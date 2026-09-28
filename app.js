@@ -46,7 +46,8 @@ const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov',
 const BUCKET='bid-files';
 const BID_COLS=['id','name','location','project_type','bid_type','size','status','probability','due_date','due_time','walk_date','rfi_date','lead_estimator_id','support_estimator_ids','client_ids','client_contacts','client_proposals','awarded_client_id','scope_items','proposal_status','amount_with','amount_without','use_for','margin','follow_ups','notes','submitted_date','awarded_date','awarded_amount','awarded_to','lost_reason'];
 const Q_COLS=['id','bid_id','vendor_id','scope','status','requested_date','due_date','received_date','amount','note','file_path','file_name'];
-const ENT_COLS={estimators:['id','name','title','email','phone','active'],clients:['id','company','type','phone','email','address','notes','contacts'],vendors:['id','company','trade','contact_name','phone','email','area','preferred','notes']};
+const ENT_COLS={estimators:['id','name','title','email','phone','active'],clients:['id','company','type','phone','email','address','notes','contacts'],vendors:['id','company','vendor_type','trade','scopes','contact_name','phone','email','area','preferred','notes']};
+const VENDOR_TYPES=['Supplier','Subcontractor','Supplier & sub','Service / testing','Trucking'];
 
 /* ---------- Supabase client with "remember me" ---------- */
 const CFG=window.BID_PIPELINE_CONFIG||{};
@@ -135,6 +136,8 @@ const openQuotes=b=>quotesFor(b.id).filter(q=>q.status==='Requested');
 const lib=()=>S.settings.scope_library&&Array.isArray(S.settings.scope_library.scopes)?S.settings.scope_library:DEFAULT_LIB;
 const libScope=name=>lib().scopes.find(x=>x.name.toLowerCase()===String(name).toLowerCase());
 const groupOf=name=>libScope(name)?.group||'Other';
+const vendorScopes=v=>Array.isArray(v?.scopes)?v.scopes:[];
+const vendorFits=(v,name)=>vendorScopes(v).some(x=>x.toLowerCase()===String(name).toLowerCase());
 const performOf=it=>PERFORM.includes(it.perform)?it.perform:'Self perform';
 // scope_items: [{id,name,group,status,assignee_id,signed_initials,signed_by_name,signed_by_user,signed_by_estimator_id,signed_at}]
 function scopeItems(b){
@@ -585,13 +588,16 @@ function vendorStats(id){const qs=S.quotes.filter(q=>q.vendor_id===id).map(q=>({
   const asked=qs.filter(x=>x.q.status!=='Not requested');const rec=qs.filter(x=>x.q.status==='Received');
   return{qs,asked:asked.length,rec:rec.length,open:qs.filter(x=>x.q.status==='Requested').length,rate:asked.length?Math.round(rec.length/asked.length*100):null}}
 function vVendors(){
-  const q=(S.q.ven||'').toLowerCase();const tf=S.q.trade||'';
-  const list=S.vendors.filter(v=>(!tf||v.trade===tf)&&(!q||[v.company,v.trade,v.contact_name,v.area].join(' ').toLowerCase().includes(q))).sort((a,b)=>a.company.localeCompare(b.company));
+  const q=(S.q.ven||'').toLowerCase();const tf=S.q.trade||'';const sf=S.q.vscope||'';const yf=S.q.vtype||'';
+  const list=S.vendors.filter(v=>(!tf||v.trade===tf)&&(!sf||vendorFits(v,sf))&&(!yf||v.vendor_type===yf)&&(!q||[v.company,v.trade,v.contact_name,v.area,v.vendor_type,...vendorScopes(v)].join(' ').toLowerCase().includes(q))).sort((a,b)=>a.company.localeCompare(b.company));
+  const L=lib();
   return dbHead('Vendors & subs',S.vendors.length+' companies','new-vendor','+ Add vendor')+`<div class="bar"><input id="q-ven" class="field search" data-q="ven" placeholder="Search vendors, contacts, areas" value="${esc(S.q.ven||'')}">
-   <select class="field" data-act="tradeF"><option value="">All trades</option>${TRADES.map(t=>`<option${tf===t?' selected':''}>${esc(t)}</option>`).join('')}</select></div>
-  <div class="panel scroll"><table><thead><tr><th>Vendor</th><th>Trade</th><th>Contact</th><th class="r">Quotes asked</th><th class="r">Received</th><th class="r">Response rate</th><th class="r">Open now</th></tr></thead><tbody>
-  ${list.map(v=>{const s=vendorStats(v.id);return `<tr class="click" data-act="open-vendor" data-id="${v.id}"><td><span class="proj">${esc(v.company)}</span>${v.preferred?' '+pill('Preferred','hot'):''}${v.area?`<div class="dim small">${esc(v.area)}</div>`:''}</td><td>${esc(v.trade)}</td><td class="small">${esc(v.contact_name)}${v.phone?'<br>'+esc(v.phone):''}${v.email?'<br>'+esc(v.email):''}</td><td class="r num">${s.asked}</td><td class="r num">${s.rec}</td><td class="r num">${s.rate==null?'—':s.rate+'%'}</td><td class="r num">${s.open||'—'}</td></tr>`}).join('')
-  ||`<tr><td colspan="7"><div class="empty"><b>No vendors ${tf||q?'match':'yet'}</b>${tf||q?'Try another search.':isAdmin()?'Add suppliers and subs so you can request quotes on bids.':''}</div></td></tr>`}</tbody></table></div>`;
+   <select class="field" data-act="vtypeF"><option value="">All types</option>${VENDOR_TYPES.map(t=>`<option${yf===t?' selected':''}>${esc(t)}</option>`).join('')}</select>
+   <select class="field" data-act="tradeF"><option value="">All trades</option>${TRADES.map(t=>`<option${tf===t?' selected':''}>${esc(t)}</option>`).join('')}</select>
+   <select class="field" data-act="vscopeF"><option value="">All scopes</option>${SCOPE_GROUPS.map(g=>{const xs=L.scopes.filter(x=>x.group===g);return xs.length?`<optgroup label="${esc(g)}">${xs.map(x=>`<option${sf===x.name?' selected':''}>${esc(x.name)}</option>`).join('')}</optgroup>`:''}).join('')}</select></div>
+  <div class="panel scroll"><table><thead><tr><th>Vendor</th><th>Type & trade</th><th>Scopes</th><th>Contact</th><th class="r">Quotes asked</th><th class="r">Received</th><th class="r">Response rate</th><th class="r">Open now</th></tr></thead><tbody>
+  ${list.map(v=>{const s=vendorStats(v.id);return `<tr class="click" data-act="open-vendor" data-id="${v.id}"><td><span class="proj">${esc(v.company)}</span>${v.preferred?' '+pill('Preferred','hot'):''}${v.area?`<div class="dim small">${esc(v.area)}</div>`:''}</td><td>${v.vendor_type?`<b style="font-weight:600">${esc(v.vendor_type)}</b><br>`:''}<span class="dim small">${esc(v.trade)}</span></td><td style="max-width:320px">${vendorScopes(v).length?`<div class="tagrow">${vendorScopes(v).slice(0,4).map(x=>`<span class="pill" style="font-size:11.5px">${esc(x)}</span>`).join('')}${vendorScopes(v).length>4?`<span class="pill na" style="font-size:11.5px">+${vendorScopes(v).length-4}</span>`:''}</div>`:'<span class="dim small">None set</span>'}</td><td class="small">${esc(v.contact_name)}${v.phone?'<br>'+esc(v.phone):''}${v.email?'<br>'+esc(v.email):''}</td><td class="r num">${s.asked}</td><td class="r num">${s.rec}</td><td class="r num">${s.rate==null?'—':s.rate+'%'}</td><td class="r num">${s.open||'—'}</td></tr>`}).join('')
+  ||`<tr><td colspan="8"><div class="empty"><b>No vendors ${tf||q||sf||yf?'match':'yet'}</b>${tf||q||sf||yf?'Try another search or filter.':isAdmin()?'Add suppliers and subs so you can request quotes on bids.':''}</div></td></tr>`}</tbody></table></div>`;
 }
 
 /* ----- scope library (admin) ----- */
@@ -660,7 +666,51 @@ function openBid(id){
 const getPath=p=>p.split('.').reduce((o,k)=>o?.[k],M.draft);
 function bf(path,type){return `data-bf="${path}"${type?` data-t="${type}"`:''} value="${esc(getPath(path)??'')}"${DIS()}`}
 function sel(path,list){const v=getPath(path);return `<select class="field" data-bf="${path}"${DIS()}>${list.map(o=>`<option value="${esc(o)}"${o===v?' selected':''}>${esc(o||'—')}</option>`).join('')}</select>`}
+/* ---- vendor picker: steps through each scope on the bid ---- */
+function pickerStart(){
+  const d=M.draft;
+  const sel={};d.scope_items.forEach(it=>{sel[it.name]=S.vendors.filter(v=>v.preferred&&vendorFits(v,it.name)&&!d.quotes.some(q=>q.vendor_id===v.id&&q.scope===it.name)).map(v=>v.id)});
+  M.picker={step:0,sel,all:false,q:''};renderModal();$('#modal .mbody').scrollTop=0;
+}
+function pickerCount(){return Object.values(M.picker.sel).reduce((n,a)=>n+a.length,0)}
+function pickerView(){
+  const d=M.draft,P=M.picker,items=d.scope_items,review=P.step>=items.length;
+  const chips=`<div class="pick-chips">${items.map((it,i)=>{const n=(P.sel[it.name]||[]).length,have=d.quotes.filter(q=>q.scope===it.name).length;
+    return `<button class="chip${i===P.step?' on':''}" data-act="pick-go" data-i="${i}">${esc(it.name)}${n||have?`<b>${n?'+'+n:''}${n&&have?' · ':''}${have?have+' on bid':''}</b>`:''}</button>`}).join('')}<button class="chip${review?' on':''}" data-act="pick-go" data-i="${items.length}">Review<b>${pickerCount()}</b></button></div>`;
+  let body;
+  if(review){
+    const rows=items.filter(it=>(P.sel[it.name]||[]).length).map(it=>`<div class="li"><div><b style="font-weight:600">${esc(it.name)}</b><div class="dim small">${P.sel[it.name].map(id=>esc(vendorOf(id)?.company||'')).join(', ')}</div></div><span class="pill">${P.sel[it.name].length}</span></div>`).join('');
+    body=`<fieldset><legend>Review</legend>${rows?`<div class="list">${rows}</div>`:'<div class="empty">No vendors selected yet. Go back and pick some.</div>'}
+      <p class="hint">Each vendor gets a quote request for that scope, marked Requested with today’s date.</p></fieldset>`;
+  }else{
+    const it=items[P.step];const q=P.q.toLowerCase();
+    const on=d.quotes.filter(x=>x.scope===it.name).map(x=>x.vendor_id);
+    const fit=S.vendors.filter(v=>vendorFits(v,it.name)).sort((a,b)=>(b.preferred-a.preferred)||a.company.localeCompare(b.company));
+    const rest=S.vendors.filter(v=>!vendorFits(v,it.name)&&(!q||[v.company,v.trade,v.vendor_type].join(' ').toLowerCase().includes(q))).sort((a,b)=>a.trade.localeCompare(b.trade)||a.company.localeCompare(b.company));
+    const row=v=>{const already=on.includes(v.id);const checked=already||(P.sel[it.name]||[]).includes(v.id);
+      return `<label class="pick-row${already?' done':''}"><input type="checkbox" data-pick="${v.id}" ${checked?'checked':''}${already?' disabled':''}>
+        <span><b>${esc(v.company)}</b>${v.preferred?' '+pill('Preferred','hot'):''}${already?' '+pill('Already requested','good'):''}<span class="dim small" style="display:block">${[v.vendor_type,v.trade,v.contact_name,v.phone].filter(Boolean).map(esc).join(' · ')}</span></span></label>`};
+    body=`<fieldset><legend>${esc(it.name)}</legend>
+      <p class="hint" style="margin:0 0 12px">${esc(it.group||'')} · <b>${esc(performOf(it))}</b>${performOf(it)==='Self perform'?' — pick suppliers for materials, or skip.':' — pick the subs to ask for pricing.'}</p>
+      ${fit.length?`<div class="small" style="font-weight:600;margin-bottom:6px">Vendors set up for this scope</div><div class="pick-list">${fit.map(row).join('')}</div>`
+        :`<div class="dim small" style="margin-bottom:10px">No vendors are set up for this scope yet.${isAdmin()?' Tick scopes on a vendor’s record on the Vendors page and they’ll show here next time.':''}</div>`}
+      <div class="adders" style="margin-top:14px"><button class="btn sm" data-act="pick-all">${P.all?'Hide other vendors':'Show all other vendors ('+S.vendors.filter(v=>!vendorFits(v,it.name)).length+')'}</button>${P.all?`<input class="field" id="pick-q" data-pickq placeholder="Search other vendors" value="${esc(P.q)}" style="width:220px">`:''}</div>
+      ${P.all?`<div class="pick-list" style="margin-top:10px">${rest.map(row).join('')||'<div class="dim small">No other vendors match.</div>'}</div>`:''}
+    </fieldset>`;
+  }
+  return mhead('Select vendors',review?'Review and add the quote requests':`Scope ${P.step+1} of ${items.length}`).replace('data-act="close"','data-act="pick-cancel"')+`<div class="mbody">${chips}${body}</div>
+   <div class="mfoot"><div><button class="btn" data-act="pick-cancel">Cancel</button></div><div class="r">
+    ${P.step>0?'<button class="btn" data-act="pick-back">Back</button>':''}
+    ${review?`<button class="btn primary" data-act="pick-finish"${pickerCount()?'':' disabled'}>Add ${pickerCount()} quote request${pickerCount()===1?'':'s'}</button>`:`<button class="btn primary" data-act="pick-next">${P.step===items.length-1?'Review':'Next scope'}</button>`}</div></div>`;
+}
+function pickerFinish(){
+  const P=M.picker;let n=0;
+  Object.entries(P.sel).forEach(([scope,ids])=>ids.forEach(id=>{if(addQuote(id,scope))n++}));
+  M.picker=null;renderModal();toast(`Added ${n} quote request${n===1?'':'s'}. Save to keep them.`);
+  setTimeout(()=>{const f=[...document.querySelectorAll('#modal legend')].find(l=>l.textContent.startsWith('Vendor & sub'));f?.scrollIntoView({block:'start'})},0);
+}
 function bidModal(){
+  if(M.picker)return pickerView();
   const b=M.draft;const admin=isAdmin();const work=canWork(b);const isNew=b._new;
   const ests=S.estimators.filter(e=>e.active!==false||e.id===b.lead_estimator_id||b.support_estimator_ids.includes(e.id));
   const clientsSorted=S.clients.slice().sort((a,c)=>a.company.localeCompare(c.company));
@@ -711,7 +761,7 @@ function bidModal(){
   <fieldset><legend>Vendor & sub quotes</legend>
     ${b.quotes.length?`<div class="qhead"><span>Vendor</span><span>Scope</span><span>Status</span><span>Need by</span><span>Amount</span><span>Quote file</span><span></span></div>`:''}
     <div class="rows">${b.quotes.map((q,i)=>quoteRow(q,i,work,admin)).join('')||'<div class="dim small">No quote requests yet.</div>'}</div>
-    ${work?`<div class="adders"><select class="field" data-act="add-quote"><option value="">+ Request a quote from…</option>${vendorsSorted.map(v=>`<option value="${v.id}">${esc(v.company)} (${esc(v.trade)})</option>`).join('')}</select>
+    ${work?`<div class="adders"><button class="btn primary sm" data-act="pick-open"${b.scope_items.length&&S.vendors.length?'':' disabled title="Add scopes and vendors first"'}>Select vendors by scope…</button><select class="field" data-act="add-quote"><option value="">+ Request a quote from…</option>${vendorsSorted.map(v=>`<option value="${v.id}">${esc(v.company)} (${esc(v.trade)})</option>`).join('')}</select>
     ${tradesWithVendors.length?`<select class="field" data-act="add-trade"><option value="">+ Add every vendor in a trade…</option>${tradesWithVendors.map(t=>`<option>${esc(t)}</option>`).join('')}</select>`:''}</div>
     <p class="hint">Upload the quote when it comes in (PDF, Excel, image — any file). Status switches to Received automatically. Save to keep changes.</p>`:''}
   </fieldset>
@@ -846,8 +896,10 @@ function quoteRow(q,i,work,admin){
    ${admin||(work&&!M.origQuoteIds?.includes(q.id))?`<button class="rm" data-act="rm-quote" data-i="${i}" aria-label="Remove">×</button>`:'<span></span>'}</div>`;
 }
 function defaultScopeForTrade(t){const g=TRADE_GROUP[t];const inG=M.draft.scope_items.filter(x=>x.group===g);const m=inG.find(x=>performOf(x)!=='Self perform')||inG[0];return m?m.name:(['Trucking','Materials','Testing'].includes(g)?g:'Other')}
-function addQuote(vid){const v=vendorOf(vid);if(!v||M.draft.quotes.some(q=>q.vendor_id===vid))return false;
-  M.draft.quotes.push({id:newId(),bid_id:M.draft.id,vendor_id:vid,scope:defaultScopeForTrade(v.trade),status:'Requested',requested_date:todayStr(),due_date:'',received_date:'',amount:null,note:'',file_path:null,file_name:null});return true}
+function addQuote(vid,scope){const v=vendorOf(vid);if(!v)return false;
+  if(!scope){const fit=M.draft.scope_items.find(x=>vendorFits(v,x.name));scope=fit?fit.name:defaultScopeForTrade(v.trade)}
+  if(M.draft.quotes.some(q=>q.vendor_id===vid&&q.scope===scope))return false;
+  M.draft.quotes.push({id:newId(),bid_id:M.draft.id,vendor_id:vid,scope,status:'Requested',requested_date:todayStr(),due_date:'',received_date:'',amount:null,note:'',file_path:null,file_name:null});return true}
 
 /* ----- directory modals ----- */
 function ef(path,ph,type){return `<input class="field" ${type?`type="${type}"`:''} data-ef="${path}" value="${esc(M.draft[path]??'')}" placeholder="${esc(ph||'')}"${DIS()}>`}
@@ -874,14 +926,22 @@ function clientModal(){const c=M.draft,isNew=M.isNew;const admin=isAdmin();
    <fieldset><legend>Contacts</legend><div class="rows">${(c.contacts||[]).map((x,i)=>`<div class="rowline contact"><input class="field" data-ctf="${i}.name" value="${esc(x.name||'')}" placeholder="Name"${DIS()}><input class="field" data-ctf="${i}.title" value="${esc(x.title||'')}" placeholder="Role, e.g. PM"${DIS()}><input class="field" data-ctf="${i}.phone" value="${esc(x.phone||'')}" placeholder="Phone"${DIS()}><input class="field" data-ctf="${i}.email" value="${esc(x.email||'')}" placeholder="Email"${DIS()}>${admin?`<button class="rm" data-act="rm-contact" data-i="${i}" aria-label="Remove">×</button>`:'<span></span>'}</div>`).join('')||'<div class="dim small">No contacts.</div>'}</div>
    ${admin?'<div class="adders"><button class="btn sm" data-act="add-contact">+ Add contact</button></div>':''}</fieldset>
    ${isNew?'':`<fieldset><legend>Bid history</legend>${bidMiniList(bs,b=>[clientAmount(b,c.id)?'Our number '+money(clientAmount(b,c.id)):'',clientWon(b,c.id)?'<b style="color:var(--good)">Awarded to us</b>':clientLost(b,c.id)?'Lost':(propOf(b,c.id).status||'Not sent'),b.client_contacts?.[c.id]?'Contact: '+esc(b.client_contacts[c.id]):''].filter(Boolean).join(' · '))}</fieldset>`}</div>`+entFoot('Add client',isNew)}
+function vendorScopeField(v){
+  const L=lib();const mine=vendorScopes(v);const names=[...new Set([...L.scopes.map(x=>x.name),...mine])];const d=DIS();
+  return `<fieldset><legend id="vs-count">Scopes they quote (${mine.length})</legend>
+   <p class="hint" style="margin:0 0 10px">These vendors are suggested for those scopes when you click <b>Select vendors</b> on a bid.</p>
+   ${SCOPE_GROUPS.map(g=>{const xs=names.filter(n=>groupOf(n)===g);return xs.length?`<div style="margin-bottom:12px"><div class="small" style="font-weight:600;margin-bottom:6px">${esc(g)}</div><div class="tplgrid">${xs.map(n=>`<label class="check"><input type="checkbox" data-vs="${esc(n)}" ${mine.some(x=>x.toLowerCase()===n.toLowerCase())?'checked':''}${d}> ${esc(n)}</label>`).join('')}</div></div>`:''}).join('')}
+  </fieldset>`;
+}
 function vendorModal(){const v=M.draft,isNew=M.isNew;const s=vendorStats(v.id);
   return mhead(isNew?'New vendor':v.company||'Vendor',v.trade||'')+`<div class="mbody">
    ${isNew?'':`<div class="statline"><div><b>${s.asked}</b>Quotes asked</div><div><b>${s.rec}</b>Received</div><div><b>${s.rate==null?'—':s.rate+'%'}</b>Response rate</div><div><b>${s.open}</b>Open now</div></div>`}
    <fieldset><legend>Vendor</legend><div class="fg">
-   <label class="f s2">Company ${isAdmin()?'<span class="req">required</span>':''}${ef('company','e.g. Metro Pipe Supply')}</label><label class="f s2">Trade${efSel('trade',TRADES)}</label>
+   <label class="f s2">Company ${isAdmin()?'<span class="req">required</span>':''}${ef('company','e.g. Metro Pipe Supply')}</label><label class="f">Vendor type<select class="field" data-ef="vendor_type"${DIS()}><option value="">Pick one…</option>${VENDOR_TYPES.map(o=>`<option${v.vendor_type===o?' selected':''}>${esc(o)}</option>`).join('')}</select></label><label class="f">Trade${efSel('trade',TRADES)}</label>
    <label class="f s2">Contact name${ef('contact_name','Estimator or rep')}</label><label class="f">Phone${ef('phone','(000) 000-0000','tel')}</label><label class="f">Email${ef('email','quotes@vendor.com','email')}</label>
    <label class="f s2">Area served${ef('area','e.g. Metro Atlanta, north GA')}</label><label class="check s2" style="align-self:end;padding-bottom:10px"><input type="checkbox" data-ef="preferred" ${v.preferred?'checked':''}${DIS()}> Preferred vendor</label>
    <label class="f s4">Notes<textarea class="field" data-ef="notes" placeholder="Pricing terms, lead times, insurance on file…"${DIS()}>${esc(v.notes||'')}</textarea></label></div></fieldset>
+   ${vendorScopeField(v)}
    ${isNew?'':`<fieldset><legend>Quote history</legend>${s.qs.length?`<div class="list">${s.qs.sort((a,b)=>(b.q.requested_date||'').localeCompare(a.q.requested_date||'')).map(({b,q})=>`<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button><div class="dim small">${esc(q.scope||'')}${q.requested_date?' · asked '+fmtShort(q.requested_date):''}${q.file_path?` · <button class="linkbtn" style="font-size:12.5px" data-act="dl" data-path="${esc(q.file_path)}" data-name="${esc(q.file_name||'quote')}">${esc(q.file_name||'Quote file')}</button>`:''}</div></div><div style="text-align:right">${pill(q.status,QUOTE_CLS[q.status])}<div class="num small">${q.amount!=null?money(q.amount):''}</div></div></div>`).join('')}</div>`:'<div class="empty">No quote requests yet.</div>'}</fieldset>`}</div>`+entFoot('Add vendor',isNew)}
 function boardModal(){const cfg=M.draft;return mhead('Customize board view','Choose what board members see. Saved for everyone.')+`<div class="mbody"><fieldset><legend>Sections</legend><div class="rows">
   ${WIDGETS.map(([k,l])=>`<label class="check"><input type="checkbox" data-wf="${k}" ${cfg[k]?'checked':''}> ${l}</label>`).join('')}</div></fieldset></div>
@@ -997,7 +1057,7 @@ function exportCsv(){
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;
-  if(a==='backdrop'){if(e.target===t)closeModal();return}
+  if(a==='backdrop'){if(e.target===t&&!(M&&M.picker))closeModal();return}
   switch(a){
     case 'auth-view':S.authView=t.dataset.v;S.authMsg=null;render();break;
     case 'signout':sb.auth.signOut();break;
@@ -1017,8 +1077,8 @@ document.addEventListener('click',e=>{
     case 'open-est':M={kind:'est',draft:clone(byId(S.estimators,t.dataset.id))};showModal();break;
     case 'new-client':M={kind:'client',isNew:true,draft:{id:newId(),company:'',type:'General contractor',phone:'',email:'',address:'',notes:'',contacts:[{name:'',title:'',phone:'',email:''}]}};showModal();break;
     case 'open-client':M={kind:'client',draft:clone(byId(S.clients,t.dataset.id))};showModal();break;
-    case 'new-vendor':M={kind:'vendor',isNew:true,draft:{id:newId(),company:'',trade:S.q.trade||TRADES[0],contact_name:'',phone:'',email:'',area:'',preferred:false,notes:''}};showModal();break;
-    case 'open-vendor':M={kind:'vendor',draft:clone(byId(S.vendors,t.dataset.id))};showModal();break;
+    case 'new-vendor':M={kind:'vendor',isNew:true,draft:{id:newId(),company:'',vendor_type:S.q.vtype||'',scopes:S.q.vscope?[S.q.vscope]:[],trade:S.q.trade||TRADES[0],contact_name:'',phone:'',email:'',area:'',preferred:false,notes:''}};showModal();break;
+    case 'open-vendor':{const vd=clone(byId(S.vendors,t.dataset.id));vd.scopes=vendorScopes(vd);vd.vendor_type=vd.vendor_type||'';M={kind:'vendor',draft:vd};showModal();break}
     case 'board-custom':M={kind:'board',draft:boardCfg()};showModal();break;
     case 'company':M={kind:'company',draft:{companyName:S.settings.general?.companyName||''}};showModal();break;
     case 'close':closeModal();break;
@@ -1027,6 +1087,13 @@ document.addEventListener('click',e=>{
     case 'rm-support':M.draft.support_estimator_ids=M.draft.support_estimator_ids.filter(x=>x!==t.dataset.id);renderModal();break;
     case 'rm-client':{const id=t.dataset.id;M.draft.client_ids=M.draft.client_ids.filter(x=>x!==id);delete M.draft.client_contacts[id];delete M.draft.client_proposals[id];if(M.draft.awarded_client_id===id)M.draft.awarded_client_id='';renderModal();break}
     case 'award':awardClient(t.dataset.id);break;
+    case 'pick-open':pickerStart();break;
+    case 'pick-cancel':M.picker=null;renderModal();break;
+    case 'pick-next':M.picker.step++;M.picker.q='';renderModal();$('#modal .mbody').scrollTop=0;break;
+    case 'pick-back':M.picker.step--;M.picker.q='';renderModal();$('#modal .mbody').scrollTop=0;break;
+    case 'pick-go':M.picker.step=+t.dataset.i;M.picker.q='';renderModal();$('#modal .mbody').scrollTop=0;break;
+    case 'pick-all':M.picker.all=!M.picker.all;renderModal();break;
+    case 'pick-finish':pickerFinish();break;
     case 'unaward':unaward();break;
     case 'rm-quote':M.draft.quotes.splice(+t.dataset.i,1);renderModal();break;
     case 'clear-file':{const q=M.draft.quotes[+t.dataset.i];q.file_path=null;q.file_name=null;renderModal();break}
@@ -1052,7 +1119,7 @@ document.addEventListener('click',e=>{
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&e.target.id==='sign-init'){e.preventDefault();const b=$('[data-act=sign-confirm]');if(b)signScope(+b.dataset.i);return}
   if(e.key==='Enter'&&e.target.id==='custom-scope'){e.preventDefault();$('[data-act=add-custom-scope]')?.click();return}
-  if(e.key==='Escape'&&M){if(M.signing!=null){M.signing=null;renderModal();return}closeModal()}
+  if(e.key==='Escape'&&M){if(M.signing!=null){M.signing=null;renderModal();return}if(M.picker){M.picker=null;renderModal();return}closeModal()}
   if((e.key==='Enter'||e.key===' ')&&e.target.classList?.contains('card')){e.preventDefault();e.target.click()}
 });
 document.addEventListener('input',e=>{
@@ -1072,6 +1139,10 @@ document.addEventListener('input',e=>{
   else if(t.dataset.sf){const[i,k]=t.dataset.sf.split('.');M.draft.scope_items[+i][k]=val}
   else if(t.dataset.lf){const[i,k]=t.dataset.lf.split('.');M.draft[+i][k]=val}
   else if(t.dataset.tn!=null){M.draft.name=val}
+  else if(t.dataset.pick){const P=M.picker,sc=M.draft.scope_items[P.step].name;P.sel[sc]=(P.sel[sc]||[]).filter(x=>x!==t.dataset.pick);if(t.checked)P.sel[sc].push(t.dataset.pick);
+    renderModal()}
+  else if(t.dataset.pickq!=null){M.picker.q=val;const pos=t.selectionStart;renderModal();const n=$('#pick-q');if(n){n.focus();n.setSelectionRange(pos,pos)}}
+  else if(t.dataset.vs!=null){const n=t.dataset.vs;M.draft.scopes=vendorScopes(M.draft).filter(x=>x.toLowerCase()!==n.toLowerCase());if(t.checked)M.draft.scopes.push(n);const lg=$('#vs-count');if(lg)lg.textContent='Scopes they quote ('+M.draft.scopes.length+')'}
   else if(t.dataset.tc!=null){const n=t.dataset.tc;M.draft.scopes=M.draft.scopes.filter(x=>x!==n);if(t.checked)M.draft.scopes.push(n);const lg=$('#tpl-count');if(lg)lg.textContent='Scopes ('+M.draft.scopes.length+')'}
 });
 document.addEventListener('change',e=>{
@@ -1093,6 +1164,8 @@ document.addEventListener('change',e=>{
     case 'estF':S.estF=t.value;render();break;
     case 'clientF':S.clientF=t.value;render();break;
     case 'tradeF':S.q.trade=t.value;render();break;
+    case 'vscopeF':S.q.vscope=t.value;render();break;
+    case 'vtypeF':S.q.vtype=t.value;render();break;
     case 'add-support':if(t.value){M.draft.support_estimator_ids.push(t.value);renderModal()}break;
     case 'add-client':if(t.value){M.draft.client_ids.push(t.value);const first=byId(S.clients,t.value)?.contacts?.[0]?.name;if(first)M.draft.client_contacts[t.value]=first;renderModal()}break;
     case 'add-quote':if(t.value){addQuote(t.value);renderModal()}break;

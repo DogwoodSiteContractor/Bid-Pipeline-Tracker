@@ -292,3 +292,14 @@ table.ov td.num,table.ov .proj{white-space:nowrap}
 /* ---- self perform / sub ---- */
 .perf-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:0 5px;border-radius:4px;background:var(--info-soft);color:var(--info);margin-left:3px;vertical-align:1px}
 .scope-row select.perf-sub,.scope-row select.perf-both{color:var(--info);font-weight:600}
+
+/* ---- vendor picker ---- */
+.pick-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.pick-chips .chip{font-size:12.5px;padding:5px 11px}
+.pick-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:8px}
+.pick-row{display:flex;gap:10px;align-items:flex-start;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:10px 12px;cursor:pointer;font-size:14px}
+.pick-row:hover{border-color:var(--ink-3)}
+.pick-row:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.pick-row.done{cursor:default;opacity:.8}
+.pick-row input{margin-top:3px}
+.pick-row b{font-weight:600}
