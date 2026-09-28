@@ -273,3 +273,12 @@ textarea.field{min-height:84px;resize:vertical}
 .auth-card:has(.auth-logo) h1{text-align:center}
 .auth-card:has(.auth-logo) p.lead{text-align:center}
 @media (max-width:800px){.brand-logo{height:28px}.brand b{font-size:15px}}
+
+/* ---- GC proposals ---- */
+.gc-row{display:grid;grid-template-columns:minmax(0,1.5fr) 128px 128px 140px minmax(0,1.5fr) auto;gap:10px;align-items:end;background:var(--surface-2);border:1px solid var(--line);border-left:3px solid var(--line);border-radius:8px;padding:10px 12px}
+.gc-row.is-won{border-left-color:var(--good);background:var(--good-soft)}
+.gc-row .field{padding:6px 8px;font-size:13.5px}
+.gc-row>.f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-weight:500;color:var(--ink-2)}
+.gc-row .rm{align-self:center}
+@media (max-width:1100px){.gc-row{grid-template-columns:1fr 1fr 1fr}.gc-row>div:first-child{grid-column:1/-1}}
+@media (max-width:600px){.gc-row{grid-template-columns:1fr 1fr}}

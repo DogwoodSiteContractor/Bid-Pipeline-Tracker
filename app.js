@@ -41,7 +41,7 @@ const WIDGETS=[['kpis','Headline numbers'],['monthly','Bid and award volume by m
 const AV_COLORS=['#2C5E99','#2C7A4C','#8B5E34','#7A3E8E','#B24A2A','#2F7C83','#5A6B1E','#9C3D5C'];
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const BUCKET='bid-files';
-const BID_COLS=['id','name','location','project_type','bid_type','size','status','probability','due_date','due_time','walk_date','rfi_date','lead_estimator_id','support_estimator_ids','client_ids','client_contacts','scope_items','proposal_status','amount_with','amount_without','use_for','margin','follow_ups','notes','submitted_date','awarded_date','awarded_amount','awarded_to','lost_reason'];
+const BID_COLS=['id','name','location','project_type','bid_type','size','status','probability','due_date','due_time','walk_date','rfi_date','lead_estimator_id','support_estimator_ids','client_ids','client_contacts','client_proposals','awarded_client_id','scope_items','proposal_status','amount_with','amount_without','use_for','margin','follow_ups','notes','submitted_date','awarded_date','awarded_amount','awarded_to','lost_reason'];
 const Q_COLS=['id','bid_id','vendor_id','scope','status','requested_date','due_date','received_date','amount','note','file_path','file_name'];
 const ENT_COLS={estimators:['id','name','title','email','phone','active'],clients:['id','company','type','phone','email','address','notes','contacts'],vendors:['id','company','trade','contact_name','phone','email','area','preferred','notes']};
 
@@ -109,8 +109,20 @@ const initials=n=>(n||'?').split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].t
 const avColor=id=>{let h=0;for(const c of String(id))h=(h*31+c.charCodeAt(0))>>>0;return AV_COLORS[h%AV_COLORS.length]};
 const avatar=(id,size)=>{const e=byId(S.estimators,id);if(!e)return '';return `<span class="av" style="background:${avColor(id)}${size?';width:'+size+'px;height:'+size+'px':''}" title="${esc(e.name)}">${esc(initials(e.name))}</span>`};
 const pill=(t,c)=>`<span class="pill ${c||''}">${esc(t)}</span>`;
-const bidValue=b=>{const w=num(b.amount_with),o=num(b.amount_without);return b.use_for==='without'?(o??w??0):(w??o??0)};
-const wonValue=b=>num(b.awarded_amount)??bidValue(b);
+// Per-GC proposals: client_proposals = {client_id: {amount_with, amount_without, sent_date, status}}
+// A blank GC amount falls back to the bid's base proposal.
+const CP_ST=['Not sent','Sent','Lost'];
+const propOf=(b,cid)=>(b.client_proposals||{})[cid]||{};
+const pick=(b,w,o)=>b.use_for==='without'?(o??w):(w??o);
+function clientAmount(b,cid){const p=propOf(b,cid);return pick(b,num(p.amount_with)??num(b.amount_with),num(p.amount_without)??num(b.amount_without))??0}
+const bidValue=b=>{const base=pick(b,num(b.amount_with),num(b.amount_without));if(base!=null)return base;
+  const a=(b.client_ids||[]).map(id=>clientAmount(b,id)).filter(Boolean);return a.length?Math.max(...a):0};
+const wonValue=b=>num(b.awarded_amount)??(b.awarded_client_id?clientAmount(b,b.awarded_client_id):bidValue(b));
+const clientWon=(b,cid)=>b.status==='Awarded'&&(b.awarded_client_id?b.awarded_client_id===cid:(b.client_ids||[]).length===1);
+const clientLost=(b,cid)=>!clientWon(b,cid)&&(b.status==='Lost'||propOf(b,cid).status==='Lost'||(b.status==='Awarded'&&!!b.awarded_client_id));
+function clientsLine(b,max=2){const ids=b.client_ids||[];if(!ids.length)return 'No client assigned';
+  if(b.status==='Awarded'&&b.awarded_client_id)return 'Awarded by '+esc(clientName(b.awarded_client_id))+(ids.length>1?` <span class="dim">(bid to ${ids.length})</span>`:'');
+  return ids.slice(0,max).map(id=>esc(clientName(id))).join(', ')+(ids.length>max?` +${ids.length-max} more`:'')}
 const yearOf=b=>+(String(b.due_date||b.submitted_date||'').slice(0,4))||new Date(b.created_at||Date.now()).getFullYear();
 const lastTouch=b=>(b.follow_ups||[]).map(f=>f.date).filter(Boolean).sort().pop()||b.submitted_date||'';
 const needsFollowUp=b=>b.status==='Submitted'&&(!lastTouch(b)||daysUntil(lastTouch(b))<=-7);
@@ -151,7 +163,7 @@ function stageInfo(b,qs){
     sc.length?`${sc.filter(x=>x==='Complete').length} of ${sc.length} scopes signed off`:'No scopes selected yet',
     qs.length?`${qs.length-qOpen} of ${qs.length} quotes in`:'No quotes requested yet',
     'Proposal '+String(b.proposal_status||'Not Started').toLowerCase(),
-    'Waiting on GC decision',
+    (b.client_ids||[]).length>1?`Sent to ${(b.client_ids||[]).filter(id=>['Sent','Lost','Awarded'].includes(propOf(b,id).status)).length} of ${b.client_ids.length} GCs · waiting on decision`:'Waiting on GC decision',
     b.status==='Awarded'?'Awarded':b.status==='Lost'?'Lost':b.status==='No Bid'?'Passed on this bid':''][current];
   return {st,current,detail,decided};
 }
@@ -322,7 +334,7 @@ function bidTable(list,opts={}){
   const rows=list.map(b=>{const qs=quotesFor(b.id);const rec=qs.filter(q=>q.status==='Received').length;const me=myEst();
     return `<tr class="click" data-act="open-bid" data-id="${b.id}">
     <td><div class="proj">${esc(b.name)}</div><div class="dim small">${esc(b.location||b.project_type||'')}</div></td>
-    <td>${(b.client_ids||[]).map(id=>esc(clientName(id))).join('<br>')||'<span class="dim">—</span>'}</td>
+    <td>${(b.client_ids||[]).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}${clientWon(b,id)?' '+pill('Awarded','good'):''}${(b.client_ids.length>1&&clientAmount(b,id))?` <span class="dim small">${moneyK(clientAmount(b,id))}</span>`:''}</div>`).join('')||'<span class="dim">—</span>'}</td>
     ${opts.mine?`<td>${me&&b.lead_estimator_id===me.id?pill('Lead','hot'):pill('Support')}</td>`:`<td>${b.lead_estimator_id?`<span class="who">${avatar(b.lead_estimator_id)}${esc(estName(b.lead_estimator_id))}</span>`:'<span class="dim">Unassigned</span>'}</td>`}
     <td>${dueCell(b)}</td><td>${scopeBar(b)}</td><td>${pill(b.proposal_status||'Not Started',PROP_CLS[b.proposal_status])}</td>
     <td class="num">${qs.length?`${rec}/${qs.length}`:'<span class="dim">—</span>'}</td>
@@ -439,7 +451,7 @@ function board(){
     out.push(panel('Pipeline by stage',Y+'',hbars(st.map(x=>({l:x.l,w:x.v/mx,v:`${moneyK(x.v)} · ${x.n}`,c:cls[x.l]||''})))));
   }
   if(cfg.clients){
-    const g={};yb.forEach(b=>(b.client_ids||[]).forEach(id=>{g[id]=g[id]||{n:0,v:0,w:0,d:0};g[id].n++;g[id].v+=bidValue(b);if(b.status==='Awarded'){g[id].w++;g[id].d++}if(b.status==='Lost')g[id].d++}));
+    const g={};yb.forEach(b=>(b.client_ids||[]).forEach(id=>{g[id]=g[id]||{n:0,v:0,w:0,d:0};g[id].n++;g[id].v+=clientAmount(b,id);if(clientWon(b,id)){g[id].w++;g[id].d++}else if(clientLost(b,id))g[id].d++}));
     const rows=Object.entries(g).sort((a,b)=>b[1].v-a[1].v).slice(0,8);
     out.push(panel('Top clients & GCs','By dollars bid',rows.length?`<div class="scroll"><table><thead><tr><th>Client</th><th class="r">Bids</th><th class="r">$ bid</th><th class="r">Won</th><th class="r">Win rate</th></tr></thead><tbody>${rows.map(([id,x])=>`<tr><td>${esc(clientName(id))}</td><td class="r num">${x.n}</td><td class="r num">${moneyK(x.v)}</td><td class="r num">${x.w}</td><td class="r num">${x.d?Math.round(x.w/x.d*100)+'%':'—'}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No client data for this year.</div>'));
   }
@@ -488,7 +500,7 @@ function card(b){
   const qs=quotesFor(b.id);const rec=qs.filter(q=>q.status==='Received').length;const v=bidValue(b);const nf=filesFor(b.id).length;
   const team=[b.lead_estimator_id,...(b.support_estimator_ids||[])].filter(id=>byId(S.estimators,id));
   return `<div class="card" role="button" tabindex="0" data-act="open-bid" data-id="${b.id}">
-   <div class="card-top"><div><h3>${esc(b.name)}</h3><div class="meta">${(b.client_ids||[]).map(clientName).map(esc).join(', ')||'No client assigned'}</div></div>${pill(b.status,BID_CLS[b.status])}</div>
+   <div class="card-top"><div><h3>${esc(b.name)}</h3><div class="meta">${clientsLine(b)}</div></div>${pill(b.status,BID_CLS[b.status])}</div>
    ${progress(b)}
    <div class="row">${dueCell(b)}<div style="text-align:right">${v?`<div class="val">${money(v)}</div><div class="dim small">${b.use_for==='without'?'Without':'With'} site improvements</div>`:`<div class="dim small">Proposal ${esc((b.proposal_status||'Not Started').toLowerCase())}</div>`}</div></div>
    <div class="scopes">${scopePills(b)}</div>
@@ -511,8 +523,8 @@ function vClients(){
   const showStats=role()!=='estimator';
   return dbHead('Clients & GCs',S.clients.length+' companies','new-client','+ Add client or GC')+`<div class="bar"><input id="q-cl" class="field search" data-q="cl" placeholder="Search companies or contacts" value="${esc(S.q.cl||'')}"></div>
   <div class="panel scroll"><table><thead><tr><th>Company</th><th>Type</th><th>Contacts</th>${showStats?'<th class="r">Bids</th><th class="r">$ bid</th><th class="r">Won</th><th class="r">Win rate</th>':'<th>Phone</th>'}</tr></thead><tbody>
-  ${list.map(c=>{const bs=S.bids.filter(b=>(b.client_ids||[]).includes(c.id));const w=bs.filter(b=>b.status==='Awarded').length,l=bs.filter(b=>b.status==='Lost').length;
-   return `<tr class="click" data-act="open-client" data-id="${c.id}"><td class="proj">${esc(c.company)}</td><td>${esc(c.type)}</td><td class="small">${(c.contacts||[]).map(x=>esc(x.name)).filter(Boolean).join(', ')||'<span class="dim">—</span>'}</td>${showStats?`<td class="r num">${bs.length}</td><td class="r num">${moneyK(bs.reduce((s,b)=>s+bidValue(b),0))}</td><td class="r num">${w}</td><td class="r num">${w+l?Math.round(w/(w+l)*100)+'%':'—'}</td>`:`<td class="small">${esc(c.phone)}</td>`}</tr>`}).join('')
+  ${list.map(c=>{const bs=S.bids.filter(b=>(b.client_ids||[]).includes(c.id));const w=bs.filter(b=>clientWon(b,c.id)).length,l=bs.filter(b=>clientLost(b,c.id)).length;
+   return `<tr class="click" data-act="open-client" data-id="${c.id}"><td class="proj">${esc(c.company)}</td><td>${esc(c.type)}</td><td class="small">${(c.contacts||[]).map(x=>esc(x.name)).filter(Boolean).join(', ')||'<span class="dim">—</span>'}</td>${showStats?`<td class="r num">${bs.length}</td><td class="r num">${moneyK(bs.reduce((s,b)=>s+clientAmount(b,c.id),0))}</td><td class="r num">${w}</td><td class="r num">${w+l?Math.round(w/(w+l)*100)+'%':'—'}</td>`:`<td class="small">${esc(c.phone)}</td>`}</tr>`}).join('')
   ||`<tr><td colspan="7"><div class="empty"><b>No clients yet</b>${isAdmin()?'Add the GCs, developers and owners you bid to.':''}</div></td></tr>`}</tbody></table></div>`;
 }
 function vendorStats(id){const qs=S.quotes.filter(q=>q.vendor_id===id).map(q=>({q,b:byId(S.bids,q.bid_id)})).filter(x=>x.b);
@@ -579,14 +591,14 @@ const DIS=()=>M&&M.kind==='bid'?(canWork(M.draft)?'':' disabled'):(isAdmin()?'':
 
 /* ----- bid editor ----- */
 function newBid(){return{id:newId(),name:'',location:'',project_type:'Commercial',bid_type:'Hard bid',size:'',status:'Estimating',probability:50,
-  due_date:'',due_time:'',walk_date:'',rfi_date:'',lead_estimator_id:'',support_estimator_ids:[],client_ids:[],client_contacts:{},
+  due_date:'',due_time:'',walk_date:'',rfi_date:'',lead_estimator_id:'',support_estimator_ids:[],client_ids:[],client_contacts:{},client_proposals:{},awarded_client_id:'',
   scope_items:[],
   proposal_status:'Not Started',amount_with:null,amount_without:null,use_for:'with',margin:null,follow_ups:[],notes:'',
   submitted_date:'',awarded_date:'',awarded_amount:null,awarded_to:'',lost_reason:'',quotes:[],_new:true}}
 function openBid(id){
   const b=byId(S.bids,id);if(!b)return;
   const d=Object.assign(newBid(),clone(b));d._new=false;
-  d.scope_items=clone(scopeItems(b));d.due_time=d.due_time?String(d.due_time).slice(0,5):'';
+  d.scope_items=clone(scopeItems(b));d.client_proposals=d.client_proposals||{};d.client_contacts=d.client_contacts||{};d.awarded_client_id=d.awarded_client_id||'';d.due_time=d.due_time?String(d.due_time).slice(0,5):'';
   ['due_date','walk_date','rfi_date','submitted_date','awarded_date'].forEach(k=>d[k]=d[k]||'');
   d.lead_estimator_id=d.lead_estimator_id||'';d.quotes=clone(quotesFor(id));d.quotes.forEach(q=>{['requested_date','due_date','received_date'].forEach(k=>q[k]=q[k]||'')});
   M={kind:'bid',draft:d,origQuoteIds:d.quotes.map(q=>q.id)};showModal();
@@ -625,25 +637,22 @@ function bidModal(){
       ${admin?`<select class="field" data-act="add-support" style="width:auto"><option value="">+ Add</option>${ests.filter(e=>e.id!==b.lead_estimator_id&&!b.support_estimator_ids.includes(e.id)).map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')}</select>`:''}</div></div>
   </div>${admin&&!S.estimators.length?'<p class="hint">No estimators on file yet. Add them in the Estimators tab.</p>':''}</fieldset>
 
-  <fieldset><legend>Bidding to</legend><div class="rows">
-    ${b.client_ids.map(id=>{const c=byId(S.clients,id);const cs=c?.contacts||[];const ct=cs.find(x=>x.name===b.client_contacts?.[id]);return `<div class="rowline client"><div><b style="font-weight:600">${esc(clientName(id))}</b><div class="dim small">${esc(c?.type||'')}${ct?.phone?' · '+esc(ct.phone):''}${ct?.email?' · '+esc(ct.email):''}</div></div>
-      <select class="field" data-cc="${id}"${DIS()}><option value="">Contact…</option>${cs.map(x=>`<option${b.client_contacts?.[id]===x.name?' selected':''}>${esc(x.name)}</option>`).join('')}</select>
-      ${work?`<button class="rm" data-act="rm-client" data-id="${id}" aria-label="Remove">×</button>`:'<span></span>'}</div>`}).join('')||'<div class="dim small">No GCs or clients added.</div>'}
-  </div>${work?`<div class="adders"><select class="field" data-act="add-client"><option value="">+ Add a GC or client…</option>${clientsSorted.filter(c=>!b.client_ids.includes(c.id)).map(c=>`<option value="${c.id}">${esc(c.company)}</option>`).join('')}</select></div>
-  <p class="hint">${S.clients.length?'Site work often goes to several GCs on the same project — add each one.':'No clients on file yet. Add them in the Clients & GCs tab.'}</p>`:''}</fieldset>
+
 
   ${scopeSection(b,work)}
 
   <fieldset><legend>Proposal</legend><div class="fg">
     <label class="f">Proposal status${sel('proposal_status',PROPOSAL_ST)}</label>
-    <label class="f">With site improvements<input type="number" step="0.01" min="0" class="field" ${bf('amount_with','n')} placeholder="$0.00"></label>
-    <label class="f">Without site improvements<input type="number" step="0.01" min="0" class="field" ${bf('amount_without','n')} placeholder="$0.00"></label>
+    <label class="f">Base — with site improvements<input type="number" step="0.01" min="0" class="field" ${bf('amount_with','n')} placeholder="$0.00"></label>
+    <label class="f">Base — without site improvements<input type="number" step="0.01" min="0" class="field" ${bf('amount_without','n')} placeholder="$0.00"></label>
     <label class="f">Estimated margin %<input type="number" step="0.1" class="field" ${bf('margin','n')} placeholder="e.g. 12"></label>
     <div class="s2"><div class="small" style="font-weight:500;color:var(--ink-2);margin-bottom:6px">Use for dashboard totals</div><div class="radio">
       <label><input type="radio" name="usefor" data-bf="use_for" value="with"${b.use_for!=='without'?' checked':''}${DIS()}> With site improvements</label>
       <label><input type="radio" name="usefor" data-bf="use_for" value="without"${b.use_for==='without'?' checked':''}${DIS()}> Without</label></div></div>
     <label class="f s2">Win probability: <b id="probv">${b.probability??50}%</b><input type="range" min="0" max="100" step="5" data-bf="probability" data-t="n" value="${b.probability??50}"${DIS()}></label>
-  </div></fieldset>
+  </div><p class="hint">The base numbers apply to every GC below unless you enter a different amount for them.</p></fieldset>
+
+  ${clientsSection(b,work)}
 
   <fieldset><legend>Vendor & sub quotes</legend>
     ${b.quotes.length?`<div class="qhead"><span>Vendor</span><span>Scope</span><span>Status</span><span>Need by</span><span>Amount</span><span>Quote file</span><span></span></div>`:''}
@@ -668,7 +677,8 @@ function bidModal(){
   ${outcome?`<fieldset><legend>Outcome</legend><div class="fg">
     <label class="f">Submitted on<input type="date" class="field" ${bf('submitted_date')}></label>
     ${b.status==='Awarded'?`<label class="f">Awarded on<input type="date" class="field" ${bf('awarded_date')}></label>
-    <label class="f s2">Contract amount<input type="number" step="0.01" class="field" ${bf('awarded_amount','n')} placeholder="Defaults to bid value"></label>`:''}
+    <label class="f">Awarded by<select class="field" data-act="award-sel"${DIS()}><option value="">${b.client_ids.length?'Pick the GC…':'Add GCs above first'}</option>${b.client_ids.map(id=>`<option value="${id}"${b.awarded_client_id===id?' selected':''}>${esc(clientName(id))}</option>`).join('')}</select></label>
+    <label class="f">Contract amount<input type="number" step="0.01" class="field" ${bf('awarded_amount','n')} placeholder="${b.awarded_client_id&&clientAmount(b,b.awarded_client_id)?money(clientAmount(b,b.awarded_client_id)):'Defaults to bid value'}"></label>`:''}
     ${b.status==='Lost'?`<label class="f">Lost reason${sel('lost_reason',LOST_REASONS)}</label><label class="f s2">Awarded to / low number<input class="field" ${bf('awarded_to')} placeholder="Who got it, and at what price"></label>`:''}
   </div></fieldset>`:''}
 
@@ -676,6 +686,42 @@ function bidModal(){
   </div>
   <div class="mfoot"><div>${admin&&!isNew?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button>`:''}</div>
   <div class="r"><button class="btn" data-act="close">${admin||work?'Cancel':'Close'}</button>${work?`<button class="btn primary" data-act="save">${isNew?'Create bid':'Save changes'}</button>`:''}</div></div>`;
+}
+function clientsSection(b,work){
+  const d=work?'':' disabled';
+  const clientsSorted=S.clients.slice().sort((a,c)=>a.company.localeCompare(c.company));
+  const amts=b.client_ids.map(id=>clientAmount(b,id)).filter(Boolean);
+  const rows=b.client_ids.map(id=>{
+    const c=byId(S.clients,id);const cs=c?.contacts||[];const ct=cs.find(x=>x.name===b.client_contacts?.[id]);const p=propOf(b,id);
+    const won=b.status==='Awarded'&&b.awarded_client_id===id;
+    const status=won?`<div class="signing">${pill('Awarded ✓','good')}${work?'<button class="btn sm ghost" data-act="unaward">Undo</button>':''}</div>`
+      :`<div class="signing"><select class="field" data-cp="${id}.status"${d} style="width:110px">${CP_ST.map(x=>`<option${(p.status||'Not sent')===x?' selected':''}>${x}</option>`).join('')}</select>${work?`<button class="btn sm" data-act="award" data-id="${id}">${b.status==='Awarded'&&b.awarded_client_id?'Switch award here':'Mark awarded'}</button>`:''}</div>`;
+    return `<div class="gc-row${won?' is-won':''}">
+      <div><b style="font-weight:600">${esc(clientName(id))}</b><div class="dim small">${esc(c?.type||'')}${ct?.phone?' · '+esc(ct.phone):''}${ct?.email?' · '+esc(ct.email):''}</div>
+        <select class="field" data-cc="${id}"${d} style="margin-top:6px"><option value="">Contact…</option>${cs.map(x=>`<option${b.client_contacts?.[id]===x.name?' selected':''}>${esc(x.name)}</option>`).join('')}</select></div>
+      <label class="f">With site impr.<input type="number" step="0.01" min="0" class="field" data-cp="${id}.amount_with" data-t="n" value="${esc(p.amount_with??'')}" placeholder="${num(b.amount_with)!=null?money(b.amount_with):'$'}"${d}></label>
+      <label class="f">Without<input type="number" step="0.01" min="0" class="field" data-cp="${id}.amount_without" data-t="n" value="${esc(p.amount_without??'')}" placeholder="${num(b.amount_without)!=null?money(b.amount_without):'$'}"${d}></label>
+      <label class="f">Sent on<input type="date" class="field" data-cp="${id}.sent_date" value="${esc(p.sent_date||'')}"${d}></label>
+      <div class="f">Proposal${status}</div>
+      ${work?`<button class="rm" data-act="rm-client" data-id="${id}" aria-label="Remove">×</button>`:'<span></span>'}</div>`}).join('');
+  return `<fieldset><legend>Bidding to & proposals</legend>
+    ${b.client_ids.length>1&&amts.length?`<p class="hint" style="margin:0 0 10px">${b.client_ids.length} GCs · proposals range ${money(Math.min(...amts))} – ${money(Math.max(...amts))}</p>`:''}
+    <div class="rows">${rows||'<div class="dim small">No GCs, owners or contractors added yet.</div>'}</div>
+    ${work?`<div class="adders"><select class="field" data-act="add-client"><option value="">+ Add a GC, owner or contractor…</option>${clientsSorted.filter(c=>!b.client_ids.includes(c.id)).map(c=>`<option value="${c.id}">${esc(c.company)}${c.type?' ('+esc(c.type)+')':''}</option>`).join('')}</select></div>
+    <p class="hint">${S.clients.length?'Add everyone you’re sending a number to. Leave an amount blank to use the base proposal. When the job is awarded, click <b>Mark awarded</b> on the winning GC — the others are marked lost.':'No clients on file yet. Add them in the Clients & GCs tab.'}</p>`:''}
+  </fieldset>`;
+}
+function awardClient(id){
+  const d=M.draft;d.client_proposals=d.client_proposals||{};
+  d.client_ids.forEach(c=>{const p=d.client_proposals[c]=Object.assign({},d.client_proposals[c]);
+    if(c===id){p.status='Awarded';if(!p.sent_date)p.sent_date=d.submitted_date||todayStr()}else if(p.status!=='Lost')p.status='Lost'});
+  d.status='Awarded';d.awarded_client_id=id;if(!d.awarded_date)d.awarded_date=todayStr();
+  d.awarded_amount=clientAmount(d,id)||null;d.proposal_status='Sent';
+  renderModal();toast(`Marked awarded by ${clientName(id)}. Save to keep it.`);
+}
+function unaward(){
+  const d=M.draft;d.client_ids.forEach(c=>{const p=d.client_proposals[c];if(p&&(p.status==='Awarded'||p.status==='Lost'))p.status='Sent'});
+  d.status='Submitted';d.awarded_client_id='';d.awarded_amount=null;d.awarded_date='';renderModal();
 }
 function scopeSection(b,work){
   const L=lib();const items=b.scope_items;const have=new Set(items.map(x=>x.name.toLowerCase()));
@@ -754,9 +800,9 @@ function estModal(){const e=M.draft,isNew=M.isNew;
    <p class="hint">Use the same email as their login, and their account links to this record automatically when they’re added.</p></fieldset>
    ${isNew?'':`<fieldset><legend>Assigned bids</legend>${bidMiniList(bs,b=>b.lead_estimator_id===e.id?'Lead':'Support')}</fieldset>`}</div>`+entFoot('Add estimator',isNew)}
 function clientModal(){const c=M.draft,isNew=M.isNew;const admin=isAdmin();
-  const bs=S.bids.filter(b=>(b.client_ids||[]).includes(c.id));const w=bs.filter(b=>b.status==='Awarded'),l=bs.filter(b=>b.status==='Lost');
+  const bs=S.bids.filter(b=>(b.client_ids||[]).includes(c.id));const w=bs.filter(b=>clientWon(b,c.id)),l=bs.filter(b=>clientLost(b,c.id));
   return mhead(isNew?'New client or GC':c.company||'Client','')+`<div class="mbody">
-   ${isNew||role()==='estimator'?'':`<div class="statline"><div><b>${bs.length}</b>Bids</div><div><b>${moneyK(bs.reduce((s,b)=>s+bidValue(b),0))}</b>Total bid</div><div><b>${w.length}</b>Won</div><div><b>${w.length+l.length?Math.round(w.length/(w.length+l.length)*100)+'%':'—'}</b>Win rate</div><div><b>${moneyK(w.reduce((s,b)=>s+wonValue(b),0))}</b>Awarded</div></div>`}
+   ${isNew||role()==='estimator'?'':`<div class="statline"><div><b>${bs.length}</b>Bids</div><div><b>${moneyK(bs.reduce((s,b)=>s+clientAmount(b,c.id),0))}</b>Total bid</div><div><b>${w.length}</b>Won</div><div><b>${w.length+l.length?Math.round(w.length/(w.length+l.length)*100)+'%':'—'}</b>Win rate</div><div><b>${moneyK(w.reduce((s,b)=>s+wonValue(b),0))}</b>Awarded</div></div>`}
    <fieldset><legend>Company</legend><div class="fg">
    <label class="f s2">Company name ${admin?'<span class="req">required</span>':''}${ef('company','e.g. Summit Builders')}</label><label class="f s2">Type${efSel('type',CLIENT_TYPES)}</label>
    <label class="f s2">Main phone${ef('phone','(000) 000-0000','tel')}</label><label class="f s2">Website or email${ef('email','')}</label>
@@ -764,7 +810,7 @@ function clientModal(){const c=M.draft,isNew=M.isNew;const admin=isAdmin();
    <label class="f s4">Notes<textarea class="field" data-ef="notes" placeholder="Prequal status, bonding requirements, payment history…"${DIS()}>${esc(c.notes||'')}</textarea></label></div></fieldset>
    <fieldset><legend>Contacts</legend><div class="rows">${(c.contacts||[]).map((x,i)=>`<div class="rowline contact"><input class="field" data-ctf="${i}.name" value="${esc(x.name||'')}" placeholder="Name"${DIS()}><input class="field" data-ctf="${i}.title" value="${esc(x.title||'')}" placeholder="Role, e.g. PM"${DIS()}><input class="field" data-ctf="${i}.phone" value="${esc(x.phone||'')}" placeholder="Phone"${DIS()}><input class="field" data-ctf="${i}.email" value="${esc(x.email||'')}" placeholder="Email"${DIS()}>${admin?`<button class="rm" data-act="rm-contact" data-i="${i}" aria-label="Remove">×</button>`:'<span></span>'}</div>`).join('')||'<div class="dim small">No contacts.</div>'}</div>
    ${admin?'<div class="adders"><button class="btn sm" data-act="add-contact">+ Add contact</button></div>':''}</fieldset>
-   ${isNew?'':`<fieldset><legend>Bid history</legend>${bidMiniList(bs,b=>b.client_contacts?.[c.id]?'Contact: '+esc(b.client_contacts[c.id]):'')}</fieldset>`}</div>`+entFoot('Add client',isNew)}
+   ${isNew?'':`<fieldset><legend>Bid history</legend>${bidMiniList(bs,b=>[clientAmount(b,c.id)?'Our number '+money(clientAmount(b,c.id)):'',clientWon(b,c.id)?'<b style="color:var(--good)">Awarded to us</b>':clientLost(b,c.id)?'Lost':(propOf(b,c.id).status||'Not sent'),b.client_contacts?.[c.id]?'Contact: '+esc(b.client_contacts[c.id]):''].filter(Boolean).join(' · '))}</fieldset>`}</div>`+entFoot('Add client',isNew)}
 function vendorModal(){const v=M.draft,isNew=M.isNew;const s=vendorStats(v.id);
   return mhead(isNew?'New vendor':v.company||'Vendor',v.trade||'')+`<div class="mbody">
    ${isNew?'':`<div class="statline"><div><b>${s.asked}</b>Quotes asked</div><div><b>${s.rec}</b>Received</div><div><b>${s.rate==null?'—':s.rate+'%'}</b>Response rate</div><div><b>${s.open}</b>Open now</div></div>`}
@@ -788,11 +834,17 @@ async function saveBid(){
   if(d.quotes.some(q=>q._uploading)||M.uploading)throw new Error('Wait for the upload to finish.');
   if(!canWork(d))throw new Error('You don’t have permission to change this bid.');
   if(!d.name.trim())throw new Error('Add a project name before saving.');
+  d.client_proposals=Object.fromEntries(Object.entries(d.client_proposals||{}).filter(([k])=>d.client_ids.includes(k)));
+  if(!d.client_ids.includes(d.awarded_client_id))d.awarded_client_id='';
+  const sent=d.client_ids.map(id=>propOf(d,id)).filter(p=>['Sent','Lost','Awarded'].includes(p.status));
+  if(d.status==='Estimating'&&sent.length)d.status='Submitted';          // a proposal went out
+  if(!d.submitted_date){const ds=sent.map(p=>p.sent_date).filter(Boolean).sort();if(ds.length)d.submitted_date=ds[0]}
+  if(d.status==='Awarded'&&!d.awarded_client_id&&d.client_ids.length===1)d.awarded_client_id=d.client_ids[0];
   if(['Submitted','Awarded','Lost'].includes(d.status)&&!d.submitted_date)d.submitted_date=todayStr();
   if(d.status==='Awarded'&&!d.awarded_date)d.awarded_date=todayStr();
   if(d.status==='Submitted'&&d.proposal_status!=='Sent')d.proposal_status='Sent';
   const row={};BID_COLS.forEach(k=>row[k]=d[k]);
-  ['due_date','due_time','walk_date','rfi_date','submitted_date','awarded_date','lead_estimator_id'].forEach(k=>row[k]=nullIfEmpty(row[k]));
+  ['due_date','due_time','walk_date','rfi_date','submitted_date','awarded_date','lead_estimator_id','awarded_client_id'].forEach(k=>row[k]=nullIfEmpty(row[k]));
   row.follow_ups=(d.follow_ups||[]).filter(f=>f.date||f.note);row.updated_by=S.session.user.id;
   if(d._new)await run(sb.from('bids').insert(row));
   else{const {id,...rest}=row;await run(sb.from('bids').update(rest).eq('id',id))}
@@ -873,9 +925,9 @@ async function download(path,name){
   setTimeout(()=>URL.revokeObjectURL(url),10000);
 }
 function exportCsv(){
-  const cols=['Project','Location','Status','Clients','Lead estimator','Due date','Bid type','Project type','With site impr.','Without site impr.','Dashboard value','Win %','Submitted','Awarded date','Awarded amount','Lost reason','Scopes signed off','Quotes received','Quotes requested'];
+  const cols=['Project','Location','Status','Clients','Lead estimator','Due date','Bid type','Project type','With site impr.','Without site impr.','Dashboard value','Win %','Submitted','Awarded date','Awarded by','Awarded amount','Lost reason','Scopes signed off','Quotes received','Quotes requested'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const rows=S.bids.map(b=>{const qs=quotesFor(b.id);return [b.name,b.location,b.status,(b.client_ids||[]).map(clientName).join('; '),estName(b.lead_estimator_id),b.due_date,b.bid_type,b.project_type,b.amount_with,b.amount_without,bidValue(b),b.probability,b.submitted_date,b.awarded_date,b.awarded_amount,b.lost_reason,scopeItems(b).filter(x=>x.status==='Complete').length+'/'+scopeItems(b).length,qs.filter(x=>x.status==='Received').length,qs.length].map(q).join(',')});
+  const rows=S.bids.map(b=>{const qs=quotesFor(b.id);return [b.name,b.location,b.status,(b.client_ids||[]).map(clientName).join('; '),estName(b.lead_estimator_id),b.due_date,b.bid_type,b.project_type,b.amount_with,b.amount_without,bidValue(b),b.probability,b.submitted_date,b.awarded_date,b.awarded_client_id?clientName(b.awarded_client_id):'',b.awarded_amount,b.lost_reason,scopeItems(b).filter(x=>x.status==='Complete').length+'/'+scopeItems(b).length,qs.filter(x=>x.status==='Received').length,qs.length].map(q).join(',')});
   const blob=new Blob([[cols.map(q).join(','),...rows].join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bid-pipeline-'+todayStr()+'.csv';a.click();
 }
 
@@ -909,7 +961,9 @@ document.addEventListener('click',e=>{
     case 'save':saveModal();break;
     case 'del':deleteModal();break;
     case 'rm-support':M.draft.support_estimator_ids=M.draft.support_estimator_ids.filter(x=>x!==t.dataset.id);renderModal();break;
-    case 'rm-client':M.draft.client_ids=M.draft.client_ids.filter(x=>x!==t.dataset.id);delete M.draft.client_contacts[t.dataset.id];renderModal();break;
+    case 'rm-client':{const id=t.dataset.id;M.draft.client_ids=M.draft.client_ids.filter(x=>x!==id);delete M.draft.client_contacts[id];delete M.draft.client_proposals[id];if(M.draft.awarded_client_id===id)M.draft.awarded_client_id='';renderModal();break}
+    case 'award':awardClient(t.dataset.id);break;
+    case 'unaward':unaward();break;
     case 'rm-quote':M.draft.quotes.splice(+t.dataset.i,1);renderModal();break;
     case 'clear-file':{const q=M.draft.quotes[+t.dataset.i];q.file_path=null;q.file_name=null;renderModal();break}
     case 'rm-file':removeFile(t.dataset.id);break;
@@ -948,6 +1002,7 @@ document.addEventListener('input',e=>{
   else if(t.dataset.ff){const[i,k]=t.dataset.ff.split('.');M.draft.follow_ups[+i][k]=val}
   else if(t.dataset.ctf){const[i,k]=t.dataset.ctf.split('.');M.draft.contacts[+i][k]=val}
   else if(t.dataset.cc){M.draft.client_contacts[t.dataset.cc]=val}
+  else if(t.dataset.cp){const[id,k]=t.dataset.cp.split('.');const cp=M.draft.client_proposals=M.draft.client_proposals||{};cp[id]=Object.assign({},cp[id],{[k]:val})}
   else if(t.dataset.ef){M.draft[t.dataset.ef]=val}
   else if(t.dataset.wf){M.draft[t.dataset.wf]=t.checked}
   else if(t.dataset.sf){const[i,k]=t.dataset.sf.split('.');M.draft.scope_items[+i][k]=val}
@@ -963,6 +1018,8 @@ document.addEventListener('change',e=>{
   if(t.dataset.plink!=null){linkEstimator(t.dataset.plink,t.value);return}
   if(t.dataset.pname){setProfileName(t.dataset.pname,t.value.trim());return}
   if(M&&t.dataset.bf){if(t.dataset.bf==='status'||t.dataset.bf==='lead_estimator_id')renderModal();return}
+  if(M&&t.dataset.cp&&t.dataset.cp.endsWith('.status')){const id=t.dataset.cp.split('.')[0];const p=M.draft.client_proposals[id];if(p.status==='Sent'&&!p.sent_date)p.sent_date=todayStr();renderModal();return}
+  if(M&&t.dataset.cp&&/amount/.test(t.dataset.cp)){renderModal();return}
   if(M&&t.dataset.qf&&t.dataset.qf.endsWith('.status')){const q=M.draft.quotes[+t.dataset.qf.split('.')[0]];
     if(q.status==='Requested'&&!q.requested_date)q.requested_date=todayStr();if(q.status==='Received'&&!q.received_date)q.received_date=todayStr();renderModal();return}
   if(!a)return;
@@ -976,6 +1033,7 @@ document.addEventListener('change',e=>{
     case 'add-quote':if(t.value){addQuote(t.value);renderModal()}break;
     case 'apply-template':if(t.value){const tp=(lib().templates||[]).find(x=>x.id===t.value);const n=tp?tp.scopes.filter(x=>addScope(x)).length:0;toast(n?`Added ${n} scope${n===1?'':'s'} from ${tp.name}`:'Those scopes are already on this bid');renderModal()}break;
     case 'add-scope':if(t.value){addScope(t.value);renderModal()}break;
+    case 'award-sel':if(t.value)awardClient(t.value);else{M.draft.awarded_client_id='';renderModal()}break;
     case 'add-trade':if(t.value){const n=S.vendors.filter(v=>v.trade===t.value).map(v=>addQuote(v.id)).filter(Boolean).length;toast(n?`Added ${n} ${t.value.toLowerCase()} vendor${n===1?'':'s'}`:'Those vendors are already on this bid');renderModal()}break;
   }
 });
