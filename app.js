@@ -44,7 +44,7 @@ const WIDGETS=[['kpis','Headline numbers'],['monthly','Bid and award volume by m
 const AV_COLORS=['#2C5E99','#2C7A4C','#8B5E34','#7A3E8E','#B24A2A','#2F7C83','#5A6B1E','#9C3D5C'];
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const BUCKET='bid-files';
-const BID_COLS=['id','name','location','project_type','bid_type','size','status','probability','due_date','due_time','walk_date','rfi_date','lead_estimator_id','support_estimator_ids','client_ids','client_contacts','client_proposals','awarded_client_id','scope_items','proposal_status','amount_with','amount_without','use_for','margin','follow_ups','notes','submitted_date','awarded_date','awarded_amount','awarded_to','lost_reason'];
+const BID_COLS=['id','name','location','project_type','bid_type','size','status','probability','due_date','due_time','walk_date','rfi_date','lead_estimator_id','support_estimator_ids','client_ids','client_contacts','client_proposals','awarded_client_id','addenda','revisions','scope_items','proposal_status','amount_with','amount_without','use_for','margin','follow_ups','notes','submitted_date','awarded_date','awarded_amount','awarded_to','lost_reason'];
 const Q_COLS=['id','bid_id','vendor_id','scope','status','requested_date','due_date','received_date','amount','note','file_path','file_name'];
 const ENT_COLS={estimators:['id','name','title','email','phone','active'],clients:['id','company','type','phone','email','address','notes','contacts'],vendors:['id','company','vendor_type','trade','scopes','contact_name','phone','email','area','preferred','notes']};
 const VENDOR_TYPES=['Supplier','Subcontractor','Supplier & sub','Service / testing','Trucking'];
@@ -124,6 +124,15 @@ const bidValue=b=>{const base=pick(b,num(b.amount_with),num(b.amount_without));i
 const wonValue=b=>num(b.awarded_amount)??(b.awarded_client_id?clientAmount(b,b.awarded_client_id):bidValue(b));
 const clientWon=(b,cid)=>b.status==='Awarded'&&(b.awarded_client_id?b.awarded_client_id===cid:(b.client_ids||[]).length===1);
 const clientLost=(b,cid)=>!clientWon(b,cid)&&(b.status==='Lost'||propOf(b,cid).status==='Lost'||(b.status==='Awarded'&&!!b.awarded_client_id));
+/* ---- addenda & proposal revisions ---- */
+const addenda=b=>Array.isArray(b.addenda)?b.addenda:[];
+const revisions=b=>Array.isArray(b.revisions)?b.revisions:[];
+const openAddenda=b=>addenda(b).filter(a=>!a.priced||!a.acknowledged);
+function revSnap(b){const gcs={};(b.client_ids||[]).forEach(id=>{const p=propOf(b,id);gcs[id]={w:num(p.amount_with)??num(b.amount_with),o:num(p.amount_without)??num(b.amount_without)}});return{w:num(b.amount_with),o:num(b.amount_without),gcs}}
+function snapValue(b,sn){if(!sn)return null;const base=pick(b,sn.w,sn.o);if(base!=null)return base;const a=Object.values(sn.gcs||{}).map(g=>pick(b,g.w,g.o)).filter(v=>v!=null);return a.length?Math.max(...a):null}
+function addRevision(d,reason,auto){const r=revisions(d);d.revisions=r;r.push({id:newId(),rev:r.length?Math.max(...r.map(x=>+x.rev||0))+1:0,date:todayStr(),reason,addendum:'',snapshot:revSnap(d),by:myName(),auto:!!auto})}
+// addenda issued after the latest revision on a bid that has gone out
+function staleAddenda(b){const r=revisions(b);if(!r.length)return [];const last=r[r.length-1].date||'';const used=new Set(r.map(x=>String(x.addendum)));return addenda(b).filter(a=>a.date&&a.date>last&&!used.has(String(a.number)))}
 function clientsLine(b,max=2){const ids=b.client_ids||[];if(!ids.length)return 'No client assigned';
   if(b.status==='Awarded'&&b.awarded_client_id)return 'Awarded by '+esc(clientName(b.awarded_client_id))+(ids.length>1?` <span class="dim">(bid to ${ids.length})</span>`:'');
   return ids.slice(0,max).map(id=>esc(clientName(id))).join(', ')+(ids.length>max?` +${ids.length-max} more`:'')}
@@ -415,7 +424,7 @@ function overviewTable(list){
     <td>${(b.client_ids||[]).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}</div>`).join('')||'<span class="dim">—</span>'}</td>
     <td>${dueCell(b)}</td>
     ${groups.map(([,g])=>`<td>${groupStatus(b,g)}</td>`).join('')}
-    <td>${pill(b.proposal_status||'Not Started',PROP_CLS[b.proposal_status])}</td>
+    <td>${pill(b.proposal_status||'Not Started',PROP_CLS[b.proposal_status])}${revisions(b).length>1?`<div class="dim small" style="margin-top:3px">Rev ${esc(revisions(b)[revisions(b).length-1].rev)}</div>`:''}${openAddenda(b).length?`<div class="small" style="margin-top:3px;color:var(--warn);font-weight:600;white-space:nowrap">${openAddenda(b).length} addend${openAddenda(b).length===1?'um':'a'} open</div>`:''}</td>
     <td class="r num">${amtCell(b,'amount_with')}</td>
     <td class="r num">${amtCell(b,'amount_without')}</td>
     <td class="r num" style="font-weight:700">${bidValue(b)?money(bidValue(b))+` <span class="dim small">${b.use_for==='without'?'w/o':'w/'}</span>`:'<span class="dim">—</span>'}</td>
@@ -562,7 +571,7 @@ function card(b){
    <div class="row">${dueCell(b)}<div style="text-align:right">${v?`<div class="val">${money(v)}</div><div class="dim small">${b.use_for==='without'?'Without':'With'} site improvements</div>`:`<div class="dim small">Proposal ${esc((b.proposal_status||'Not Started').toLowerCase())}</div>`}</div></div>
    <div class="scopes">${scopePills(b)}</div>
    <div class="foot"><span class="who" style="gap:3px">${team.map(id=>avatar(id,24)).join('')||'<span class="dim small">No estimator</span>'}</span>
-   <span class="dim small" style="margin-left:auto">${qs.length?`Quotes ${rec}/${qs.length} in`:'No vendor quotes'}${nf?` · ${nf} file${nf===1?'':'s'}`:''}</span></div></div>`;
+   <span class="dim small" style="margin-left:auto">${qs.length?`Quotes ${rec}/${qs.length} in`:'No vendor quotes'}${nf?` · ${nf} file${nf===1?'':'s'}`:''}${addenda(b).length?` · ${addenda(b).length} add.${openAddenda(b).length?` <b style="color:var(--warn)">(${openAddenda(b).length} open)</b>`:''}`:''}${revisions(b).length>1?` · Rev ${revisions(b)[revisions(b).length-1].rev}`:''}</span></div></div>`;
 }
 
 /* ----- directories ----- */
@@ -651,14 +660,14 @@ const DIS=()=>M&&M.kind==='bid'?(canWork(M.draft)?'':' disabled'):(isAdmin()?'':
 
 /* ----- bid editor ----- */
 function newBid(){return{id:newId(),name:'',location:'',project_type:'Commercial',bid_type:'Hard bid',size:'',status:'Estimating',probability:50,
-  due_date:'',due_time:'',walk_date:'',rfi_date:'',lead_estimator_id:'',support_estimator_ids:[],client_ids:[],client_contacts:{},client_proposals:{},awarded_client_id:'',
+  due_date:'',due_time:'',walk_date:'',rfi_date:'',lead_estimator_id:'',support_estimator_ids:[],client_ids:[],client_contacts:{},client_proposals:{},awarded_client_id:'',addenda:[],revisions:[],
   scope_items:[],
   proposal_status:'Not Started',amount_with:null,amount_without:null,use_for:'with',margin:null,follow_ups:[],notes:'',
   submitted_date:'',awarded_date:'',awarded_amount:null,awarded_to:'',lost_reason:'',quotes:[],_new:true}}
 function openBid(id){
   const b=byId(S.bids,id);if(!b)return;
   const d=Object.assign(newBid(),clone(b));d._new=false;
-  d.scope_items=clone(scopeItems(b));d.client_proposals=d.client_proposals||{};d.client_contacts=d.client_contacts||{};d.awarded_client_id=d.awarded_client_id||'';d.due_time=d.due_time?String(d.due_time).slice(0,5):'';
+  d.scope_items=clone(scopeItems(b));d.client_proposals=d.client_proposals||{};d.client_contacts=d.client_contacts||{};d.awarded_client_id=d.awarded_client_id||'';d.addenda=Array.isArray(d.addenda)?d.addenda:[];d.revisions=Array.isArray(d.revisions)?d.revisions:[];d.due_time=d.due_time?String(d.due_time).slice(0,5):'';
   ['due_date','walk_date','rfi_date','submitted_date','awarded_date'].forEach(k=>d[k]=d[k]||'');
   d.lead_estimator_id=d.lead_estimator_id||'';d.quotes=clone(quotesFor(id));d.quotes.forEach(q=>{['requested_date','due_date','received_date'].forEach(k=>q[k]=q[k]||'')});
   M={kind:'bid',draft:d,origQuoteIds:d.quotes.map(q=>q.id)};showModal();
@@ -758,6 +767,10 @@ function bidModal(){
 
   ${clientsSection(b,work)}
 
+  ${addendaSection(b,work)}
+
+  ${revisionSection(b,work)}
+
   <fieldset><legend>Vendor & sub quotes</legend>
     ${b.quotes.length?`<div class="qhead"><span>Vendor</span><span>Scope</span><span>Status</span><span>Need by</span><span>Amount</span><span>Quote file</span><span></span></div>`:''}
     <div class="rows">${b.quotes.map((q,i)=>quoteRow(q,i,work,admin)).join('')||'<div class="dim small">No quote requests yet.</div>'}</div>
@@ -814,6 +827,45 @@ function clientsSection(b,work){
     ${work?`<div class="adders"><select class="field" data-act="add-client"><option value="">+ Add a GC, owner or contractor…</option>${clientsSorted.filter(c=>!b.client_ids.includes(c.id)).map(c=>`<option value="${c.id}">${esc(c.company)}${c.type?' ('+esc(c.type)+')':''}</option>`).join('')}</select></div>
     <p class="hint">${S.clients.length?'Add everyone you’re sending a number to. Leave an amount blank to use the base proposal. When the job is awarded, click <b>Mark awarded</b> on the winning GC — the others are marked lost.':'No clients on file yet. Add them in the Clients & GCs tab.'}</p>`:''}
   </fieldset>`;
+}
+function addendaSection(b,work){
+  const d=work?'':' disabled';const list=addenda(b);const stale=staleAddenda(b);
+  const rows=list.map((a,i)=>`<div class="ad-row${a.priced&&a.acknowledged?' is-done':''}">
+    <label class="f">No.<input type="number" min="0" class="field" data-ad="${i}.number" data-t="n" value="${esc(a.number??'')}"${d}></label>
+    <label class="f">Issued<input type="date" class="field" data-ad="${i}.date" value="${esc(a.date||'')}"${d}></label>
+    <label class="f">What changed<input class="field" data-ad="${i}.description" value="${esc(a.description||'')}" placeholder="e.g. Revised storm layout, added 200 LF of 24&quot; RCP"${d}></label>
+    <div class="ad-checks"><label class="check"><input type="checkbox" data-ad="${i}.priced" ${a.priced?'checked':''}${d}> Priced</label><label class="check"><input type="checkbox" data-ad="${i}.acknowledged" ${a.acknowledged?'checked':''}${d}> Acknowledged</label></div>
+    <div class="file">${a.file_path?`<button class="linkbtn" style="font-size:13px;font-weight:600" data-act="dl" data-path="${esc(a.file_path)}" data-name="${esc(a.file_name||'addendum')}">${esc(a.file_name||'Download')}</button>${work?` <button class="rm" data-act="ad-clear" data-i="${i}" title="Detach file">×</button>`:''}`
+      :work&&!b._new?`<label>Attach file<input type="file" data-adupload="${i}"></label>`:'<span class="dim small">No file</span>'}</div>
+    ${work?`<button class="rm" data-act="rm-ad" data-i="${i}" aria-label="Remove">×</button>`:'<span></span>'}</div>`).join('');
+  return `<fieldset><legend>Addendum log</legend>
+    ${list.length?`<p class="hint" style="margin:0 0 10px">${list.length} addend${list.length===1?'um':'a'} · ${openAddenda(b).length?`<b style="color:var(--warn)">${openAddenda(b).length} not yet priced and acknowledged</b>`:'all priced and acknowledged'}</p>`:''}
+    ${stale.length?`<div class="notice" style="margin-bottom:10px">Addend${stale.length===1?'um':'a'} ${stale.map(a=>esc(a.number??'?')).join(', ')} came out after the last proposal revision. If pricing changed, update the numbers or click <b>Record revision</b>.</div>`:''}
+    <div class="rows">${rows||'<div class="dim small">No addenda logged.</div>'}</div>
+    ${work?`<div class="adders"><button class="btn sm" data-act="add-ad">+ Log addendum</button></div>${b._new?'<p class="hint">Create the bid first to attach addendum files.</p>':'<p class="hint">Attached files also appear under Project files as “Addenda”.</p>'}`:''}
+  </fieldset>`;
+}
+function revisionSection(b,work){
+  const list=revisions(b);const d=work?'':' disabled';
+  const rows=list.map((r,i)=>{const v=snapValue(b,r.snapshot),pv=i?snapValue(b,list[i-1].snapshot):null;const diff=v!=null&&pv!=null?v-pv:null;
+    const gcs=Object.entries(r.snapshot?.gcs||{}).map(([id,g])=>`${esc(clientName(id))} ${moneyK(pick(b,g.w,g.o)||0)}`).join(' · ');
+    return `<div class="rev-row">
+      <div class="rev-no">Rev ${esc(r.rev)}</div>
+      <div><div class="num" style="font-weight:700">${v!=null?money(v):'—'}${diff?` <span class="small" style="color:var(--info);font-weight:600">${diff>0?'+':'−'}${money(Math.abs(diff))}</span>`:''}</div><div class="dim small">${fmtDate(r.date)} · ${esc(r.by||'')}${r.auto?' · logged automatically':''}</div>${gcs&&Object.keys(r.snapshot.gcs).length>1?`<div class="dim small">${gcs}</div>`:''}</div>
+      <label class="f">Reason<input class="field" data-rv="${i}.reason" value="${esc(r.reason||'')}" placeholder="e.g. Addendum 2, GC value engineering"${d}></label>
+      <label class="f">Addendum<select class="field" data-rv="${i}.addendum"${d}><option value="">—</option>${addenda(b).filter(a=>a.number!=null).map(a=>`<option value="${esc(a.number)}"${String(r.addendum)===String(a.number)?' selected':''}>Addendum ${esc(a.number)}</option>`).join('')}</select></label>
+      ${work&&isAdmin()?`<button class="rm" data-act="rm-rev" data-i="${i}" aria-label="Remove">×</button>`:'<span></span>'}</div>`}).join('');
+  return `<fieldset><legend>Proposal revision log</legend>
+    <div class="rows">${rows||'<div class="dim small">No revisions yet. Rev 0 is recorded automatically when the proposal goes out.</div>'}</div>
+    ${work?`<div class="adders"><button class="btn sm" data-act="add-rev">+ Record revision</button></div><p class="hint">Records the current proposal numbers. A revision is also logged automatically whenever the numbers change after the proposal has been sent — add the reason here.</p>`:''}
+  </fieldset>`;
+}
+async function uploadAddendum(i,file){
+  const a=M?.draft.addenda[i];if(!a||!file)return;const bidId=M.draft.id;M.uploading=true;renderModal();
+  try{const path=await uploadTo(bidId,'docs',file);
+    await run(sb.from('bid_files').insert({bid_id:bidId,file_path:path,file_name:file.name,category:'Addenda',size_bytes:file.size,uploaded_by:S.session.user.id,uploaded_by_name:myName()}));
+    a.file_path=path;a.file_name=file.name;await loadTable('bid_files');toast('Addendum file attached. Save to keep the link.')}
+  catch(e){toast(errMsg(e))}finally{if(M){M.uploading=false;renderModal()}}
 }
 function awardClient(id){
   const d=M.draft;d.client_proposals=d.client_proposals||{};
@@ -964,6 +1016,12 @@ async function saveBid(){
   if(!d.submitted_date){const ds=sent.map(p=>p.sent_date).filter(Boolean).sort();if(ds.length)d.submitted_date=ds[0]}
   if(d.status==='Awarded'&&!d.awarded_client_id&&d.client_ids.length===1)d.awarded_client_id=d.client_ids[0];
   if(['Submitted','Awarded','Lost'].includes(d.status)&&!d.submitted_date)d.submitted_date=todayStr();
+  d.addenda=addenda(d).filter(a=>a.number!=null||a.description||a.date);d.revisions=revisions(d);
+  // Log a proposal revision automatically once the proposal has gone out and its numbers change
+  const out=['Submitted','Awarded','Lost'].includes(d.status)||d.proposal_status==='Sent';
+  if(out&&bidValue(d)){const last=d.revisions[d.revisions.length-1];
+    if(!last)addRevision(d,'Original proposal',true);
+    else if(JSON.stringify(last.snapshot)!==JSON.stringify(revSnap(d)))addRevision(d,'Numbers updated',true);}
   if(d.status==='Awarded'&&!d.awarded_date)d.awarded_date=todayStr();
   if(d.status==='Submitted'&&d.proposal_status!=='Sent')d.proposal_status='Sent';
   const row={};BID_COLS.forEach(k=>row[k]=d[k]);
@@ -1048,9 +1106,9 @@ async function download(path,name){
   setTimeout(()=>URL.revokeObjectURL(url),10000);
 }
 function exportCsv(){
-  const cols=['Project','Location','Status','Clients','Lead estimator','Due date','Bid type','Project type','With site impr.','Without site impr.','Dashboard value','Win %','Submitted','Awarded date','Awarded by','Awarded amount','Lost reason','Scopes signed off','Quotes received','Quotes requested'];
+  const cols=['Project','Location','Status','Clients','Lead estimator','Due date','Bid type','Project type','With site impr.','Without site impr.','Dashboard value','Win %','Submitted','Awarded date','Awarded by','Awarded amount','Lost reason','Scopes signed off','Addenda','Addenda open','Latest revision','Quotes received','Quotes requested'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const rows=S.bids.map(b=>{const qs=quotesFor(b.id);return [b.name,b.location,b.status,(b.client_ids||[]).map(clientName).join('; '),estName(b.lead_estimator_id),b.due_date,b.bid_type,b.project_type,b.amount_with,b.amount_without,bidValue(b),b.probability,b.submitted_date,b.awarded_date,b.awarded_client_id?clientName(b.awarded_client_id):'',b.awarded_amount,b.lost_reason,scopeItems(b).filter(x=>x.status==='Complete').length+'/'+scopeItems(b).length,qs.filter(x=>x.status==='Received').length,qs.length].map(q).join(',')});
+  const rows=S.bids.map(b=>{const qs=quotesFor(b.id);return [b.name,b.location,b.status,(b.client_ids||[]).map(clientName).join('; '),estName(b.lead_estimator_id),b.due_date,b.bid_type,b.project_type,b.amount_with,b.amount_without,bidValue(b),b.probability,b.submitted_date,b.awarded_date,b.awarded_client_id?clientName(b.awarded_client_id):'',b.awarded_amount,b.lost_reason,scopeItems(b).filter(x=>x.status==='Complete').length+'/'+scopeItems(b).length,addenda(b).length,openAddenda(b).length,revisions(b).length?'Rev '+revisions(b)[revisions(b).length-1].rev:'',qs.filter(x=>x.status==='Received').length,qs.length].map(q).join(',')});
   const blob=new Blob([[cols.map(q).join(','),...rows].join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bid-pipeline-'+todayStr()+'.csv';a.click();
 }
 
@@ -1088,6 +1146,11 @@ document.addEventListener('click',e=>{
     case 'rm-client':{const id=t.dataset.id;M.draft.client_ids=M.draft.client_ids.filter(x=>x!==id);delete M.draft.client_contacts[id];delete M.draft.client_proposals[id];if(M.draft.awarded_client_id===id)M.draft.awarded_client_id='';renderModal();break}
     case 'award':awardClient(t.dataset.id);break;
     case 'pick-open':pickerStart();break;
+    case 'add-ad':{const l=M.draft.addenda;const n=l.reduce((m,a)=>Math.max(m,+a.number||0),0)+1;l.push({id:newId(),number:n,date:todayStr(),description:'',priced:false,acknowledged:false});renderModal();setTimeout(()=>{const x=document.querySelectorAll('[data-ad$=".description"]');x[x.length-1]?.focus()},0);break}
+    case 'rm-ad':M.draft.addenda.splice(+t.dataset.i,1);renderModal();break;
+    case 'ad-clear':{const a=M.draft.addenda[+t.dataset.i];a.file_path=null;a.file_name=null;renderModal();break}
+    case 'add-rev':addRevision(M.draft,'',false);renderModal();setTimeout(()=>{const x=document.querySelectorAll('[data-rv$=".reason"]');x[x.length-1]?.focus()},0);break;
+    case 'rm-rev':M.draft.revisions.splice(+t.dataset.i,1);renderModal();break;
     case 'pick-cancel':M.picker=null;renderModal();break;
     case 'pick-next':M.picker.step++;M.picker.q='';renderModal();$('#modal .mbody').scrollTop=0;break;
     case 'pick-back':M.picker.step--;M.picker.q='';renderModal();$('#modal .mbody').scrollTop=0;break;
@@ -1139,6 +1202,8 @@ document.addEventListener('input',e=>{
   else if(t.dataset.sf){const[i,k]=t.dataset.sf.split('.');M.draft.scope_items[+i][k]=val}
   else if(t.dataset.lf){const[i,k]=t.dataset.lf.split('.');M.draft[+i][k]=val}
   else if(t.dataset.tn!=null){M.draft.name=val}
+  else if(t.dataset.ad){const[i,k]=t.dataset.ad.split('.');M.draft.addenda[+i][k]=val}
+  else if(t.dataset.rv){const[i,k]=t.dataset.rv.split('.');M.draft.revisions[+i][k]=val}
   else if(t.dataset.pick){const P=M.picker,sc=M.draft.scope_items[P.step].name;P.sel[sc]=(P.sel[sc]||[]).filter(x=>x!==t.dataset.pick);if(t.checked)P.sel[sc].push(t.dataset.pick);
     renderModal()}
   else if(t.dataset.pickq!=null){M.picker.q=val;const pos=t.selectionStart;renderModal();const n=$('#pick-q');if(n){n.focus();n.setSelectionRange(pos,pos)}}
@@ -1148,6 +1213,8 @@ document.addEventListener('input',e=>{
 document.addEventListener('change',e=>{
   const t=e.target;const a=t.dataset.act;
   if(t.dataset.upload!=null){uploadQuote(+t.dataset.upload,t.files[0]);return}
+  if(t.dataset.adupload!=null){uploadAddendum(+t.dataset.adupload,t.files[0]);return}
+  if(M&&t.dataset.ad&&/priced|acknowledged|date/.test(t.dataset.ad)){renderModal();return}
   if(t.dataset.docupload!=null){if(t.files.length)uploadDocs([...t.files]);return}
   if(t.dataset.prole){setRole(t.dataset.prole,t.value);return}
   if(t.dataset.plink!=null){linkEstimator(t.dataset.plink,t.value);return}

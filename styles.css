@@ -303,3 +303,16 @@ table.ov td.num,table.ov .proj{white-space:nowrap}
 .pick-row.done{cursor:default;opacity:.8}
 .pick-row input{margin-top:3px}
 .pick-row b{font-weight:600}
+
+/* ---- addenda & revisions ---- */
+.ad-row{display:grid;grid-template-columns:78px 140px minmax(0,2fr) auto minmax(0,.9fr) auto;gap:10px;align-items:end;background:var(--surface-2);border:1px solid var(--line);border-left:3px solid var(--warn);border-radius:8px;padding:9px 11px}
+.ad-row.is-done{border-left-color:var(--good)}
+.ad-row .field{padding:6px 8px;font-size:13.5px}
+.ad-row>.f,.rev-row>.f{display:flex;flex-direction:column;gap:4px;font-size:12.5px;font-weight:500;color:var(--ink-2)}
+.ad-checks{display:flex;flex-direction:column;gap:4px;padding-bottom:2px}
+.ad-checks .check{font-size:13px}
+.ad-row .file{padding-bottom:6px}
+.rev-row{display:grid;grid-template-columns:64px minmax(0,1.3fr) minmax(0,1.6fr) 150px auto;gap:12px;align-items:center;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:9px 11px}
+.rev-row .field{padding:6px 8px;font-size:13.5px}
+.rev-no{font-family:"Montserrat",system-ui,sans-serif;font-weight:700;font-size:14px;color:var(--accent);border:2px solid var(--accent);border-radius:6px;text-align:center;padding:4px 0}
+@media (max-width:900px){.ad-row{grid-template-columns:78px 1fr}.ad-row>.f:nth-child(3){grid-column:1/-1}.rev-row{grid-template-columns:64px 1fr}.rev-row>.f{grid-column:1/-1}}
