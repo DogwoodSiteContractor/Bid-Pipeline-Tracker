@@ -13,4 +13,4 @@ window.BID_PIPELINE_CONFIG = {
     logo: "img/logo-mark-white.png",
     loginLogo: "img/logo.png",
     loginLogoDark: "img/logo-white.png"
-  }
+  };
