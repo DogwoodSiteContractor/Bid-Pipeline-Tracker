@@ -14,7 +14,21 @@ const BID_CLS={Estimating:'warn',Submitted:'info','On Hold':'',Awarded:'good',Lo
 const ACTIVE=['Estimating','Submitted','On Hold'];
 const QUOTE_ST=['Not requested','Requested','Received','Declined','No response'];
 const QUOTE_CLS={'Not requested':'','Requested':'warn','Received':'good','Declined':'bad','No response':'na'};
-const QUOTE_SCOPES=['Earthwork','Underground','Erosion control','Site demo','Paving & curb','Materials','Trucking','Testing','Other'];
+const QUOTE_EXTRA=['Materials','Trucking','Testing','Other'];
+const SCOPE_GROUPS=['Site prep & demo','Erosion control','Earthwork','Underground utilities','Paving & concrete','Other'];
+const DEFAULT_LIB={scopes:[
+  ['Clearing & grubbing','Site prep & demo'],['Site demolition','Site prep & demo'],['Tree protection','Site prep & demo'],['Construction entrance','Site prep & demo'],
+  ['Erosion control','Erosion control'],['Sediment basin','Erosion control'],['Grassing & stabilization','Erosion control'],
+  ['Mass grading','Earthwork'],['Fine grading','Earthwork'],['Building pad','Earthwork'],['Topsoil strip & respread','Earthwork'],['Undercut & replacement','Earthwork'],['Rock excavation','Earthwork'],['Import / export haul','Earthwork'],
+  ['Storm drainage','Underground utilities'],['Sanitary sewer','Underground utilities'],['Water','Underground utilities'],['Fire line','Underground utilities'],['Detention / water quality','Underground utilities'],['Underground detention','Underground utilities'],
+  ['Graded aggregate base','Paving & concrete'],['Asphalt paving','Paving & concrete'],['Concrete paving','Paving & concrete'],['Curb & gutter','Paving & concrete'],['Sidewalks','Paving & concrete'],['Striping & signage','Paving & concrete'],
+  ['Retaining walls','Other'],['Fencing','Other'],['Traffic control','Other'],['Dewatering','Other'],['Testing allowance','Other']].map(([name,group])=>({name,group})),
+ templates:[
+  {id:'tpl-full',name:'Full site package',scopes:['Clearing & grubbing','Erosion control','Mass grading','Fine grading','Building pad','Storm drainage','Sanitary sewer','Water','Fire line','Graded aggregate base','Asphalt paving','Curb & gutter']},
+  {id:'tpl-earth',name:'Earthwork only',scopes:['Clearing & grubbing','Erosion control','Mass grading','Fine grading','Building pad']},
+  {id:'tpl-ug',name:'Underground utilities',scopes:['Storm drainage','Sanitary sewer','Water','Fire line','Detention / water quality']},
+  {id:'tpl-demo',name:'Demo & clearing',scopes:['Site demolition','Clearing & grubbing','Tree protection','Erosion control']}]};
+const TRADE_GROUP={'Pipe & utility supply':'Underground utilities','Precast structures':'Underground utilities','Utility sub':'Underground utilities','Erosion control':'Erosion control','Landscaping & grassing':'Erosion control','Demolition':'Site prep & demo','Clearing & grubbing':'Site prep & demo','Asphalt paving':'Paving & concrete','Concrete & curb':'Paving & concrete','Grading sub':'Earthwork','Dewatering':'Earthwork','Trucking & hauling':'Trucking','Stone & aggregate':'Materials','Testing & inspection':'Testing'};
 const FILE_CATS=['Plans','Specs','Addenda','Geotech report','Takeoff','Proposal','Bid form','Photos','Other'];
 const TRADES=['Pipe & utility supply','Precast structures','Stone & aggregate','Trucking & hauling','Asphalt paving','Concrete & curb','Erosion control','Demolition','Clearing & grubbing','Grading sub','Utility sub','Dewatering','Fencing','Landscaping & grassing','Surveying','Testing & inspection','Equipment rental','Other'];
 const CLIENT_TYPES=['General contractor','Developer','Owner','Municipality / public','Other'];
@@ -27,7 +41,7 @@ const WIDGETS=[['kpis','Headline numbers'],['monthly','Bid and award volume by m
 const AV_COLORS=['#2C5E99','#2C7A4C','#8B5E34','#7A3E8E','#B24A2A','#2F7C83','#5A6B1E','#9C3D5C'];
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const BUCKET='bid-files';
-const BID_COLS=['id','name','location','project_type','bid_type','size','status','probability','due_date','due_time','walk_date','rfi_date','lead_estimator_id','support_estimator_ids','client_ids','client_contacts','scopes','proposal_status','amount_with','amount_without','use_for','margin','follow_ups','notes','submitted_date','awarded_date','awarded_amount','awarded_to','lost_reason'];
+const BID_COLS=['id','name','location','project_type','bid_type','size','status','probability','due_date','due_time','walk_date','rfi_date','lead_estimator_id','support_estimator_ids','client_ids','client_contacts','scope_items','proposal_status','amount_with','amount_without','use_for','margin','follow_ups','notes','submitted_date','awarded_date','awarded_amount','awarded_to','lost_reason'];
 const Q_COLS=['id','bid_id','vendor_id','scope','status','requested_date','due_date','received_date','amount','note','file_path','file_name'];
 const ENT_COLS={estimators:['id','name','title','email','phone','active'],clients:['id','company','type','phone','email','address','notes','contacts'],vendors:['id','company','trade','contact_name','phone','email','area','preferred','notes']};
 
@@ -44,6 +58,25 @@ const authStorage={
   removeItem:k=>{try{localStorage.removeItem(k);sessionStorage.removeItem(k)}catch(e){}}
 };
 const sb=CONFIGURED?window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAnonKey,{auth:{storage:authStorage,persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
+
+
+/* ---------- company branding (colors + logo from config.js) ---------- */
+const BRAND=CFG.brand||{};
+(function applyBrand(){
+  const hex=/^#?([0-9a-f]{6})$/i.exec(String(BRAND.primary||'').trim());if(!hex)return;
+  const n=parseInt(hex[1],16),r=(n>>16&255)/255,g=(n>>8&255)/255,b=(n&255)/255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b),l=(mx+mn)/2,d=mx-mn;
+  let h=0,s=0;if(d){s=d/(1-Math.abs(2*l-1));h=mx===r?((g-b)/d)%6:mx===g?(b-r)/d+2:(r-g)/d+4;h=(h*60+360)%360}
+  const c=(S2,L2)=>{S2=Math.max(0,Math.min(1,S2));L2=Math.max(0,Math.min(1,L2));const C=(1-Math.abs(2*L2-1))*S2,X=C*(1-Math.abs((h/60)%2-1)),m=L2-C/2;
+    const [R,G,B]=h<60?[C,X,0]:h<120?[X,C,0]:h<180?[0,C,X]:h<240?[0,X,C]:h<300?[X,0,C]:[C,0,X];
+    return '#'+[R,G,B].map(v=>Math.round((v+m)*255).toString(16).padStart(2,'0')).join('')};
+  const top=/^#[0-9a-f]{6}$/i.test(BRAND.topBar||'')?BRAND.topBar:c(s*.9,Math.max(.1,l-.2));
+  const dark=`--accent:${c(s*1.1,Math.min(.72,l+.2))};--accent-ink:${c(s,.08)};--accent-soft:${c(s*.8,.17)};--accent-2:${c(s*1.1,Math.min(.72,l+.2))};--top:${c(s*.8,.1)};--top-ink:#FFFFFF;--sel:${c(s*.9,.8)};--sel-ink:${c(s,.08)};`;
+  const css=`:root{--accent:#${hex[1]};--accent-ink:${l>.62?'#111111':'#FFFFFF'};--accent-soft:${c(Math.min(s,.4),.92)};--accent-2:${c(s*1.05,Math.min(.8,l+.25))};--top:${top};--top-ink:#FFFFFF;--sel:${top};--sel-ink:#FFFFFF;}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){${dark}}}
+:root[data-theme="dark"]{${dark}}`;
+  const el=document.createElement('style');el.textContent=css;document.head.appendChild(el);
+})();
 
 /* ---------- state ---------- */
 const TABLES=['bids','quotes','bid_files','estimators','clients','vendors','settings'];
@@ -84,6 +117,15 @@ const needsFollowUp=b=>b.status==='Submitted'&&(!lastTouch(b)||daysUntil(lastTou
 const quotesFor=id=>S.quotes.filter(q=>q.bid_id===id);
 const filesFor=id=>S.bid_files.filter(f=>f.bid_id===id).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
 const openQuotes=b=>quotesFor(b.id).filter(q=>q.status==='Requested');
+const lib=()=>S.settings.scope_library&&Array.isArray(S.settings.scope_library.scopes)?S.settings.scope_library:DEFAULT_LIB;
+const groupOf=name=>lib().scopes.find(x=>x.name.toLowerCase()===String(name).toLowerCase())?.group||'Other';
+// scope_items: [{id,name,group,status,assignee_id,signed_initials,signed_by_name,signed_by_user,signed_by_estimator_id,signed_at}]
+function scopeItems(b){
+  if(Array.isArray(b.scope_items))return b.scope_items;
+  return SCOPES.filter(([k])=>(b.scopes?.[k]||'N/A')!=='N/A').map(([k,l])=>({id:k,name:l,group:groupOf(l),status:b.scopes[k]}));
+}
+const scopeCls=x=>x.status==='Complete'?'good':x.status==='In Progress'?'warn':'';
+const myInitials=()=>initials(myEst()?.name||S.profile?.full_name||S.session?.user?.email||'');
 function toast(msg){const t=$('#toast');t.innerHTML=`<div class="toast">${esc(msg)}</div>`;clearTimeout(toast._t);toast._t=setTimeout(()=>t.innerHTML='',3800)}
 
 
@@ -92,7 +134,7 @@ const STAGES=['Received','Takeoff','Quotes','Proposal','Submitted','Decision'];
 const STAGE_NAMES=['Bid received','Scope takeoff','Vendor quotes','Proposal','Submitted to GC','Decision'];
 function stageInfo(b,qs){
   qs=qs||quotesFor(b.id);
-  const sc=SCOPES.map(([k])=>b.scopes?.[k]||'Not Started').filter(x=>x!=='N/A');
+  const sc=scopeItems(b).map(x=>x.status||'Not Started');
   const decided=['Awarded','Lost','No Bid'].includes(b.status);
   const submitted=b.status==='Submitted'||b.status==='Awarded'||b.status==='Lost';
   const st=[1,
@@ -106,7 +148,7 @@ function stageInfo(b,qs){
   const qOpen=qs.filter(q=>q.status==='Requested').length;
   const detail=[
     'Bid set up',
-    `${sc.filter(x=>x==='Complete').length} of ${sc.length} scopes complete`,
+    sc.length?`${sc.filter(x=>x==='Complete').length} of ${sc.length} scopes signed off`:'No scopes selected yet',
     qs.length?`${qs.length-qOpen} of ${qs.length} quotes in`:'No quotes requested yet',
     'Proposal '+String(b.proposal_status||'Not Started').toLowerCase(),
     'Waiting on GC decision',
@@ -182,26 +224,26 @@ function render(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;
-  const views={dashboard:vDashboard,pipeline:vPipeline,estimators:vEstimators,clients:vClients,vendors:vVendors,team:vTeam};
+  const views={dashboard:vDashboard,pipeline:vPipeline,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam};
   if(!navItems().some(n=>n[0]===S.view))S.view='dashboard';
   main.innerHTML=views[S.view]();
   if(fid){const n=document.getElementById(fid);if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}
 }
 function navItems(){
-  if(isAdmin())return [['dashboard','Dashboard'],['pipeline','Pipeline'],['estimators','Estimators'],['clients','Clients & GCs'],['vendors','Vendors'],['team','Team & logins']];
+  if(isAdmin())return [['dashboard','Dashboard'],['pipeline','Pipeline'],['estimators','Estimators'],['clients','Clients & GCs'],['vendors','Vendors'],['scopes','Scopes'],['team','Team & logins']];
   if(role()==='estimator')return [['dashboard','My dashboard'],['pipeline','My bids'],['vendors','Vendors'],['clients','Clients & GCs']];
   return [['dashboard','Board dashboard'],['pipeline','Pipeline']];
 }
 function renderTop(){
   const company=S.settings.general?.companyName||CFG.companyName||'Bid Pipeline';
-  $('#top').innerHTML=`<button class="brand" ${isAdmin()?'data-act="company" title="Edit company name"':'tabindex="-1" style="cursor:default"'}><span class="stake"></span><span><b>${esc(company)}</b><small>Bid pipeline</small></span></button>
+  $('#top').innerHTML=`<button class="brand" ${isAdmin()?'data-act="company" title="Edit company name"':'tabindex="-1" style="cursor:default"'}>${BRAND.logo?`<img class="brand-logo" src="${esc(BRAND.logo)}" alt="">`:'<span class="stake"></span>'}<span><b>${esc(company)}</b><small>Bid pipeline</small></span></button>
   <nav class="nav">${navItems().map(([k,l])=>`<button class="${S.view===k?'on':''}" data-act="nav" data-v="${k}">${l}</button>`).join('')}</nav>
   <div class="userbox"><span>${esc(myName())}<br><span class="rolepill">${ROLE_LABEL[role()]}</span></span>
   ${isAdmin()?'<button class="btn primary" data-act="new-bid">+ New bid</button>':''}<button class="btn sm" data-act="signout">Sign out</button></div>`;
 }
 
 /* ---------- auth screens ---------- */
-function brandBlock(){return `<div class="auth-brand"><span class="stake"></span><div><b>${esc(CFG.companyName||'Bid Pipeline')}</b><small>Bid pipeline</small></div></div>`}
+function brandBlock(){return BRAND.loginLogo?`<picture>${BRAND.loginLogoDark?`<source srcset="${esc(BRAND.loginLogoDark)}" media="(prefers-color-scheme: dark)">`:''}<img class="auth-logo" src="${esc(BRAND.loginLogo)}" alt="${esc(CFG.companyName||'')}"></picture>`:`<div class="auth-brand"><span class="stake"></span><div><b>${esc(CFG.companyName||'Bid Pipeline')}</b><small>Bid pipeline</small></div></div>`}
 function msgBlock(){const m=S.authMsg;return m?(m.err?`<div class="err">${esc(m.err)}</div>`:`<div class="okmsg">${esc(m.ok)}</div>`):''}
 function authScreen(){
   let remembered='',rememberOn=true;try{remembered=localStorage.getItem(EMAIL_KEY)||'';rememberOn=localStorage.getItem(REMEMBER_KEY)!=='0'}catch(e){}
@@ -274,7 +316,8 @@ function dueCell(b){
   else txt='In '+d+' days';
   return `<div class="due ${cls}">${fmtDate(b.due_date)}${b.due_time?' <span class="dim small">'+esc(fmtTime(b.due_time))+'</span>':''}<small>${txt}</small></div>`;
 }
-function scopeBar(b){return `<span class="scopebar" title="${esc(SCOPES.map(([k,l])=>l+': '+(b.scopes?.[k]||'Not Started')).join('\n'))}">${SCOPES.map(([k])=>`<i class="${SCOPE_CLS[b.scopes?.[k]||'Not Started']}"></i>`).join('')}</span>`}
+function scopeBar(b){const it=scopeItems(b);if(!it.length)return '<span class="dim small">No scopes</span>';const d=it.filter(x=>x.status==='Complete').length;
+  return `<span class="who" style="gap:8px"><span class="scopebar" title="${esc(it.map(x=>x.name+': '+(x.status==='Complete'?'signed off'+(x.signed_initials?' by '+x.signed_initials:''):x.status||'Not Started')).join('\n'))}">${it.slice(0,14).map(x=>`<i class="${scopeCls(x)}"></i>`).join('')}</span><span class="small num">${d}/${it.length}</span></span>`}
 function bidTable(list,opts={}){
   const rows=list.map(b=>{const qs=quotesFor(b.id);const rec=qs.filter(q=>q.status==='Received').length;const me=myEst();
     return `<tr class="click" data-act="open-bid" data-id="${b.id}">
@@ -313,7 +356,7 @@ function precon(){
   const load=S.estimators.filter(e=>e.active!==false).map(e=>({e,n:est.filter(b=>b.lead_estimator_id===e.id||(b.support_estimator_ids||[]).includes(e.id)).length,soon:due7.filter(b=>b.lead_estimator_id===e.id).length}));
   const maxL=Math.max(1,...load.map(x=>x.n));
   const loadHtml=load.length?`<div class="hbars">${load.sort((a,b)=>b.n-a.n).map(x=>`<div class="hb"><span class="lab who">${avatar(x.e.id,22)}${esc(x.e.name)}</span><div class="track"><div class="fill ${x.soon?'acc':''}" style="width:${x.n/maxL*100}%"></div></div><span class="v">${x.n} bid${x.n===1?'':'s'}${x.soon?` · ${x.soon} due soon`:''}</span></div>`).join('')}</div>`:`<div class="empty"><b>No estimators yet</b><button class="btn sm" data-act="nav" data-v="estimators">Add estimators</button></div>`;
-  return kpis+`<div class="sec"><div class="sec-h"><h2>Active bids</h2><span>Sorted by due date. Scope bar: ${SCOPES.map(s=>s[1]).join(', ')}.</span></div>${bidTable(act)}</div>
+  return kpis+`<div class="sec"><div class="sec-h"><h2>Active bids</h2><span>Sorted by due date. Scope bar: one block per scope, green once signed off.</span></div>${bidTable(act)}</div>
   <div class="grid3">
     <div class="sec"><div class="sec-h"><h2>Estimator workload</h2><span>Bids in estimating</span></div><div class="panel pad">${loadHtml}</div></div>
     <div class="sec"><div class="sec-h"><h2>Quotes outstanding</h2><span>${oq.length}</span></div><div class="panel pad">${quoteList(oq,'All requested quotes are in.')}</div></div>
@@ -351,6 +394,8 @@ function mine(){
     ${kpi('Bids this year',yr.length,yr.filter(b=>b.status==='Awarded').length+' awarded')}
     ${kpi('My active value',moneyK(act.reduce((s,b)=>s+bidValue(b),0)),'Across my active bids','good')}</div>
   <div class="sec"><div class="sec-h"><h2>My bids</h2><span>Open a bid to see details, request quotes and upload files</span></div>${bidTable(act,{mine:true})}</div>
+  ${(()=>{const open=act.flatMap(b=>scopeItems(b).filter(x=>x.status!=='Complete'&&(!x.assignee_id||x.assignee_id===me.id)).map(x=>({b,x})));
+    return `<div class="sec"><div class="sec-h"><h2>Scopes to sign off</h2><span>${open.length} open on your bids</span></div><div class="panel pad">${open.length?`<div class="list">${open.slice(0,15).map(({b,x})=>`<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(x.name)}</button><div class="dim small">${esc(b.name)}${b.due_date?' · bid due '+fmtShort(b.due_date):''}</div></div><div style="text-align:right">${pill(x.status||'Not Started',scopeCls(x))}<div class="dim small">${x.assignee_id===me.id?'Assigned to you':'Whole team'}</div></div></div>`).join('')}</div>`:'<div class="empty">Every scope on your bids is signed off.</div>'}</div></div>`})()}
   <div class="grid3">
    <div class="sec"><div class="sec-h"><h2>Key dates</h2><span>Next 3 weeks</span></div><div class="panel pad">${dates.length?`<div class="list">${dates.map(x=>`<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${x.b.id}">${esc(x.b.name)}</button><div class="dim small">${x.l}</div></div><div class="small" style="text-align:right"><b>${fmtShort(x.date)}</b><div class="dim">${x.d===0?'Today':'In '+x.d+' day'+(x.d===1?'':'s')}</div></div></div>`).join('')}</div>`:'<div class="empty">No bid dates, site walks or RFI deadlines coming up.</div>'}</div></div>
    <div class="sec"><div class="sec-h"><h2>Quotes outstanding</h2><span>${oq.length}</span></div><div class="panel pad">${quoteList(oq,'All requested quotes on your bids are in.')}</div></div>
@@ -437,6 +482,8 @@ function vPipeline(){
    <select class="field" data-act="clientF"><option value="">All clients & GCs</option>${S.clients.slice().sort((a,b)=>a.company.localeCompare(b.company)).map(c=>`<option value="${c.id}"${S.clientF===c.id?' selected':''}>${esc(c.company)}</option>`).join('')}</select></div>
   ${list.length?`<div class="cards">${list.map(card).join('')}</div>`:`<div class="panel"><div class="empty"><b>No bids match</b>${pool.length?'Try a different filter or search.':est?'Bids assigned to you will appear here.':'Create your first bid to fill the pipeline.'}</div></div>`}`;
 }
+function scopePills(b){const it=scopeItems(b);if(!it.length)return '<span class="dim small">No scopes selected</span>';
+  return it.slice(0,6).map(x=>`<span class="pill ${scopeCls(x)}" title="${esc(x.name+': '+(x.status||'Not Started'))}">${esc(x.name)}${x.status==='Complete'?' ✓'+(x.signed_initials?' '+esc(x.signed_initials):''):''}</span>`).join('')+(it.length>6?`<span class="pill na">+${it.length-6} more</span>`:'')}
 function card(b){
   const qs=quotesFor(b.id);const rec=qs.filter(q=>q.status==='Received').length;const v=bidValue(b);const nf=filesFor(b.id).length;
   const team=[b.lead_estimator_id,...(b.support_estimator_ids||[])].filter(id=>byId(S.estimators,id));
@@ -444,7 +491,7 @@ function card(b){
    <div class="card-top"><div><h3>${esc(b.name)}</h3><div class="meta">${(b.client_ids||[]).map(clientName).map(esc).join(', ')||'No client assigned'}</div></div>${pill(b.status,BID_CLS[b.status])}</div>
    ${progress(b)}
    <div class="row">${dueCell(b)}<div style="text-align:right">${v?`<div class="val">${money(v)}</div><div class="dim small">${b.use_for==='without'?'Without':'With'} site improvements</div>`:`<div class="dim small">Proposal ${esc((b.proposal_status||'Not Started').toLowerCase())}</div>`}</div></div>
-   <div class="scopes">${SCOPES.map(([k,l])=>{const s=b.scopes?.[k]||'Not Started';return s==='N/A'?'':`<span class="pill ${SCOPE_CLS[s]}" title="${l}: ${s}">${l}${s==='Complete'?' ✓':''}</span>`}).join('')}</div>
+   <div class="scopes">${scopePills(b)}</div>
    <div class="foot"><span class="who" style="gap:3px">${team.map(id=>avatar(id,24)).join('')||'<span class="dim small">No estimator</span>'}</span>
    <span class="dim small" style="margin-left:auto">${qs.length?`Quotes ${rec}/${qs.length} in`:'No vendor quotes'}${nf?` · ${nf} file${nf===1?'':'s'}`:''}</span></div></div>`;
 }
@@ -481,6 +528,19 @@ function vVendors(){
   ||`<tr><td colspan="7"><div class="empty"><b>No vendors ${tf||q?'match':'yet'}</b>${tf||q?'Try another search.':isAdmin()?'Add suppliers and subs so you can request quotes on bids.':''}</div></td></tr>`}</tbody></table></div>`;
 }
 
+/* ----- scope library (admin) ----- */
+function vScopes(){const L=lib();const groups=SCOPE_GROUPS.filter(g=>L.scopes.some(x=>x.group===g));
+  return `<div class="head"><div><h1>Scopes & templates</h1><p>${L.scopes.length} scopes · ${(L.templates||[]).length} templates${S.settings.scope_library?'':' · starter list, edit it to make it yours'}</p></div><div class="tools"><button class="btn" data-act="edit-lib">Edit scope list</button><button class="btn primary" data-act="new-tpl">+ New template</button></div></div>
+  <div class="grid2"><div class="sec"><div class="sec-h"><h2>Templates</h2><span>Apply to a bid in one click</span></div><div class="panel pad"><div class="list">${(L.templates||[]).map(t=>`<div class="li"><div><button class="linkish" data-act="edit-tpl" data-id="${esc(t.id)}">${esc(t.name)}</button><div class="dim small">${t.scopes.map(esc).join(', ')}</div></div><span class="pill">${t.scopes.length}</span></div>`).join('')||'<div class="empty">No templates yet.</div>'}</div></div></div>
+  <div class="sec"><div class="sec-h"><h2>Scope list</h2><span>What your team picks from on each bid</span></div><div class="panel pad">${groups.map(g=>`<div style="margin-bottom:14px"><div class="small" style="font-weight:600;margin-bottom:6px">${esc(g)}</div><div class="tagrow">${L.scopes.filter(x=>x.group===g).map(x=>pill(x.name)).join('')}</div></div>`).join('')}</div></div></div>`}
+function libModal(){return mhead('Scope list','The scopes your team can pick from on any bid.')+`<div class="mbody"><fieldset><legend>Scopes</legend><div class="rows">${M.draft.map((x,i)=>`<div class="rowline" style="grid-template-columns:minmax(0,1fr) 210px auto"><input class="field" data-lf="${i}.name" value="${esc(x.name)}" placeholder="Scope name"><select class="field" data-lf="${i}.group">${SCOPE_GROUPS.map(g=>`<option${x.group===g?' selected':''}>${esc(g)}</option>`).join('')}</select><button class="rm" data-act="rm-lib" data-i="${i}" aria-label="Remove">×</button></div>`).join('')}</div>
+  <div class="adders"><button class="btn sm" data-act="add-lib">+ Add scope</button></div><p class="hint">Changes here don’t alter bids that already use a scope.</p></fieldset></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="save">Save scope list</button></div></div>`}
+function tplModal(){const d=M.draft;const L=lib();const names=[...new Set([...L.scopes.map(x=>x.name),...d.scopes])];
+  return mhead(M.isNew?'New template':d.name||'Template','Pick the scopes this template adds to a bid.')+`<div class="mbody"><fieldset><legend>Template</legend><label class="f">Name<input class="field" data-tn value="${esc(d.name)}" placeholder="e.g. Retail pad site"></label></fieldset>
+  <fieldset><legend id="tpl-count">Scopes (${d.scopes.length})</legend>${SCOPE_GROUPS.map(g=>{const xs=names.filter(n=>groupOf(n)===g);return xs.length?`<div style="margin-bottom:12px"><div class="small" style="font-weight:600;margin-bottom:6px">${esc(g)}</div><div class="tplgrid">${xs.map(n=>`<label class="check"><input type="checkbox" data-tc="${esc(n)}" ${d.scopes.includes(n)?'checked':''}> ${esc(n)}</label>`).join('')}</div></div>`:''}).join('')}</fieldset></div>
+  <div class="mfoot"><div>${M.isNew?'':`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete template'}</button>`}</div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="save">Save template</button></div></div>`}
+
 /* ----- team & logins (admin) ----- */
 function vTeam(){
   const me=S.session.user.id;
@@ -493,7 +553,7 @@ function vTeam(){
     <td><select class="field" data-prole="${p.id}" ${self?'disabled title="You can’t change your own role"':''}>${ROLES.map(([k,l])=>`<option value="${k}"${p.role===k?' selected':''}>${l}</option>`).join('')}</select></td>
     <td>${p.role==='estimator'?`<div style="display:flex;gap:6px;align-items:center"><select class="field" data-plink="${p.id}"><option value="">Not linked</option>${S.estimators.filter(e=>!e.user_id||e.user_id===p.id).map(e=>`<option value="${e.id}"${linked?.id===e.id?' selected':''}>${esc(e.name)}</option>`).join('')}</select>${linked?'':`<button class="btn sm" data-act="make-est" data-id="${p.id}">Create record</button>`}</div>`:'<span class="dim">—</span>'}</td>
     <td class="small dim">${fmtShort(String(p.created_at).slice(0,10))}</td></tr>`}).join('')}</tbody></table></div>
-  <p class="hint">Estimators see only bids they’re assigned to, can request and update vendor quotes, and can upload and download files on those bids. Board members see the board dashboard and pipeline, read-only. Only admins can create, change or delete bids and directory records.</p>`;
+  <p class="hint">Estimators see only bids they’re assigned to (lead or supporting). On those bids they can change anything except who’s assigned, sign off scopes, manage vendor quotes, and upload and download files. Board members see the board dashboard and pipeline, read-only. Only admins can create, change or delete bids and directory records.</p>`;
 }
 async function setRole(id,r){try{await run(sb.from('profiles').update({role:r}).eq('id',id));toast('Role updated');await loadProfiles()}catch(e){toast(errMsg(e))}}
 async function setProfileName(id,n){try{await run(sb.from('profiles').update({full_name:n}).eq('id',id));await loadProfiles()}catch(e){toast(errMsg(e))}}
@@ -510,23 +570,23 @@ function closeModal(){M=null;$('#modal').innerHTML='';document.body.style.overfl
 function showModal(){document.body.style.overflow='hidden';renderModal(true)}
 function renderModal(first){
   if(!M)return;const body=$('#modal .mbody');const st=body?body.scrollTop:0;
-  const html={bid:bidModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal}[M.kind]();
+  const html={bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
 }
 function mhead(t,s){return `<div class="mhead"><div><h2>${esc(t)}</h2>${s?`<p>${esc(s)}</p>`:''}</div><button class="x" data-act="close" aria-label="Close">×</button></div>`}
-const DIS=()=>isAdmin()?'':' disabled';
+const DIS=()=>M&&M.kind==='bid'?(canWork(M.draft)?'':' disabled'):(isAdmin()?'':' disabled');
 
 /* ----- bid editor ----- */
 function newBid(){return{id:newId(),name:'',location:'',project_type:'Commercial',bid_type:'Hard bid',size:'',status:'Estimating',probability:50,
   due_date:'',due_time:'',walk_date:'',rfi_date:'',lead_estimator_id:'',support_estimator_ids:[],client_ids:[],client_contacts:{},
-  scopes:{earthwork:'Not Started',underground:'Not Started',erosion:'Not Started',demo:'Not Started',paving:'N/A'},
+  scope_items:[],
   proposal_status:'Not Started',amount_with:null,amount_without:null,use_for:'with',margin:null,follow_ups:[],notes:'',
   submitted_date:'',awarded_date:'',awarded_amount:null,awarded_to:'',lost_reason:'',quotes:[],_new:true}}
 function openBid(id){
   const b=byId(S.bids,id);if(!b)return;
   const d=Object.assign(newBid(),clone(b));d._new=false;
-  d.scopes=Object.assign(newBid().scopes,b.scopes||{});d.due_time=d.due_time?String(d.due_time).slice(0,5):'';
+  d.scope_items=clone(scopeItems(b));d.due_time=d.due_time?String(d.due_time).slice(0,5):'';
   ['due_date','walk_date','rfi_date','submitted_date','awarded_date'].forEach(k=>d[k]=d[k]||'');
   d.lead_estimator_id=d.lead_estimator_id||'';d.quotes=clone(quotesFor(id));d.quotes.forEach(q=>{['requested_date','due_date','received_date'].forEach(k=>q[k]=q[k]||'')});
   M={kind:'bid',draft:d,origQuoteIds:d.quotes.map(q=>q.id)};showModal();
@@ -541,12 +601,12 @@ function bidModal(){
   const vendorsSorted=S.vendors.slice().sort((a,c)=>a.trade.localeCompare(c.trade)||a.company.localeCompare(c.company));
   const tradesWithVendors=TRADES.filter(t=>S.vendors.some(v=>v.trade===t));
   const outcome=['Submitted','Awarded','Lost','No Bid'].includes(b.status);
-  const sub=isNew?'Project details, team, scope, vendor quotes and files':admin?'Last saved '+(b.updated_at?new Date(b.updated_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—'):work?'You can request and update vendor quotes and upload files. Other details are managed by your precon manager.':'Read-only';
+  const sub=isNew?'Project details, team, scope, vendor quotes and files':admin?'Last saved '+(b.updated_at?new Date(b.updated_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—'):work?'You’re on this bid, so you can update anything here except who’s assigned to it.':'Read-only';
   const files=isNew?[]:filesFor(b.id);
   return mhead(isNew?'New bid':b.name||'Untitled bid',sub)+`<div class="mbody">
   ${isNew?'':`<div class="panel pad" style="margin-bottom:14px">${progress(b,{lg:true,quotes:b.quotes})}</div>`}
   <fieldset><legend>Project</legend><div class="fg">
-    <label class="f s2">Project name ${admin?'<span class="req">required</span>':''}<input class="field" ${bf('name')} placeholder="e.g. Riverside Commerce Park"></label>
+    <label class="f s2">Project name ${work?'<span class="req">required</span>':''}<input class="field" ${bf('name')} placeholder="e.g. Riverside Commerce Park"></label>
     <label class="f s2">Location<input class="field" ${bf('location')} placeholder="City, county or address"></label>
     <label class="f">Project type${sel('project_type',PROJECT_TYPES)}</label>
     <label class="f">Bid type${sel('bid_type',BID_TYPES)}</label>
@@ -559,7 +619,7 @@ function bidModal(){
   </div></fieldset>
 
   <fieldset><legend>Estimating team</legend><div class="fg">
-    <label class="f s2">Lead estimator<select class="field" data-bf="lead_estimator_id"${DIS()}><option value="">Unassigned</option>${ests.map(e=>`<option value="${e.id}"${b.lead_estimator_id===e.id?' selected':''}>${esc(e.name)}${e.title?' — '+esc(e.title):''}</option>`).join('')}</select></label>
+    <label class="f s2">Lead estimator<select class="field" data-bf="lead_estimator_id"${admin?'':' disabled'}><option value="">Unassigned</option>${ests.map(e=>`<option value="${e.id}"${b.lead_estimator_id===e.id?' selected':''}>${esc(e.name)}${e.title?' — '+esc(e.title):''}</option>`).join('')}</select></label>
     <div class="f s2" style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:500;color:var(--ink-2)">Supporting estimators
       <div class="tagrow">${b.support_estimator_ids.map(id=>`<span class="tag">${avatar(id,20)} ${esc(estName(id)||'Removed')}${admin?`<button class="rm" data-act="rm-support" data-id="${id}" aria-label="Remove">×</button>`:'&nbsp;'}</span>`).join('')||(admin?'':'<span class="dim">None</span>')}
       ${admin?`<select class="field" data-act="add-support" style="width:auto"><option value="">+ Add</option>${ests.filter(e=>e.id!==b.lead_estimator_id&&!b.support_estimator_ids.includes(e.id)).map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')}</select>`:''}</div></div>
@@ -568,12 +628,11 @@ function bidModal(){
   <fieldset><legend>Bidding to</legend><div class="rows">
     ${b.client_ids.map(id=>{const c=byId(S.clients,id);const cs=c?.contacts||[];const ct=cs.find(x=>x.name===b.client_contacts?.[id]);return `<div class="rowline client"><div><b style="font-weight:600">${esc(clientName(id))}</b><div class="dim small">${esc(c?.type||'')}${ct?.phone?' · '+esc(ct.phone):''}${ct?.email?' · '+esc(ct.email):''}</div></div>
       <select class="field" data-cc="${id}"${DIS()}><option value="">Contact…</option>${cs.map(x=>`<option${b.client_contacts?.[id]===x.name?' selected':''}>${esc(x.name)}</option>`).join('')}</select>
-      ${admin?`<button class="rm" data-act="rm-client" data-id="${id}" aria-label="Remove">×</button>`:'<span></span>'}</div>`}).join('')||'<div class="dim small">No GCs or clients added.</div>'}
-  </div>${admin?`<div class="adders"><select class="field" data-act="add-client"><option value="">+ Add a GC or client…</option>${clientsSorted.filter(c=>!b.client_ids.includes(c.id)).map(c=>`<option value="${c.id}">${esc(c.company)}</option>`).join('')}</select></div>
+      ${work?`<button class="rm" data-act="rm-client" data-id="${id}" aria-label="Remove">×</button>`:'<span></span>'}</div>`}).join('')||'<div class="dim small">No GCs or clients added.</div>'}
+  </div>${work?`<div class="adders"><select class="field" data-act="add-client"><option value="">+ Add a GC or client…</option>${clientsSorted.filter(c=>!b.client_ids.includes(c.id)).map(c=>`<option value="${c.id}">${esc(c.company)}</option>`).join('')}</select></div>
   <p class="hint">${S.clients.length?'Site work often goes to several GCs on the same project — add each one.':'No clients on file yet. Add them in the Clients & GCs tab.'}</p>`:''}</fieldset>
 
-  <fieldset><legend>Scope takeoff</legend><div class="fg" style="grid-template-columns:repeat(5,minmax(0,1fr))">
-    ${SCOPES.map(([k,l])=>`<label class="f">${l}${sel('scopes.'+k,SCOPE_ST)}</label>`).join('')}</div></fieldset>
+  ${scopeSection(b,work)}
 
   <fieldset><legend>Proposal</legend><div class="fg">
     <label class="f">Proposal status${sel('proposal_status',PROPOSAL_ST)}</label>
@@ -591,7 +650,7 @@ function bidModal(){
     <div class="rows">${b.quotes.map((q,i)=>quoteRow(q,i,work,admin)).join('')||'<div class="dim small">No quote requests yet.</div>'}</div>
     ${work?`<div class="adders"><select class="field" data-act="add-quote"><option value="">+ Request a quote from…</option>${vendorsSorted.map(v=>`<option value="${v.id}">${esc(v.company)} (${esc(v.trade)})</option>`).join('')}</select>
     ${tradesWithVendors.length?`<select class="field" data-act="add-trade"><option value="">+ Add every vendor in a trade…</option>${tradesWithVendors.map(t=>`<option>${esc(t)}</option>`).join('')}</select>`:''}</div>
-    <p class="hint">Upload the quote when it comes in (PDF, Excel, image — any file). Status switches to Received automatically. Save to keep quote changes.</p>`:''}
+    <p class="hint">Upload the quote when it comes in (PDF, Excel, image — any file). Status switches to Received automatically. Save to keep changes.</p>`:''}
   </fieldset>
 
   <fieldset><legend>Project files</legend>
@@ -603,8 +662,8 @@ function bidModal(){
   </fieldset>
 
   <fieldset><legend>GC follow-up log</legend><div class="rows">
-    ${b.follow_ups.map((f,i)=>`<div class="rowline fu"><input type="date" class="field" data-ff="${i}.date" value="${esc(f.date||'')}"${DIS()}><input type="text" class="field" data-ff="${i}.note" value="${esc(f.note||'')}" placeholder="e.g. Called PM, decision expected next week"${DIS()}>${admin?`<button class="rm" data-act="rm-fu" data-i="${i}" aria-label="Remove">×</button>`:'<span></span>'}</div>`).join('')||'<div class="dim small">No follow-ups logged.</div>'}
-  </div>${admin?'<div class="adders"><button class="btn sm" data-act="add-fu">+ Log a follow-up</button></div>':''}</fieldset>
+    ${b.follow_ups.map((f,i)=>`<div class="rowline fu"><input type="date" class="field" data-ff="${i}.date" value="${esc(f.date||'')}"${DIS()}><input type="text" class="field" data-ff="${i}.note" value="${esc(f.note||'')}" placeholder="e.g. Called PM, decision expected next week"${DIS()}>${work?`<button class="rm" data-act="rm-fu" data-i="${i}" aria-label="Remove">×</button>`:'<span></span>'}</div>`).join('')||'<div class="dim small">No follow-ups logged.</div>'}
+  </div>${work?'<div class="adders"><button class="btn sm" data-act="add-fu">+ Log a follow-up</button></div>':''}</fieldset>
 
   ${outcome?`<fieldset><legend>Outcome</legend><div class="fg">
     <label class="f">Submitted on<input type="date" class="field" ${bf('submitted_date')}></label>
@@ -616,7 +675,53 @@ function bidModal(){
   <fieldset><legend>Notes</legend><textarea class="field" data-bf="notes" placeholder="Scope clarifications, bid strategy, site conditions…"${DIS()}>${esc(b.notes||'')}</textarea></fieldset>
   </div>
   <div class="mfoot"><div>${admin&&!isNew?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button>`:''}</div>
-  <div class="r"><button class="btn" data-act="close">${admin||work?'Cancel':'Close'}</button>${admin?`<button class="btn primary" data-act="save">${isNew?'Create bid':'Save changes'}</button>`:work?'<button class="btn primary" data-act="save">Save quotes</button>':''}</div></div>`;
+  <div class="r"><button class="btn" data-act="close">${admin||work?'Cancel':'Close'}</button>${work?`<button class="btn primary" data-act="save">${isNew?'Create bid':'Save changes'}</button>`:''}</div></div>`;
+}
+function scopeSection(b,work){
+  const L=lib();const items=b.scope_items;const have=new Set(items.map(x=>x.name.toLowerCase()));
+  const team=[b.lead_estimator_id,...b.support_estimator_ids].filter(id=>id&&byId(S.estimators,id));
+  const done=items.filter(x=>x.status==='Complete').length;
+  const avail=SCOPE_GROUPS.map(g=>[g,L.scopes.filter(x=>x.group===g&&!have.has(x.name.toLowerCase()))]).filter(([,xs])=>xs.length);
+  return `<fieldset><legend>Scope takeoff</legend>
+   ${items.length?`<p class="hint" style="margin:0 0 10px">${done} of ${items.length} scopes signed off</p>`:''}
+   <div class="rows">${items.map((it,i)=>scopeRow(it,i,work,team)).join('')||`<div class="dim small">No scopes selected yet.${work?' Start from a template or pick scopes from the list.':''}</div>`}</div>
+   ${work?`<div class="adders">
+     <select class="field" data-act="apply-template"><option value="">Apply a template…</option>${(L.templates||[]).map(t=>`<option value="${esc(t.id)}">${esc(t.name)} (${t.scopes.length})</option>`).join('')}</select>
+     <select class="field" data-act="add-scope"><option value="">+ Add a scope…</option>${avail.map(([g,xs])=>`<optgroup label="${esc(g)}">${xs.map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('')}</optgroup>`).join('')}</select>
+     <span style="display:flex;gap:6px"><input class="field" id="custom-scope" placeholder="Custom scope" style="width:170px"><button class="btn sm" data-act="add-custom-scope">Add</button></span></div>
+   <p class="hint">When a scope’s takeoff is done, sign it off with your initials. Sign-offs save right away and record who did it and when.${isAdmin()?' Edit the scope list and templates on the Scopes page.':''}</p>`:''}
+  </fieldset>`;
+}
+function scopeRow(it,i,work,team){
+  const signed=it.status==='Complete';const canUnsign=work&&(isAdmin()||it.signed_by_user===S.session.user.id);
+  let right;
+  if(signed)right=`<div class="signed"><span class="stamp">${esc(it.signed_initials||'✓')}</span><div class="small"><b>Signed off</b>${it.signed_by_name?' by '+esc(it.signed_by_name):''}<div class="dim">${it.signed_at?new Date(it.signed_at).toLocaleString('en-US',{month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'}):'No sign-off recorded'}</div></div>${canUnsign?`<button class="btn sm ghost" data-act="unsign" data-i="${i}">Reopen</button>`:''}</div>`;
+  else if(M.signing===i)right=`<div class="signing"><input class="field" id="sign-init" maxlength="4" value="${esc(myInitials())}" aria-label="Your initials" style="width:74px;text-transform:uppercase;font-weight:700"><button class="btn sm primary" data-act="sign-confirm" data-i="${i}">Confirm sign-off</button><button class="btn sm ghost" data-act="sign-cancel">Cancel</button></div>`;
+  else right=`<div class="signing"><select class="field" data-sf="${i}.status"${work?'':' disabled'} style="width:140px">${['Not Started','In Progress'].map(x=>`<option${(it.status||'Not Started')===x?' selected':''}>${x}</option>`).join('')}</select>${work?`<button class="btn sm" data-act="sign-start" data-i="${i}">Sign off</button>`:''}</div>`;
+  return `<div class="scope-row${signed?' is-signed':''}">
+   <div><b style="font-weight:600">${esc(it.name)}</b>${it.group?`<div class="dim small">${esc(it.group)}</div>`:''}</div>
+   <select class="field" data-sf="${i}.assignee_id" title="Who is doing this scope"${work&&!signed?'':' disabled'}><option value="">Whole team</option>${team.map(id=>`<option value="${id}"${it.assignee_id===id?' selected':''}>${esc(estName(id))}</option>`).join('')}</select>
+   ${right}
+   ${work&&(!signed||isAdmin())?`<button class="rm" data-act="rm-scope" data-i="${i}" aria-label="Remove scope">×</button>`:'<span></span>'}</div>`;
+}
+function addScope(name,group){name=String(name||'').trim();if(!name)return false;
+  if(M.draft.scope_items.some(x=>x.name.toLowerCase()===name.toLowerCase()))return false;
+  M.draft.scope_items.push({id:newId(),name,group:group||groupOf(name),status:'Not Started',assignee_id:''});return true}
+const UNSIGNED={signed_initials:null,signed_by_name:null,signed_by_user:null,signed_by_estimator_id:null,signed_at:null};
+async function signScope(i){
+  const it=M.draft.scope_items[i];const ini=($('#sign-init')?.value||'').trim().toUpperCase();
+  if(!/^[A-Z]{1,4}$/.test(ini)){toast('Enter your initials (letters only).');return}
+  const prev=clone(it);
+  Object.assign(it,{status:'Complete',signed_initials:ini,signed_by_name:myName(),signed_by_user:S.session.user.id,signed_by_estimator_id:myEst()?.id||null,signed_at:new Date().toISOString()});
+  M.signing=null;
+  if(M.draft._new){renderModal();toast('Signed off. Create the bid to keep it.');return}
+  try{await saveBid();renderModal();toast(`${it.name} signed off by ${ini}`)}catch(e){Object.assign(it,prev);renderModal();toast(errMsg(e))}
+}
+async function unsignScope(i){
+  const it=M.draft.scope_items[i];const prev=clone(it);
+  Object.assign(it,{status:'In Progress'},UNSIGNED);
+  if(M.draft._new){renderModal();return}
+  try{await saveBid();renderModal();toast(`${it.name} reopened`)}catch(e){Object.assign(it,prev);renderModal();toast(errMsg(e))}
 }
 function quoteRow(q,i,work,admin){
   const v=vendorOf(q.vendor_id);const d=work?'':' disabled';
@@ -624,14 +729,14 @@ function quoteRow(q,i,work,admin){
     :q.file_path?`<span class="file"><button class="linkbtn" style="font-size:13px;font-weight:600;text-align:left;word-break:break-all" data-act="dl" data-path="${esc(q.file_path)}" data-name="${esc(q.file_name||'quote')}">${esc(q.file_name||'Download quote')}</button>${work?` <button class="rm" data-act="clear-file" data-i="${i}" title="Detach file">×</button>`:''}</span>`
     :work?`<span class="file"><label>Upload quote<input type="file" data-upload="${i}"></label></span>`:'<span class="dim small">No file</span>';
   return `<div class="quote"><div class="vn">${esc(v?.company||'Removed vendor')}<small>${esc(v?.trade||'')}${v?.phone?' · '+esc(v.phone):''}${q.requested_date?' · asked '+fmtShort(q.requested_date):''}${q.received_date?' · in '+fmtShort(q.received_date):''}</small></div>
-   <select class="field" data-qf="${i}.scope"${d}>${QUOTE_SCOPES.map(s=>`<option${q.scope===s?' selected':''}>${s}</option>`).join('')}</select>
+   <select class="field" data-qf="${i}.scope"${d}>${[...new Set([...M.draft.scope_items.map(x=>x.name),...QUOTE_EXTRA,q.scope].filter(Boolean))].map(x=>`<option${q.scope===x?' selected':''}>${esc(x)}</option>`).join('')}</select>
    <select class="field" data-qf="${i}.status"${d}>${QUOTE_ST.map(s=>`<option${q.status===s?' selected':''}>${s}</option>`).join('')}</select>
    <input type="date" class="field" data-qf="${i}.due_date" value="${esc(q.due_date||'')}" title="Need quote by"${d}>
    <input type="number" step="0.01" class="field" data-qf="${i}.amount" data-t="n" value="${esc(q.amount??'')}" placeholder="$"${d}>
    <div>${file}<input class="field" style="margin-top:4px" data-qf="${i}.note" value="${esc(q.note||'')}" placeholder="Note"${d}></div>
    ${admin||(work&&!M.origQuoteIds?.includes(q.id))?`<button class="rm" data-act="rm-quote" data-i="${i}" aria-label="Remove">×</button>`:'<span></span>'}</div>`;
 }
-function defaultScopeForTrade(t){return({'Pipe & utility supply':'Underground','Precast structures':'Underground','Utility sub':'Underground','Erosion control':'Erosion control','Landscaping & grassing':'Erosion control','Demolition':'Site demo','Clearing & grubbing':'Site demo','Asphalt paving':'Paving & curb','Concrete & curb':'Paving & curb','Trucking & hauling':'Trucking','Stone & aggregate':'Materials','Testing & inspection':'Testing','Grading sub':'Earthwork','Dewatering':'Earthwork'})[t]||'Other'}
+function defaultScopeForTrade(t){const g=TRADE_GROUP[t];const m=M.draft.scope_items.find(x=>x.group===g);return m?m.name:(['Trucking','Materials','Testing'].includes(g)?g:'Other')}
 function addQuote(vid){const v=vendorOf(vid);if(!v||M.draft.quotes.some(q=>q.vendor_id===vid))return false;
   M.draft.quotes.push({id:newId(),bid_id:M.draft.id,vendor_id:vid,scope:defaultScopeForTrade(v.trade),status:'Requested',requested_date:todayStr(),due_date:'',received_date:'',amount:null,note:'',file_path:null,file_name:null});return true}
 
@@ -678,26 +783,30 @@ function companyModal(){return mhead('Company','Shown at the top of the app for 
 /* ---------- saving ---------- */
 const nullIfEmpty=v=>v===''||v===undefined?null:v;
 function quoteRowData(q){const r={};Q_COLS.forEach(k=>r[k]=q[k]);['requested_date','due_date','received_date','file_path','file_name'].forEach(k=>r[k]=nullIfEmpty(r[k]));r.updated_by=S.session.user.id;return r}
+async function saveBid(){
+  const d=M.draft;
+  if(d.quotes.some(q=>q._uploading)||M.uploading)throw new Error('Wait for the upload to finish.');
+  if(!canWork(d))throw new Error('You don’t have permission to change this bid.');
+  if(!d.name.trim())throw new Error('Add a project name before saving.');
+  if(['Submitted','Awarded','Lost'].includes(d.status)&&!d.submitted_date)d.submitted_date=todayStr();
+  if(d.status==='Awarded'&&!d.awarded_date)d.awarded_date=todayStr();
+  if(d.status==='Submitted'&&d.proposal_status!=='Sent')d.proposal_status='Sent';
+  const row={};BID_COLS.forEach(k=>row[k]=d[k]);
+  ['due_date','due_time','walk_date','rfi_date','submitted_date','awarded_date','lead_estimator_id'].forEach(k=>row[k]=nullIfEmpty(row[k]));
+  row.follow_ups=(d.follow_ups||[]).filter(f=>f.date||f.note);row.updated_by=S.session.user.id;
+  if(d._new)await run(sb.from('bids').insert(row));
+  else{const {id,...rest}=row;await run(sb.from('bids').update(rest).eq('id',id))}
+  d._new=false;
+  if(isAdmin()){const gone=(M.origQuoteIds||[]).filter(id=>!d.quotes.some(q=>q.id===id));if(gone.length)await run(sb.from('quotes').delete().in('id',gone))}
+  if(d.quotes.length)await run(sb.from('quotes').upsert(d.quotes.map(quoteRowData)));
+  M.origQuoteIds=d.quotes.map(q=>q.id);
+  await Promise.all([loadTable('bids'),loadTable('quotes')]);
+}
+async function saveLib(next){await run(sb.from('settings').upsert({key:'scope_library',value:next}));await loadTable('settings')}
 async function saveModal(){
   const d=M.draft;const btn=$('#modal [data-act=save]');if(btn){btn.disabled=true;btn.textContent='Saving…'}
   try{
-    if(M.kind==='bid'){
-      if(d.quotes.some(q=>q._uploading)||M.uploading)throw new Error('Wait for the upload to finish.');
-      if(isAdmin()){
-        if(!d.name.trim())throw new Error('Add a project name before saving.');
-        if(['Submitted','Awarded','Lost'].includes(d.status)&&!d.submitted_date)d.submitted_date=todayStr();
-        if(d.status==='Awarded'&&!d.awarded_date)d.awarded_date=todayStr();
-        if(d.status==='Submitted'&&d.proposal_status!=='Sent')d.proposal_status='Sent';
-        const row={};BID_COLS.forEach(k=>row[k]=d[k]);
-        ['due_date','due_time','walk_date','rfi_date','submitted_date','awarded_date','lead_estimator_id'].forEach(k=>row[k]=nullIfEmpty(row[k]));
-        row.follow_ups=(d.follow_ups||[]).filter(f=>f.date||f.note);row.updated_by=S.session.user.id;
-        await run(sb.from('bids').upsert(row));
-        const gone=(M.origQuoteIds||[]).filter(id=>!d.quotes.some(q=>q.id===id));
-        if(gone.length)await run(sb.from('quotes').delete().in('id',gone));
-      }
-      if(d.quotes.length)await run(sb.from('quotes').upsert(d.quotes.map(quoteRowData)));
-      await Promise.all([loadTable('bids'),loadTable('quotes')]);
-      toast(`Saved ${d.name}`);
+    if(M.kind==='bid'){await saveBid();toast(`Saved ${d.name}`)
     }else if(['est','client','vendor'].includes(M.kind)){
       const t={est:'estimators',client:'clients',vendor:'vendors'}[M.kind];
       if(!String(d.name??d.company??'').trim())throw new Error(M.kind==='est'?'Add a name.':'Add a company name.');
@@ -705,12 +814,21 @@ async function saveModal(){
       const row={};ENT_COLS[t].forEach(k=>row[k]=d[k]);
       await run(sb.from(t).upsert(row));await loadTable(t);toast('Saved');
     }else if(M.kind==='board'){await run(sb.from('settings').upsert({key:'board',value:{widgets:d}}));await loadTable('settings');toast('Board view saved')}
+    else if(M.kind==='lib'){
+      const seen=new Set();const scopes=M.draft.map(x=>({name:String(x.name||'').trim(),group:x.group})).filter(x=>x.name&&!seen.has(x.name.toLowerCase())&&seen.add(x.name.toLowerCase()));
+      await saveLib({scopes,templates:lib().templates||[]});toast('Scope list saved');
+    }else if(M.kind==='tpl'){
+      if(!d.name.trim())throw new Error('Name the template.');if(!d.scopes.length)throw new Error('Pick at least one scope.');
+      const L=clone(lib());L.templates=L.templates||[];const i=L.templates.findIndex(t=>t.id===d.id);const t={id:d.id,name:d.name.trim(),scopes:d.scopes};
+      if(i>=0)L.templates[i]=t;else L.templates.push(t);await saveLib(L);toast('Template saved');
+    }
     else if(M.kind==='company'){await run(sb.from('settings').upsert({key:'general',value:{companyName:(d.companyName||'').trim()}}));await loadTable('settings');toast('Company name saved')}
     closeModal();
   }catch(e){toast(errMsg(e));if(btn){btn.disabled=false;btn.textContent='Try again'}}
 }
 async function deleteModal(){
   if(!M.arm){M.arm=true;renderModal();return}
+  if(M.kind==='tpl'){try{const L=clone(lib());L.templates=(L.templates||[]).filter(t=>t.id!==M.draft.id);await saveLib(L);toast('Template deleted');closeModal()}catch(e){toast(errMsg(e))}return}
   const t={bid:'bids',est:'estimators',client:'clients',vendor:'vendors'}[M.kind];
   try{
     if(M.kind==='bid'){ // remove the bid's stored files too
@@ -755,9 +873,9 @@ async function download(path,name){
   setTimeout(()=>URL.revokeObjectURL(url),10000);
 }
 function exportCsv(){
-  const cols=['Project','Location','Status','Clients','Lead estimator','Due date','Bid type','Project type','With site impr.','Without site impr.','Dashboard value','Win %','Submitted','Awarded date','Awarded amount','Lost reason','Quotes received','Quotes requested'];
+  const cols=['Project','Location','Status','Clients','Lead estimator','Due date','Bid type','Project type','With site impr.','Without site impr.','Dashboard value','Win %','Submitted','Awarded date','Awarded amount','Lost reason','Scopes signed off','Quotes received','Quotes requested'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const rows=S.bids.map(b=>{const qs=quotesFor(b.id);return [b.name,b.location,b.status,(b.client_ids||[]).map(clientName).join('; '),estName(b.lead_estimator_id),b.due_date,b.bid_type,b.project_type,b.amount_with,b.amount_without,bidValue(b),b.probability,b.submitted_date,b.awarded_date,b.awarded_amount,b.lost_reason,qs.filter(x=>x.status==='Received').length,qs.length].map(q).join(',')});
+  const rows=S.bids.map(b=>{const qs=quotesFor(b.id);return [b.name,b.location,b.status,(b.client_ids||[]).map(clientName).join('; '),estName(b.lead_estimator_id),b.due_date,b.bid_type,b.project_type,b.amount_with,b.amount_without,bidValue(b),b.probability,b.submitted_date,b.awarded_date,b.awarded_amount,b.lost_reason,scopeItems(b).filter(x=>x.status==='Complete').length+'/'+scopeItems(b).length,qs.filter(x=>x.status==='Received').length,qs.length].map(q).join(',')});
   const blob=new Blob([[cols.map(q).join(','),...rows].join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bid-pipeline-'+todayStr()+'.csv';a.click();
 }
 
@@ -799,11 +917,24 @@ document.addEventListener('click',e=>{
     case 'rm-fu':M.draft.follow_ups.splice(+t.dataset.i,1);renderModal();break;
     case 'add-contact':(M.draft.contacts=M.draft.contacts||[]).push({name:'',title:'',phone:'',email:''});renderModal();break;
     case 'rm-contact':M.draft.contacts.splice(+t.dataset.i,1);renderModal();break;
+    case 'rm-scope':M.draft.scope_items.splice(+t.dataset.i,1);M.signing=null;renderModal();break;
+    case 'add-custom-scope':{const v=$('#custom-scope')?.value;if(addScope(v,'Other'))renderModal();else if(v)toast('That scope is already on this bid.');break}
+    case 'sign-start':M.signing=+t.dataset.i;renderModal();setTimeout(()=>{const n=$('#sign-init');if(n){n.focus();n.select()}},0);break;
+    case 'sign-cancel':M.signing=null;renderModal();break;
+    case 'sign-confirm':signScope(+t.dataset.i);break;
+    case 'unsign':unsignScope(+t.dataset.i);break;
+    case 'edit-lib':M={kind:'lib',draft:clone(lib().scopes)};showModal();break;
+    case 'add-lib':M.draft.push({name:'',group:'Other'});renderModal();setTimeout(()=>{const n=document.querySelectorAll('[data-lf$=".name"]');n[n.length-1]?.focus()},0);break;
+    case 'rm-lib':M.draft.splice(+t.dataset.i,1);renderModal();break;
+    case 'new-tpl':M={kind:'tpl',isNew:true,draft:{id:'tpl-'+newId().slice(0,8),name:'',scopes:[]}};showModal();break;
+    case 'edit-tpl':{const tp=(lib().templates||[]).find(x=>x.id===t.dataset.id);if(tp){M={kind:'tpl',draft:clone(tp)};showModal()}break}
   }
   if(M&&M.arm&&a!=='del'){M.arm=false;renderModal()}
 });
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'&&M)closeModal();
+  if(e.key==='Enter'&&e.target.id==='sign-init'){e.preventDefault();const b=$('[data-act=sign-confirm]');if(b)signScope(+b.dataset.i);return}
+  if(e.key==='Enter'&&e.target.id==='custom-scope'){e.preventDefault();$('[data-act=add-custom-scope]')?.click();return}
+  if(e.key==='Escape'&&M){if(M.signing!=null){M.signing=null;renderModal();return}closeModal()}
   if((e.key==='Enter'||e.key===' ')&&e.target.classList?.contains('card')){e.preventDefault();e.target.click()}
 });
 document.addEventListener('input',e=>{
@@ -819,6 +950,10 @@ document.addEventListener('input',e=>{
   else if(t.dataset.cc){M.draft.client_contacts[t.dataset.cc]=val}
   else if(t.dataset.ef){M.draft[t.dataset.ef]=val}
   else if(t.dataset.wf){M.draft[t.dataset.wf]=t.checked}
+  else if(t.dataset.sf){const[i,k]=t.dataset.sf.split('.');M.draft.scope_items[+i][k]=val}
+  else if(t.dataset.lf){const[i,k]=t.dataset.lf.split('.');M.draft[+i][k]=val}
+  else if(t.dataset.tn!=null){M.draft.name=val}
+  else if(t.dataset.tc!=null){const n=t.dataset.tc;M.draft.scopes=M.draft.scopes.filter(x=>x!==n);if(t.checked)M.draft.scopes.push(n);const lg=$('#tpl-count');if(lg)lg.textContent='Scopes ('+M.draft.scopes.length+')'}
 });
 document.addEventListener('change',e=>{
   const t=e.target;const a=t.dataset.act;
@@ -839,6 +974,8 @@ document.addEventListener('change',e=>{
     case 'add-support':if(t.value){M.draft.support_estimator_ids.push(t.value);renderModal()}break;
     case 'add-client':if(t.value){M.draft.client_ids.push(t.value);const first=byId(S.clients,t.value)?.contacts?.[0]?.name;if(first)M.draft.client_contacts[t.value]=first;renderModal()}break;
     case 'add-quote':if(t.value){addQuote(t.value);renderModal()}break;
+    case 'apply-template':if(t.value){const tp=(lib().templates||[]).find(x=>x.id===t.value);const n=tp?tp.scopes.filter(x=>addScope(x)).length:0;toast(n?`Added ${n} scope${n===1?'':'s'} from ${tp.name}`:'Those scopes are already on this bid');renderModal()}break;
+    case 'add-scope':if(t.value){addScope(t.value);renderModal()}break;
     case 'add-trade':if(t.value){const n=S.vendors.filter(v=>v.trade===t.value).map(v=>addQuote(v.id)).filter(Boolean).length;toast(n?`Added ${n} ${t.value.toLowerCase()} vendor${n===1?'':'s'}`:'Those vendors are already on this bid');renderModal()}break;
   }
 });
