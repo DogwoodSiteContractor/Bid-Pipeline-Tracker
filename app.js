@@ -232,7 +232,7 @@ document.addEventListener('submit',async e=>{
     try{localStorage.setItem(REMEMBER_KEY,remember?'1':'0');if(remember)localStorage.setItem(EMAIL_KEY,email);else localStorage.removeItem(EMAIL_KEY)}catch(x){}
     busy('Signing in…');
     const {error}=await sb.auth.signInWithPassword({email,password:String(fd.get('password'))});
-    if(error){S.authMsg={err:/invalid/i.test(error.message)?'That email and password don’t match. Try again or reset your password.':errMsg(error)};render()}
+    if(error){const m=error.message||'';S.authMsg={err:m==='Invalid login credentials'?'That email and password don’t match. Try again or reset your password.':/not confirmed/i.test(m)?'This email hasn’t been confirmed. In Supabase, delete the user and add it again with “Auto Confirm User” checked.':/api key|apikey|jwt|No API key/i.test(m)?'Supabase rejected the key in config.js. Copy the anon / public key again from Project Settings → API Keys.':'Sign-in failed: '+m};render()}
     else S.authMsg=null;
   }
   if(f.id==='forgot-form'){
@@ -844,6 +844,16 @@ document.addEventListener('change',e=>{
 });
 
 /* ---------- start ---------- */
+// Checks that config.js points at a real Supabase project with a valid key
+async function checkConfig(){
+  try{
+    const r=await fetch(CFG.supabaseUrl.replace(/\/+$/,'')+'/auth/v1/settings',{headers:{apikey:CFG.supabaseAnonKey}});
+    if(r.status===401||r.status===403)S.authMsg={err:'Setup problem: Supabase rejected the key in config.js. Copy the anon / public key again from Project Settings → API Keys (not the secret / service_role key).'};
+    else if(!r.ok)S.authMsg={err:'Setup problem: the Supabase URL in config.js returned an error ('+r.status+'). Check it matches your Project URL exactly.'};
+    else{const j=await r.json().catch(()=>({}));if(j.external&&j.external.email===false)S.authMsg={err:'Setup problem: email sign-in is turned off in Supabase. Turn Email back on under Authentication → Sign In / Providers.'}}
+  }catch(e){S.authMsg={err:'Setup problem: can’t reach the Supabase URL in config.js. It should look like https://abcdefgh.supabase.co'}}
+  render();
+}
 async function start(){
   render();
   if(!sb){S.loading=false;render();return}
@@ -854,6 +864,7 @@ async function start(){
     // run outside the callback (Supabase recommends not awaiting inside it)
     setTimeout(()=>afterLogin(),0);
   });
+  checkConfig();
   const {data:{session}}=await sb.auth.getSession();
   S.session=session;
   if(session)await afterLogin();
