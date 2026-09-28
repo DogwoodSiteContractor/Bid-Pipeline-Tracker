@@ -27,7 +27,7 @@ a{color:var(--info)}
 
 /* top bar */
 .top{position:sticky;top:env(safe-area-inset-top,0px);z-index:20;background:var(--top);color:var(--top-ink);border-bottom:3px solid var(--accent-2)}
-.top-in{max-width:1440px;margin:0 auto;display:flex;align-items:center;gap:20px;padding:10px 24px}
+.top-in{max-width:1760px;margin:0 auto;display:flex;align-items:center;gap:20px;padding:10px 24px}
 .brand{display:flex;align-items:center;gap:10px;background:none;border:0;cursor:pointer;padding:0;color:inherit;text-align:left}
 .brand-logo{height:34px;width:auto;display:block}
 .stake{width:14px;height:30px;background:var(--accent);clip-path:polygon(0 0,100% 0,100% 72%,50% 100%,0 72%)}
@@ -47,7 +47,7 @@ a{color:var(--info)}
 .btn.sm{padding:5px 10px;font-size:13px}
 .top .btn.primary{padding:8px 16px}
 
-main{max-width:1440px;margin:0 auto;padding:24px 24px 60px}
+main{max-width:1760px;margin:0 auto;padding:24px 24px 60px}
 .banner{background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:10px 14px;margin-bottom:18px;font-size:14px}
 .head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;margin-bottom:20px}
 .head h1{font-family:"Montserrat",system-ui,sans-serif;font-weight:700;font-size:34px;line-height:1.05;margin:0;letter-spacing:-.01em}
@@ -257,7 +257,7 @@ textarea.field{min-height:84px;resize:vertical}
 .prog-now b{color:var(--ink)}
 
 /* ---- scope takeoff sign-off ---- */
-.scope-row{display:grid;grid-template-columns:minmax(0,1.1fr) 170px minmax(0,1.5fr) auto;gap:10px;align-items:center;background:var(--surface-2);border:1px solid var(--line);border-left:3px solid var(--line);border-radius:8px;padding:9px 10px}
+.scope-row{display:grid;grid-template-columns:minmax(0,1.1fr) 128px 160px minmax(0,1.5fr) auto;gap:10px;align-items:center;background:var(--surface-2);border:1px solid var(--line);border-left:3px solid var(--line);border-radius:8px;padding:9px 10px}
 .scope-row.is-signed{border-left-color:var(--good)}
 .scope-row .field{padding:6px 8px;font-size:13.5px}
 .signing{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
@@ -282,3 +282,13 @@ textarea.field{min-height:84px;resize:vertical}
 .gc-row .rm{align-self:center}
 @media (max-width:1100px){.gc-row{grid-template-columns:1fr 1fr 1fr}.gc-row>div:first-child{grid-column:1/-1}}
 @media (max-width:600px){.gc-row{grid-template-columns:1fr 1fr}}
+
+/* ---- projects overview ---- */
+table.ov td,table.ov th{padding:10px 10px}
+table.ov .pill{font-size:12px}
+table.ov td.num,table.ov .proj{white-space:nowrap}
+.ov-n{font-weight:600;opacity:.75;margin-left:2px}
+
+/* ---- self perform / sub ---- */
+.perf-tag{display:inline-block;font-size:10.5px;font-weight:700;padding:0 5px;border-radius:4px;background:var(--info-soft);color:var(--info);margin-left:3px;vertical-align:1px}
+.scope-row select.perf-sub,.scope-row select.perf-both{color:var(--info);font-weight:600}

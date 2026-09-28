@@ -15,6 +15,9 @@ const ACTIVE=['Estimating','Submitted','On Hold'];
 const QUOTE_ST=['Not requested','Requested','Received','Declined','No response'];
 const QUOTE_CLS={'Not requested':'','Requested':'warn','Received':'good','Declined':'bad','No response':'na'};
 const QUOTE_EXTRA=['Materials','Trucking','Testing','Other'];
+const PERFORM=['Self perform','Sub','Both'];
+const PERF_SHORT={'Self perform':'Self','Sub':'Sub','Both':'Self + sub'};
+const DEFAULT_SUB=['Asphalt paving','Concrete paving','Curb & gutter','Sidewalks','Striping & signage','Fencing','Testing allowance','Retaining walls','Grassing & stabilization'];
 const SCOPE_GROUPS=['Site prep & demo','Erosion control','Earthwork','Underground utilities','Paving & concrete','Other'];
 const DEFAULT_LIB={scopes:[
   ['Clearing & grubbing','Site prep & demo'],['Site demolition','Site prep & demo'],['Tree protection','Site prep & demo'],['Construction entrance','Site prep & demo'],
@@ -22,7 +25,7 @@ const DEFAULT_LIB={scopes:[
   ['Mass grading','Earthwork'],['Fine grading','Earthwork'],['Building pad','Earthwork'],['Topsoil strip & respread','Earthwork'],['Undercut & replacement','Earthwork'],['Rock excavation','Earthwork'],['Import / export haul','Earthwork'],
   ['Storm drainage','Underground utilities'],['Sanitary sewer','Underground utilities'],['Water','Underground utilities'],['Fire line','Underground utilities'],['Detention / water quality','Underground utilities'],['Underground detention','Underground utilities'],
   ['Graded aggregate base','Paving & concrete'],['Asphalt paving','Paving & concrete'],['Concrete paving','Paving & concrete'],['Curb & gutter','Paving & concrete'],['Sidewalks','Paving & concrete'],['Striping & signage','Paving & concrete'],
-  ['Retaining walls','Other'],['Fencing','Other'],['Traffic control','Other'],['Dewatering','Other'],['Testing allowance','Other']].map(([name,group])=>({name,group})),
+  ['Retaining walls','Other'],['Fencing','Other'],['Traffic control','Other'],['Dewatering','Other'],['Testing allowance','Other']].map(([name,group])=>({name,group,perform:DEFAULT_SUB.includes(name)?'Sub':'Self perform'})),
  templates:[
   {id:'tpl-full',name:'Full site package',scopes:['Clearing & grubbing','Erosion control','Mass grading','Fine grading','Building pad','Storm drainage','Sanitary sewer','Water','Fire line','Graded aggregate base','Asphalt paving','Curb & gutter']},
   {id:'tpl-earth',name:'Earthwork only',scopes:['Clearing & grubbing','Erosion control','Mass grading','Fine grading','Building pad']},
@@ -130,7 +133,9 @@ const quotesFor=id=>S.quotes.filter(q=>q.bid_id===id);
 const filesFor=id=>S.bid_files.filter(f=>f.bid_id===id).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||''));
 const openQuotes=b=>quotesFor(b.id).filter(q=>q.status==='Requested');
 const lib=()=>S.settings.scope_library&&Array.isArray(S.settings.scope_library.scopes)?S.settings.scope_library:DEFAULT_LIB;
-const groupOf=name=>lib().scopes.find(x=>x.name.toLowerCase()===String(name).toLowerCase())?.group||'Other';
+const libScope=name=>lib().scopes.find(x=>x.name.toLowerCase()===String(name).toLowerCase());
+const groupOf=name=>libScope(name)?.group||'Other';
+const performOf=it=>PERFORM.includes(it.perform)?it.perform:'Self perform';
 // scope_items: [{id,name,group,status,assignee_id,signed_initials,signed_by_name,signed_by_user,signed_by_estimator_id,signed_at}]
 function scopeItems(b){
   if(Array.isArray(b.scope_items))return b.scope_items;
@@ -191,6 +196,7 @@ const myName=()=>S.profile?.full_name||myEst()?.name||S.session?.user?.email||''
 async function loadTable(t){
   const {data,error}=await sb.from(t).select('*');
   if(error){console.error(t,error);return}
+  S.lastLoaded=new Date();
   if(t==='settings')S.settings=Object.fromEntries((data||[]).map(r=>[r.key,r.value||{}]));
   else S[t]=data||[];
   schedule();
@@ -309,8 +315,8 @@ function vDashboard(){
   const d=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
   if(role()==='estimator')return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div></div>`+mine();
   if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}</div></div>`+board();
-  return `<div class="head"><div><h1>${S.dash==='precon'?'Precon dashboard':'Board dashboard'}</h1><p>${d}</p></div>
-  <div class="tools">${S.dash==='board'?yearSelect()+'<button class="btn" data-act="board-custom">Customize view</button>':''}
+  return `<div class="head"><div><h1>${S.dash==='precon'?'Bid pipeline dashboard':'Board dashboard'}</h1><p>${d}${S.lastLoaded?` · <span class="dim">Last updated ${S.lastLoaded.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>`:''}</p></div>
+  <div class="tools">${S.dash==='board'?yearSelect()+'<button class="btn" data-act="board-custom">Customize view</button>':'<button class="btn" data-act="refresh">↻ Refresh</button>'}
   <div class="seg" role="tablist"><button class="${S.dash==='precon'?'on':''}" data-act="dash" data-v="precon">Precon<small>Daily work</small></button><button class="${S.dash==='board'?'on':''}" data-act="dash" data-v="board">Board<small>Results & trends</small></button></div></div></div>`
   +(S.dash==='precon'?precon():board());
 }
@@ -356,23 +362,71 @@ function precon(){
   const oq=act.flatMap(b=>openQuotes(b).map(q=>({b,q}))).sort((a,b)=>(a.q.due_date||a.b.due_date||'9').localeCompare(b.q.due_date||b.b.due_date||'9'));
   const fu=sub.filter(needsFollowUp);
   const val=act.reduce((s,b)=>s+bidValue(b),0);
+  const Y=new Date().getFullYear();
+  const yr=S.bids.filter(b=>yearOf(b)===Y);
+  const proposed=yr.filter(b=>['Submitted','Awarded','Lost'].includes(b.status));
+  const won=yr.filter(b=>b.status==='Awarded');
+  const split=list=>{const w=list.filter(b=>bidValue(b)&&b.use_for!=='without').length,o=list.filter(b=>bidValue(b)&&b.use_for==='without').length;return `${w} w/ site, ${o} w/o site`};
   const kpis=`<div class="kpis">
-    ${kpi('Active bids',act.length,est.length+' estimating, '+sub.length+' submitted','','active')}
-    ${kpi('Due in 7 days',due7.length,past.length?past.length+' past due':'Nothing past due',due7.length||past.length?'hot':'','estimating')}
-    ${kpi('Awaiting decision',sub.length,'Submitted to GC','','submitted')}
-    ${kpi('Follow-ups needed',fu.length,'No contact in 7+ days',fu.length?'bad':'')}
-    ${kpi('Quotes outstanding',oq.length,'Requested, not received',oq.length?'hot':'')}
-    ${kpi('Active bid value',moneyK(val),money(val),'good')}</div>`;
-  if(!S.bids.length)return kpis+setupGuide();
+    ${kpi('Active bids',act.length,'In pipeline','','active')}
+    ${kpi('Due this week',due7.length,past.length?past.length+' past due':'Upcoming deadlines',due7.length||past.length?'hot':'','estimating')}
+    ${kpi('Pending decision',sub.length,'Bids submitted','','submitted')}
+    ${kpi('Awarded',won.length,won.length?moneyK(won.reduce((x,b)=>x+wonValue(b),0))+' this year':'This year','good','awarded')}
+    ${kpi('Yearly proposals',moneyK(proposed.reduce((x,b)=>x+bidValue(b),0)),split(proposed))}
+    ${kpi('Active bid value',moneyK(val),split(act),'good')}</div>`;
   const fuList=fu.map(b=>`<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button><div class="dim small">${(b.client_ids||[]).map(clientName).map(esc).join(', ')||'No client'}</div></div><div class="small">${lastTouch(b)?'Last '+fmtShort(lastTouch(b)):'Never contacted'}</div></div>`).join('');
   const load=S.estimators.filter(e=>e.active!==false).map(e=>({e,n:est.filter(b=>b.lead_estimator_id===e.id||(b.support_estimator_ids||[]).includes(e.id)).length,soon:due7.filter(b=>b.lead_estimator_id===e.id).length}));
   const maxL=Math.max(1,...load.map(x=>x.n));
   const loadHtml=load.length?`<div class="hbars">${load.sort((a,b)=>b.n-a.n).map(x=>`<div class="hb"><span class="lab who">${avatar(x.e.id,22)}${esc(x.e.name)}</span><div class="track"><div class="fill ${x.soon?'acc':''}" style="width:${x.n/maxL*100}%"></div></div><span class="v">${x.n} bid${x.n===1?'':'s'}${x.soon?` · ${x.soon} due soon`:''}</span></div>`).join('')}</div>`:`<div class="empty"><b>No estimators yet</b><button class="btn sm" data-act="nav" data-v="estimators">Add estimators</button></div>`;
-  return kpis+`<div class="sec"><div class="sec-h"><h2>Active bids</h2><span>Sorted by due date. Scope bar: one block per scope, green once signed off.</span></div>${bidTable(act)}</div>
+  const closed=yr.filter(b=>['Awarded','Lost','No Bid'].includes(b.status)).sort((a,b)=>(b.awarded_date||b.due_date||'').localeCompare(a.awarded_date||a.due_date||''));
+  return kpis+`<div class="sec"><div class="sec-h"><h2>Projects overview</h2><span>Active bids and upcoming deadlines · click a row to open it</span></div>${overviewTable(act)}</div>
+  ${closed.length?`<div class="sec"><div class="sec-h"><h2>Closed this year</h2><span>Awarded, lost and no-bid</span></div>${closedTable(closed)}</div>`:''}
   <div class="grid3">
     <div class="sec"><div class="sec-h"><h2>Estimator workload</h2><span>Bids in estimating</span></div><div class="panel pad">${loadHtml}</div></div>
     <div class="sec"><div class="sec-h"><h2>Quotes outstanding</h2><span>${oq.length}</span></div><div class="panel pad">${quoteList(oq,'All requested quotes are in.')}</div></div>
     <div class="sec"><div class="sec-h"><h2>Follow-ups needed</h2><span>${fu.length}</span></div><div class="panel pad"><div class="list">${fuList||'<div class="empty">Every submitted bid has a recent follow-up.</div>'}</div></div></div></div>`;
+}
+// Scope columns for the overview: each groups related scopes from the scope library
+const OV_GROUPS=[['Earthwork',['Earthwork']],['Underground',['Underground utilities']],['Erosion / demo',['Erosion control','Site prep & demo']],['Paving',['Paving & concrete']],['Other',['Other']]];
+function groupStatus(b,groups){
+  const it=scopeItems(b).filter(x=>groups.includes(x.group||groupOf(x.name)));
+  if(!it.length)return '<span class="dim">—</span>';
+  const done=it.filter(x=>x.status==='Complete').length,started=it.some(x=>x.status==='In Progress');
+  const tip=esc(it.map(x=>x.name+' ('+performOf(x)+'): '+(x.status==='Complete'?'signed off'+(x.signed_initials?' ('+x.signed_initials+')':''):x.status||'Not Started')).join('\n'));
+  const count=it.length>1?` <span class="ov-n">${done}/${it.length}</span>`:'';
+  const pf=[...new Set(it.map(performOf))];const perf=pf.length===1&&pf[0]==='Self perform'?'':`<div class="dim small" style="margin-top:3px">${pf.length===1?(pf[0]==='Sub'?'Sub':'Self + sub'):'Mixed'}</div>`;
+  if(done===it.length)return `<span class="pill good" title="${tip}">✓ Complete${it.length===1&&it[0].signed_initials?' · '+esc(it[0].signed_initials):count}</span>${perf}`;
+  if(done||started)return `<span class="pill warn" title="${tip}">In progress${count}</span>${perf}`;
+  return `<span class="pill" title="${tip}">Not started${count}</span>${perf}`;
+}
+function amtCell(b,key){
+  const base=num(b[key]);if(base!=null)return money(base);
+  const a=(b.client_ids||[]).map(id=>num(propOf(b,id)[key])).filter(v=>v!=null);
+  if(!a.length)return '<span class="dim">—</span>';
+  const lo=Math.min(...a),hi=Math.max(...a);return lo===hi?money(hi):`${moneyK(lo)}–${moneyK(hi)}`;
+}
+function overviewTable(list){
+  const groups=OV_GROUPS.filter(([l,g])=>['Earthwork','Underground','Erosion / demo'].includes(l)||list.some(b=>scopeItems(b).some(x=>g.includes(x.group||groupOf(x.name)))));
+  const rows=list.map(b=>`<tr class="click" data-act="open-bid" data-id="${b.id}">
+    <td><div class="proj">${esc(b.name)}</div>${b.lead_estimator_id?`<div class="dim small">${esc(estName(b.lead_estimator_id))}</div>`:''}</td>
+    <td>${(b.client_ids||[]).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}</div>`).join('')||'<span class="dim">—</span>'}</td>
+    <td>${dueCell(b)}</td>
+    ${groups.map(([,g])=>`<td>${groupStatus(b,g)}</td>`).join('')}
+    <td>${pill(b.proposal_status||'Not Started',PROP_CLS[b.proposal_status])}</td>
+    <td class="r num">${amtCell(b,'amount_with')}</td>
+    <td class="r num">${amtCell(b,'amount_without')}</td>
+    <td class="r num" style="font-weight:700">${bidValue(b)?money(bidValue(b))+` <span class="dim small">${b.use_for==='without'?'w/o':'w/'}</span>`:'<span class="dim">—</span>'}</td>
+    <td>${lastTouch(b)?fmtShort(lastTouch(b)):'<span class="dim">—</span>'}</td>
+    <td>${pill(b.status,BID_CLS[b.status])}</td></tr>`).join('');
+  return `<div class="panel scroll"><table class="ov"><thead><tr><th>Project</th><th>GC / client</th><th>Due date</th>${groups.map(([l])=>`<th>${l}</th>`).join('')}<th>Proposal</th><th class="r">W/ site impr.</th><th class="r">W/O site impr.</th><th class="r">Dashboard $</th><th>Last GC contact</th><th>Status</th></tr></thead>
+   <tbody>${rows||`<tr><td colspan="${9+groups.length}"><div class="empty"><b>No active bids</b>${isAdmin()?'Click <b>+ New bid</b> to add one.':''}</div></td></tr>`}</tbody></table></div>`;
+}
+function closedTable(list){
+  return `<div class="panel scroll"><table><thead><tr><th>Project</th><th>GC / client</th><th>Due date</th><th class="r">W/ site impr.</th><th class="r">W/O site impr.</th><th class="r">Contract</th><th>Status</th></tr></thead><tbody>
+  ${list.slice(0,20).map(b=>`<tr class="click" data-act="open-bid" data-id="${b.id}"><td class="proj">${esc(b.name)}</td><td>${clientsLine(b,3)}</td><td>${fmtDate(b.due_date)}</td>
+    <td class="r num">${amtCell(b,'amount_with')}</td><td class="r num">${amtCell(b,'amount_without')}</td>
+    <td class="r num" style="font-weight:700">${b.status==='Awarded'?money(wonValue(b)):'<span class="dim">—</span>'}</td><td>${pill(b.status,BID_CLS[b.status])}${b.status==='Lost'&&b.lost_reason?`<div class="dim small">${esc(b.lost_reason)}</div>`:''}</td></tr>`).join('')}
+  </tbody></table></div>`;
 }
 function setupGuide(){
   const step=(done,t,d,v)=>`<div class="li"><div><b style="font-weight:600">${done?'✓ ':''}${t}</b><div class="dim small">${d}</div></div>${v?`<button class="btn sm" data-act="${v==='new-bid'?'new-bid':'nav'}" data-v="${v}">${done?'Open':'Start'}</button>`:''}</div>`;
@@ -495,7 +549,7 @@ function vPipeline(){
   ${list.length?`<div class="cards">${list.map(card).join('')}</div>`:`<div class="panel"><div class="empty"><b>No bids match</b>${pool.length?'Try a different filter or search.':est?'Bids assigned to you will appear here.':'Create your first bid to fill the pipeline.'}</div></div>`}`;
 }
 function scopePills(b){const it=scopeItems(b);if(!it.length)return '<span class="dim small">No scopes selected</span>';
-  return it.slice(0,6).map(x=>`<span class="pill ${scopeCls(x)}" title="${esc(x.name+': '+(x.status||'Not Started'))}">${esc(x.name)}${x.status==='Complete'?' ✓'+(x.signed_initials?' '+esc(x.signed_initials):''):''}</span>`).join('')+(it.length>6?`<span class="pill na">+${it.length-6} more</span>`:'')}
+  return it.slice(0,6).map(x=>`<span class="pill ${scopeCls(x)}" title="${esc(x.name+': '+(x.status||'Not Started')+' · '+performOf(x))}">${esc(x.name)}${performOf(x)!=='Self perform'?` <span class="perf-tag">${PERF_SHORT[performOf(x)]==='Sub'?'Sub':'S+S'}</span>`:''}${x.status==='Complete'?' ✓'+(x.signed_initials?' '+esc(x.signed_initials):''):''}</span>`).join('')+(it.length>6?`<span class="pill na">+${it.length-6} more</span>`:'')}
 function card(b){
   const qs=quotesFor(b.id);const rec=qs.filter(q=>q.status==='Received').length;const v=bidValue(b);const nf=filesFor(b.id).length;
   const team=[b.lead_estimator_id,...(b.support_estimator_ids||[])].filter(id=>byId(S.estimators,id));
@@ -544,9 +598,9 @@ function vVendors(){
 function vScopes(){const L=lib();const groups=SCOPE_GROUPS.filter(g=>L.scopes.some(x=>x.group===g));
   return `<div class="head"><div><h1>Scopes & templates</h1><p>${L.scopes.length} scopes · ${(L.templates||[]).length} templates${S.settings.scope_library?'':' · starter list, edit it to make it yours'}</p></div><div class="tools"><button class="btn" data-act="edit-lib">Edit scope list</button><button class="btn primary" data-act="new-tpl">+ New template</button></div></div>
   <div class="grid2"><div class="sec"><div class="sec-h"><h2>Templates</h2><span>Apply to a bid in one click</span></div><div class="panel pad"><div class="list">${(L.templates||[]).map(t=>`<div class="li"><div><button class="linkish" data-act="edit-tpl" data-id="${esc(t.id)}">${esc(t.name)}</button><div class="dim small">${t.scopes.map(esc).join(', ')}</div></div><span class="pill">${t.scopes.length}</span></div>`).join('')||'<div class="empty">No templates yet.</div>'}</div></div></div>
-  <div class="sec"><div class="sec-h"><h2>Scope list</h2><span>What your team picks from on each bid</span></div><div class="panel pad">${groups.map(g=>`<div style="margin-bottom:14px"><div class="small" style="font-weight:600;margin-bottom:6px">${esc(g)}</div><div class="tagrow">${L.scopes.filter(x=>x.group===g).map(x=>pill(x.name)).join('')}</div></div>`).join('')}</div></div></div>`}
-function libModal(){return mhead('Scope list','The scopes your team can pick from on any bid.')+`<div class="mbody"><fieldset><legend>Scopes</legend><div class="rows">${M.draft.map((x,i)=>`<div class="rowline" style="grid-template-columns:minmax(0,1fr) 210px auto"><input class="field" data-lf="${i}.name" value="${esc(x.name)}" placeholder="Scope name"><select class="field" data-lf="${i}.group">${SCOPE_GROUPS.map(g=>`<option${x.group===g?' selected':''}>${esc(g)}</option>`).join('')}</select><button class="rm" data-act="rm-lib" data-i="${i}" aria-label="Remove">×</button></div>`).join('')}</div>
-  <div class="adders"><button class="btn sm" data-act="add-lib">+ Add scope</button></div><p class="hint">Changes here don’t alter bids that already use a scope.</p></fieldset></div>
+  <div class="sec"><div class="sec-h"><h2>Scope list</h2><span>What your team picks from on each bid</span></div><div class="panel pad">${groups.map(g=>`<div style="margin-bottom:14px"><div class="small" style="font-weight:600;margin-bottom:6px">${esc(g)}</div><div class="tagrow">${L.scopes.filter(x=>x.group===g).map(x=>`<span class="pill">${esc(x.name)}${x.perform&&x.perform!=='Self perform'?` <span class="perf-tag">${x.perform==='Sub'?'Sub':'S+S'}</span>`:''}</span>`).join('')}</div></div>`).join('')}</div></div></div>`}
+function libModal(){return mhead('Scope list','The scopes your team can pick from on any bid, and who usually performs each one.')+`<div class="mbody"><fieldset><legend>Scopes</legend><div class="rows">${M.draft.map((x,i)=>`<div class="rowline" style="grid-template-columns:minmax(0,1fr) 190px 140px auto"><input class="field" data-lf="${i}.name" value="${esc(x.name)}" placeholder="Scope name"><select class="field" data-lf="${i}.group">${SCOPE_GROUPS.map(g=>`<option${x.group===g?' selected':''}>${esc(g)}</option>`).join('')}</select><select class="field" data-lf="${i}.perform" title="Default when added to a bid">${PERFORM.map(o=>`<option${(x.perform||'Self perform')===o?' selected':''}>${o}</option>`).join('')}</select><button class="rm" data-act="rm-lib" data-i="${i}" aria-label="Remove">×</button></div>`).join('')}</div>
+  <div class="adders"><button class="btn sm" data-act="add-lib">+ Add scope</button></div><p class="hint">The self perform / sub setting is the default when a scope is added to a bid; it can be changed on each bid. Changes here don’t alter bids that already use a scope.</p></fieldset></div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="save">Save scope list</button></div></div>`}
 function tplModal(){const d=M.draft;const L=lib();const names=[...new Set([...L.scopes.map(x=>x.name),...d.scopes])];
   return mhead(M.isNew?'New template':d.name||'Template','Pick the scopes this template adds to a bid.')+`<div class="mbody"><fieldset><legend>Template</legend><label class="f">Name<input class="field" data-tn value="${esc(d.name)}" placeholder="e.g. Retail pad site"></label></fieldset>
@@ -738,6 +792,14 @@ function scopeSection(b,work){
    <p class="hint">When a scope’s takeoff is done, sign it off with your initials. Sign-offs save right away and record who did it and when.${isAdmin()?' Edit the scope list and templates on the Scopes page.':''}</p>`:''}
   </fieldset>`;
 }
+// For scopes that use a sub, show how the sub quotes for that scope are coming along
+function subQuoteNote(it){
+  if(performOf(it)==='Self perform')return '';
+  const qs=(M.draft.quotes||[]).filter(q=>q.scope===it.name);
+  if(!qs.length)return ' · <span style="color:var(--warn);font-weight:600">No sub quotes yet</span>';
+  const rec=qs.filter(q=>q.status==='Received').length,req=qs.filter(q=>q.status==='Requested').length;
+  return ` · <span style="color:var(--${rec?'good':'warn'});font-weight:600">Sub quotes: ${rec} in${req?`, ${req} waiting`:''}</span>`;
+}
 function scopeRow(it,i,work,team){
   const signed=it.status==='Complete';const canUnsign=work&&(isAdmin()||it.signed_by_user===S.session.user.id);
   let right;
@@ -745,14 +807,15 @@ function scopeRow(it,i,work,team){
   else if(M.signing===i)right=`<div class="signing"><input class="field" id="sign-init" maxlength="4" value="${esc(myInitials())}" aria-label="Your initials" style="width:74px;text-transform:uppercase;font-weight:700"><button class="btn sm primary" data-act="sign-confirm" data-i="${i}">Confirm sign-off</button><button class="btn sm ghost" data-act="sign-cancel">Cancel</button></div>`;
   else right=`<div class="signing"><select class="field" data-sf="${i}.status"${work?'':' disabled'} style="width:140px">${['Not Started','In Progress'].map(x=>`<option${(it.status||'Not Started')===x?' selected':''}>${x}</option>`).join('')}</select>${work?`<button class="btn sm" data-act="sign-start" data-i="${i}">Sign off</button>`:''}</div>`;
   return `<div class="scope-row${signed?' is-signed':''}">
-   <div><b style="font-weight:600">${esc(it.name)}</b>${it.group?`<div class="dim small">${esc(it.group)}</div>`:''}</div>
+   <div><b style="font-weight:600">${esc(it.name)}</b><div class="dim small">${esc(it.group||'')}${subQuoteNote(it)}</div></div>
+   <select class="field perf-${performOf(it)==='Self perform'?'self':performOf(it)==='Sub'?'sub':'both'}" data-sf="${i}.perform" title="Who performs this scope"${work&&!signed?'':' disabled'}>${PERFORM.map(x=>`<option${performOf(it)===x?' selected':''}>${x}</option>`).join('')}</select>
    <select class="field" data-sf="${i}.assignee_id" title="Who is doing this scope"${work&&!signed?'':' disabled'}><option value="">Whole team</option>${team.map(id=>`<option value="${id}"${it.assignee_id===id?' selected':''}>${esc(estName(id))}</option>`).join('')}</select>
    ${right}
    ${work&&(!signed||isAdmin())?`<button class="rm" data-act="rm-scope" data-i="${i}" aria-label="Remove scope">×</button>`:'<span></span>'}</div>`;
 }
 function addScope(name,group){name=String(name||'').trim();if(!name)return false;
   if(M.draft.scope_items.some(x=>x.name.toLowerCase()===name.toLowerCase()))return false;
-  M.draft.scope_items.push({id:newId(),name,group:group||groupOf(name),status:'Not Started',assignee_id:''});return true}
+  M.draft.scope_items.push({id:newId(),name,group:group||groupOf(name),perform:PERFORM.includes(libScope(name)?.perform)?libScope(name).perform:'Self perform',status:'Not Started',assignee_id:''});return true}
 const UNSIGNED={signed_initials:null,signed_by_name:null,signed_by_user:null,signed_by_estimator_id:null,signed_at:null};
 async function signScope(i){
   const it=M.draft.scope_items[i];const ini=($('#sign-init')?.value||'').trim().toUpperCase();
@@ -782,7 +845,7 @@ function quoteRow(q,i,work,admin){
    <div>${file}<input class="field" style="margin-top:4px" data-qf="${i}.note" value="${esc(q.note||'')}" placeholder="Note"${d}></div>
    ${admin||(work&&!M.origQuoteIds?.includes(q.id))?`<button class="rm" data-act="rm-quote" data-i="${i}" aria-label="Remove">×</button>`:'<span></span>'}</div>`;
 }
-function defaultScopeForTrade(t){const g=TRADE_GROUP[t];const m=M.draft.scope_items.find(x=>x.group===g);return m?m.name:(['Trucking','Materials','Testing'].includes(g)?g:'Other')}
+function defaultScopeForTrade(t){const g=TRADE_GROUP[t];const inG=M.draft.scope_items.filter(x=>x.group===g);const m=inG.find(x=>performOf(x)!=='Self perform')||inG[0];return m?m.name:(['Trucking','Materials','Testing'].includes(g)?g:'Other')}
 function addQuote(vid){const v=vendorOf(vid);if(!v||M.draft.quotes.some(q=>q.vendor_id===vid))return false;
   M.draft.quotes.push({id:newId(),bid_id:M.draft.id,vendor_id:vid,scope:defaultScopeForTrade(v.trade),status:'Requested',requested_date:todayStr(),due_date:'',received_date:'',amount:null,note:'',file_path:null,file_name:null});return true}
 
@@ -867,7 +930,7 @@ async function saveModal(){
       await run(sb.from(t).upsert(row));await loadTable(t);toast('Saved');
     }else if(M.kind==='board'){await run(sb.from('settings').upsert({key:'board',value:{widgets:d}}));await loadTable('settings');toast('Board view saved')}
     else if(M.kind==='lib'){
-      const seen=new Set();const scopes=M.draft.map(x=>({name:String(x.name||'').trim(),group:x.group})).filter(x=>x.name&&!seen.has(x.name.toLowerCase())&&seen.add(x.name.toLowerCase()));
+      const seen=new Set();const scopes=M.draft.map(x=>({name:String(x.name||'').trim(),group:x.group,perform:PERFORM.includes(x.perform)?x.perform:'Self perform'})).filter(x=>x.name&&!seen.has(x.name.toLowerCase())&&seen.add(x.name.toLowerCase()));
       await saveLib({scopes,templates:lib().templates||[]});toast('Scope list saved');
     }else if(M.kind==='tpl'){
       if(!d.name.trim())throw new Error('Name the template.');if(!d.scopes.length)throw new Error('Pick at least one scope.');
@@ -944,6 +1007,7 @@ document.addEventListener('click',e=>{
     case 'kpi-filter':S.view='pipeline';S.filter=t.dataset.v;render();break;
     case 'filter':S.filter=t.dataset.v;render();break;
     case 'export':exportCsv();break;
+    case 'refresh':Promise.all(TABLES.map(loadTable)).then(()=>toast('Up to date'));break;
     case 'reload-team':loadProfiles();loadTable('estimators');break;
     case 'make-est':makeEstimatorFor(t.dataset.id);break;
     case 'dl':download(t.dataset.path,t.dataset.name);break;
@@ -978,7 +1042,7 @@ document.addEventListener('click',e=>{
     case 'sign-confirm':signScope(+t.dataset.i);break;
     case 'unsign':unsignScope(+t.dataset.i);break;
     case 'edit-lib':M={kind:'lib',draft:clone(lib().scopes)};showModal();break;
-    case 'add-lib':M.draft.push({name:'',group:'Other'});renderModal();setTimeout(()=>{const n=document.querySelectorAll('[data-lf$=".name"]');n[n.length-1]?.focus()},0);break;
+    case 'add-lib':M.draft.push({name:'',group:'Other',perform:'Self perform'});renderModal();setTimeout(()=>{const n=document.querySelectorAll('[data-lf$=".name"]');n[n.length-1]?.focus()},0);break;
     case 'rm-lib':M.draft.splice(+t.dataset.i,1);renderModal();break;
     case 'new-tpl':M={kind:'tpl',isNew:true,draft:{id:'tpl-'+newId().slice(0,8),name:'',scopes:[]}};showModal();break;
     case 'edit-tpl':{const tp=(lib().templates||[]).find(x=>x.id===t.dataset.id);if(tp){M={kind:'tpl',draft:clone(tp)};showModal()}break}
@@ -1018,6 +1082,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.plink!=null){linkEstimator(t.dataset.plink,t.value);return}
   if(t.dataset.pname){setProfileName(t.dataset.pname,t.value.trim());return}
   if(M&&t.dataset.bf){if(t.dataset.bf==='status'||t.dataset.bf==='lead_estimator_id')renderModal();return}
+  if(M&&t.dataset.sf&&t.dataset.sf.endsWith('.perform')){renderModal();return}
   if(M&&t.dataset.cp&&t.dataset.cp.endsWith('.status')){const id=t.dataset.cp.split('.')[0];const p=M.draft.client_proposals[id];if(p.status==='Sent'&&!p.sent_date)p.sent_date=todayStr();renderModal();return}
   if(M&&t.dataset.cp&&/amount/.test(t.dataset.cp)){renderModal();return}
   if(M&&t.dataset.qf&&t.dataset.qf.endsWith('.status')){const q=M.draft.quotes[+t.dataset.qf.split('.')[0]];
