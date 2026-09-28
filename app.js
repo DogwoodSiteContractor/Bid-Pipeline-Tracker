@@ -40,6 +40,7 @@ const PROJECT_TYPES=['Industrial','Commercial','Residential','Single Family','To
 const PROJECT_TYPE_ALIASES={singlefamily:'Single Family',sfr:'Single Family',singlefamilyhomes:'Single Family',multifamily:'Apartments',apartment:'Apartments',apartments:'Apartments',townhome:'Townhomes',townhouses:'Townhomes',townhouse:'Townhomes',townhomes:'Townhomes',
   singlefamilytownhomes:'Single Family & Townhomes',singlefamilyandtownhomes:'Single Family & Townhomes',sftownhomes:'Single Family & Townhomes',residential:'Residential',industrial:'Industrial',warehouse:'Industrial',commercial:'Commercial',retail:'Commercial',office:'Commercial',public:'Public / municipal',municipal:'Public / municipal',publicmunicipal:'Public / municipal',institutional:'Institutional',school:'Institutional'};
 const normProjectType=v=>{if(!v)return v;if(PROJECT_TYPES.includes(v))return v;return PROJECT_TYPE_ALIASES[String(v).toLowerCase().replace(/[^a-z0-9]/g,'')]||v};
+const live=b=>!b.archived_at;
 const unitsText=b=>num(b.units)?`${Number(b.units).toLocaleString('en-US')} unit${+b.units===1?'':'s'}`:'';
 const BID_TYPES=['Hard bid','Negotiated','Budget / pricing','Design-assist'];
 const LOST_REASONS=['','Price','Schedule','Relationship / incumbent','Project cancelled','Scope','Unknown'];
@@ -49,7 +50,7 @@ const WIDGETS=[['kpis','Headline numbers'],['monthly','Bid and award volume by m
 const AV_COLORS=['#2C5E99','#2C7A4C','#8B5E34','#7A3E8E','#B24A2A','#2F7C83','#5A6B1E','#9C3D5C'];
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const BUCKET='bid-files';
-const BID_COLS=['id','name','location','project_type','units','bid_type','size','status','probability','due_date','due_time','walk_date','rfi_date','lead_estimator_id','support_estimator_ids','client_ids','client_contacts','client_proposals','awarded_client_id','addenda','revisions','scope_items','proposal_status','amount_with','amount_without','use_for','margin','follow_ups','notes','submitted_date','awarded_date','awarded_amount','awarded_to','lost_reason'];
+const BID_COLS=['id','name','location','project_type','units','bid_type','size','status','probability','due_date','due_time','walk_date','rfi_date','lead_estimator_id','support_estimator_ids','client_ids','client_contacts','client_proposals','awarded_client_id','addenda','revisions','archived_at','scope_items','proposal_status','amount_with','amount_without','use_for','margin','follow_ups','notes','submitted_date','awarded_date','awarded_amount','awarded_to','lost_reason'];
 const Q_COLS=['id','bid_id','vendor_id','scope','status','requested_date','due_date','received_date','amount','note','file_path','file_name'];
 const ENT_COLS={estimators:['id','name','title','email','phone','active'],clients:['id','company','type','phone','email','address','notes','contacts'],vendors:['id','company','vendor_type','trade','scopes','contact_name','phone','email','area','preferred','notes']};
 const VENDOR_TYPES=['Supplier','Subcontractor','Supplier & sub','Service / testing','Trucking'];
@@ -371,7 +372,7 @@ function quoteList(pairs,empty){return pairs.length?`<div class="list">${pairs.s
   return `<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(v?.company||'Removed vendor')}</button><div class="dim small">${esc(q.scope||'')} for ${esc(b.name)}${q.requested_date?', asked '+fmtShort(q.requested_date):''}</div></div><div class="small">${q.due_date?'Need by '+fmtShort(q.due_date):b.due_date?'Bid '+fmtShort(b.due_date):''}</div></div>`}).join('')}</div>`:`<div class="empty">${empty}</div>`}
 
 function precon(){
-  const act=S.bids.filter(b=>ACTIVE.includes(b.status)).sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999'));
+  const act=S.bids.filter(b=>live(b)&&ACTIVE.includes(b.status)).sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999'));
   const est=act.filter(b=>b.status==='Estimating');
   const due7=est.filter(b=>b.due_date&&daysUntil(b.due_date)>=0&&daysUntil(b.due_date)<=7);
   const past=est.filter(b=>b.due_date&&daysUntil(b.due_date)<0);
@@ -395,7 +396,7 @@ function precon(){
   const load=S.estimators.filter(e=>e.active!==false).map(e=>({e,n:est.filter(b=>b.lead_estimator_id===e.id||(b.support_estimator_ids||[]).includes(e.id)).length,soon:due7.filter(b=>b.lead_estimator_id===e.id).length}));
   const maxL=Math.max(1,...load.map(x=>x.n));
   const loadHtml=load.length?`<div class="hbars">${load.sort((a,b)=>b.n-a.n).map(x=>`<div class="hb"><span class="lab who">${avatar(x.e.id,22)}${esc(x.e.name)}</span><div class="track"><div class="fill ${x.soon?'acc':''}" style="width:${x.n/maxL*100}%"></div></div><span class="v">${x.n} bid${x.n===1?'':'s'}${x.soon?` · ${x.soon} due soon`:''}</span></div>`).join('')}</div>`:`<div class="empty"><b>No estimators yet</b><button class="btn sm" data-act="nav" data-v="estimators">Add estimators</button></div>`;
-  const closed=yr.filter(b=>['Awarded','Lost','No Bid'].includes(b.status)).sort((a,b)=>(b.awarded_date||b.due_date||'').localeCompare(a.awarded_date||a.due_date||''));
+  const closed=yr.filter(b=>live(b)&&['Awarded','Lost','No Bid'].includes(b.status)).sort((a,b)=>(b.awarded_date||b.due_date||'').localeCompare(a.awarded_date||a.due_date||''));
   return kpis+`<div class="sec"><div class="sec-h"><h2>Projects overview</h2><span>Active bids and upcoming deadlines · click a row to open it</span></div>${overviewTable(act)}</div>
   ${closed.length?`<div class="sec"><div class="sec-h"><h2>Closed this year</h2><span>Awarded, lost and no-bid</span></div>${closedTable(closed)}</div>`:''}
   <div class="grid3">
@@ -460,7 +461,7 @@ function setupGuide(){
 function mine(){
   const me=myEst();
   if(!me)return `<div class="notice">Your login isn’t linked to an estimator record yet, so no bids can be assigned to you. Ask your precon manager to link your account on the Team & logins page.</div>`;
-  const my=S.bids.filter(assigned);
+  const my=S.bids.filter(b=>live(b)&&assigned(b));
   const act=my.filter(b=>ACTIVE.includes(b.status)).sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999'));
   const est=act.filter(b=>b.status==='Estimating');
   const due7=est.filter(b=>b.due_date&&daysUntil(b.due_date)>=0&&daysUntil(b.due_date)<=7);
@@ -499,7 +500,7 @@ function board(){
   const decided=won.length+lost.length;const winRate=decided?Math.round(won.length/decided*100):null;
   const decVal=[...won,...lost].reduce((s,b)=>s+bidValue(b),0);
   const dollarRate=decVal?Math.round(won.reduce((s,b)=>s+bidValue(b),0)/decVal*100):null;
-  const act=S.bids.filter(b=>ACTIVE.includes(b.status));
+  const act=S.bids.filter(b=>live(b)&&ACTIVE.includes(b.status));
   const weighted=act.reduce((s,b)=>s+bidValue(b)*(num(b.probability)??50)/100,0);
   const out=[];
   if(cfg.kpis)out.push(`<div class="wide"><div class="kpis" style="margin:0">
@@ -537,7 +538,7 @@ function board(){
     out.push(panel('Project type mix','Dollars bid',e.length?hbars(e.map(([l,v])=>({l,w:v/mx,v:moneyK(v)}))):'<div class="empty">No bids this year.</div>'));
   }
   if(cfg.upcoming){
-    const up=S.bids.filter(b=>b.status==='Estimating'&&b.due_date&&daysUntil(b.due_date)>=0&&daysUntil(b.due_date)<=30).sort((a,b)=>a.due_date.localeCompare(b.due_date));
+    const up=S.bids.filter(b=>live(b)&&b.status==='Estimating'&&b.due_date&&daysUntil(b.due_date)>=0&&daysUntil(b.due_date)<=30).sort((a,b)=>a.due_date.localeCompare(b.due_date));
     out.push(panel('Bids due in the next 30 days',up.length+' bids · '+moneyK(up.reduce((s,b)=>s+bidValue(b),0)),up.length?`<div class="list">${up.map(b=>`<div class="li"><div><b style="font-weight:600">${esc(b.name)}</b><div class="dim small">${(b.client_ids||[]).map(clientName).map(esc).join(', ')||esc(b.project_type||'')}</div></div><div style="text-align:right"><div class="num" style="font-weight:600">${bidValue(b)?money(bidValue(b)):'Pricing'}</div><div class="dim small">${fmtShort(b.due_date)}</div></div></div>`).join('')}</div>`:'<div class="empty">Nothing due in the next 30 days.</div>'));
   }
   if(cfg.lost){
@@ -550,28 +551,43 @@ function board(){
 }
 
 /* ----- pipeline ----- */
+const ARCHIVED_FILTER=['archived','Archived',b=>!!b.archived_at];
 const FILTERS=[['active','All active',b=>ACTIVE.includes(b.status)],['estimating','Estimating',b=>b.status==='Estimating'],['submitted','Submitted',b=>b.status==='Submitted'],['hold','On hold',b=>b.status==='On Hold'],['awarded','Awarded',b=>b.status==='Awarded'],['lost','Lost / no bid',b=>b.status==='Lost'||b.status==='No Bid'],['all','Everything',()=>true]];
 function vPipeline(){
   const q=(S.q.pipe||'').toLowerCase();const est=role()==='estimator';
   const pool=est?S.bids.filter(assigned):S.bids;
   const base=pool.filter(b=>(!S.estF||b.lead_estimator_id===S.estF||(b.support_estimator_ids||[]).includes(S.estF))&&(!S.clientF||(b.client_ids||[]).includes(S.clientF))
     &&(!q||[b.name,b.location,...(b.client_ids||[]).map(clientName)].join(' ').toLowerCase().includes(q)));
-  const f=FILTERS.find(x=>x[0]===S.filter)||FILTERS[0];
-  const list=base.filter(f[2]).sort((a,b)=>ACTIVE.includes(a.status)?(a.due_date||'9999').localeCompare(b.due_date||'9999'):(b.due_date||'').localeCompare(a.due_date||''));
-  return `<div class="head"><div><h1>${est?'My bids':'Pipeline'}</h1><p>${pool.length} bid${pool.length===1?'':'s'}${est?' assigned to you':' on file'}</p></div><div class="tools">${est?'':'<button class="btn" data-act="export-xlsx">Export Excel</button><button class="btn ghost" data-act="export">CSV</button>'}${isAdmin()?'<button class="btn" data-act="import">Import from Excel</button><button class="btn primary" data-act="new-bid">+ New bid</button>':''}</div></div>
-  <div class="bar">${FILTERS.map(([k,l,fn])=>`<button class="chip ${S.filter===k?'on':''}" data-act="filter" data-v="${k}">${l}<b>${base.filter(fn).length}</b></button>`).join('')}</div>
+  const f=[...FILTERS,ARCHIVED_FILTER].find(x=>x[0]===S.filter)||FILTERS[0];const inArch=f[0]==='archived';
+  const list=base.filter(b=>inArch?!!b.archived_at:live(b)).filter(f[2]).sort((a,b)=>ACTIVE.includes(a.status)?(a.due_date||'9999').localeCompare(b.due_date||'9999'):(b.due_date||'').localeCompare(a.due_date||''));
+  S.shownIds=list.map(b=>b.id);
+  const sel=S.sel||new Set();[...sel].forEach(id=>{if(!byId(S.bids,id))sel.delete(id)});
+  const allShown=list.length&&list.every(b=>sel.has(b.id));
+  const selBar=S.selMode?`<div class="selbar" role="region" aria-label="Selection">
+    <b>${sel.size} selected</b>
+    <button class="btn sm" data-act="sel-all">${allShown?'Unselect':'Select'} all ${list.length} shown</button>
+    ${sel.size?'<button class="btn sm ghost" data-act="sel-clear">Clear</button>':''}
+    <span style="flex:1"></span>
+    <button class="btn sm ghost" data-act="sel-done">Done</button>
+    ${(()=>{const ids=[...sel];const na=ids.filter(id=>byId(S.bids,id)?.archived_at).length,nl=ids.length-na;
+      return (nl?`<button class="btn sm" data-act="sel-archive">Archive ${nl}</button>`:'')+(na?`<button class="btn sm" data-act="sel-restore">Restore ${na}</button>`:'')})()}
+    <button class="btn sm danger${sel.size?' arm':''}" data-act="sel-delete"${sel.size?'':' disabled'}>Delete ${sel.size||''}</button></div>`:'';
+  return `<div class="head"><div><h1>${est?'My bids':'Pipeline'}</h1><p>${pool.filter(live).length} bid${pool.filter(live).length===1?'':'s'}${est?' assigned to you':' on file'}</p></div><div class="tools">${est?'':'<button class="btn" data-act="export-xlsx">Export Excel</button><button class="btn ghost" data-act="export">CSV</button>'}${isAdmin()?`<button class="btn${S.selMode?' primary':''}" data-act="sel-mode">${S.selMode?'Selecting…':'Select'}</button>`:''}${isAdmin()?'<button class="btn" data-act="import">Import from Excel</button><button class="btn primary" data-act="new-bid">+ New bid</button>':''}</div></div>
+  <div class="bar">${FILTERS.map(([k,l,fn])=>`<button class="chip ${S.filter===k?'on':''}" data-act="filter" data-v="${k}">${l}<b>${base.filter(b=>live(b)&&fn(b)).length}</b></button>`).join('')}${base.some(b=>b.archived_at)||inArch?`<button class="chip ${inArch?'on':''}" data-act="filter" data-v="archived">🗄 Archived<b>${base.filter(b=>b.archived_at).length}</b></button>`:''}</div>
   <div class="bar"><input id="q-pipe" class="field search" placeholder="Search projects, locations, GCs" value="${esc(S.q.pipe||'')}" data-q="pipe">
    ${est?'':`<select class="field" data-act="estF"><option value="">All estimators</option>${S.estimators.map(e=>`<option value="${e.id}"${S.estF===e.id?' selected':''}>${esc(e.name)}</option>`).join('')}</select>`}
    <select class="field" data-act="clientF"><option value="">All clients & GCs</option>${S.clients.slice().sort((a,b)=>a.company.localeCompare(b.company)).map(c=>`<option value="${c.id}"${S.clientF===c.id?' selected':''}>${esc(c.company)}</option>`).join('')}</select></div>
-  ${list.length?`<div class="cards">${list.map(card).join('')}</div>`:`<div class="panel"><div class="empty"><b>No bids match</b>${pool.length?'Try a different filter or search.':est?'Bids assigned to you will appear here.':'Create your first bid to fill the pipeline.'}</div></div>`}`;
+  ${S.selMode?'<div class="notice">Click cards to select them, then archive or delete. Archived bids leave your pipeline and dashboard but keep all their history — find them under <b>Archived</b> to restore. Use the filters and search to narrow down first.</div>':''}
+  ${list.length?`<div class="cards${S.selMode?' selecting':''}">${list.map(card).join('')}</div>${selBar}`:`<div class="panel"><div class="empty"><b>No bids match</b>${pool.length?'Try a different filter or search.':est?'Bids assigned to you will appear here.':'Create your first bid to fill the pipeline.'}</div></div>`}`;
 }
 function scopePills(b){const it=scopeItems(b);if(!it.length)return '<span class="dim small">No scopes selected</span>';
   return it.slice(0,6).map(x=>`<span class="pill ${scopeCls(x)}" title="${esc(x.name+': '+(x.status||'Not Started')+' · '+performOf(x))}">${esc(x.name)}${performOf(x)!=='Self perform'?` <span class="perf-tag">${PERF_SHORT[performOf(x)]==='Sub'?'Sub':'S+S'}</span>`:''}${x.status==='Complete'?' ✓'+(x.signed_initials?' '+esc(x.signed_initials):''):''}</span>`).join('')+(it.length>6?`<span class="pill na">+${it.length-6} more</span>`:'')}
 function card(b){
   const qs=quotesFor(b.id);const rec=qs.filter(q=>q.status==='Received').length;const v=bidValue(b);const nf=filesFor(b.id).length;
   const team=[b.lead_estimator_id,...(b.support_estimator_ids||[])].filter(id=>byId(S.estimators,id));
-  return `<div class="card" role="button" tabindex="0" data-act="open-bid" data-id="${b.id}">
-   <div class="card-top"><div><h3>${esc(b.name)}</h3><div class="meta">${clientsLine(b)}</div>${b.project_type||unitsText(b)?`<div class="meta" style="margin-top:1px">${[normProjectType(b.project_type),unitsText(b)].filter(Boolean).map(esc).join(' · ')}</div>`:''}</div>${pill(b.status,BID_CLS[b.status])}</div>
+  const picked=S.selMode&&S.sel?.has(b.id);
+  return `<div class="card${picked?' picked':''}" role="button" tabindex="0" data-act="open-bid" data-id="${b.id}"${S.selMode?` aria-pressed="${picked?'true':'false'}"`:''}>${S.selMode?`<span class="pickbox" aria-hidden="true">${picked?'✓':''}</span>`:''}
+   <div class="card-top"><div><h3>${esc(b.name)}${b.archived_at?' <span class="pill na" style="font-size:11px;vertical-align:3px">Archived</span>':''}</h3><div class="meta">${clientsLine(b)}</div>${b.project_type||unitsText(b)?`<div class="meta" style="margin-top:1px">${[normProjectType(b.project_type),unitsText(b)].filter(Boolean).map(esc).join(' · ')}</div>`:''}</div>${pill(b.status,BID_CLS[b.status])}</div>
    ${progress(b)}
    <div class="row">${dueCell(b)}<div style="text-align:right">${v?`<div class="val">${money(v)}</div><div class="dim small">${b.use_for==='without'?'Without':'With'} site improvements</div>`:`<div class="dim small">Proposal ${esc((b.proposal_status||'Not Started').toLowerCase())}</div>`}</div></div>
    <div class="scopes">${scopePills(b)}</div>
@@ -656,7 +672,7 @@ function closeModal(){M=null;$('#modal').innerHTML='';document.body.style.overfl
 function showModal(){document.body.style.overflow='hidden';renderModal(true)}
 function renderModal(first){
   if(!M)return;const body=$('#modal .mbody');const st=body?body.scrollTop:0;
-  const html={import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal}[M.kind]();
+  const html={bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='import'?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
 }
@@ -725,6 +741,7 @@ function pickerFinish(){
 }
 function bidModal(){
   if(M.picker)return pickerView();
+  const archNote=M.draft.archived_at?`<div class="notice" style="margin-bottom:14px">🗄 Archived ${fmtDate(String(M.draft.archived_at).slice(0,10))}. It’s hidden from the pipeline and dashboard but all its history is kept.${isAdmin()?' Click <b>Restore</b> to bring it back.':''}</div>`:'';
   const b=M.draft;const admin=isAdmin();const work=canWork(b);const isNew=b._new;
   const ests=S.estimators.filter(e=>e.active!==false||e.id===b.lead_estimator_id||b.support_estimator_ids.includes(e.id));
   const clientsSorted=S.clients.slice().sort((a,c)=>a.company.localeCompare(c.company));
@@ -733,7 +750,7 @@ function bidModal(){
   const outcome=['Submitted','Awarded','Lost','No Bid'].includes(b.status);
   const sub=isNew?'Project details, team, scope, vendor quotes and files':admin?'Last saved '+(b.updated_at?new Date(b.updated_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—'):work?'You’re on this bid, so you can update anything here except who’s assigned to it.':'Read-only';
   const files=isNew?[]:filesFor(b.id);
-  return mhead(isNew?'New bid':b.name||'Untitled bid',sub)+`<div class="mbody">
+  return mhead(isNew?'New bid':b.name||'Untitled bid',sub)+`<div class="mbody">${archNote}
   ${isNew?'':`<div class="panel pad" style="margin-bottom:14px">${progress(b,{lg:true,quotes:b.quotes})}</div>`}
   <fieldset><legend>Project</legend><div class="fg">
     <label class="f s2">Project name ${work?'<span class="req">required</span>':''}<input class="field" ${bf('name')} placeholder="e.g. Riverside Commerce Park"></label>
@@ -807,7 +824,7 @@ function bidModal(){
 
   <fieldset><legend>Notes</legend><textarea class="field" data-bf="notes" placeholder="Scope clarifications, bid strategy, site conditions…"${DIS()}>${esc(b.notes||'')}</textarea></fieldset>
   </div>
-  <div class="mfoot"><div>${admin&&!isNew?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button>`:''}</div>
+  <div class="mfoot"><div style="display:flex;gap:8px">${admin&&!isNew?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button><button class="btn" data-act="${b.archived_at?'bid-restore':'bid-archive'}">${b.archived_at?'Restore':'Archive'}</button>`:''}</div>
   <div class="r"><button class="btn" data-act="close">${admin||work?'Cancel':'Close'}</button>${work?`<button class="btn primary" data-act="save">${isNew?'Create bid':'Save changes'}</button>`:''}</div></div>`;
 }
 function clientsSection(b,work){
@@ -1456,6 +1473,37 @@ function dirImportModal(){
     +foot('<button class="btn" data-act="imp-restart">Choose a different file</button>',`<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="imp-run"${n&&!M.running?'':' disabled'}>${M.running?'Adding…':type==='clients'&&cnt('contacts')?`Add ${cnt('new')} compan${cnt('new')===1?'y':'ies'} + contacts`:`Add ${cnt('new')} compan${cnt('new')===1?'y':'ies'}`}</button>`);
 }
 
+/* ---- bulk delete (admin) ---- */
+function bulkDelModal(){
+  const bs=M.ids.map(id=>byId(S.bids,id)).filter(Boolean);const n=bs.length;
+  const files=bs.reduce((x,b)=>x+filesFor(b.id).length+quotesFor(b.id).filter(q=>q.file_path).length,0);
+  const quotes=bs.reduce((x,b)=>x+quotesFor(b.id).length,0);const ok=M.typed.trim().toUpperCase()==='DELETE';
+  return mhead(`Delete ${n} bid${n===1?'':'s'}?`,'This can’t be undone')+`<div class="mbody">
+    <div class="err" style="margin-bottom:14px">These bids will be permanently deleted${quotes||files?`, along with ${quotes?`${quotes} vendor quote${quotes===1?'':'s'}`:''}${quotes&&files?' and ':''}${files?`${files} uploaded file${files===1?'':'s'}`:''}`:''}. Clients, GCs, vendors and estimators are not affected.</div>
+    <fieldset><legend>Bids to delete</legend><div class="list">${bs.slice(0,25).map(b=>`<div class="li"><div><b style="font-weight:600">${esc(b.name)}</b><div class="dim small">${[fmtDate(b.due_date),clientsLine(b,2)].filter(x=>x&&x!=='—').join(' · ')}</div></div>${pill(b.status,BID_CLS[b.status])}</div>`).join('')}${n>25?`<div class="li dim small">…and ${n-25} more</div>`:''}</div></fieldset>
+    <fieldset><legend>Confirm</legend><label class="f">Type <b>DELETE</b> to confirm<input class="field" id="bulk-confirm" data-bulktype value="${esc(M.typed)}" autocomplete="off" style="max-width:220px;text-transform:uppercase"></label></fieldset></div>
+    <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn danger arm" data-act="bulkdel-run"${ok&&!M.running?'':' disabled'}>${M.running?'Deleting…':`Delete ${n} bid${n===1?'':'s'}`}</button></div></div>`;
+}
+async function setArchived(ids,on){
+  const stamp=on?new Date().toISOString():null;let done=0;const failed=[];
+  for(let i=0;i<ids.length;i+=100){const chunk=ids.slice(i,i+100);
+    try{await run(sb.from('bids').update({archived_at:stamp,updated_by:S.session.user.id}).in('id',chunk));done+=chunk.length}catch(e){failed.push(errMsg(e))}}
+  await loadTable('bids');
+  toast(failed.length?`${on?'Archived':'Restored'} ${done}. Problem: ${failed[0]}`:`${on?'Archived':'Restored'} ${done} bid${done===1?'':'s'}${on?' — find them under Archived':''}`);
+  return done;
+}
+async function runBulkDelete(){
+  if(!isAdmin()||M.running||M.typed.trim().toUpperCase()!=='DELETE')return;
+  M.running=true;renderModal();const ids=M.ids.slice();let done=0;const failed=[];
+  try{
+    const paths=ids.flatMap(id=>[...filesFor(id).map(f=>f.file_path),...quotesFor(id).map(q=>q.file_path).filter(Boolean),...addenda(byId(S.bids,id)||{}).map(a=>a.file_path).filter(Boolean)]);
+    for(let i=0;i<paths.length;i+=100){try{await sb.storage.from(BUCKET).remove([...new Set(paths.slice(i,i+100))])}catch(e){}}
+    for(let i=0;i<ids.length;i+=100){const chunk=ids.slice(i,i+100);try{await run(sb.from('bids').delete().in('id',chunk));done+=chunk.length}catch(e){failed.push(errMsg(e))}}
+    await Promise.all(['bids','quotes','bid_files'].map(loadTable));
+  }catch(e){failed.push(errMsg(e))}
+  S.sel=new Set();S.selMode=false;closeModal();render();
+  toast(failed.length?`Deleted ${done}. Problem: ${failed[0]}`:`Deleted ${done} bid${done===1?'':'s'}`);
+}
 async function exportXlsx(){
   let X;try{X=await loadXLSX()}catch(e){toast(errMsg(e));return}
   const serial=s=>{if(!s)return '';const [y,m,d]=String(s).slice(0,10).split('-').map(Number);return {t:'n',v:(Date.UTC(y,m-1,d)-Date.UTC(1899,11,30))/864e5,z:'m/d/yyyy'}};
@@ -1481,7 +1529,7 @@ document.addEventListener('click',e=>{
     case 'auth-view':S.authView=t.dataset.v;S.authMsg=null;render();break;
     case 'signout':sb.auth.signOut();break;
     case 'recheck':S.profileFor=null;S.profile=null;render();afterLogin();break;
-    case 'nav':S.view=t.dataset.v;closeModal();render();window.scrollTo(0,0);break;
+    case 'nav':S.selMode=false;S.sel=new Set();S.view=t.dataset.v;closeModal();render();window.scrollTo(0,0);break;
     case 'dash':S.dash=t.dataset.v;render();break;
     case 'kpi-filter':S.view='pipeline';S.filter=t.dataset.v;render();break;
     case 'filter':S.filter=t.dataset.v;render();break;
@@ -1496,7 +1544,16 @@ document.addEventListener('click',e=>{
     case 'make-est':makeEstimatorFor(t.dataset.id);break;
     case 'dl':download(t.dataset.path,t.dataset.name);break;
     case 'new-bid':if(isAdmin()){M={kind:'bid',draft:newBid(),origQuoteIds:[]};showModal()}break;
-    case 'open-bid':openBid(t.dataset.id);break;
+    case 'open-bid':if(S.selMode&&S.view==='pipeline'&&!M){S.sel=S.sel||new Set();S.sel.has(t.dataset.id)?S.sel.delete(t.dataset.id):S.sel.add(t.dataset.id);render();break}openBid(t.dataset.id);break;
+    case 'sel-mode':S.selMode=!S.selMode;if(!S.selMode)S.sel=new Set();render();break;
+    case 'sel-done':S.selMode=false;S.sel=new Set();render();break;
+    case 'sel-clear':S.sel=new Set();render();break;
+    case 'sel-all':{S.sel=S.sel||new Set();const all=(S.shownIds||[]).every(id=>S.sel.has(id));(S.shownIds||[]).forEach(id=>all?S.sel.delete(id):S.sel.add(id));render();break}
+    case 'sel-delete':if(S.sel?.size){M={kind:'bulkdel',ids:[...S.sel],typed:''};showModal()}break;
+    case 'bulkdel-run':runBulkDelete();break;
+    case 'sel-archive':{const ids=[...(S.sel||[])].filter(id=>!byId(S.bids,id)?.archived_at);if(ids.length)setArchived(ids,true).then(()=>{S.sel=new Set();render()});break}
+    case 'sel-restore':{const ids=[...(S.sel||[])].filter(id=>byId(S.bids,id)?.archived_at);if(ids.length)setArchived(ids,false).then(()=>{S.sel=new Set();render()});break}
+    case 'bid-archive':case 'bid-restore':{const on=a==='bid-archive';const id=M.draft.id;setArchived([id],on).then(()=>{closeModal();render()});break}
     case 'new-est':M={kind:'est',isNew:true,draft:{id:newId(),name:'',title:'',email:'',phone:'',active:true}};showModal();break;
     case 'open-est':M={kind:'est',draft:clone(byId(S.estimators,t.dataset.id))};showModal();break;
     case 'new-client':M={kind:'client',isNew:true,draft:{id:newId(),company:'',type:'General contractor',phone:'',email:'',address:'',notes:'',contacts:[{name:'',title:'',phone:'',email:''}]}};showModal();break;
@@ -1548,12 +1605,14 @@ document.addEventListener('click',e=>{
 document.addEventListener('keydown',e=>{
   if(e.key==='Enter'&&e.target.id==='sign-init'){e.preventDefault();const b=$('[data-act=sign-confirm]');if(b)signScope(+b.dataset.i);return}
   if(e.key==='Enter'&&e.target.id==='custom-scope'){e.preventDefault();$('[data-act=add-custom-scope]')?.click();return}
+  if(e.key==='Escape'&&!M&&S.selMode){S.selMode=false;S.sel=new Set();render();return}
   if(e.key==='Escape'&&M){if(M.signing!=null){M.signing=null;renderModal();return}if(M.picker){M.picker=null;renderModal();return}closeModal()}
   if((e.key==='Enter'||e.key===' ')&&e.target.classList?.contains('card')){e.preventDefault();e.target.click()}
 });
 document.addEventListener('input',e=>{
   const t=e.target;
   if(t.dataset.q){S.q[t.dataset.q]=t.value;render();return}
+  if(t.dataset.bulktype!=null&&M){M.typed=t.value;const b=$('[data-act=bulkdel-run]');if(b)b.disabled=M.typed.trim().toUpperCase()!=='DELETE';return}
   if(!M)return;
   const val=t.type==='checkbox'?t.checked:(t.dataset.t==='n'?num(t.value):t.value);
   if(t.dataset.bf){if(t.type==='radio'&&!t.checked)return;const p=t.dataset.bf.split('.');let o=M.draft;while(p.length>1)o=o[p.shift()];o[p[0]]=val;
