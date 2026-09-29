@@ -272,16 +272,16 @@ function render(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;
-  const views={dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam};
+  const views={dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc};
   const navOk=v=>navItems().some(n=>n[0]===v)||(v==='job'&&navItems().some(n=>n[0]==='jobs'));
   if(!navOk(S.view))S.view=navItems()[0][0];
   main.innerHTML=views[S.view]();
   if(fid){const n=document.getElementById(fid);if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}
 }
 function navItems(){
-  if(role()==='pm')return [['jobs','Jobs']];
-  if(isAdmin())return [['dashboard','Dashboard'],['pipeline','Pipeline'],['jobs','Jobs'],['estimators','Estimators'],['clients','Clients & GCs'],['vendors','Vendors'],['scopes','Scopes'],['team','Team & logins']];
-  if(role()==='estimator')return [['dashboard','My dashboard'],['pipeline','My bids'],['vendors','Vendors'],['clients','Clients & GCs']];
+  if(role()==='pm')return [['jobs','Jobs'],['calc','Calculators']];
+  if(isAdmin())return [['dashboard','Dashboard'],['pipeline','Pipeline'],['jobs','Jobs'],['estimators','Estimators'],['clients','Clients & GCs'],['vendors','Vendors'],['scopes','Scopes'],['calc','Calculators'],['team','Team & logins']];
+  if(role()==='estimator')return [['dashboard','My dashboard'],['pipeline','My bids'],['vendors','Vendors'],['clients','Clients & GCs'],['calc','Calculators']];
   return [['dashboard','Board dashboard'],['pipeline','Pipeline']];
 }
 function renderTop(){
@@ -751,7 +751,10 @@ function palItems(){
     ['Pipeline: Cards view',()=>{S.view='pipeline';S.pv.mode='cards';savePv();render()}],['Pipeline: List view',()=>{S.view='pipeline';S.pv.mode='list';savePv();render()}],['Pipeline: Calendar view',()=>{S.view='pipeline';S.pv.mode='calendar';savePv();render()}],
     ...(isAdmin()?[['Go to Jobs',()=>{S.view='jobs';render()}],['New job',()=>{M={kind:'job',isNew:true,draft:newJob()};showModal()}],['New bid',()=>{M={kind:'bid',draft:newBid(),origQuoteIds:[]};showModal()}],['Go to Clients & GCs',()=>{S.view='clients';render()}],['Go to Vendors',()=>{S.view='vendors';render()}],['Go to Estimators',()=>{S.view='estimators';render()}],['Go to Scopes',()=>{S.view='scopes';render()}],['Go to Team & logins',()=>{S.view='team';render()}]]:[]),
     ...(role()==='estimator'?[['Go to Vendors',()=>{S.view='vendors';render()}],['Go to Clients & GCs',()=>{S.view='clients';render()}]]:[])];
+  if(role()!=='board')acts.push(['Go to Calculators',()=>{S.view='calc';render()}]);
   acts.filter(([l])=>!q||matchesQuery(l.toLowerCase(),q)).slice(0,q?4:6).forEach(([l,fn])=>add('Actions',l,'',fn));
+  if(q&&role()!=='board')CALCS.filter(c=>matchesQuery(('calculator calc '+c.name+' '+c.group+' '+c.desc).toLowerCase(),q)).slice(0,6)
+    .forEach(c=>add('Calculators',c.name,c.group,()=>{S.calcState.id=c.id;saveCalc();S.view='calc';render()}))
   if(q&&canJob()){S.jobs.filter(j=>matchesQuery([j.job_number,j.name,j.location,clientName(j.client_id),pmName(j.pm_user_id)].join(' ').toLowerCase(),q)).slice(0,6)
     .forEach(j=>add('Jobs',(j.job_number?j.job_number+' · ':'')+j.name,[j.status,j.client_id?clientName(j.client_id):''].filter(Boolean).join(' · '),()=>{S.view='job';S.jobId=j.id;S.jt=null;render()}))}
   if(q&&!isPM()){
@@ -880,7 +883,7 @@ function focusKey(el){if(!el||!$('#modal')?.contains(el))return null;if(el.id)re
 function renderModal(first){
   if(!M)return;const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal}[M.kind]();
+  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='import'||M.kind==='jlog'?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -1293,6 +1296,11 @@ async function saveModal(){
       if(!d.name.trim())throw new Error('Name the template.');if(!d.scopes.length)throw new Error('Pick at least one scope.');
       const L=clone(lib());L.templates=L.templates||[];const i=L.templates.findIndex(t=>t.id===d.id);const t={id:d.id,name:d.name.trim(),scopes:d.scopes};
       if(i>=0)L.templates[i]=t;else L.templates.push(t);await saveLib(L);toast('Template saved');
+    }
+    else if(M.kind==='mats'){
+      const seen=new Set();const list=M.draft.map(m=>({name:String(m.name||'').trim(),tpcy:+m.tpcy})).filter(m=>m.name&&m.tpcy>0&&!seen.has(m.name.toLowerCase())&&seen.add(m.name.toLowerCase()));
+      if(!list.length)throw new Error('Add at least one material with a weight.');
+      await run(sb.from('settings').upsert({key:'calc_materials',value:{list}}));await loadTable('settings');toast('Material weights saved');if(S.view==='calc')render();
     }
     else if(M.kind==='company'){await run(sb.from('settings').upsert({key:'general',value:{companyName:(d.companyName||'').trim()}}));await loadTable('settings');toast('Company name saved')}
     closeModal();
@@ -2331,6 +2339,200 @@ async function exportJob(){
   X.writeFile(wb,`${(job.job_number?job.job_number+' ':'')+job.name}-job-cost-${todayStr()}.xlsx`.replace(/[\\/:*?"<>|]/g,'-'));
 }
 
+
+/* =====================================================================
+   CALCULATORS
+   Each calculator is a list of fields plus a calc(v) function.
+   A field with `auto` shows a suggested value; leaving it blank uses it.
+   ===================================================================== */
+// Typical in-place weights — every company and quarry differs, so these are editable (admin) and overridable per calculation.
+const DEFAULT_MATERIALS=[
+  {name:'#57 stone',tpcy:1.40},{name:'#67 stone',tpcy:1.40},{name:'#8 / #89 stone',tpcy:1.35},{name:'#4 stone',tpcy:1.40},
+  {name:'GAB / crusher run (compacted)',tpcy:2.00},{name:'Surge stone',tpcy:1.50},{name:'Rip rap',tpcy:1.60},{name:'Screenings',tpcy:1.40},
+  {name:'Sand',tpcy:1.35},{name:'Select fill / red clay',tpcy:1.50},{name:'Topsoil',tpcy:1.10},{name:'Asphalt (compacted)',tpcy:2.00}];
+const calcMaterials=()=>Array.isArray(S.settings.calc_materials?.list)&&S.settings.calc_materials.list.length?S.settings.calc_materials.list:DEFAULT_MATERIALS;
+const matDensity=name=>(calcMaterials().find(m=>m.name===name)||calcMaterials()[0]).tpcy;
+// Typical outside diameters (inches) by nominal size — check the manufacturer for the pipe you're using.
+const PIPE_OD={
+  'RCP (wall B)':{12:16,15:19.5,18:23,21:26.5,24:30,27:33.5,30:37,36:44,42:51,48:58,54:65,60:72,72:86},
+  'HDPE corrugated':{8:9.5,10:12,12:14.5,15:18,18:21,24:28,30:36,36:42,42:48,48:54,60:67},
+  'PVC SDR 35 sewer':{4:4.215,6:6.275,8:8.4,10:10.5,12:12.5,15:15.3,18:18.701,21:22.047,24:24.803},
+  'PVC C900 / DIP water':{4:4.8,6:6.9,8:9.05,10:11.1,12:13.2,14:15.3,16:17.4,18:19.5,20:21.6,24:25.8,30:32,36:38.3},
+  'CMP':{12:13.5,15:16.5,18:19.5,24:25.5,30:31.5,36:37.5,42:43.5,48:49.5,60:61.5}};
+const PIPE_TYPES=Object.keys(PIPE_OD);
+const pipeSizes=t=>Object.keys(PIPE_OD[t]||PIPE_OD['RCP (wall B)']).map(Number);
+const AREA_UNITS=[['sf','SF'],['sy','SY'],['ac','Acres']];
+const toSF=(a,u)=>u==='sy'?a*9:u==='ac'?a*43560:a;
+const fmtN=(n,d=2)=>n==null||!isFinite(n)?'—':Number(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:d});
+const fmt$=(n,d=2)=>n==null||!isFinite(n)?'—':'$'+Number(n).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
+const matField=(k='mat',label='Material')=>({k,label,type:'material'});
+const densField=(k='dens',mk='mat')=>({k,label:'Weight',unit:'tons / CY',step:'0.01',auto:v=>matDensity(v[mk]),help:'Blank uses the material’s weight from the list. Type your own to override.'});
+
+const CALCS=[
+ {id:'pipe',group:'Pipe & utilities',name:'Pipe bedding & stone backfill',icon:'◯',
+  desc:'Stone around a pipe in a trench: bedding under the pipe, the pipe zone, and cover over the crown — less the space the pipe takes up.',
+  fields:[{k:'ptype',label:'Pipe type',type:'select',options:PIPE_TYPES.map(x=>[x,x]),def:'RCP (wall B)'},
+    {k:'size',label:'Nominal size',unit:'in',type:'select',options:v=>pipeSizes(v.ptype).map(n=>[String(n),n+'"']),def:'24'},
+    {k:'od',label:'Outside diameter',unit:'in',step:'0.1',auto:v=>(PIPE_OD[v.ptype]||{})[v.size],help:'Typical OD for this pipe and size. Type your own to override.'},
+    {k:'len',label:'Pipe length',unit:'LF',def:100},
+    {k:'width',label:'Trench width',unit:'in',auto:v=>Math.ceil((+v.od||0)+24),help:'Blank = OD + 12" each side.'},
+    {k:'bed',label:'Bedding under pipe',unit:'in',def:6},{k:'cover',label:'Stone over crown',unit:'in',def:12},
+    matField(),densField(),{k:'waste',label:'Waste / overrun',unit:'%',def:10}],
+  calc:v=>{const W=v.width/12,H=(v.bed+v.od+v.cover)/12,pipeA=Math.PI*Math.pow(v.od/24,2);const perLF=(W*H-pipeA)/27;const cy=perLF*v.len;const cyW=cy*(1+v.waste/100);const tons=cyW*v.dens;
+    return {main:[fmtN(tons,1),'tons'],out:[['Stone volume',fmtN(cy,2)+' CY'],['With '+v.waste+'% waste',fmtN(cyW,2)+' CY'],['Tons',fmtN(tons,2)],['Per LF of pipe',fmtN(perLF*27,2)+' CF · '+fmtN(perLF*(1+v.waste/100)*v.dens,3)+' tons'],['Stone zone depth',fmtN(H*12,1)+' in']],
+      math:[`Trench cross-section = ${fmtN(W,3)} ft wide × ${fmtN(H,3)} ft deep (${v.bed}" bedding + ${fmtN(v.od,2)}" OD + ${v.cover}" cover) = ${fmtN(W*H,3)} SF`,`Pipe area = π × (${fmtN(v.od,2)}" ÷ 24)² = ${fmtN(pipeA,3)} SF`,`Stone per LF = (${fmtN(W*H,3)} − ${fmtN(pipeA,3)}) ÷ 27 = ${fmtN(perLF,4)} CY`,`× ${fmtN(v.len)} LF = ${fmtN(cy,2)} CY × ${1+v.waste/100} waste = ${fmtN(cyW,2)} CY`,`× ${v.dens} tons/CY = ${fmtN(tons,2)} tons`]}}},
+ {id:'trench',group:'Pipe & utilities',name:'Trench excavation',icon:'⊔',
+  desc:'Bank and loose volume for a trench, with sloped sides if needed, and truck loads to haul the spoil.',
+  fields:[{k:'len',label:'Length',unit:'LF',def:100},{k:'depth',label:'Average depth',unit:'ft',def:6},{k:'bw',label:'Bottom width',unit:'ft',def:3},
+    {k:'slope',label:'Side slope',unit:'H : 1V',def:0,help:'0 = vertical sides (shored or boxed). 1 = 1:1, 1.5 = 1½:1.'},{k:'swell',label:'Swell',unit:'%',def:25},{k:'truck',label:'Truck capacity',unit:'loose CY',def:14}],
+  calc:v=>{const tw=v.bw+2*v.slope*v.depth;const A=(v.bw+tw)/2*v.depth;const bank=A*v.len/27;const loose=bank*(1+v.swell/100);const loads=v.truck>0?Math.ceil(loose/v.truck):null;
+    return {main:[fmtN(bank,1),'bank CY'],out:[['Bank volume',fmtN(bank,2)+' CY'],['Loose volume ('+v.swell+'% swell)',fmtN(loose,2)+' CY'],['Truck loads',loads==null?'—':fmtN(loads,0)],['Top width',fmtN(tw,2)+' ft'],['Per LF',fmtN(A/27,3)+' bank CY']],
+      math:[`Top width = ${v.bw} + 2 × ${v.slope} × ${v.depth} = ${fmtN(tw,2)} ft`,`Cross-section = (${v.bw} + ${fmtN(tw,2)}) ÷ 2 × ${v.depth} = ${fmtN(A,3)} SF`,`× ${fmtN(v.len)} LF ÷ 27 = ${fmtN(bank,2)} bank CY`,`× ${1+v.swell/100} swell = ${fmtN(loose,2)} loose CY ÷ ${v.truck} = ${loads??'—'} loads`]}}},
+ {id:'fall',group:'Pipe & utilities',name:'Pipe slope & fall',icon:'⟋',
+  desc:'Fall and downstream invert from a slope, or the slope between two inverts.',
+  fields:[{k:'len',label:'Pipe length',unit:'LF',def:250},{k:'up',label:'Upstream invert',unit:'ft',def:100},{k:'mode',label:'Solve for',type:'select',options:[['down','Downstream invert (from slope)'],['slope','Slope (from two inverts)']],def:'down'},
+    {k:'pct',label:'Slope',unit:'%',def:1,show:v=>v.mode==='down'},{k:'dn',label:'Downstream invert',unit:'ft',def:97.5,show:v=>v.mode==='slope'}],
+  calc:v=>{if(v.mode==='slope'){const fall=v.up-v.dn;const pct=v.len?fall/v.len*100:0;return {main:[fmtN(pct,3),'%'],out:[['Slope',fmtN(pct,3)+'%'],['Fall',fmtN(fall,3)+' ft'],['Ft per ft',fmtN(fall/v.len,5)],['Inches per 100 LF',fmtN(pct*12,2)+'"']],math:[`Fall = ${v.up} − ${v.dn} = ${fmtN(fall,3)} ft`,`Slope = ${fmtN(fall,3)} ÷ ${v.len} × 100 = ${fmtN(pct,3)}%`]}}
+    const fall=v.len*v.pct/100;return {main:[fmtN(v.up-fall,2),'ft invert'],out:[['Downstream invert',fmtN(v.up-fall,3)+' ft'],['Fall',fmtN(fall,3)+' ft ('+fmtN(fall*12,1)+'")'],['Ft per ft',fmtN(v.pct/100,5)]],math:[`Fall = ${v.len} × ${v.pct}% = ${fmtN(fall,3)} ft`,`Downstream invert = ${v.up} − ${fmtN(fall,3)} = ${fmtN(v.up-fall,3)} ft`]}}},
+ {id:'volume',group:'Earthwork',name:'Cut / fill volume',icon:'▱',
+  desc:'Volume from an area and a depth, adjusted for shrink (fill) or swell (haul).',
+  fields:[{k:'area',label:'Area',def:1},{k:'au',label:'Area in',type:'select',options:AREA_UNITS,def:'ac'},{k:'depth',label:'Average depth',def:1},{k:'du',label:'Depth in',type:'select',options:[['ft','Feet'],['in','Inches']],def:'ft'},
+    {k:'adj',label:'Adjust for',type:'select',options:[['none','Nothing (bank)'],['swell','Swell — hauling it off'],['shrink','Shrink — compacted fill']],def:'none'},{k:'pct',label:'Swell / shrink',unit:'%',def:15,show:v=>v.adj!=='none'}],
+  calc:v=>{const sf=toSF(v.area,v.au);const d=v.du==='in'?v.depth/12:v.depth;const bank=sf*d/27;const adj=v.adj==='swell'?bank*(1+v.pct/100):v.adj==='shrink'?bank/(1-v.pct/100):bank;
+    return {main:[fmtN(adj,0),'CY'],out:[['Bank volume',fmtN(bank,1)+' CY'],...(v.adj!=='none'?[[v.adj==='swell'?'Loose volume to haul':'Bank CY needed to make it',fmtN(adj,1)+' CY']]:[]),['Area',fmtN(sf,0)+' SF · '+fmtN(sf/9,0)+' SY · '+fmtN(sf/43560,3)+' ac']],
+      math:[`${fmtN(sf,0)} SF × ${fmtN(d,3)} ft ÷ 27 = ${fmtN(bank,1)} CY`,...(v.adj==='swell'?[`× (1 + ${v.pct}%) = ${fmtN(adj,1)} loose CY`]:v.adj==='shrink'?[`÷ (1 − ${v.pct}%) = ${fmtN(adj,1)} bank CY needed`]:[])]}}},
+ {id:'endarea',group:'Earthwork',name:'Average end area',icon:'⧈',
+  desc:'Volume between two cross-sections (cut or fill areas from the plans).',
+  fields:[{k:'a1',label:'Area at station 1',unit:'SF',def:120},{k:'a2',label:'Area at station 2',unit:'SF',def:80},{k:'dist',label:'Distance between',unit:'ft',def:50}],
+  calc:v=>{const cy=(v.a1+v.a2)/2*v.dist/27;return {main:[fmtN(cy,1),'CY'],out:[['Volume',fmtN(cy,2)+' CY'],['Average area',fmtN((v.a1+v.a2)/2,2)+' SF']],math:[`(${v.a1} + ${v.a2}) ÷ 2 × ${v.dist} ft ÷ 27 = ${fmtN(cy,2)} CY`]}}},
+ {id:'haul',group:'Earthwork',name:'Trucking & haul',icon:'⛟',
+  desc:'Loads, truck hours and days to move a quantity, or how many trucks you need to hit a schedule.',
+  fields:[{k:'qty',label:'Quantity to haul',def:5000},{k:'qu',label:'Measured in',type:'select',options:[['cy','Loose CY'],['t','Tons']],def:'cy'},{k:'cap',label:'Per truck load',unit:'CY or tons',def:14},
+    {k:'cycle',label:'Round trip',unit:'min',def:45,help:'Load + haul + dump + return.'},{k:'hours',label:'Hours per day',def:9},{k:'trucks',label:'Trucks',def:6},{k:'rate',label:'Truck rate',unit:'$ / hr',def:95}],
+  calc:v=>{const loads=Math.ceil(v.qty/v.cap);const perTruckDay=Math.floor(v.hours*60/v.cycle);const days=v.trucks&&perTruckDay?loads/(perTruckDay*v.trucks):null;const thrs=loads*v.cycle/60;const cost=thrs*v.rate;
+    return {main:[fmtN(days,1),'days'],out:[['Loads',fmtN(loads,0)],['Loads per truck per day',fmtN(perTruckDay,0)],['Days with '+v.trucks+' trucks',fmtN(days,1)],['Truck hours',fmtN(thrs,1)],['Trucking cost',fmt$(cost,0)],['Cost per '+(v.qu==='t'?'ton':'CY'),fmt$(cost/v.qty)]],
+      math:[`${fmtN(v.qty)} ÷ ${v.cap} = ${loads} loads`,`${v.hours} hrs × 60 ÷ ${v.cycle} min = ${perTruckDay} loads per truck per day`,`${loads} ÷ (${perTruckDay} × ${v.trucks} trucks) = ${fmtN(days,2)} days`,`${loads} × ${v.cycle} ÷ 60 = ${fmtN(thrs,1)} truck-hours × ${fmt$(v.rate,0)} = ${fmt$(cost,0)}`]}}},
+ {id:'stone',group:'Materials',name:'Stone / GAB by area',icon:'▦',
+  desc:'Tons of base stone, GAB or any aggregate for an area at a thickness.',
+  fields:[{k:'area',label:'Area',def:9500},{k:'au',label:'Area in',type:'select',options:AREA_UNITS,def:'sy'},{k:'thk',label:'Compacted thickness',unit:'in',def:8},matField(),densField(),{k:'waste',label:'Waste',unit:'%',def:5},{k:'truck',label:'Tons per truck',def:22}],
+  calc:v=>{const sf=toSF(v.area,v.au);const cy=sf*v.thk/12/27;const tons=cy*v.dens*(1+v.waste/100);return {main:[fmtN(tons,0),'tons'],out:[['Volume',fmtN(cy,1)+' CY'],['Tons (with waste)',fmtN(tons,1)],['Truck loads',fmtN(Math.ceil(tons/v.truck),0)],['Tons per SY',fmtN(tons/(sf/9),3)]],
+    math:[`${fmtN(sf,0)} SF × ${v.thk}" ÷ 12 ÷ 27 = ${fmtN(cy,2)} CY`,`× ${v.dens} tons/CY × ${1+v.waste/100} = ${fmtN(tons,1)} tons`]}}},
+ {id:'asphalt',group:'Materials',name:'Asphalt tonnage',icon:'▬',
+  desc:'Tons of asphalt for an area and thickness. 110 lb per SY per inch is the usual rule of thumb.',
+  fields:[{k:'area',label:'Area',def:9500},{k:'au',label:'Area in',type:'select',options:AREA_UNITS,def:'sy'},{k:'thk',label:'Thickness',unit:'in',def:2},{k:'lb',label:'Weight',unit:'lb / SY / in',def:110},{k:'waste',label:'Waste',unit:'%',def:3}],
+  calc:v=>{const sy=toSF(v.area,v.au)/9;const tons=sy*v.thk*v.lb/2000*(1+v.waste/100);return {main:[fmtN(tons,0),'tons'],out:[['Tons',fmtN(tons,1)],['Area',fmtN(sy,0)+' SY'],['Tons per SY',fmtN(tons/sy,4)]],math:[`${fmtN(sy,0)} SY × ${v.thk}" × ${v.lb} lb ÷ 2,000 = ${fmtN(sy*v.thk*v.lb/2000,1)} tons`,`× ${1+v.waste/100} waste = ${fmtN(tons,1)} tons`]}}},
+ {id:'concrete',group:'Materials',name:'Concrete',icon:'▣',
+  desc:'Yards of concrete for slabs, footings, piers or curb & gutter.',
+  fields:[{k:'shape',label:'Shape',type:'select',options:[['slab','Slab / sidewalk / footing'],['pier','Round pier / pipe'],['curb','Curb & gutter (by section)']],def:'slab'},
+    {k:'len',label:'Length',unit:'ft',def:100,show:v=>v.shape!=='pier'},{k:'wid',label:'Width',unit:'ft',def:5,show:v=>v.shape==='slab'},{k:'thk',label:'Thickness',unit:'in',def:4,show:v=>v.shape==='slab'},
+    {k:'dia',label:'Diameter',unit:'in',def:24,show:v=>v.shape==='pier'},{k:'ht',label:'Depth',unit:'ft',def:6,show:v=>v.shape==='pier'},{k:'cnt',label:'How many',def:1,show:v=>v.shape==='pier'},
+    {k:'sec',label:'Section area',unit:'SF',def:1.5,show:v=>v.shape==='curb',help:'Cross-section area from your curb detail. Check the detail — sections vary.'},{k:'waste',label:'Waste',unit:'%',def:5}],
+  calc:v=>{let cf,m;if(v.shape==='pier'){cf=Math.PI*Math.pow(v.dia/24,2)*v.ht*v.cnt;m=`π × (${v.dia}" ÷ 24)² × ${v.ht} ft × ${v.cnt} = ${fmtN(cf,2)} CF`}else if(v.shape==='curb'){cf=v.sec*v.len;m=`${v.sec} SF × ${fmtN(v.len)} LF = ${fmtN(cf,2)} CF`}else{cf=v.len*v.wid*v.thk/12;m=`${v.len} × ${v.wid} × ${v.thk}" ÷ 12 = ${fmtN(cf,2)} CF`}
+    const cy=cf/27*(1+v.waste/100);return {main:[fmtN(cy,2),'CY'],out:[['Concrete',fmtN(cy,2)+' CY (with waste)'],['Before waste',fmtN(cf/27,2)+' CY'],['Round up to order',fmtN(Math.ceil(cy*4)/4,2)+' CY']],math:[m,`÷ 27 × ${1+v.waste/100} = ${fmtN(cy,2)} CY`]}}},
+ {id:'convert',group:'Materials',name:'Tons ⇄ cubic yards',icon:'⇄',
+  desc:'Convert between tons and cubic yards for any material.',
+  fields:[{k:'qty',label:'Quantity',def:100},{k:'from',label:'From',type:'select',options:[['cy','Cubic yards → tons'],['t','Tons → cubic yards']],def:'cy'},matField(),densField()],
+  calc:v=>v.from==='cy'?{main:[fmtN(v.qty*v.dens,2),'tons'],out:[['Tons',fmtN(v.qty*v.dens,2)]],math:[`${fmtN(v.qty)} CY × ${v.dens} = ${fmtN(v.qty*v.dens,2)} tons`]}
+    :{main:[fmtN(v.qty/v.dens,2),'CY'],out:[['Cubic yards',fmtN(v.qty/v.dens,2)]],math:[`${fmtN(v.qty)} tons ÷ ${v.dens} = ${fmtN(v.qty/v.dens,2)} CY`]}},
+ {id:'silt',group:'Erosion control',name:'Silt fence',icon:'⋯',
+  desc:'Rolls and stakes for a run of silt fence.',
+  fields:[{k:'lf',label:'Length',unit:'LF',def:2500},{k:'roll',label:'Roll length',unit:'LF',def:100},{k:'sp',label:'Post spacing',unit:'ft',def:6},{k:'waste',label:'Overlap / waste',unit:'%',def:5}],
+  calc:v=>{const lf=v.lf*(1+v.waste/100);const rolls=Math.ceil(lf/v.roll);const posts=Math.ceil(v.lf/v.sp)+1;return {main:[fmtN(rolls,0),'rolls'],out:[['Rolls',fmtN(rolls,0)],['Posts / stakes',fmtN(posts,0)],['Fabric with waste',fmtN(lf,0)+' LF']],math:[`${fmtN(v.lf)} × ${1+v.waste/100} ÷ ${v.roll} = ${rolls} rolls`,`${fmtN(v.lf)} ÷ ${v.sp} + 1 = ${posts} posts`]}}},
+ {id:'seed',group:'Erosion control',name:'Seeding & mulch',icon:'❋',
+  desc:'Seed, fertilizer, lime and straw for an area, at your spec’s rates per acre.',
+  fields:[{k:'area',label:'Area',def:3},{k:'au',label:'Area in',type:'select',options:AREA_UNITS,def:'ac'},{k:'seed',label:'Seed rate',unit:'lb / acre',def:100},{k:'fert',label:'Fertilizer',unit:'lb / acre',def:1000},{k:'lime',label:'Lime',unit:'tons / acre',def:1.5},
+    {k:'straw',label:'Straw',unit:'tons / acre',def:2},{k:'bale',label:'Bale weight',unit:'lb',def:50}],
+  calc:v=>{const ac=toSF(v.area,v.au)/43560;const bales=Math.ceil(ac*v.straw*2000/v.bale);return {main:[fmtN(ac*v.seed,0),'lb seed'],out:[['Acres',fmtN(ac,3)],['Seed',fmtN(ac*v.seed,0)+' lb'],['Fertilizer',fmtN(ac*v.fert,0)+' lb'],['Lime',fmtN(ac*v.lime,2)+' tons'],['Straw',fmtN(ac*v.straw,2)+' tons · '+fmtN(bales,0)+' bales']],
+    math:[`${fmtN(ac,3)} ac × ${v.seed} lb = ${fmtN(ac*v.seed,0)} lb seed`,`${fmtN(ac,3)} ac × ${v.straw} tons × 2,000 ÷ ${v.bale} lb = ${bales} bales`]}}},
+ {id:'slope',group:'Layout & grades',name:'Slope converter',icon:'◿',
+  desc:'Convert a slope between percent, ratio (H:1V), degrees and inches per foot.',
+  fields:[{k:'val',label:'Slope',def:2},{k:'unit',label:'Given as',type:'select',options:[['pct','Percent (%)'],['ratio','Ratio H : 1V'],['deg','Degrees'],['inft','Inches per foot']],def:'pct'},{k:'run',label:'Over a run of',unit:'ft',def:100}],
+  calc:v=>{const g=v.unit==='pct'?v.val/100:v.unit==='ratio'?(v.val?1/v.val:0):v.unit==='deg'?Math.tan(v.val*Math.PI/180):v.val/12;
+    return {main:[fmtN(g*100,2),'%'],out:[['Percent',fmtN(g*100,3)+'%'],['Ratio',g?fmtN(1/g,2)+' : 1':'flat'],['Degrees',fmtN(Math.atan(g)*180/Math.PI,2)+'°'],['Inches per foot',fmtN(g*12,3)+'"'],['Rise over '+v.run+' ft',fmtN(g*v.run,3)+' ft']],math:[`Grade = ${fmtN(g,5)} ft per ft`]}}},
+ {id:'unitcost',group:'Estimating',name:'Crew unit cost',icon:'⚒',
+  desc:'Cost per unit from a crew’s hourly cost and its production, plus duration for a quantity.',
+  fields:[{k:'lab',label:'Labor cost',unit:'$ / hr (whole crew)',def:180},{k:'eq',label:'Equipment cost',unit:'$ / hr (whole spread)',def:320},{k:'prod',label:'Production',unit:'units / hr',def:120},{k:'qty',label:'Quantity',unit:'units',def:48000},{k:'hours',label:'Hours per day',def:9},{k:'mat',label:'Material',unit:'$ / unit',def:0}],
+  calc:v=>{const crew=v.lab+v.eq;const uc=crew/v.prod+v.mat;const hrs=v.qty/v.prod;return {main:[fmt$(uc,2),'per unit'],out:[['Crew cost',fmt$(crew,2)+' / hr'],['Unit cost',fmt$(uc,3)],['Crew hours',fmtN(hrs,1)],['Days',fmtN(hrs/v.hours,1)],['Total cost',fmt$(uc*v.qty,0)]],
+    math:[`(${fmt$(v.lab,0)} + ${fmt$(v.eq,0)}) ÷ ${v.prod} per hr + ${fmt$(v.mat)} = ${fmt$(uc,3)} per unit`,`${fmtN(v.qty)} ÷ ${v.prod} = ${fmtN(hrs,1)} hrs ÷ ${v.hours} = ${fmtN(hrs/v.hours,1)} days`]}}},
+ {id:'markup',group:'Estimating',name:'Cost ⇄ bid price',icon:'％',
+  desc:'Add overhead and markup to a cost, or take them back out of a bid price — the same math the Jobs budget uses.',
+  fields:[{k:'amt',label:'Amount',unit:'$',def:100000},{k:'dir',label:'Amount is',type:'select',options:[['cost','Cost → bid price'],['price','Bid price → cost']],def:'cost'},{k:'oh',label:'Overhead',unit:'%',def:10},{k:'mk',label:'Markup',unit:'%',def:12}],
+  calc:v=>{const f=(1+v.oh/100)*(1+v.mk/100);const cost=v.dir==='cost'?v.amt:v.amt/f,price=v.dir==='cost'?v.amt*f:v.amt;const ohA=cost*v.oh/100,mkA=(cost+ohA)*v.mk/100;
+    return {main:[fmt$(v.dir==='cost'?price:cost,0),v.dir==='cost'?'bid price':'cost'],out:[['Cost',fmt$(cost)],['Overhead',fmt$(ohA)],['Markup',fmt$(mkA)],['Bid price',fmt$(price)],['Margin on price',fmtN((price-cost)/price*100,2)+'%']],
+      math:[`Factor = (1 + ${v.oh}%) × (1 + ${v.mk}%) = ${fmtN(f,4)}`,v.dir==='cost'?`${fmt$(cost)} × ${fmtN(f,4)} = ${fmt$(price)}`:`${fmt$(price)} ÷ ${fmtN(f,4)} = ${fmt$(cost)}`]}}},
+ {id:'units',group:'Layout & grades',name:'Unit converter',icon:'↔',
+  desc:'Area, length and volume conversions.',
+  fields:[{k:'val',label:'Value',def:1},{k:'from',label:'From',type:'select',options:[['sf','Square feet'],['sy','Square yards'],['ac','Acres'],['cf','Cubic feet'],['cy','Cubic yards'],['gal','Gallons'],['ft','Feet'],['yd','Yards'],['mi','Miles'],['in','Inches']],def:'ac'}],
+  calc:v=>{const A={sf:1,sy:9,ac:43560},V={cf:1,cy:27,gal:1/7.48052},L={ft:1,yd:3,mi:5280,in:1/12};
+    const [tbl,names]=A[v.from]?[A,{sf:'SF',sy:'SY',ac:'acres'}]:V[v.from]?[V,{cf:'CF',cy:'CY',gal:'gallons'}]:[L,{ft:'ft',yd:'yd',mi:'miles',in:'in'}];
+    const base=v.val*tbl[v.from];const out=Object.keys(tbl).filter(k=>k!==v.from).map(k=>[names[k],fmtN(base/tbl[k],4)]);
+    return {main:[out[0][1],out[0][0]],out,math:[]}}}
+];
+const CALC_GROUPS=[...new Set(CALCS.map(c=>c.group))];
+
+// ---- state (last values per calculator, remembered in this browser)
+S.calcState=(()=>{try{return JSON.parse(localStorage.getItem('bp-calc')||'{}')}catch(e){return {}}})();
+S.calcState.vals=S.calcState.vals||{};
+const saveCalc=()=>{try{localStorage.setItem('bp-calc',JSON.stringify(S.calcState))}catch(e){}};
+function calcDef(){return CALCS.find(c=>c.id===S.calcState.id)||CALCS[0]}
+function calcRaw(c){return S.calcState.vals[c.id]=S.calcState.vals[c.id]||{}}
+// resolve values: typed value → default → auto
+function calcValues(c){
+  const raw=calcRaw(c);const v={};
+  c.fields.forEach(f=>{
+    if(f.type==='select'){const opts=typeof f.options==='function'?f.options(v):f.options;const cur=raw[f.k];v[f.k]=opts.some(o=>o[0]===cur)?cur:(opts.some(o=>o[0]===String(f.def))?String(f.def):opts[0]?.[0]);return}
+    if(f.type==='material'){const names=calcMaterials().map(m=>m.name);v[f.k]=names.includes(raw[f.k])?raw[f.k]:names[0];return}
+    const t=raw[f.k];if(t!==undefined&&t!==''&&!isNaN(+t)){v[f.k]=+t;return}
+    if(f.auto){const a=f.auto(v);v[f.k]=a==null||isNaN(a)?0:+a;v['_auto_'+f.k]=true;return}
+    v[f.k]=+(f.def??0);
+  });
+  return v;
+}
+function calcResultHtml(c){
+  const v=calcValues(c);let r;try{r=c.calc(v)}catch(e){r=null}
+  if(!r)return '<div class="empty">Check the inputs.</div>';
+  return `<div class="calc-main"><b>${esc(r.main[0])}</b><span>${esc(r.main[1])}</span></div>
+    <div class="list">${r.out.map(([l,x])=>`<div class="li"><span class="dim">${esc(l)}</span><b class="num">${esc(x)}</b></div>`).join('')}</div>
+    ${r.math&&r.math.length?`<details class="calc-math"><summary>Show the math</summary><ol>${r.math.map(m=>`<li>${esc(m)}</li>`).join('')}</ol></details>`:''}`;
+}
+function calcFieldHtml(c,f,v){
+  if(f.show&&!f.show(v))return '';
+  const raw=calcRaw(c);const id='cf-'+f.k;
+  if(f.type==='select'){const opts=typeof f.options==='function'?f.options(v):f.options;return `<label class="f"><span>${esc(f.label)}${f.unit?` <span class="dim">(${esc(f.unit)})</span>`:''}</span><select class="field" id="${id}" data-cf="${f.k}">${opts.map(([val,l])=>`<option value="${esc(val)}"${v[f.k]===val?' selected':''}>${esc(l)}</option>`).join('')}</select></label>`}
+  if(f.type==='material')return `<label class="f"><span>${esc(f.label)}</span><select class="field" id="${id}" data-cf="${f.k}">${calcMaterials().map(m=>`<option value="${esc(m.name)}"${v[f.k]===m.name?' selected':''}>${esc(m.name)} — ${m.tpcy} t/CY</option>`).join('')}</select></label>`;
+  const auto=f.auto?f.auto(v):null;const has=raw[f.k]!==undefined&&raw[f.k]!=='';
+  return `<label class="f"><span>${esc(f.label)}${f.unit?` <span class="dim">(${esc(f.unit)})</span>`:''}</span><input type="number" inputmode="decimal" step="${f.step||'any'}" class="field" id="${id}" data-cf="${f.k}" value="${has?esc(raw[f.k]):(f.auto?'':esc(f.def??''))}"${f.auto?` placeholder="${auto==null||isNaN(auto)?'—':'Auto: '+fmtN(auto,3)}"`:''}>${f.help?`<span class="hint" style="margin:2px 0 0">${esc(f.help)}</span>`:''}</label>`;
+}
+function vCalc(){
+  const c=calcDef();const v=calcValues(c);const q=(S.q.calc||'').trim().toLowerCase();
+  const list=CALCS.filter(x=>!q||matchesQuery((x.name+' '+x.group+' '+x.desc).toLowerCase(),q));
+  return `<div class="head"><div><h1>Calculators</h1><p>Quick field and estimating math. Your last inputs are remembered on this computer.</p></div>${isAdmin()?'<div class="tools"><button class="btn" data-act="calc-mats">Material weights</button></div>':''}</div>
+  <div class="calc-wrap">
+    <aside class="calc-nav panel"><div class="pv-search" style="margin:10px"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><input id="q-calc" class="field" data-q="calc" placeholder="Find a calculator" value="${esc(S.q.calc||'')}" aria-label="Find a calculator"></div>
+      ${CALC_GROUPS.map(g=>{const xs=list.filter(x=>x.group===g);return xs.length?`<div class="calc-g">${esc(g)}</div>${xs.map(x=>`<button class="calc-it${x.id===c.id?' on':''}" data-act="calc-pick" data-id="${x.id}"><span class="calc-ic" aria-hidden="true">${x.icon}</span>${esc(x.name)}</button>`).join('')}`:''}).join('')||'<div class="empty">No match.</div>'}
+    </aside>
+    <section class="calc-body">
+      <div class="panel pad"><div class="sec-h" style="margin:0 0 4px"><h2>${esc(c.name)}</h2><button class="linkbtn" data-act="calc-reset">Reset</button></div><p class="dim small" style="margin:0 0 14px">${esc(c.desc)}</p>
+        <div class="calc-grid">
+          <div class="fg calc-fields" id="calc-fields">${c.fields.map(f=>calcFieldHtml(c,f,v)).join('')}</div>
+          <div class="calc-res" id="calc-res" aria-live="polite">${calcResultHtml(c)}</div>
+        </div>
+        ${c.fields.some(f=>f.type==='material')?`<p class="hint">Weights are typical in-place values. Your quarry’s ticket is the final word — type your own weight to override${isAdmin()?', or update the list under <b>Material weights</b>':''}.</p>`:''}
+        ${c.id==='pipe'?'<p class="hint">Outside diameters are typical for each pipe type. Check the manufacturer for the exact pipe and class you’re using.</p>':''}
+      </div>
+    </section>
+  </div>`;
+}
+// update results and auto placeholders in place (keeps the cursor where it is)
+function refreshCalc(structural){
+  const c=calcDef();if(structural){const v=calcValues(c);const box=$('#calc-fields');if(box){const ae=document.activeElement?.id;box.innerHTML=c.fields.map(f=>calcFieldHtml(c,f,v)).join('');if(ae){const n=document.getElementById(ae);if(n&&n.tagName==='SELECT')n.focus()}}}
+  else{const v=calcValues(c);c.fields.forEach(f=>{if(!f.auto)return;const n=document.getElementById('cf-'+f.k);if(n){const a=f.auto(v);n.placeholder=a==null||isNaN(a)?'—':'Auto: '+fmtN(a,3)}})}
+  const r=$('#calc-res');if(r){const open=r.querySelector('details')?.open;r.innerHTML=calcResultHtml(c);if(open)r.querySelector('details').open=true}
+}
+function matsModal(){return mhead('Material weights','Used by every calculator that turns yards into tons. Saved for everyone.')+`<div class="mbody"><fieldset><legend>Materials</legend><div class="rows">${M.draft.map((m,i)=>`<div class="rowline" style="grid-template-columns:minmax(0,1fr) 150px auto"><input class="field" data-mf="${i}.name" value="${esc(m.name)}" placeholder="Material"><input type="number" step="0.01" class="field" data-mf="${i}.tpcy" value="${esc(m.tpcy)}" placeholder="tons / CY"><button class="rm" data-act="mat-rm" data-i="${i}" aria-label="Remove">×</button></div>`).join('')}</div>
+  <div class="adders"><button class="btn sm" data-act="mat-add">+ Add material</button><button class="btn sm ghost" data-act="mat-defaults">Reset to typical values</button></div><p class="hint">Tons per cubic yard, in place. Ask your quarry for the numbers on their tickets.</p></fieldset></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="save">Save weights</button></div></div>`}
+
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;
@@ -2404,6 +2606,12 @@ document.addEventListener('click',e=>{
     case 'open-vendor':{const vd=clone(byId(S.vendors,t.dataset.id));vd.scopes=vendorScopes(vd);vd.vendor_type=vd.vendor_type||'';M={kind:'vendor',draft:vd};showModal();break}
     case 'board-custom':M={kind:'board',draft:boardCfg()};showModal();break;
     case 'company':M={kind:'company',draft:{companyName:S.settings.general?.companyName||''}};showModal();break;
+    case 'calc-pick':S.calcState.id=t.dataset.id;saveCalc();render();if(window.innerWidth<760)$('.calc-body')?.scrollIntoView({block:'start'});break;
+    case 'calc-reset':delete S.calcState.vals[calcDef().id];saveCalc();render();break;
+    case 'calc-mats':if(isAdmin()){M={kind:'mats',draft:clone(calcMaterials())};showModal()}break;
+    case 'mat-add':M.draft.push({name:'',tpcy:''});renderModal();setTimeout(()=>{const ns=document.querySelectorAll('#modal [data-mf$=".name"]');ns[ns.length-1]?.focus()},0);break;
+    case 'mat-rm':M.draft.splice(+t.dataset.i,1);renderModal();break;
+    case 'mat-defaults':M.draft=clone(DEFAULT_MATERIALS);renderModal();break;
     case 'close':closeModal();break;
     case 'save':saveModal();break;
     case 'del':deleteModal();break;
@@ -2477,6 +2685,8 @@ document.addEventListener('input',e=>{
   if(t.dataset.jtq!=null){S.jt.q=t.value;render();return}
   if(t.dataset.jtf&&t.tagName==='INPUT'){S.jt[t.dataset.jtf]=t.value;render();return}
   if(t.id==='pal-q'){S.pal.q=t.value;S.pal.i=0;renderPalette();return}
+  if(t.dataset.cf){const c=calcDef();calcRaw(c)[t.dataset.cf]=t.value;saveCalc();refreshCalc(t.tagName==='SELECT');return}
+  if(M&&M.kind==='mats'&&t.dataset.mf){const[i,k]=t.dataset.mf.split('.');M.draft[+i][k]=k==='tpcy'?(t.value===''?'':+t.value):t.value;return}
   if(t.dataset.q){S.q[t.dataset.q]=t.value;render();return}
   if(t.dataset.pvf&&t.tagName==='INPUT'){S.pv.f[t.dataset.pvf]=t.value;savePv();render();return}
   if(t.dataset.bulktype!=null&&M){M.typed=t.value;const b=$('[data-act=bulkdel-run]');if(b)b.disabled=M.typed.trim().toUpperCase()!=='DELETE';return}
