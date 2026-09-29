@@ -883,7 +883,7 @@ function focusKey(el){if(!el||!$('#modal')?.contains(el))return null;if(el.id)re
 function renderModal(first){
   if(!M)return;const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal}[M.kind]();
+  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='import'||M.kind==='jlog'?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -1296,6 +1296,16 @@ async function saveModal(){
       if(!d.name.trim())throw new Error('Name the template.');if(!d.scopes.length)throw new Error('Pick at least one scope.');
       const L=clone(lib());L.templates=L.templates||[];const i=L.templates.findIndex(t=>t.id===d.id);const t={id:d.id,name:d.name.trim(),scopes:d.scopes};
       if(i>=0)L.templates[i]=t;else L.templates.push(t);await saveLib(L);toast('Template saved');
+    }
+    else if(M.kind==='pipes'){
+      const seen=new Set();const list=[];
+      for(const p of M.draft){const name=String(p.name||'').trim();if(!name&&!p.size&&!p.od)continue;
+        const size=+p.size,od=+p.od,idIn=p.idIn===''||p.idIn==null?null:+p.idIn;
+        if(!name)throw new Error('Name every pipe.');if(!(size>0)||!(od>0))throw new Error(`${name}: needs a nominal size and an OD.`);
+        if(idIn!=null&&!(idIn>0&&idIn<od))throw new Error(`${name}: the ID has to be smaller than the OD.`);
+        if(seen.has(name.toLowerCase()))throw new Error(`${name} is in the list twice.`);seen.add(name.toLowerCase());
+        list.push({id:p.id||newId(),name,size,od,...(idIn!=null?{idIn}:{})})}
+      await run(sb.from('settings').upsert({key:'calc_pipes',value:{list}}));await loadTable('settings');toast('Pipe library saved');if(S.view==='calc')render();
     }
     else if(M.kind==='mats'){
       const seen=new Set();const list=M.draft.map(m=>({name:String(m.name||'').trim(),tpcy:+m.tpcy})).filter(m=>m.name&&m.tpcy>0&&!seen.has(m.name.toLowerCase())&&seen.add(m.name.toLowerCase()));
@@ -2361,6 +2371,15 @@ const PIPE_OD={
   'CMP':{12:13.5,15:16.5,18:19.5,24:25.5,30:31.5,36:37.5,42:43.5,48:49.5,60:61.5}};
 const PIPE_TYPES=Object.keys(PIPE_OD);
 const pipeSizes=t=>Object.keys(PIPE_OD[t]||PIPE_OD['RCP (wall B)']).map(Number);
+// company pipe library (admin-edited, shared): {id,name,size (nominal in),od (in),idIn (inside dia in, optional)}
+const calcPipes=()=>Array.isArray(S.settings.calc_pipes?.list)?S.settings.calc_pipes.list:[];
+const pipeLib=t=>typeof t==='string'&&t.startsWith('lib:')?calcPipes().find(p=>'lib:'+p.id===t)||null:null;
+const validPipeType=t=>pipeLib(t)||PIPE_OD[t]?t:PIPE_TYPES[0];
+const pipeTypeOpts=()=>{const L=calcPipes();return [...L.map(p=>['lib:'+p.id,p.name,'My pipes']),...PIPE_TYPES.map(x=>[x,x,L.length?'Standard (typical OD)':''])]};
+const sizesFor=t=>{const l=pipeLib(t);return l?[+l.size]:pipeSizes(t)};
+const odFor=(t,size)=>{const l=pipeLib(t);return l?+l.od:(PIPE_OD[t]||{})[size]};
+const wallFor=(t,od,nom)=>{const l=pipeLib(t);return l&&+l.idIn>0?Math.max((od-l.idIn)/2,0.05):Math.max((od-nom)/2,0.1)};
+const pipeLabel=(t,size)=>{const l=pipeLib(t);return l?l.name:size+'″ '+t};
 const AREA_UNITS=[['sf','SF'],['sy','SY'],['ac','Acres']];
 const toSF=(a,u)=>u==='sy'?a*9:u==='ac'?a*43560:a;
 const fmtN=(n,d=2)=>n==null||!isFinite(n)?'—':Number(n).toLocaleString('en-US',{minimumFractionDigits:0,maximumFractionDigits:d});
@@ -2368,19 +2387,119 @@ const fmt$=(n,d=2)=>n==null||!isFinite(n)?'—':'$'+Number(n).toLocaleString('en
 const matField=(k='mat',label='Material')=>({k,label,type:'material'});
 const densField=(k='dens',mk='mat')=>({k,label:'Weight',unit:'tons / CY',step:'0.01',auto:v=>matDensity(v[mk]),help:'Blank uses the material’s weight from the list. Type your own to override.'});
 
+// ---- manholes (typical precast values — precasters differ, so most are editable)
+const MH_SIZES=[48,60,72,84,96];
+const MH_WALL={48:5,60:6,72:7,84:8,96:9};      // wall thickness, in
+const MH_FLOOR={48:6,60:8,72:8,84:10,96:12};   // base floor thickness, in
+const MH_BASES=[3,4,5,6];                        // standard base heights, ft
+const MH_CLR=4;                                  // hole = pipe OD + 4 in
+const ftin=ft=>{if(ft==null||!isFinite(ft))return '—';const neg=ft<-1e-9;let q=Math.round(Math.abs(ft)*48);let f=Math.floor(q/48),r=(q-f*48)/4;const w=Math.floor(r),fr=r-w;
+  const rs=(w||!fr?String(w):'')+({0.25:'¼',0.5:'½',0.75:'¾'}[fr]||'');return (neg?'−':'')+f+'′-'+rs+'″'};
+const fmtE=x=>x==null||!isFinite(x)?'—':Number(x).toFixed(2);
+function mhDefaults(raw){
+  if(!Array.isArray(raw.inv))raw.inv=[{name:'Inlet',dir:'in',elev:'101.20',size:'18',type:'RCP (wall B)'},{name:'Outlet',dir:'out',elev:'101.00',size:'24',type:'RCP (wall B)'}];
+  if(!Array.isArray(raw.sz))raw.sz=[{in:'12',on:true,n:''},{in:'24',on:true,n:'1'},{in:'36',on:true,n:''},{in:'48',on:true,n:'1'}];
+  return raw;
+}
+function mhPipes(raw){mhDefaults(raw);return raw.inv.map(p=>{const type=validPipeType(p.type);const sizes=sizesFor(type);let size=+p.size;
+  if(!sizes.includes(size)){size=sizes.reduce((a,b)=>Math.abs(b-size)<Math.abs(a-size)?b:a,sizes[0]);p.size=String(size)}
+  const od=odFor(type,size);return {name:String(p.name||'').trim(),dir:p.dir==='out'?'out':'in',e:p.elev===''||p.elev==null?NaN:+p.elev,size,type,label:pipeLabel(type,size),od,wall:wallFor(type,od,size)}})}
+function mhSizes(raw){mhDefaults(raw);return raw.sz.map(s=>({in:+s.in,ft:+s.in/12,on:!!s.on,n:s.n})).filter(s=>s.in>0)}
+// fewest pieces that leave rings between rMin and rMax; ties go to rings closest to target
+function riserSearch(sizes,X,rMin,rMax,target){
+  sizes=[...new Set(sizes.filter(s=>s>=0.25))].sort((a,b)=>b-a);const lo=X-rMax,hi=X-rMin;if(!sizes.length||hi<0)return [];
+  let best=null;const cnt=sizes.map(()=>0);
+  (function dfs(i,sum,pieces){
+    if(pieces>40||(best&&best.viol===0&&pieces>best.pieces))return;
+    if(i===sizes.length){const viol=Math.max(0,lo-sum);const sc=viol*1e6+pieces*1e3+Math.abs(X-sum-target);if(!best||sc<best.sc)best={sc,viol,pieces,c:[...cnt]};return}
+    const s=sizes[i];for(let n=Math.floor((hi-sum)/s+1e-9);n>=0;n--){cnt[i]=n;dfs(i+1,sum+n*s,pieces+n)}cnt[i]=0;
+  })(0,0,0);
+  return best?sizes.map((ft,i)=>({ft,n:best.c[i]})).filter(p=>p.n>0):[];
+}
 const CALCS=[
  {id:'pipe',group:'Pipe & utilities',name:'Pipe bedding & stone backfill',icon:'◯',
-  desc:'Stone around a pipe in a trench: bedding under the pipe, the pipe zone, and cover over the crown — less the space the pipe takes up.',
-  fields:[{k:'ptype',label:'Pipe type',type:'select',options:PIPE_TYPES.map(x=>[x,x]),def:'RCP (wall B)'},
-    {k:'size',label:'Nominal size',unit:'in',type:'select',options:v=>pipeSizes(v.ptype).map(n=>[String(n),n+'"']),def:'24'},
-    {k:'od',label:'Outside diameter',unit:'in',step:'0.1',auto:v=>(PIPE_OD[v.ptype]||{})[v.size],help:'Typical OD for this pipe and size. Type your own to override.'},
+  desc:'Stone around a pipe in a trench: bedding under the pipe, the pipe zone, and cover over the crown — less the space the pipe takes up. The trench section redraws as you type.',
+  fields:[{k:'ptype',label:'Pipe',type:'select',options:()=>pipeTypeOpts(),def:'RCP (wall B)'},
+    {k:'size',label:'Nominal size',unit:'in',type:'select',options:v=>pipeSizes(v.ptype).map(n=>[String(n),n+'"']),def:'24',show:v=>!pipeLib(v.ptype)},
+    {k:'od',label:'Outside diameter',unit:'in',step:'0.1',auto:v=>odFor(v.ptype,v.size),help:'From the pipe you picked. Type your own to override.'},
     {k:'len',label:'Pipe length',unit:'LF',def:100},
-    {k:'width',label:'Trench width',unit:'in',auto:v=>Math.ceil((+v.od||0)+24),help:'Blank = OD + 12" each side.'},
+    {k:'width',label:'Trench width',unit:'in',auto:v=>Math.ceil((+v.od||0)+24),help:'At the bottom. Blank = OD + 12" each side.'},
     {k:'bed',label:'Bedding under pipe',unit:'in',def:6},{k:'cover',label:'Stone over crown',unit:'in',def:12},
+    {k:'depth',label:'Depth to invert',unit:'ft',step:'0.1',def:6,help:'From finished grade. Adds excavation and backfill. 0 = skip.'},
+    {k:'slope',label:'Trench side slope',unit:'H : 1V',step:'0.25',def:0,help:'0 = vertical walls (trench box). 1 = 1:1.'},
     matField(),densField(),{k:'waste',label:'Waste / overrun',unit:'%',def:10}],
-  calc:v=>{const W=v.width/12,H=(v.bed+v.od+v.cover)/12,pipeA=Math.PI*Math.pow(v.od/24,2);const perLF=(W*H-pipeA)/27;const cy=perLF*v.len;const cyW=cy*(1+v.waste/100);const tons=cyW*v.dens;
-    return {main:[fmtN(tons,1),'tons'],out:[['Stone volume',fmtN(cy,2)+' CY'],['With '+v.waste+'% waste',fmtN(cyW,2)+' CY'],['Tons',fmtN(tons,2)],['Per LF of pipe',fmtN(perLF*27,2)+' CF · '+fmtN(perLF*(1+v.waste/100)*v.dens,3)+' tons'],['Stone zone depth',fmtN(H*12,1)+' in']],
-      math:[`Trench cross-section = ${fmtN(W,3)} ft wide × ${fmtN(H,3)} ft deep (${v.bed}" bedding + ${fmtN(v.od,2)}" OD + ${v.cover}" cover) = ${fmtN(W*H,3)} SF`,`Pipe area = π × (${fmtN(v.od,2)}" ÷ 24)² = ${fmtN(pipeA,3)} SF`,`Stone per LF = (${fmtN(W*H,3)} − ${fmtN(pipeA,3)}) ÷ 27 = ${fmtN(perLF,4)} CY`,`× ${fmtN(v.len)} LF = ${fmtN(cy,2)} CY × ${1+v.waste/100} waste = ${fmtN(cyW,2)} CY`,`× ${v.dens} tons/CY = ${fmtN(tons,2)} tons`]}}},
+  calc:v=>{const lib=pipeLib(v.ptype);const nom=lib?+lib.size:(+v.size||0);const wall=wallFor(v.ptype,v.od,nom);const s=Math.max(0,v.slope||0);
+    const W=v.width/12,H=(v.bed+v.od+v.cover)/12,pipeA=Math.PI*Math.pow(v.od/24,2);const zoneA=W*H+s*H*H;
+    const perLF=(zoneA-pipeA)/27;const cy=perLF*v.len;const cyW=cy*(1+v.waste/100);const tons=cyW*v.dens;
+    const Dt=v.depth>0?v.depth+(wall+v.bed)/12:0;const exA=Dt?W*Dt+s*Dt*Dt:0;const bfA=Dt>H?exA-zoneA:0;const coverG=v.depth>0?v.depth-(v.od-wall)/12:null;
+    const warn=[];if(Dt&&H>Dt+1e-6)warn.push('The stone zone is taller than the trench — it would stick up above grade. Check the depth or the cover.');
+    if(v.od<=nom)warn.push('The outside diameter is not bigger than the nominal size — check the OD.');
+    if(W*12<v.od)warn.push('The trench is narrower than the pipe.');
+    return {main:[fmtN(tons,1),'tons'],warn,
+      out:[['Stone volume',fmtN(cy,2)+' CY'],['With '+v.waste+'% waste',fmtN(cyW,2)+' CY'],['Tons',fmtN(tons,2)],['Per LF of pipe',fmtN(perLF*27,2)+' CF · '+fmtN(perLF*(1+v.waste/100)*v.dens,3)+' tons'],['Stone zone depth',ftin(H)],
+        ...(Dt?[['Trench depth',ftin(Dt)],['Trench excavation',fmtN(exA/27*v.len,1)+' bank CY'],['Backfill above stone',fmtN(bfA/27*v.len,1)+' CY'],['Cover to grade over pipe',ftin(coverG)]]:[])],
+      math:[`Stone zone = ${fmtN(W,3)} ft wide × ${fmtN(H,3)} ft deep (${v.bed}" bedding + ${fmtN(v.od,2)}" OD + ${v.cover}" cover)${s?` + ${s} × ${fmtN(H,3)}² for the side slopes`:''} = ${fmtN(zoneA,3)} SF`,
+        `Pipe area = π × (${fmtN(v.od,2)}" ÷ 24)² = ${fmtN(pipeA,3)} SF`,`Stone per LF = (${fmtN(zoneA,3)} − ${fmtN(pipeA,3)}) ÷ 27 = ${fmtN(perLF,4)} CY`,
+        `× ${fmtN(v.len)} LF = ${fmtN(cy,2)} CY × ${1+v.waste/100} waste = ${fmtN(cyW,2)} CY`,`× ${v.dens} tons/CY = ${fmtN(tons,2)} tons`,
+        ...(Dt?[`Trench depth = ${v.depth} ft to invert + ${fmtN(wall,2)}" pipe wall + ${v.bed}" bedding = ${fmtN(Dt,3)} ft`,`Excavation = ${fmtN(W,3)} × ${fmtN(Dt,3)}${s?` + ${s} × ${fmtN(Dt,3)}²`:''} = ${fmtN(exA,3)} SF × ${fmtN(v.len)} LF ÷ 27 = ${fmtN(exA/27*v.len,1)} CY`]:[])],
+      g:{W,H,s,wall,Dt}}},
+  draw:drawPipe},
+ {id:'manhole',group:'Pipe & utilities',name:'Precast manhole & risers',icon:'⊚',
+  desc:'Put in the rim and every invert. It sets the bottom of the base, checks that the pipe holes fit in the base, and picks the risers and adjusting rings to hit the rim.',
+  fields:[{k:'rim',label:'Rim / top elevation',unit:'ft',step:'0.01',def:110},
+    {k:'dia',label:'Manhole size',unit:'inside dia.',type:'select',options:MH_SIZES.map(d=>[String(d),d+'″']),def:'48'},
+    {k:'base',label:'Base height',type:'select',options:[['auto','Recommended'],['3','3′-0″'],['4','4′-0″'],['5','5′-0″'],['6','6′-0″'],['custom','Other…']],def:'auto'},
+    {k:'baseC',label:'Other base height',unit:'in',def:42,show:v=>v.base==='custom'},
+    {k:'top',label:'Top',type:'select',options:[['cone','Eccentric cone'],['conc','Concentric cone'],['flat','Flat top slab']],def:'cone'},
+    {k:'topH',label:'Top height',type:'select',options:v=>v.top==='flat'?[['8','8″ slab'],['6','6″ slab'],['12','12″ slab'],['custom','Other…']]:[['36','3′-0″'],['48','4′-0″'],['24','2′-0″'],['custom','Other…']],def:v=>v.top==='flat'?'8':'36'},
+    {k:'topC',label:'Other top height',unit:'in',def:32,show:v=>v.topH==='custom'},
+    {k:'mode',label:'Risers',type:'select',options:[['auto','Recommend for me'],['pick','I’ll pick them']],def:'auto'},
+    {k:'frame',label:'Frame & cover height',unit:'in',def:8,help:'Check the casting — most standard frames are 7–9″.'},
+    {k:'ringMin',label:'Adjusting rings — min',unit:'in',def:2},{k:'ringMax',label:'Adjusting rings — max',unit:'in',def:12},
+    {k:'floor',label:'Base floor thickness',unit:'in',auto:v=>MH_FLOOR[v.dia]||8,help:'Typical for this size. Check your precaster’s drawing.'},
+    {k:'sump',label:'Sump below lowest invert',unit:'in',def:0},
+    {k:'leg',label:'Solid wall above pipe holes',unit:'in',def:6,help:'Wall needed between the top of a hole and the base joint. Holes are figured at OD + 4″.'},
+    {k:'stone',label:'Stone under base',unit:'in',def:6}],
+  extra:mhExtraHtml,
+  calc:v=>{
+    const pipes=mhPipes(v._raw).filter(p=>isFinite(p.e));if(pipes.length&&!(v.rim>Math.max(...pipes.map(p=>p.e))))return {main:['—',''],out:[],warn:['The rim has to be above the inverts.'],math:[]};if(!pipes.length)return {main:['—',''],out:[],warn:['Add at least one pipe with an invert elevation.'],math:[]};
+    const D=+v.dia/12,t=(MH_WALL[v.dia]||6)/12,OD=D+2*t;const low=Math.min(...pipes.map(p=>p.e));
+    const bottom=low-v.floor/12-v.sump/12;const leg=v.leg/12;
+    pipes.forEach(p=>{p.holeTop=p.e-p.wall/12+(p.od+MH_CLR)/12;p.need=p.holeTop-bottom+leg});
+    const need=Math.max(...pipes.map(p=>p.need));const autoBase=MH_BASES.find(h=>h>=need-1e-9);
+    const baseH=v.base==='custom'?v.baseC/12:v.base==='auto'?(autoBase||MH_BASES[MH_BASES.length-1]):+v.base;
+    const topH=v.topH==='custom'?v.topC/12:+v.topH/12;const frame=v.frame/12,rMin=v.ringMin/12,rMax=Math.max(v.ringMax,v.ringMin)/12;
+    const X=v.rim-frame-bottom-baseH-topH;// room for risers + rings
+    const raw=v._raw;const sizes=mhSizes(raw);let pick=[];
+    if(v.mode==='pick')pick=sizes.map(s=>({ft:s.ft,n:Math.max(0,Math.round(+s.n||0))})).filter(s=>s.n>0);
+    else{const on=sizes.filter(s=>s.on).map(s=>s.ft);pick=riserSearch(on,X,rMin,rMax,Math.min(Math.max(6/12,rMin),rMax))}
+    pick.sort((a,b)=>b.ft-a.ft);const rs=pick.reduce((s,p)=>s+p.ft*p.n,0);const count=pick.reduce((s,p)=>s+p.n,0);const rings=X-rs;
+    const topBase=bottom+baseH,topRis=topBase+rs,topTop=topRis+topH;const depth=v.rim-low;
+    const warn=[];
+    if(X<rMin-1e-6)warn.push(`Too shallow for this base and top — they reach ${ftin(rMin-X)} above where the rings need to start. Use a shorter base, a shorter top or a flat top slab.`);
+    else if(rings<0)warn.push(`The stack is ${ftin(-rings)} taller than the rim allows. ${v.mode==='pick'?'Take out risers.':'Use a shorter base or top.'}`);
+    else if(rings<rMin-1e-6||rings>rMax+1e-6)warn.push(`The adjusting rings come out to ${fmtN(rings*12,2)}″ — outside your ${v.ringMin}–${Math.max(v.ringMax,v.ringMin)}″ range. ${v.mode==='pick'?'Change the riser counts.':'Add riser sizes, or change the base or top.'}`);
+    if(v.base==='auto'&&!autoBase)warn.push(`No standard base is tall enough for every pipe hole (needs ${ftin(need)}). Order a cored riser or a special base, or use a drop connection.`);
+    pipes.forEach(p=>{p.bad=p.holeTop+leg>topBase+1e-6;if(p.bad&&!(v.base==='auto'&&!autoBase))warn.push(`${p.name||'A pipe'} (${p.size}″): the hole comes within ${fmtN(Math.max(0,(topBase-p.holeTop)*12),1)}″ of the base joint — it needs a base of at least ${ftin(p.need)} or a hole cored in the riser.`)});
+    const outs=pipes.filter(p=>p.dir==='out'),ins=pipes.filter(p=>p.dir!=='out');
+    if(outs.length){const o=Math.min(...outs.map(p=>p.e));ins.forEach(p=>{if(p.e<o-1e-6)warn.push(`${p.name||'An inlet'} is below the outlet invert — check the flow direction.`);else if(p.e-o>2)warn.push(`${p.name||'An inlet'} is ${ftin(p.e-o)} above the outlet — most specs call for an outside drop connection over 2′.`)})}
+    if(v.top!=='flat'&&+v.dia>48)warn.push('Cones are usually made for 48″ manholes. Larger sizes normally use a flat top or a reducing slab — check with your precaster.');
+    const ri=Math.max(0,rings*12);const even=Math.floor(ri/2+1e-6)*2;let rem=even;const stack=[];[6,4,2].forEach(s=>{const n=Math.floor(rem/s+1e-6);if(n){stack.push(n+' × '+s+'″');rem-=n*s}});
+    const mortar=ri-even;const ringTxt=ri<0.01?'None':`${fmtN(ri,2)}″ — ${stack.join(' + ')||'mortar only'}${mortar>0.05?` + ${fmtN(mortar,2)}″ mortar`:''}`;
+    const padR=(OD+1)/2;const stoneCY=Math.PI*padR*padR*v.stone/12/27;const stoneT=stoneCY*matDensity(calcMaterials().some(m=>m.name==='#57 stone')?'#57 stone':calcMaterials()[0].name);
+    const topName=v.top==='flat'?`${v.dia}″ flat top slab, ${fmtN(topH*12,1)}″ thick, 24″ opening`:`${v.dia}″ × 24″ ${v.top==='conc'?'concentric':'eccentric'} cone, ${ftin(topH)}`;
+    const order=[`1 × ${v.dia}″ base, ${ftin(baseH)} tall`,...pick.map(p=>`${p.n} × ${v.dia}″ riser, ${ftin(p.ft)}`),`1 × ${topName}`,...(ri>0.01?[`Adjusting rings: ${ringTxt}`]:[]),'1 × frame & cover',
+      ...pipes.map(p=>`Hole: ${p.label} (${p.name||p.dir}) — invert ${ftin(p.e-bottom)} above the bottom of the base`)];
+    return {main:[String(count),count===1?'riser · '+ftin(rs):'risers · '+ftin(rs)],warn,order,
+      out:[['Depth, rim to lowest invert',ftin(depth)+' · '+fmtN(depth,2)+' VF'],['Base',ftin(baseH)+(v.base==='auto'&&autoBase?' (recommended)':'')],['Risers',pick.length?pick.map(p=>p.n+' × '+ftin(p.ft)).join(', '):'None'],
+        ['Top',v.top==='flat'?fmtN(topH*12,1)+'″ slab':ftin(topH)+' cone'],['Adjusting rings',rings<-0.001?`${fmtN(-rings*12,2)}″ too tall`:ri<0.01?'None':fmtN(ri,2)+'″'],['Frame & cover',fmtN(v.frame,2)+'″'],
+        ['Rim',fmtE(v.rim)],['Top of '+(v.top==='flat'?'slab':'cone'),fmtE(topTop)],['Top of base',fmtE(topBase)],['Bottom of base',fmtE(bottom)],['Stone under base',fmtN(stoneCY,2)+' CY · '+fmtN(stoneT,2)+' tons']],
+      math:[`Bottom of base = ${fmtE(low)} lowest invert − ${v.floor}″ floor${v.sump?` − ${v.sump}″ sump`:''} = ${fmtE(bottom)}`,
+        ...(v.base==='auto'?[`Tallest hole needs ${ftin(need)} of base (hole top + ${v.leg}″ of wall) → ${autoBase?ftin(autoBase)+' base':'no standard base fits'}`]:[]),
+        `Room for risers and rings = ${fmtE(v.rim)} rim − ${v.frame}″ frame − ${fmtE(bottom)} bottom − ${ftin(baseH)} base − ${ftin(topH)} top = ${ftin(X)} (${fmtN(X,3)} ft)`,
+        `Risers ${ftin(rs)} → rings = ${ftin(X)} − ${ftin(rs)} = ${fmtN(rings*12,2)}″`,`Stone pad = π × (${fmtN(padR,2)} ft)² × ${v.stone}″ ÷ 12 ÷ 27 = ${fmtN(stoneCY,2)} CY`],
+      g:{D,t,OD,bottom,floor:v.floor/12,baseH,risers:pick.flatMap(p=>Array(p.n).fill(p.ft)),topH,top:v.top,rings:Math.max(0,rings),frame,rim:v.rim,pipes,stone:v.stone/12,low}}},
+  draw:drawMH},
  {id:'trench',group:'Pipe & utilities',name:'Trench excavation',icon:'⊔',
   desc:'Bank and loose volume for a trench, with sloped sides if needed, and truck loads to haul the spoil.',
   fields:[{k:'len',label:'Length',unit:'LF',def:100},{k:'depth',label:'Average depth',unit:'ft',def:6},{k:'bw',label:'Bottom width',unit:'ft',def:3},
@@ -2477,36 +2596,42 @@ const saveCalc=()=>{try{localStorage.setItem('bp-calc',JSON.stringify(S.calcStat
 function calcDef(){return CALCS.find(c=>c.id===S.calcState.id)||CALCS[0]}
 function calcRaw(c){return S.calcState.vals[c.id]=S.calcState.vals[c.id]||{}}
 // resolve values: typed value → default → auto
+const calcDefault=(f,v)=>typeof f.def==='function'?f.def(v):f.def;
 function calcValues(c){
-  const raw=calcRaw(c);const v={};
+  const raw=calcRaw(c);const v={_raw:raw};
   c.fields.forEach(f=>{
-    if(f.type==='select'){const opts=typeof f.options==='function'?f.options(v):f.options;const cur=raw[f.k];v[f.k]=opts.some(o=>o[0]===cur)?cur:(opts.some(o=>o[0]===String(f.def))?String(f.def):opts[0]?.[0]);return}
+    if(f.type==='select'){const opts=typeof f.options==='function'?f.options(v):f.options;const cur=raw[f.k];const d=String(calcDefault(f,v));v[f.k]=opts.some(o=>o[0]===cur)?cur:(opts.some(o=>o[0]===d)?d:opts[0]?.[0]);return}
     if(f.type==='material'){const names=calcMaterials().map(m=>m.name);v[f.k]=names.includes(raw[f.k])?raw[f.k]:names[0];return}
     const t=raw[f.k];if(t!==undefined&&t!==''&&!isNaN(+t)){v[f.k]=+t;return}
     if(f.auto){const a=f.auto(v);v[f.k]=a==null||isNaN(a)?0:+a;v['_auto_'+f.k]=true;return}
-    v[f.k]=+(f.def??0);
+    v[f.k]=+(calcDefault(f,v)??0);
   });
   return v;
 }
-function calcResultHtml(c){
-  const v=calcValues(c);let r;try{r=c.calc(v)}catch(e){r=null}
+function calcRun(c){const v=calcValues(c);let r=null;try{r=c.calc(v)}catch(e){console.warn(e);r=null}return {v,r}}
+function calcResultHtml(c,run){
+  const {r}=run||calcRun(c);
   if(!r)return '<div class="empty">Check the inputs.</div>';
   return `<div class="calc-main"><b>${esc(r.main[0])}</b><span>${esc(r.main[1])}</span></div>
+    ${r.warn&&r.warn.length?`<div class="calc-warn">${r.warn.map(w=>`<p>${esc(w)}</p>`).join('')}</div>`:''}
     <div class="list">${r.out.map(([l,x])=>`<div class="li"><span class="dim">${esc(l)}</span><b class="num">${esc(x)}</b></div>`).join('')}</div>
+    ${r.order&&r.order.length?`<div class="calc-order"><b>Order list</b><ul>${r.order.map(o=>`<li>${esc(o)}</li>`).join('')}</ul></div>`:''}
     ${r.math&&r.math.length?`<details class="calc-math"><summary>Show the math</summary><ol>${r.math.map(m=>`<li>${esc(m)}</li>`).join('')}</ol></details>`:''}`;
 }
+function calcDrawHtml(c,run){if(!c.draw)return '';const {v,r}=run||calcRun(c);if(!r||!r.g)return '<div class="empty">Fix the inputs to see the drawing.</div>';try{return c.draw(v,r)}catch(e){console.warn(e);return ''}}
+function optsHtml(opts,cur){let g=null,h='';opts.forEach(([val,l,grp])=>{if((grp||'')!==(g||'')){if(g)h+='</optgroup>';if(grp)h+=`<optgroup label="${esc(grp)}">`;g=grp||null}h+=`<option value="${esc(val)}"${cur===val?' selected':''}>${esc(l)}</option>`});return h+(g?'</optgroup>':'')}
 function calcFieldHtml(c,f,v){
   if(f.show&&!f.show(v))return '';
-  const raw=calcRaw(c);const id='cf-'+f.k;
-  if(f.type==='select'){const opts=typeof f.options==='function'?f.options(v):f.options;return `<label class="f"><span>${esc(f.label)}${f.unit?` <span class="dim">(${esc(f.unit)})</span>`:''}</span><select class="field" id="${id}" data-cf="${f.k}">${opts.map(([val,l])=>`<option value="${esc(val)}"${v[f.k]===val?' selected':''}>${esc(l)}</option>`).join('')}</select></label>`}
+  const raw=calcRaw(c);const id='cf-'+f.k;const lab=`<span>${esc(f.label)}${f.unit?` <span class="dim">(${esc(f.unit)})</span>`:''}</span>`;
+  if(f.type==='select'){const opts=typeof f.options==='function'?f.options(v):f.options;return `<label class="f">${lab}<select class="field" id="${id}" data-cf="${f.k}">${optsHtml(opts,v[f.k])}</select></label>`}
   if(f.type==='material')return `<label class="f"><span>${esc(f.label)}</span><select class="field" id="${id}" data-cf="${f.k}">${calcMaterials().map(m=>`<option value="${esc(m.name)}"${v[f.k]===m.name?' selected':''}>${esc(m.name)} — ${m.tpcy} t/CY</option>`).join('')}</select></label>`;
   const auto=f.auto?f.auto(v):null;const has=raw[f.k]!==undefined&&raw[f.k]!=='';
-  return `<label class="f"><span>${esc(f.label)}${f.unit?` <span class="dim">(${esc(f.unit)})</span>`:''}</span><input type="number" inputmode="decimal" step="${f.step||'any'}" class="field" id="${id}" data-cf="${f.k}" value="${has?esc(raw[f.k]):(f.auto?'':esc(f.def??''))}"${f.auto?` placeholder="${auto==null||isNaN(auto)?'—':'Auto: '+fmtN(auto,3)}"`:''}>${f.help?`<span class="hint" style="margin:2px 0 0">${esc(f.help)}</span>`:''}</label>`;
+  return `<label class="f">${lab}<input type="number" inputmode="decimal" step="${f.step||'any'}" class="field" id="${id}" data-cf="${f.k}" value="${has?esc(raw[f.k]):(f.auto?'':esc(calcDefault(f,v)??''))}"${f.auto?` placeholder="${auto==null||isNaN(auto)?'—':'Auto: '+fmtN(auto,3)}"`:''}>${f.help?`<span class="hint" style="margin:2px 0 0">${esc(f.help)}</span>`:''}</label>`;
 }
 function vCalc(){
-  const c=calcDef();const v=calcValues(c);const q=(S.q.calc||'').trim().toLowerCase();
+  const c=calcDef();const run=calcRun(c);const v=run.v;const q=(S.q.calc||'').trim().toLowerCase();
   const list=CALCS.filter(x=>!q||matchesQuery((x.name+' '+x.group+' '+x.desc).toLowerCase(),q));
-  return `<div class="head"><div><h1>Calculators</h1><p>Quick field and estimating math. Your last inputs are remembered on this computer.</p></div>${isAdmin()?'<div class="tools"><button class="btn" data-act="calc-mats">Material weights</button></div>':''}</div>
+  return `<div class="head"><div><h1>Calculators</h1><p>Quick field and estimating math. Your last inputs are remembered on this computer.</p></div>${isAdmin()?'<div class="tools"><button class="btn" data-act="calc-pipes">Pipe library</button><button class="btn" data-act="calc-mats">Material weights</button></div>':''}</div>
   <div class="calc-wrap">
     <aside class="calc-nav panel"><div class="pv-search" style="margin:10px"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><input id="q-calc" class="field" data-q="calc" placeholder="Find a calculator" value="${esc(S.q.calc||'')}" aria-label="Find a calculator"></div>
       ${CALC_GROUPS.map(g=>{const xs=list.filter(x=>x.group===g);return xs.length?`<div class="calc-g">${esc(g)}</div>${xs.map(x=>`<button class="calc-it${x.id===c.id?' on':''}" data-act="calc-pick" data-id="${x.id}"><span class="calc-ic" aria-hidden="true">${x.icon}</span>${esc(x.name)}</button>`).join('')}`:''}).join('')||'<div class="empty">No match.</div>'}
@@ -2514,21 +2639,137 @@ function vCalc(){
     <section class="calc-body">
       <div class="panel pad"><div class="sec-h" style="margin:0 0 4px"><h2>${esc(c.name)}</h2><button class="linkbtn" data-act="calc-reset">Reset</button></div><p class="dim small" style="margin:0 0 14px">${esc(c.desc)}</p>
         <div class="calc-grid">
-          <div class="fg calc-fields" id="calc-fields">${c.fields.map(f=>calcFieldHtml(c,f,v)).join('')}</div>
-          <div class="calc-res" id="calc-res" aria-live="polite">${calcResultHtml(c)}</div>
+          <div class="calc-left">
+            <div class="fg calc-fields" id="calc-fields">${c.fields.map(f=>calcFieldHtml(c,f,v)).join('')}</div>
+            ${c.extra?`<div id="calc-extra">${c.extra(v)}</div>`:''}
+            ${c.draw?`<div class="calc-draw" id="calc-draw">${calcDrawHtml(c,run)}</div>`:''}
+          </div>
+          <div class="calc-res" id="calc-res" aria-live="polite">${calcResultHtml(c,run)}</div>
         </div>
         ${c.fields.some(f=>f.type==='material')?`<p class="hint">Weights are typical in-place values. Your quarry’s ticket is the final word — type your own weight to override${isAdmin()?', or update the list under <b>Material weights</b>':''}.</p>`:''}
-        ${c.id==='pipe'?'<p class="hint">Outside diameters are typical for each pipe type. Check the manufacturer for the exact pipe and class you’re using.</p>':''}
+        ${c.id==='pipe'||c.id==='manhole'?`<p class="hint">Standard pipe outside diameters are typical values. ${calcPipes().length?'Pipes under <b>My pipes</b> use the numbers in your pipe library.':'Add the exact pipes you use to the pipe library'+(isAdmin()?' with <b>Pipe library</b> above':' — ask an admin')+' and they’ll show up at the top of the list.'}</p>`:''}
+        ${c.id==='manhole'?'<p class="hint">Wall and floor thicknesses, base heights and riser sizes vary by precaster — match them to your supplier’s shop drawings before you order.</p>':''}
       </div>
     </section>
   </div>`;
 }
-// update results and auto placeholders in place (keeps the cursor where it is)
+// update results, drawing and auto placeholders in place (keeps the cursor where it is)
 function refreshCalc(structural){
-  const c=calcDef();if(structural){const v=calcValues(c);const box=$('#calc-fields');if(box){const ae=document.activeElement?.id;box.innerHTML=c.fields.map(f=>calcFieldHtml(c,f,v)).join('');if(ae){const n=document.getElementById(ae);if(n&&n.tagName==='SELECT')n.focus()}}}
-  else{const v=calcValues(c);c.fields.forEach(f=>{if(!f.auto)return;const n=document.getElementById('cf-'+f.k);if(n){const a=f.auto(v);n.placeholder=a==null||isNaN(a)?'—':'Auto: '+fmtN(a,3)}})}
-  const r=$('#calc-res');if(r){const open=r.querySelector('details')?.open;r.innerHTML=calcResultHtml(c);if(open)r.querySelector('details').open=true}
+  const c=calcDef();const ae=document.activeElement?.id;
+  if(structural){const v=calcValues(c);const box=$('#calc-fields');if(box)box.innerHTML=c.fields.map(f=>calcFieldHtml(c,f,v)).join('');
+    const ex=$('#calc-extra');if(ex&&c.extra)ex.innerHTML=c.extra(v);
+    if(ae){const n=document.getElementById(ae);if(n&&n!==document.activeElement)n.focus()}}
+  const run=calcRun(c);const v=run.v;
+  if(!structural)c.fields.forEach(f=>{if(!f.auto)return;const n=document.getElementById('cf-'+f.k);if(n){const a=f.auto(v);n.placeholder=a==null||isNaN(a)?'—':'Auto: '+fmtN(a,3)}});
+  const r=$('#calc-res');if(r){const open=r.querySelector('details')?.open;r.innerHTML=calcResultHtml(c,run);if(open)r.querySelector('details').open=true}
+  const d=$('#calc-draw');if(d)d.innerHTML=calcDrawHtml(c,run);
 }
+function setCalcPath(raw,path,val){const p=path.split('.');let o=raw;while(p.length>1){const k=p.shift();o=o[k]}o[p[0]]=val}
+
+// ---- manhole: pipes and riser sizes
+function mhExtraHtml(v){
+  const raw=mhDefaults(v._raw);const pick=v.mode==='pick';mhPipes(raw);
+  const pipes=raw.inv.map((p,i)=>{const type=validPipeType(p.type);return `<div class="mh-row mh-pipe">
+    <input class="field" id="mh-inv-${i}-name" data-mh="inv.${i}.name" value="${esc(p.name)}" placeholder="Pipe" aria-label="Pipe name">
+    <select class="field" id="mh-inv-${i}-dir" data-mh="inv.${i}.dir" aria-label="In or out"><option value="in"${p.dir!=='out'?' selected':''}>In</option><option value="out"${p.dir==='out'?' selected':''}>Out</option></select>
+    <input type="number" step="0.01" inputmode="decimal" class="field" id="mh-inv-${i}-elev" data-mh="inv.${i}.elev" value="${esc(p.elev)}" placeholder="Invert" aria-label="Invert elevation">
+    <select class="field" id="mh-inv-${i}-size" data-mh="inv.${i}.size" aria-label="Pipe size">${sizesFor(type).map(n=>`<option value="${n}"${String(n)===String(p.size)?' selected':''}>${n}″</option>`).join('')}</select>
+    <select class="field" id="mh-inv-${i}-type" data-mh="inv.${i}.type" aria-label="Pipe type">${optsHtml(pipeTypeOpts(),type)}</select>
+    <button class="rm" data-act="mh-rm-inv" data-i="${i}" aria-label="Remove pipe"${raw.inv.length<2?' disabled':''}>×</button></div>`}).join('');
+  const sizes=raw.sz.map((s,i)=>`<div class="mh-row mh-size">
+    <input type="number" step="1" inputmode="numeric" class="field" id="mh-sz-${i}-in" data-mh="sz.${i}.in" value="${esc(s.in)}" aria-label="Riser height in inches"><span class="dim small">${+s.in>0?ftin(+s.in/12):''}</span>
+    ${pick?`<input type="number" min="0" step="1" inputmode="numeric" class="field" id="mh-sz-${i}-n" data-mh="sz.${i}.n" value="${esc(s.n)}" placeholder="0" aria-label="How many">`
+      :`<label class="mh-use"><input type="checkbox" id="mh-sz-${i}-on" data-mh="sz.${i}.on"${s.on?' checked':''}> Use</label>`}
+    <button class="rm" data-act="mh-rm-size" data-i="${i}" aria-label="Remove size">×</button></div>`).join('');
+  return `<div class="calc-sub"><div class="sec-h"><h3>Pipes in and out</h3><button class="btn sm" data-act="mh-add-inv">+ Add pipe</button></div>
+    <div class="mh-row mh-pipe mh-hd" aria-hidden="true"><span>Pipe</span><span>In / out</span><span>Invert elev.</span><span>Size</span><span>Type</span><span></span></div>${pipes}</div>
+  <div class="calc-sub"><div class="sec-h"><h3>${pick?'Risers to use':'Riser sections your precaster makes'}</h3><button class="btn sm" data-act="mh-add-size">+ Add size</button></div>
+    <div class="mh-row mh-size mh-hd" aria-hidden="true"><span>Height (in)</span><span></span><span>${pick?'How many':''}</span><span></span></div>${sizes}
+    <p class="hint">${pick?'Type how many of each. The rings make up the rest.':'Tick the sizes you can get. It picks the fewest pieces that leave the rings inside your range.'}</p></div>`;
+}
+
+// ---- drawings (inline SVG, colors come from the stylesheet so they follow light / dark)
+function svgWrap(w,h,body,label){return `<svg class="dw" viewBox="0 0 ${Math.round(w)} ${Math.round(h)}" style="max-width:${Math.round(w)}px" role="img" aria-label="${esc(label)}"><defs>
+  <pattern id="dwStone" width="7" height="7" patternUnits="userSpaceOnUse"><rect width="7" height="7" class="dw-st"/><circle cx="1.8" cy="1.8" r="1.1" class="dw-std"/><circle cx="5.2" cy="4.8" r=".9" class="dw-std"/><circle cx="1.4" cy="5.7" r=".55" class="dw-std"/></pattern>
+  <pattern id="dwSoil" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="9" height="9" class="dw-soil"/><line x1="0" y1="0" x2="0" y2="9" class="dw-soilh"/></pattern></defs>${body}</svg>`}
+const svgT=(x,y,t,cls='',anchor='start')=>`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" class="dw-t ${cls}" text-anchor="${anchor}">${esc(t)}</text>`;
+function dimV(x,y1,y2,label,side='r'){const a=Math.min(y1,y2),b=Math.max(y1,y2);return `<line x1="${x}" x2="${x}" y1="${a}" y2="${b}" class="dw-dim"/><line x1="${x-4}" x2="${x+4}" y1="${a}" y2="${a}" class="dw-dim"/><line x1="${x-4}" x2="${x+4}" y1="${b}" y2="${b}" class="dw-dim"/>`}
+function spread(items,gap=13){items.sort((a,b)=>a.y-b.y);for(let i=1;i<items.length;i++)if(items[i].y-items[i-1].y<gap)items[i].y=items[i-1].y+gap;return items}
+
+function drawPipe(v,r){
+  const g=r.g;const {W,H,s,wall}=g;const Dg=g.Dt>0?g.Dt:H+0.5;const Tp=Math.max(Dg,H);const half=W/2+s*Dg;
+  const sw=Math.max(W/2+s*Tp,half)*2+2.4;const sh=Tp+1.2;const k=Math.min(420/sw,320/sh,110);const LAB=170,PT=20;const Wp=sw*k+LAB,Hp=sh*k+PT+6;
+  const X=x=>(sw/2+x)*k,Y=y=>PT+(Tp-y)*k,P=pts=>pts.map(p=>X(p[0]).toFixed(1)+','+Y(p[1]).toFixed(1)).join(' ');
+  const cy=(v.bed+v.od/2)/12,R=v.od/24,Ri=Math.max(R-wall/12,0.02),inv=(v.bed+wall)/12,top=Y(Dg);let b='';
+  b+=`<rect x="0" y="${top}" width="${sw*k}" height="${Y(-1.05)-top}" fill="url(#dwSoil)"/>`;
+  b+=`<polygon points="${P([[-W/2,0],[W/2,0],[half,Dg],[-half,Dg]])}" class="dw-back"/>`;
+  b+=`<polygon points="${P([[-W/2,0],[W/2,0],[W/2+s*Math.min(H,Dg),Math.min(H,Dg)],[-W/2-s*Math.min(H,Dg),Math.min(H,Dg)]])}" fill="url(#dwStone)" class="dw-stoneedge"/>`;
+  if(H>Dg)b+=`<polygon points="${P([[-W/2-s*Dg,Dg],[W/2+s*Dg,Dg],[W/2+s*H,H],[-W/2-s*H,H]])}" fill="url(#dwStone)" class="dw-over"/>`;
+  b+=`<circle cx="${X(0)}" cy="${Y(cy)}" r="${(R*k).toFixed(1)}" class="dw-pipe"/><circle cx="${X(0)}" cy="${Y(cy)}" r="${(Ri*k).toFixed(1)}" class="dw-pipein"/>`;
+  b+=`<line x1="${X(-Ri*0.55)}" x2="${X(Ri*0.55)}" y1="${Y(inv)}" y2="${Y(inv)}" class="dw-inv"/>`;
+  b+=`<polyline points="${P([[-half,Dg],[-W/2,0],[W/2,0],[half,Dg]])}" class="dw-cut"/>`;
+  if(g.Dt>0)b+=`<line x1="0" x2="${sw*k}" y1="${top}" y2="${top}" class="dw-grade"/>`+svgT(6,top-5,'Finished grade','dw-muted');
+  // dimensions on the right
+  const x1=sw*k+14,x2=sw*k+96;const lv=[[0,v.bed/12,ftin(v.bed/12)+' bedding'],[v.bed/12,(v.bed+v.od)/12,fmtN(v.od,1)+'″ OD'],[(v.bed+v.od)/12,H,ftin(v.cover/12)+' cover']];
+  const lines=[0,v.bed/12,(v.bed+v.od)/12,H];lines.forEach(y=>b+=`<line x1="${X(W/2+s*y)+2}" x2="${x1+4}" y1="${Y(y)}" y2="${Y(y)}" class="dw-ext"/>`);
+  lv.forEach(([a,c])=>b+=dimV(x1,Y(a),Y(c)));
+  spread(lv.map(([a,c,t])=>({y:(Y(a)+Y(c))/2+4,t})).reverse()).forEach(l=>b+=svgT(x1+8,l.y,l.t,'dw-dimt'));
+  if(g.Dt>0){b+=`<line x1="${X(Ri*0.55)}" x2="${x2+4}" y1="${Y(inv)}" y2="${Y(inv)}" class="dw-ext"/><line x1="${sw*k}" x2="${x2+4}" y1="${top}" y2="${top}" class="dw-ext"/>`+dimV(x2,Y(inv),top)+svgT(x2+8,(Y(inv)+top)/2+4,fmtN(v.depth,2)+'′ to inv.','dw-dimt')}
+  const yb=Y(-0.3);b+=`<line x1="${X(-W/2)}" x2="${X(W/2)}" y1="${yb}" y2="${yb}" class="dw-dim"/><line x1="${X(-W/2)}" x2="${X(-W/2)}" y1="${yb-4}" y2="${yb+4}" class="dw-dim"/><line x1="${X(W/2)}" x2="${X(W/2)}" y1="${yb-4}" y2="${yb+4}" class="dw-dim"/>`+svgT(X(0),yb+15,ftin(W)+' bottom','dw-dimt dw-halo','middle');
+  if(s>0)b+=svgT(X(half)-4,top+14,s+' : 1','dw-dimt dw-halo','end');
+  const legend=`<div class="dw-legend"><span><i class="lg-stone"></i>${esc(v.mat)}</span>${g.Dt>0?'<span><i class="lg-back"></i>Backfill</span>':''}<span><i class="lg-soil"></i>Native</span><span><i class="lg-pipe"></i>${esc(pipeLabel(v.ptype,v.size))}</span></div>`;
+  return `<div class="dw-h"><b>Trench section</b><span class="dim small">To scale · redraws as you type</span></div>`+svgWrap(Wp,Hp,b,'Trench cross-section with the pipe, bedding and stone')+legend;
+}
+
+function drawMH(v,r){
+  const g=r.g;const {D,t,OD}=g;const pipeL=3;const left=OD/2+pipeL+1.3,right=OD/2+pipeL;
+  if(!(g.rim>g.bottom+1))return '<div class="empty">Put in a rim above the inverts to see the drawing.</div>';
+  const stackTop=g.bottom+g.baseH+g.risers.reduce((a,h)=>a+h,0)+g.topH+g.rings+g.frame;const yTop=Math.max(g.rim,stackTop)+0.7,yBot=g.bottom-g.stone-0.5;const sw=left+right,sh=yTop-yBot;const k=Math.max(9,Math.min(44,400/sw,560/sh));const LAB=205;
+  const X=x=>(left+x)*k,Y=y=>(yTop-y)*k,Wp=sw*k+LAB,Hp=sh*k;const rect=(x1,y1,x2,y2,cls,extra='')=>`<rect x="${X(Math.min(x1,x2)).toFixed(1)}" y="${Y(Math.max(y1,y2)).toFixed(1)}" width="${(Math.abs(x2-x1)*k).toFixed(1)}" height="${(Math.abs(y2-y1)*k).toFixed(1)}" class="${cls}"${extra}/>`;
+  let b='';const lab=[];const secLab=(y1,y2,t)=>{if((y2-y1)*k>=13)b+=svgT(X(0),Y((y1+y2)/2)+4,t,'dw-sec','middle')};
+  b+=`<rect x="0" y="${Y(g.rim)}" width="${sw*k}" height="${Y(yBot)-Y(g.rim)}" fill="url(#dwSoil)"/>`;
+  b+=rect(-OD/2-0.5,g.bottom-g.stone,OD/2+0.5,g.bottom,'dw-stonepad',' fill="url(#dwStone)"');
+  // base
+  const tb=g.bottom+g.baseH;b+=rect(-OD/2,g.bottom,OD/2,tb,'dw-conc')+rect(-D/2,g.bottom+g.floor,D/2,tb,'dw-mhin');
+  // bench / flow channel hint
+  b+=rect(-D/2,g.bottom+g.floor,D/2,g.low,'dw-bench');
+  if(g.baseH*k>=13)b+=svgT(X(0),Y(tb)+15,'Base '+ftin(g.baseH),'dw-sec','middle');
+  let y=tb;g.risers.forEach(h=>{b+=rect(-OD/2,y,OD/2,y+h,'dw-conc')+rect(-D/2,y,D/2,y+h,'dw-mhin')+`<line x1="${X(-OD/2)}" x2="${X(OD/2)}" y1="${Y(y)}" y2="${Y(y)}" class="dw-joint"/>`;secLab(y,y+h,'Riser '+ftin(h));y+=h});
+  const tr=y,tt=y+g.topH;b+=`<line x1="${X(-OD/2)}" x2="${X(OD/2)}" y1="${Y(tr)}" y2="${Y(tr)}" class="dw-joint"/>`;
+  const op=2,ecc=g.top==='cone'||g.top==='flat';const oL=ecc?D/2-op:-op/2,oR=oL+op;
+  if(g.top==='flat'){b+=rect(-OD/2,tr,OD/2,tt,'dw-conc')+rect(oL,tr,oR,tt,'dw-mhin');secLab(tr,tt,'Slab')}
+  else{const P=pts=>pts.map(p=>X(p[0]).toFixed(1)+','+Y(p[1]).toFixed(1)).join(' ');
+    b+=`<polygon points="${P([[-OD/2,tr],[OD/2,tr],[oR+t,tt],[oL-t,tt]])}" class="dw-conc"/>`;
+    b+=`<polygon points="${P([[-D/2,tr],[D/2,tr],[oR,tt],[oL,tt]])}" class="dw-mhin"/>`;secLab(tr,tt,'Cone '+ftin(g.topH))}
+  const tg=tt+g.rings;if(g.rings>0.001){b+=rect(oL-t,tt,oR+t,tg,'dw-ring');if(g.rings*k>=11)b+=svgT(X(oR+t)+5,Y((tt+tg)/2)+4,'Rings '+fmtN(g.rings*12,1)+'″','dw-muted')}
+  b+=rect(oL-0.35,tg,oR+0.35,tg+g.frame,'dw-frame');
+  b+=`<line x1="0" x2="${sw*k}" y1="${Y(g.rim)}" y2="${Y(g.rim)}" class="dw-grade"/>`+svgT(6,Y(g.rim)-5,'Finished grade','dw-muted');
+  // pipes
+  const ins=g.pipes.filter(p=>p.dir!=='out'),outs=g.pipes.filter(p=>p.dir==='out');const side=[];
+  if(outs[0])side.push([outs[0],1]);if(ins[0])side.push([ins[0],-1]);
+  const back=g.pipes.filter(p=>!side.some(s=>s[0]===p));
+  side.forEach(([p,dir])=>{const bo=p.e-p.wall/12,to=bo+p.od/12,x0=dir>0?D/2:-D/2,x1=dir>0?OD/2+pipeL:-OD/2-pipeL;const bad=p.bad?' dw-bad':'';
+    b+=rect(x0,bo,x1,to,'dw-pipe'+bad)+rect(x0,p.e,x1,p.e+p.size/12,'dw-pipein');
+    const nm=`${p.name||(p.dir==='out'?'Out':'In')} ${p.size}″ · inv ${fmtE(p.e)}`;
+    if(dir>0)lab.push({y:Y(p.e),t:nm,e:p.e,x:X(x1)});else b+=svgT(X(x1)+4,Y(to)-5,nm,'dw-dimt dw-halo','start')});
+  back.forEach((p,i)=>{const cx=(i%2?-1:1)*Math.min(D/4,0.9),cyy=p.e-p.wall/12+p.od/24;
+    b+=`<circle cx="${X(cx)}" cy="${Y(cyy)}" r="${(p.od/24*k).toFixed(1)}" class="dw-pipeback${p.bad?' dw-bad':''}"/>`+svgT(X(cx),Y(cyy)+4,`${p.size}″`,'dw-dimt','middle');
+    lab.push({y:Y(p.e),t:`${p.name||'Pipe'} ${p.size}″ · inv ${fmtE(p.e)}`})});
+  // elevations on the right
+  const xr=sw*k+10;[[g.rim,'Rim '+fmtE(g.rim)],[tt,'Top '+fmtE(tt)],[tb,'Top of base '+fmtE(tb)],[g.bottom,'Bottom '+fmtE(g.bottom)]].forEach(([e,t])=>lab.push({y:Y(e),t,e}));
+  spread(lab.map(l=>({...l,ty:l.y})).map(l=>({...l,y:l.y+4}))).forEach(l=>{b+=`<line x1="${l.x||X(OD/2)}" x2="${xr-2}" y1="${l.ty}" y2="${l.ty}" class="dw-ext"/><line x1="${xr-2}" x2="${xr+4}" y1="${l.ty}" y2="${l.y-4}" class="dw-ext"/>`+svgT(xr+7,l.y,l.t,'dw-dimt')});
+  // depth dimension on the left
+  const xl=10;b+=dimV(xl,Y(g.rim),Y(g.low))+`<text class="dw-t dw-dimt" transform="translate(${xl+13},${((Y(g.rim)+Y(g.low))/2).toFixed(1)}) rotate(-90)" text-anchor="middle">${esc(ftin(g.rim-g.low)+' deep')}</text>`;
+  const legend=`<div class="dw-legend"><span><i class="lg-conc"></i>Precast</span><span><i class="lg-stone"></i>Stone</span><span><i class="lg-pipe"></i>Pipe</span>${g.pipes.some(p=>p.bad)?'<span><i class="lg-bad"></i>Hole hits a joint</span>':''}${back.length?'<span><i class="lg-back2"></i>Pipe in the back wall</span>':''}</div>`;
+  return `<div class="dw-h"><b>Manhole section</b><span class="dim small">To scale · redraws as you type</span></div>`+svgWrap(Wp,Hp,b,'Manhole section with the base, risers, top, rings and pipes')+legend;
+}
+function pipesModal(){const std=PIPE_TYPES.flatMap(t=>pipeSizes(t).map(n=>[t+'|'+n,n+'″ '+t,t]));
+  return mhead('Pipe library','Your own pipes — they show up at the top of the pipe list in the calculators. Saved for everyone.')+`<div class="mbody"><fieldset><legend>Pipes</legend>
+  ${M.draft.length?`<div class="pl-row pl-hd" aria-hidden="true"><span>Name</span><span>Nominal (in)</span><span>OD (in)</span><span>ID (in)</span><span></span></div>`:'<p class="dim small" style="margin:0 0 10px">No pipes yet. Add one, or start from a standard size and change the numbers.</p>'}
+  <div class="rows">${M.draft.map((p,i)=>`<div class="pl-row"><input class="field" id="pf-${i}-name" data-pf="${i}.name" value="${esc(p.name)}" placeholder="e.g. 24″ RCP Class III" aria-label="Name"><input type="number" step="any" class="field" id="pf-${i}-size" data-pf="${i}.size" value="${esc(p.size)}" aria-label="Nominal size"><input type="number" step="any" class="field" id="pf-${i}-od" data-pf="${i}.od" value="${esc(p.od)}" aria-label="Outside diameter"><input type="number" step="any" class="field" id="pf-${i}-idIn" data-pf="${i}.idIn" value="${esc(p.idIn??'')}" placeholder="optional" aria-label="Inside diameter"><button class="rm" data-act="pl-rm" data-i="${i}" aria-label="Remove">×</button></div>`).join('')}</div>
+  <div class="adders"><button class="btn sm" data-act="pl-add">+ Add pipe</button><select class="field" data-plstd style="max-width:260px" aria-label="Start from a standard pipe"><option value="">Start from a standard size…</option>${optsHtml(std,'')}</select></div>
+  <p class="hint">OD sets the space the pipe takes up and the trench width. ID is used for the wall thickness in the drawings — leave it blank to use (OD − nominal) ÷ 2. Get the numbers from the manufacturer’s spec sheet.</p></fieldset></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="save">Save pipes</button></div></div>`}
 function matsModal(){return mhead('Material weights','Used by every calculator that turns yards into tons. Saved for everyone.')+`<div class="mbody"><fieldset><legend>Materials</legend><div class="rows">${M.draft.map((m,i)=>`<div class="rowline" style="grid-template-columns:minmax(0,1fr) 150px auto"><input class="field" data-mf="${i}.name" value="${esc(m.name)}" placeholder="Material"><input type="number" step="0.01" class="field" data-mf="${i}.tpcy" value="${esc(m.tpcy)}" placeholder="tons / CY"><button class="rm" data-act="mat-rm" data-i="${i}" aria-label="Remove">×</button></div>`).join('')}</div>
   <div class="adders"><button class="btn sm" data-act="mat-add">+ Add material</button><button class="btn sm ghost" data-act="mat-defaults">Reset to typical values</button></div><p class="hint">Tons per cubic yard, in place. Ask your quarry for the numbers on their tickets.</p></fieldset></div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="save">Save weights</button></div></div>`}
@@ -2607,10 +2848,17 @@ document.addEventListener('click',e=>{
     case 'board-custom':M={kind:'board',draft:boardCfg()};showModal();break;
     case 'company':M={kind:'company',draft:{companyName:S.settings.general?.companyName||''}};showModal();break;
     case 'calc-pick':S.calcState.id=t.dataset.id;saveCalc();render();if(window.innerWidth<760)$('.calc-body')?.scrollIntoView({block:'start'});break;
+    case 'mh-add-inv':{const raw=mhDefaults(calcRaw(calcDef()));const last=raw.inv[raw.inv.length-1]||{};raw.inv.push({name:'Inlet '+(raw.inv.filter(p=>p.dir!=='out').length+1),dir:'in',elev:last.elev?(+last.elev+0.1).toFixed(2):'',size:last.size||'15',type:last.type||'RCP (wall B)'});saveCalc();refreshCalc(true);const n=document.getElementById('mh-inv-'+(raw.inv.length-1)+'-elev');if(n){n.focus();n.select()}break}
+    case 'mh-rm-inv':{const raw=mhDefaults(calcRaw(calcDef()));if(raw.inv.length>1)raw.inv.splice(+t.dataset.i,1);saveCalc();refreshCalc(true);break}
+    case 'mh-add-size':{const raw=mhDefaults(calcRaw(calcDef()));raw.sz.push({in:'',on:true,n:''});saveCalc();refreshCalc(true);document.getElementById('mh-sz-'+(raw.sz.length-1)+'-in')?.focus();break}
+    case 'mh-rm-size':{const raw=mhDefaults(calcRaw(calcDef()));raw.sz.splice(+t.dataset.i,1);saveCalc();refreshCalc(true);break}
     case 'calc-reset':delete S.calcState.vals[calcDef().id];saveCalc();render();break;
     case 'calc-mats':if(isAdmin()){M={kind:'mats',draft:clone(calcMaterials())};showModal()}break;
     case 'mat-add':M.draft.push({name:'',tpcy:''});renderModal();setTimeout(()=>{const ns=document.querySelectorAll('#modal [data-mf$=".name"]');ns[ns.length-1]?.focus()},0);break;
     case 'mat-rm':M.draft.splice(+t.dataset.i,1);renderModal();break;
+    case 'calc-pipes':if(isAdmin()){M={kind:'pipes',draft:clone(calcPipes())};showModal()}break;
+    case 'pl-add':M.draft.push({id:newId(),name:'',size:'',od:'',idIn:''});renderModal();document.getElementById('pf-'+(M.draft.length-1)+'-name')?.focus();break;
+    case 'pl-rm':M.draft.splice(+t.dataset.i,1);renderModal();break;
     case 'mat-defaults':M.draft=clone(DEFAULT_MATERIALS);renderModal();break;
     case 'close':closeModal();break;
     case 'save':saveModal();break;
@@ -2685,7 +2933,10 @@ document.addEventListener('input',e=>{
   if(t.dataset.jtq!=null){S.jt.q=t.value;render();return}
   if(t.dataset.jtf&&t.tagName==='INPUT'){S.jt[t.dataset.jtf]=t.value;render();return}
   if(t.id==='pal-q'){S.pal.q=t.value;S.pal.i=0;renderPalette();return}
-  if(t.dataset.cf){const c=calcDef();calcRaw(c)[t.dataset.cf]=t.value;saveCalc();refreshCalc(t.tagName==='SELECT');return}
+  if(t.dataset.cf){const c=calcDef();calcRaw(c)[t.dataset.cf]=t.value;if(c.id==='pipe'&&(t.dataset.cf==='ptype'||t.dataset.cf==='size'))delete calcRaw(c).od;saveCalc();refreshCalc(t.tagName==='SELECT');return}
+  if(t.dataset.mh){const c=calcDef();const raw=calcRaw(c);mhDefaults(raw);setCalcPath(raw,t.dataset.mh,t.type==='checkbox'?t.checked:t.value);saveCalc();refreshCalc(t.tagName==='SELECT');return}
+  if(M&&M.kind==='pipes'&&t.dataset.pf){const[i,k]=t.dataset.pf.split('.');M.draft[+i][k]=t.value;return}
+  if(M&&M.kind==='pipes'&&t.dataset.plstd!=null){if(!t.value)return;const[ty,n]=t.value.split('|');const od=PIPE_OD[ty][n];M.draft.push({id:newId(),name:`${n}″ ${ty.replace(/ \(.*\)/,'')}`,size:n,od:String(od),idIn:''});renderModal();const k=M.draft.length-1;const el=document.getElementById('pf-'+k+'-name');if(el){el.focus();el.select()}return}
   if(M&&M.kind==='mats'&&t.dataset.mf){const[i,k]=t.dataset.mf.split('.');M.draft[+i][k]=k==='tpcy'?(t.value===''?'':+t.value):t.value;return}
   if(t.dataset.q){S.q[t.dataset.q]=t.value;render();return}
   if(t.dataset.pvf&&t.tagName==='INPUT'){S.pv.f[t.dataset.pvf]=t.value;savePv();render();return}
