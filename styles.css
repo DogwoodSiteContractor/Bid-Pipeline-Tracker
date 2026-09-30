@@ -202,7 +202,7 @@ textarea.field{min-height:84px;resize:vertical}
 .statline div{font-size:13px;color:var(--ink-3)}
 .statline b{display:block;font-family:"Montserrat",system-ui,sans-serif;font-size:21px;color:var(--ink);font-variant-numeric:tabular-nums}
 .check{display:flex;gap:8px;align-items:center;font-size:14px;cursor:pointer}
-.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;z-index:80;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+.toast{pointer-events:none;position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:14px;z-index:80;box-shadow:0 6px 20px rgba(0,0,0,.25)}
 .widgets{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
 .widgets .wide{grid-column:1/-1}
 
@@ -706,3 +706,11 @@ th.r .ov-sort{flex-direction:row}
 .ov-arr{font-size:10px;opacity:.35}
 th.sorted{color:var(--ink)}th.sorted .ov-arr{opacity:1;color:var(--accent)}
 @media (max-width:700px){.ov-bar select.field{flex:1 1 45%;max-width:none}.ov-count{margin-left:0}}
+.tk-vgroups{display:flex;flex-direction:column;gap:4px;max-height:320px;overflow:auto;margin:4px -4px 0;padding:0 4px}
+.tk-vg{display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:8px;align-items:center;padding:5px 4px;border-radius:6px}
+.tk-vg:hover{background:var(--surface-2)}.tk-vg.off{opacity:.45}
+.tk-sw{width:16px;height:4px;border-radius:2px}
+.tk-vgn{min-width:0}.tk-vgn .linkish-sm{color:var(--ink);text-align:left;overflow-wrap:anywhere}
+.tk-vga{display:flex;gap:4px;align-items:center}.tk-vga .btn.sm{padding:3px 7px;font-size:12px}
+.btn.tk-ex{color:var(--tk-ex);border-color:color-mix(in srgb,var(--tk-ex) 45%,var(--line))}.btn.tk-pr{color:var(--tk-pr);border-color:color-mix(in srgb,var(--tk-pr) 45%,var(--line))}
+.tk-vsel{background:color-mix(in srgb,#E8590C 9%,transparent);border-radius:8px;padding:8px 10px;margin:8px 0}

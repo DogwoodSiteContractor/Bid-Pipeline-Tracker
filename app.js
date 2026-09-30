@@ -3092,7 +3092,7 @@ async function supSave(){
    ===================================================================== */
 const TK_KEY='bp-takeoff';const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 const TK_TOOLS=[['pan','✋','Move','Drag to move, scroll to zoom'],['scale','📏','Scale','Click two points a known distance apart on this sheet'],['align','⤧','Align','Line this sheet up: click a point on it, then click where that point belongs on another sheet or surface'],['perim','⬠','Perimeter','Click around the limits of work; click the first point or right-click to close'],
-  ['line','〰','Contour','Click along a contour; right-click, double-click or Enter to finish'],['pad','▭','Pad','Flat area (building pad, pond bottom): click around it; click the first point or right-click to close'],['spot','✚','Spot','Click a spot elevation'],['select','➚','Select','Click a line to change its elevation or delete it']];
+  ['line','〰','Contour','Click along a contour; right-click, double-click or Enter to finish'],['pad','▭','Pad','Flat area (building pad, pond bottom): click around it; click the first point or right-click to close'],['spot','✚','Spot','Click a spot elevation'],['select','➚','Select','Click a line to change its elevation or delete it'],['elev','#','Elevation','Click a contour or pad to type its elevation'],['pick','⌖','Pick','Click vector lines to select them — Shift-drag to box-select']];
 function tkBlank(){return {v:2,surfaces:[],origin:null,fileName:'',fileKind:'',page:1,pageCount:0,sheets:{},perim:null,perimPage:null,lines:[],interval:1,dir:1,layer:'ex',tool:'pan',strip:6,section:0,shrink:15,swell:25,truck:14,heat:true,others:true,otherAlpha:0.45}}
 S.tk=(()=>{const d=tkBlank();let s=null;try{s=JSON.parse(localStorage.getItem(TK_KEY)||'null')}catch(e){}
   if(s&&s.v===2)Object.assign(d,s);
@@ -3102,7 +3102,9 @@ S.tk=(()=>{const d=tkBlank();let s=null;try{s=JSON.parse(localStorage.getItem(TK
       perim:cv(s.perim),perimPage:s.perim?pg:null,lines:(s.lines||[]).map(l=>({...l,pts:l.space==='world'||s.space==='world'?l.pts:cv(l.pts),page:s.space==='world'?null:pg}))});
     if(s.space==='world'){d.sheets={};d.perimPage=null;d.perim=s.perim}}
   d.surfaces=(d.surfaces||[]).map(x=>({...x,pts:Float64Array.from(x.pts||[]),tris:Uint32Array.from(x.tris||[])}));
-  Object.assign(d,{tool:d.tool==='scale'||d.tool==='align'?'pan':d.tool||'pan',cur:[],view:null,res:null,pending:null,sel:null,ver:0,imgs:{},pdf:null,img:null,align:null});return d})();
+  // sheets opened before stacking was the default sat beside each other — stack any that were never lined up
+  Object.entries(d.sheets||{}).forEach(([k,sh])=>{if(!sh.placed&&(sh.tx||sh.ty)&&!(d.lines||[]).some(l=>l.page===+k)&&d.perimPage!==+k){sh.tx=0;sh.ty=0}});
+  Object.assign(d,{vecSel:new Set(),vec:{},tool:['scale','align','pick','elev'].includes(d.tool)?'pan':d.tool||'pan',cur:[],view:null,res:null,pending:null,sel:null,ver:0,imgs:{},pdf:null,img:null,align:null});return d})();
 function tkSave(){const t=S.tk;t.res=null;t.ver++;tkPersist()}
 function tkPersist(){const t=S.tk;const keys=['v','fileName','fileKind','page','pageCount','sheets','perim','perimPage','lines','interval','dir','layer','strip','section','shrink','swell','truck','heat','others','otherAlpha','origin'];const o={};keys.forEach(k=>o[k]=t[k]);
   const surf=(t.surfaces||[]).map(x=>({id:x.id,name:x.name,layer:x.layer,pts:Array.from(x.pts),tris:Array.from(x.tris)}));
@@ -3129,14 +3131,15 @@ function tkOtherSheets(){const t=S.tk;return Object.keys(t.sheets).map(Number).f
 async function tkEnsureSheets(){const t=S.tk;if(!t.pdf&&!t.img)return;await tkRenderSheet(t.page,true);if(t.others)for(const n of tkOtherSheets())if(!t.imgs[n])await tkRenderSheet(n,false);tkDraw()}
 
 const tkLines=l=>S.tk.lines.filter(x=>x.layer===l);
-const tkLastElev=(layer,kind)=>{const xs=S.tk.lines.filter(x=>x.layer===layer&&(!kind||x.kind===kind));return xs.length?xs[xs.length-1].elev:null};
+const tkHasElev=l=>typeof l.elev==='number'&&isFinite(l.elev);
+const tkLastElev=(layer,kind)=>{const xs=S.tk.lines.filter(x=>x.layer===layer&&(!kind||x.kind===kind)&&tkHasElev(x));return xs.length?xs[xs.length-1].elev:null};
 function tkPip(p,poly){let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const [xi,yi]=poly[i],[xj,yj]=poly[j];if(((yi>p[1])!==(yj>p[1]))&&(p[0]<(xj-xi)*(p[1]-yi)/(yj-yi)+xi))c=!c}return c}
 function tkPolyArea(poly){let a=0;for(let i=0,j=poly.length-1;i<poly.length;j=i++)a+=(poly[j][0]+poly[i][0])*(poly[j][1]-poly[i][1]);return Math.abs(a/2)}
 function tkSegDist(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1];const L=dx*dx+dy*dy;let t=L?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/L:0;t=Math.max(0,Math.min(1,t));const x=a[0]+t*dx-p[0],y=a[1]+t*dy-p[1];return Math.sqrt(x*x+y*y)}
 // ---- surfaces: densify lines into samples; a point's elevation = between the nearest two different contours
 function tkSamples(layer,step){
   const xs=[],ys=[],zs=[];const pads=[];let tot=0;tkLines(layer).forEach(l=>{const pts=l.kind==='pad'?[...l.pts,l.pts[0]]:l.pts;for(let i=0;i<pts.length-1;i++)tot+=Math.hypot(pts[i+1][0]-pts[i][0],pts[i+1][1]-pts[i][1])});step=Math.max(step,tot/6000);
-  tkLines(layer).forEach(l=>{if(!isFinite(l.elev))return;const pts=l.kind==='pad'?[...l.pts,l.pts[0]]:l.pts;if(l.kind==='pad')pads.push(l);
+  tkLines(layer).forEach(l=>{if(!tkHasElev(l))return;const pts=l.kind==='pad'?[...l.pts,l.pts[0]]:l.pts;if(l.kind==='pad')pads.push(l);
     if(l.kind==='spot'){xs.push(pts[0][0]);ys.push(pts[0][1]);zs.push(l.elev);return}
     for(let i=0;i<pts.length-1;i++){const [x1,y1]=pts[i],[x2,y2]=pts[i+1];const n=Math.max(1,Math.ceil(Math.hypot(x2-x1,y2-y1)/step));for(let k=0;k<n;k++){xs.push(x1+(x2-x1)*k/n);ys.push(y1+(y2-y1)*k/n);zs.push(l.elev)}}
     const e=pts[pts.length-1];xs.push(e[0]);ys.push(e[1]);zs.push(l.elev)});
@@ -3194,7 +3197,11 @@ function tkDraw(){
   const drawSheet=(n,alpha)=>{const im=t.imgs[n];if(!im)return;const sh=tkSheet(n)||{};const f=sh.ftpu||1,r=sh.rot||0;ctx.save();ctx.translate(sh.tx||0,sh.ty||0);ctx.rotate(r);ctx.scale(f,f);ctx.globalAlpha=alpha;
     ctx.fillStyle='#fff';ctx.fillRect(0,0,im.w,im.h);ctx.drawImage(im.cv,0,0,im.w,im.h);ctx.globalAlpha=1;ctx.lineWidth=1.5*px/f;ctx.strokeStyle=n===t.page?'rgba(0,0,0,.35)':'rgba(0,0,0,.2)';ctx.strokeRect(0,0,im.w,im.h);ctx.restore()};
   if(t.others)tkOtherSheets().forEach(n=>drawSheet(n,t.otherAlpha));
-  drawSheet(t.page,t.tool==='align'&&t.align&&t.align.step%2===1?0.5:1);
+  if(t.showPlan!==false)drawSheet(t.page,t.tool==='align'&&t.align&&t.align.step%2===1?0.5:1);
+  const V=tkVec();if(V&&t.showVec!==false){const sh=tkSheet(t.page)||{};const f=sh.ftpu||1;ctx.save();ctx.translate(sh.tx||0,sh.ty||0);ctx.rotate(sh.rot||0);ctx.scale(f,f);const hid=new Set(V.groups.filter(g=>g.hidden).map(g=>g.id));
+    const byG=new Map();V.paths.forEach((P,i)=>{if(P.used||hid.has(P.g)||t.vecSel.has(i))return;let a=byG.get(P.g);if(!a)byG.set(P.g,a=[]);a.push(P)});
+    byG.forEach((ps,g)=>{const G=V.groups.find(x=>x.id===g);ctx.beginPath();ps.forEach(P=>{P.pts.forEach((q,k)=>k?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]))});ctx.strokeStyle=t.vecHi===g?'#E8590C':(G?.color||'#555');ctx.globalAlpha=t.vecHi===g?1:0.85;ctx.lineWidth=(t.vecHi===g?2.4:1.3)*px/f;ctx.stroke()});
+    ctx.globalAlpha=1;if(t.vecSel.size){ctx.beginPath();t.vecSel.forEach(i=>{const P=V.paths[i];if(P)P.pts.forEach((q,k)=>k?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1]))});ctx.strokeStyle='#E8590C';ctx.lineWidth=3.2*px/f;ctx.stroke()}ctx.restore()}
   (t.surfaces||[]).forEach(sf=>{const P=sf.pts,T=sf.tris;const col=sf.layer==='ex'?C.ex:C.pr;
     if(T.length/3<=40000){ctx.beginPath();for(let k=0;k<T.length;k+=3){const a=T[k]*3,b=T[k+1]*3,cc=T[k+2]*3;ctx.moveTo(P[a],P[a+1]);ctx.lineTo(P[b],P[b+1]);ctx.lineTo(P[cc],P[cc+1]);ctx.closePath()}ctx.strokeStyle=col;ctx.globalAlpha=0.22;ctx.lineWidth=px;ctx.stroke();ctx.globalAlpha=1}
     const E=tinEdges(sf);ctx.beginPath();for(let k=0;k<E.length;k+=2){ctx.moveTo(P[E[k]*3],P[E[k]*3+1]);ctx.lineTo(P[E[k+1]*3],P[E[k+1]*3+1])}ctx.strokeStyle=col;ctx.lineWidth=2.5*px;ctx.setLineDash(sf.layer==='ex'?[8*px,4*px]:[]);ctx.stroke();ctx.setLineDash([])});
@@ -3202,11 +3209,12 @@ function tkDraw(){
   const path=(pts,close)=>{ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));if(close)ctx.closePath()};
   const label=(txt,x,y,col)=>{ctx.font=`600 ${12*px}px system-ui,sans-serif`;const w=ctx.measureText(txt).width;ctx.fillStyle='rgba(255,255,255,.85)';ctx.fillRect(x-w/2-3*px,y-8*px,w+6*px,15*px);ctx.fillStyle=col;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(txt,x,y)};
   if(t.perim){path(t.perim,true);ctx.strokeStyle=C.per;ctx.lineWidth=3*px;ctx.setLineDash([10*px,5*px]);ctx.stroke();ctx.setLineDash([])}
-  t.lines.forEach((l,li)=>{const col=l.layer==='ex'?C.ex:C.pr;const sel=t.sel===l.id;ctx.strokeStyle=col;ctx.lineWidth=(sel?4:2)*px;ctx.setLineDash(l.layer==='ex'?[6*px,4*px]:[]);
-    if(l.kind==='spot'){const [x,y]=l.pts[0];ctx.setLineDash([]);ctx.beginPath();ctx.moveTo(x-6*px,y);ctx.lineTo(x+6*px,y);ctx.moveTo(x,y-6*px);ctx.lineTo(x,y+6*px);ctx.stroke();label(fmtE(l.elev),x,y-14*px,col);return}
+  t.lines.forEach((l,li)=>{const noE=!tkHasElev(l);const col=noE?'#D6336C':l.layer==='ex'?C.ex:C.pr;const sel=t.sel===l.id;ctx.strokeStyle=col;ctx.lineWidth=(sel?4:2)*px;ctx.setLineDash(l.layer==='ex'?[6*px,4*px]:[]);
+    if(l.kind==='spot'){const [x,y]=l.pts[0];ctx.setLineDash([]);ctx.beginPath();ctx.moveTo(x-6*px,y);ctx.lineTo(x+6*px,y);ctx.moveTo(x,y-6*px);ctx.lineTo(x,y+6*px);ctx.stroke();label(noE?'?':fmtE(l.elev),x,y-14*px,col);return}
     path(l.pts,l.kind==='pad');if(l.kind==='pad'){ctx.fillStyle=l.layer==='ex'?'rgba(139,94,52,.12)':'rgba(37,102,192,.12)';ctx.fill()}ctx.stroke();ctx.setLineDash([]);
     if(sel){ctx.fillStyle=col;l.pts.forEach(p=>{ctx.beginPath();ctx.arc(p[0],p[1],3.5*px,0,7);ctx.fill()})}
-    const mi=Math.floor((l.pts.length-1)*(0.15+((li*0.37)%0.7)));const m=l.pts[mi],n=l.pts[Math.min(l.pts.length-1,mi+1)];label(String(+l.elev.toFixed(2)),(m[0]+n[0])/2,(m[1]+n[1])/2,col)});
+    const mi=Math.floor((l.pts.length-1)*(0.15+((li*0.37)%0.7)));const m=l.pts[mi],n=l.pts[Math.min(l.pts.length-1,mi+1)];label(noE?'? '+(l.layer==='ex'?'EX':'PR'):String(+l.elev.toFixed(2)),(m[0]+n[0])/2,(m[1]+n[1])/2,col)});
+  if(t.box){const [a,b]=t.box;ctx.strokeStyle='#E8590C';ctx.lineWidth=1.5*px;ctx.setLineDash([6*px,4*px]);ctx.strokeRect(Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.abs(b[0]-a[0]),Math.abs(b[1]-a[1]));ctx.setLineDash([]);ctx.fillStyle='rgba(232,89,12,.08)';ctx.fillRect(Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.abs(b[0]-a[0]),Math.abs(b[1]-a[1]))}
   const cur=t.cur;if(cur.length){const col=t.tool==='perim'?C.per:t.tool==='scale'?'#7A3EB1':t.layer==='ex'?C.ex:C.pr;const pts=t.hover&&!t.pending?[...cur,t.hover]:cur;
     path(pts,false);ctx.strokeStyle=col;ctx.lineWidth=2*px;ctx.setLineDash([4*px,3*px]);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=col;cur.forEach(p=>{ctx.beginPath();ctx.arc(p[0],p[1],3.5*px,0,7);ctx.fill()});
     if((t.tool==='perim'||t.tool==='pad')&&cur.length>2){ctx.beginPath();ctx.arc(cur[0][0],cur[0][1],8*px,0,7);ctx.strokeStyle=col;ctx.stroke()}}
@@ -3227,6 +3235,9 @@ function tkClick(p){
   const t=S.tk;if(t.pending)return;
   if(t.tool==='select'){const tol=10/t.view.z;let best=null,bd=Infinity;t.lines.forEach(l=>{const pts=l.kind==='pad'?[...l.pts,l.pts[0]]:l.pts;let d=l.kind==='spot'?Math.hypot(pts[0][0]-p[0],pts[0][1]-p[1]):Infinity;for(let i=0;i<pts.length-1;i++)d=Math.min(d,tkSegDist(p,pts[i],pts[i+1]));if(d<bd){bd=d;best=l}});
     t.sel=best&&bd<tol?best.id:null;tkDraw();tkUI();return}
+  if(t.tool==='elev'){const tol=10/t.view.z;let best=null,bd=Infinity;t.lines.forEach(l=>{if(l.kind==='spot')return;const pts=l.kind==='pad'?[...l.pts,l.pts[0]]:l.pts;let d=Infinity;for(let i=0;i<pts.length-1;i++)d=Math.min(d,tkSegDist(p,pts[i],pts[i+1]));if(d<bd){bd=d;best=l}});
+    if(best&&bd<tol)tkAskRelabel(best);else{t.sel=null;tkDraw();tkUI()}return}
+  if(t.tool==='pick'){tkVecPick(p,true);return}
   if(t.tool==='pan')return;
   if(t.tool==='scale'){if(!tkHasSheet()){toast('Upload a plan first.');return}t.cur.push(p);if(t.cur.length===2){t.pending={type:'scale'};tkUI();tkDraw();setTimeout(()=>$('#tk-pv')?.focus(),0);return}tkDraw();tkUI();return}
   if(tkNeedScale())return;
@@ -3260,8 +3271,9 @@ function tkCommit(){const t=S.tk;const P=t.pending;if(!P)return;const val=+($('#
     tkReplace(t.page,old,nsh);t.cur=[];t.pending=null;const first=!t.perim&&!t.lines.length;t.tool=first?'perim':'pan';tkSave();t.view=null;tkFit();
     toast(`Scale set on sheet ${t.page} — ${fmtN(val,2)} ft between the points.${Object.keys(t.sheets).filter(n=>tkScaled(+n)).length>1&&!t.sheets[t.page].placed?' Use Align to line it up with your other sheets.':''}`);tkDraw();tkUI();return}
   if(!isFinite(val)||$('#tk-pv').value===''){toast('Type the elevation.');return}
+  if(P.type==='relabel'){const l=t.lines.find(x=>x.id===P.id);if(l){l.elev=val;t.lastRelabel=val}t.pending=null;const chain=t.chain;tkSave();tkDraw();tkUI();if(chain&&t.lines.some(x=>x.kind!=='spot'&&!tkHasElev(x)))setTimeout(tkNextMissing,0);else t.chain=false;return}
   t.lines.push({id:newId(),layer:t.layer,kind:P.kind,pts:t.cur,elev:val,page:tkHasSheet()?t.page:null});t.cur=[];t.pending=null;tkSave();tkDraw();tkUI()}
-function tkCancel(){const t=S.tk;t.cur=[];t.pending=null;if(t.tool==='align')t.align=null;tkDraw();tkUI()}
+function tkCancel(){const t=S.tk;t.cur=[];t.pending=null;t.chain=false;if(t.tool==='align')t.align=null;tkDraw();tkUI()}
 async function tkLoadFile(file){
   const t=S.tk;const isPdf=/pdf$/i.test(file.type)||/\.pdf$/i.test(file.name);t.loading=true;tkUI();
   try{const same=t.fileName===file.name;
@@ -3273,8 +3285,6 @@ async function tkLoadFile(file){
   catch(e){toast(errMsg(e))}finally{t.loading=false;tkUI()}
 }
 async function tkGoPage(n){const t=S.tk;t.loading=true;tkUI();try{t.page=n;t.cur=[];t.pending=null;t.align=null;await tkRenderSheet(n,true);if(!t.sheets[n]){t.sheets[n]={rot:0,tx:0,ty:0}}
-  // an unplaced sheet opens next to what's already there, not on top of it
-  const sh=t.sheets[n];if(!sh.placed&&!tkScaled(n)){const others=tkOtherSheets();if(others.length){let x1=-Infinity,y0=Infinity;others.forEach(k=>(tkSheetCorners(k)||[]).forEach(p=>{x1=Math.max(x1,p[0]);y0=Math.min(y0,p[1])}));if(isFinite(x1)){sh.tx=x1+50;sh.ty=y0}}}
   tkPersist();t.view=null;tkFit();tkDraw();tkEnsureSheets()}catch(e){toast(errMsg(e))}finally{t.loading=false;tkUI()}}
 
 
@@ -3286,18 +3296,19 @@ function tkUI(){
     <div class="seg tk-layer"><button class="${t.layer==='ex'?'on':''}" data-act="tk-layer" data-v="ex">Existing</button><button class="${t.layer==='pr'?'on':''}" data-act="tk-layer" data-v="pr">Proposed</button></div>
     ${TK_TOOLS.slice(4).map(tb).join('')}<span class="tk-sep"></span>
     <button class="btn sm" data-act="tk-finish"${t.cur.length?'':' disabled'}>Finish ↵</button><button class="btn sm ghost" data-act="tk-undo"${t.cur.length||t.lines.length?'':' disabled'} title="Undo last point or line">Undo</button><button class="btn sm ghost" data-act="tk-fit" title="Fit this sheet on screen (Shift-click: everything)">Fit</button>`;
-  function tb([k,ic,l,tip]){const off=(k==='scale'||k==='align')&&!sheet;return `<button class="tk-tool${t.tool===k?' on':''}${(k==='line'||k==='pad'||k==='spot')?(t.layer==='ex'?' ex':' pr'):''}" data-act="tk-tool" data-v="${k}" title="${esc(tip)}"${off?' disabled':''}><span aria-hidden="true">${ic}</span>${l}</button>`}
+  function tb([k,ic,l,tip]){const off=((k==='scale'||k==='align')&&!sheet)||(k==='pick'&&!tkVec());return `<button class="tk-tool${t.tool===k?' on':''}${(k==='line'||k==='pad'||k==='spot')?(t.layer==='ex'?' ex':' pr'):''}" data-act="tk-tool" data-v="${k}" title="${esc(tip)}"${off?' disabled':''}><span aria-hidden="true">${ic}</span>${l}</button>`}
   const em=$('#tk-empty');if(em)em.hidden=!!(sheet||t.lines.length||(t.surfaces||[]).length);
   if(hint)hint.textContent=t.hoverText||(tool?tool[3]+(['line','pad','spot'].includes(t.tool)?` — ${t.layer==='ex'?'existing':'proposed'}`:''):'');
   const AL=['Click a point on this sheet — a corner, manhole or match-line mark','Click where that point is on another sheet or surface','Optional: click a second point on this sheet, far from the first','Click where it is on the other sheet (sets the rotation)'];
   if(hint&&t.tool==='align'&&!t.pending){const st=t.align?.step||0;hint.textContent=`Align sheet ${t.page} — step ${st+1} of 4: ${AL[st]}`}
   if(pr){pr.hidden=!t.pending;
-    if(t.pending)pr.innerHTML=t.pending.type==='scale'?`<b>Distance between those points — sheet ${t.page}</b><div><input type="number" step="any" class="field" id="tk-pv" placeholder="feet"> <span class="dim">ft</span> <button class="btn sm primary" data-act="tk-commit">Set scale</button> <button class="btn sm ghost" data-act="tk-cancel">Cancel</button></div>`
+    if(t.pending&&t.pending.type==='relabel')pr.innerHTML=`<b>${t.pending.kind==='pad'?'Pad':'Contour'} elevation</b><div><input type="number" step="any" class="field" id="tk-pv" value="${esc(t.pending.def)}"> <button class="btn sm primary" data-act="tk-commit">Set ↵</button> <button class="btn sm ghost" data-act="tk-cancel">${t.chain?'Stop':'Cancel'}</button></div>${t.chain?`<div class="dim small">${t.lines.filter(x=>x.kind!=='spot'&&!tkHasElev(x)).length} left without an elevation · Enter jumps to the next</div>`:''}`;
+    else if(t.pending)pr.innerHTML=t.pending.type==='scale'?`<b>Distance between those points — sheet ${t.page}</b><div><input type="number" step="any" class="field" id="tk-pv" placeholder="feet"> <span class="dim">ft</span> <button class="btn sm primary" data-act="tk-commit">Set scale</button> <button class="btn sm ghost" data-act="tk-cancel">Cancel</button></div>`
       :`<b>${t.pending.kind==='pad'?'Pad':t.pending.kind==='spot'?'Spot':'Contour'} elevation — ${t.layer==='ex'?'existing':'proposed'}</b><div><input type="number" step="any" class="field" id="tk-pv" value="${esc(t.pending.def)}"> <button class="btn sm primary" data-act="tk-commit">Add ↵</button> <button class="btn sm ghost" data-act="tk-cancel">Cancel</button></div>`}
   const alignCard=t.tool==='align'?`<div class="tk-card tk-selcard"><div class="tk-h">Line up sheet ${t.page}</div><ol class="tk-al">${AL.map((x,i)=>{const st=t.align?.step||0;return `<li class="${i<st?'done':i===st?'now':''}">${x}</li>`}).join('')}</ol>
     <p class="hint" style="margin:4px 0 8px">Other lined-up sheets and surfaces show through underneath. Zoom in close for accurate picks.</p>
     <div class="adders"><button class="btn sm primary" data-act="tk-align-done">Done</button><button class="btn sm ghost" data-act="tk-align-restart">Start over</button></div></div>`:'';
-  if(!side)return;const r=t.res;const sel=t.lines.find(l=>l.id===t.sel);const cnt=l=>{const xs=tkLines(l);const el=xs.map(x=>x.elev);return xs.length?`${xs.length} · ${fmtN(Math.min(...el),2)}–${fmtN(Math.max(...el),2)}`:'none yet'};
+  if(!side)return;const r=t.res;const sel=t.lines.find(l=>l.id===t.sel);const cnt=l=>{const xs=tkLines(l);const el=xs.filter(tkHasElev).map(x=>x.elev);const miss=xs.length-el.length;return xs.length?`${xs.length}${el.length?` · ${fmtN(Math.min(...el),2)}–${fmtN(Math.max(...el),2)}`:''}${miss?` · <span style="color:#D6336C">${miss} need elev.</span>`:''}`:'none yet'};
   const step=(ok,txt)=>`<li class="${ok?'done':''}">${ok?'✓':'○'} ${txt}</li>`;const sh=tkSheet(t.page);
   const surfList=(t.surfaces||[]).map(x=>`<div class="tk-surf"><span class="tk-dot ${x.layer}"></span><div><b>${esc(x.name)}</b><div class="dim small">${x.layer==='ex'?'Existing':'Proposed'} TIN · ${fmtN(x.tris.length/3,0)} triangles</div></div><button class="rm" data-act="tk-surfdel" data-id="${x.id}" aria-label="Remove surface">×</button></div>`).join('');
   const sheetState=n=>{const s=tkSheet(n);const lines=t.lines.filter(l=>l.page===n).length;return (tkScaled(n)?(s.placed?'✓ ':'• '):'')+`Sheet ${n}`+(tkScaled(n)?'':' — no scale')+(lines?` · ${lines} lines`:'')};
@@ -3306,6 +3317,8 @@ function tkUI(){
     <div class="tk-sheetinfo small">${tkScaled(t.page)?`Scale: <b>${t.fileKind==='pdf'?`1″ = ${fmtN(sh.ftpu*72,1)}′`:`${fmtN(1/sh.ftpu,2)} px per ft`}</b>${t.fileKind==='pdf'?' <span class="dim">(as printed full size)</span>':''}`:'<span style="color:var(--warn)">No scale yet — use <b>Scale</b> on this sheet.</span>'}
       ${tkScaled(t.page)?`<div>Rotation <b>${fmtN(((sh.rot||0)*180/Math.PI+540)%360-180,2)}°</b>${sh.placed?' · lined up':''}</div>`:''}</div>
     ${tkScaled(t.page)?`<div class="adders" style="margin-top:6px"><button class="btn sm" data-act="tk-tool" data-v="align">Align this sheet</button>${sh.placed||sh.rot?'<button class="btn sm ghost" data-act="tk-sheetreset">Reset position</button>':''}</div>`:''}
+    ${t.fileKind==='pdf'?`<div class="adders" style="margin-top:6px"><button class="btn sm${tkVec()?'':' primary'}" data-act="tk-vectorize"${t.vecBusy?' disabled':''}>${t.vecBusy?'Reading line work…':tkVec()?'Vectorize again':'⚡ Vectorize this sheet'}</button></div>`:''}
+    <label class="mh-use" style="margin-top:8px"><input type="checkbox" data-tkset="showPlan"${t.showPlan!==false?' checked':''}> Show the plan sheet</label>
     ${Object.keys(t.sheets).filter(n=>+n!==t.page&&tkScaled(+n)).length?`<label class="mh-use" style="margin-top:8px"><input type="checkbox" data-tkset="others"${t.others?' checked':''}> Show other lined-up sheets</label>
       ${t.others?`<label class="f" style="margin-top:4px"><span>Fade <span class="dim">(others)</span></span><input type="range" min="0.1" max="1" step="0.05" data-tkset="otherAlpha" value="${t.otherAlpha}"></label>`:''}`:''}
   </div>`:'';
@@ -3315,8 +3328,8 @@ function tkUI(){
     ${t.fileName?`<div class="small dim" style="margin-top:6px;overflow-wrap:anywhere">${esc(t.fileName)}${t.pageCount>1?` · ${t.pageCount} sheets`:''}</div>`:''}
     ${!sheet&&t.fileName&&t.lines.some(l=>l.page)?`<p class="hint">Your lines are saved. Re-open <b>${esc(t.fileName)}</b> to see the sheets under them.</p>`:''}
     ${surfList?`<div class="tk-surfs">${surfList}</div>`:''}${t.surfNotSaved?'<p class="hint">These surfaces are too big to remember in this browser — import them again next time.</p>':''}</div>
-  ${alignCard}${sheetsCard}
-  <div class="tk-card"><div class="tk-h">Steps</div><ol class="tk-steps">${sheet||t.fileName?step(sheet,'Upload the plan')+step(tkScaled(t.page),`Scale sheet ${t.page}`):''}${step(t.perim,t.perim?`Perimeter — ${fmtN(tkPolyArea(t.perim)/43560,2)} ac`:(t.surfaces||[]).length?'Perimeter (optional — else where the surfaces overlap)':'Draw the perimeter')}${step(tkLines('ex').length||tkSurf('ex').length,`Existing — ${tkSurf('ex').length?tkSurf('ex').length+' TIN'+(tkLines('ex').length?' + ':''):''}${tkLines('ex').length||!tkSurf('ex').length?cnt('ex'):''}`)}${step(tkLines('pr').length||tkSurf('pr').length,`Proposed — ${tkSurf('pr').length?tkSurf('pr').length+' TIN'+(tkLines('pr').length?' + ':''):''}${tkLines('pr').length||!tkSurf('pr').length?cnt('pr'):''}`)}${step(r,'Calculate')}</ol></div>
+  ${alignCard}${sheetsCard}${tkVecCard()}
+  <div class="tk-card"><div class="tk-h">Steps</div><ol class="tk-steps">${sheet||t.fileName?step(sheet,'Upload the plan')+step(tkScaled(t.page),`Scale sheet ${t.page}`):''}${step(t.perim,t.perim?`Perimeter — ${fmtN(tkPolyArea(t.perim)/43560,2)} ac`:(t.surfaces||[]).length?'Perimeter (optional — else where the surfaces overlap)':'Draw the perimeter')}${step(tkLines('ex').length||tkSurf('ex').length,`Existing — ${tkSurf('ex').length?tkSurf('ex').length+' TIN'+(tkLines('ex').length?' + ':''):''}${tkLines('ex').length||!tkSurf('ex').length?cnt('ex'):''}`)}${step(tkLines('pr').length||tkSurf('pr').length,`Proposed — ${tkSurf('pr').length?tkSurf('pr').length+' TIN'+(tkLines('pr').length?' + ':''):''}${tkLines('pr').length||!tkSurf('pr').length?cnt('pr'):''}`)}${step(r,'Calculate')}</ol>${t.lines.some(x=>x.kind!=='spot'&&!tkHasElev(x))?`<div class="adders" style="margin-top:8px"><button class="btn sm" data-act="tk-nextmissing">Next line missing an elevation</button></div>`:''}</div>
   ${sel?`<div class="tk-card tk-selcard"><div class="tk-h">Selected ${sel.kind==='pad'?'pad':sel.kind==='spot'?'spot':'contour'} · ${sel.layer==='ex'?'existing':'proposed'}${sel.page?` · sheet ${sel.page}`:''}</div>
     <label class="f">Elevation<input type="number" step="any" class="field" id="tk-selev" data-tksel="elev" value="${esc(sel.elev)}"></label>
     <div class="adders"><button class="btn sm" data-act="tk-selflip">Move to ${sel.layer==='ex'?'proposed':'existing'}</button><button class="btn sm danger" data-act="tk-seldel">Delete</button></div></div>`:''}
@@ -3341,20 +3354,23 @@ function tkView(){return `<div class="tk-wrap"><div class="tk-bar" id="tk-bar"><
   <aside class="tk-side" id="tk-side"></aside></div></div>`}
 function tkLinesNeedingScale(){const t=S.tk;return [...new Set(t.lines.filter(l=>l.page&&!tkScaled(l.page)).map(l=>l.page))]}
 
+const PDFJS_V='5.7.284';const PDFJS_ESM=[`https://cdn.jsdelivr.net/npm/pdfjs-dist@${PDFJS_V}/legacy/build/`,`https://unpkg.com/pdfjs-dist@${PDFJS_V}/legacy/build/`];
 const PDFJS_SRC=[PDFJS,'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/','https://unpkg.com/pdfjs-dist@3.11.174/build/'];let PDFJSP=null;
-function tkPdfLib(){return PDFJSP||(PDFJSP=new Promise((res,rej)=>{if(window.pdfjsLib)return res(window.pdfjsLib);
-  const tryAt=i=>{if(i>=PDFJS_SRC.length){PDFJSP=null;return rej(new Error('Couldn’t load the PDF reader. Check your connection, or save the sheet as a PNG or JPG and upload that.'))}
-    const base=PDFJS_SRC[i];const sc=document.createElement('script');sc.src=base+'pdf.min.js';sc.onload=()=>{if(!window.pdfjsLib){tryAt(i+1);return}window.pdfjsLib.GlobalWorkerOptions.workerSrc=base+'pdf.worker.min.js';res(window.pdfjsLib)};sc.onerror=()=>{sc.remove();tryAt(i+1)};document.head.appendChild(sc)};tryAt(0)}))}
+function tkPdfLib(){return PDFJSP||(PDFJSP=(async()=>{if(window.pdfjsLib)return window.pdfjsLib;
+  for(const base of PDFJS_ESM){try{const m=await import(base+'pdf.min.mjs');m.GlobalWorkerOptions.workerSrc=base+'pdf.worker.min.mjs';window.pdfjsLib=m;return m}catch(e){console.warn('pdf.js',base,e)}}
+  return await new Promise((res,rej)=>{const tryAt=i=>{if(i>=PDFJS_SRC.length){PDFJSP=null;return rej(new Error('Couldn’t load the PDF reader. Check your connection, or save the sheet as a PNG or JPG and upload that.'))}
+    const base=PDFJS_SRC[i];const sc=document.createElement('script');sc.src=base+'pdf.min.js';sc.onload=()=>{if(!window.pdfjsLib){tryAt(i+1);return}window.pdfjsLib.GlobalWorkerOptions.workerSrc=base+'pdf.worker.min.js';res(window.pdfjsLib)};sc.onerror=()=>{sc.remove();tryAt(i+1)};document.head.appendChild(sc)};tryAt(0)})})().catch(e=>{PDFJSP=null;throw e}))}
 
 // pointer / wheel / key handling for the canvas
 (function(){let drag=null;
-  document.addEventListener('pointerdown',e=>{if(e.target.id!=='tk-canvas')return;e.target.focus({preventScroll:true});drag={x:e.clientX,y:e.clientY,ox:S.tk.view.ox,oy:S.tk.view.oy,moved:false,btn:e.button};e.target.setPointerCapture(e.pointerId)});
+  document.addEventListener('pointerdown',e=>{if(e.target.id!=='tk-canvas')return;e.target.focus({preventScroll:true});drag={x:e.clientX,y:e.clientY,ox:S.tk.view.ox,oy:S.tk.view.oy,moved:false,btn:e.button,box:e.shiftKey&&e.button===0&&S.tk.tool==='pick'?tkToPlan(e):null};e.target.setPointerCapture(e.pointerId)});
+  document.addEventListener('mouseover',e=>{const g=e.target.closest?.('[data-vg]');const v=g?+g.dataset.vg:null;if(S.tk.vecHi!==v&&(g||S.tk.vecHi!=null)){S.tk.vecHi=v;tkDraw()}});
   document.addEventListener('pointermove',e=>{if(e.target.id!=='tk-canvas'&&!drag)return;const t=S.tk;if(!t.view)return;
-    if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>4)drag.moved=true;if(drag.moved){t.view.ox=drag.ox+dx;t.view.oy=drag.oy+dy;tkDraw()}return}
+    if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>4)drag.moved=true;if(drag.moved){if(drag.box){t.box=[drag.box,tkToPlan(e)]}else{t.view.ox=drag.ox+dx;t.view.oy=drag.oy+dy}tkDraw()}return}
     const p=tkToPlan(e);t.hover=p;t.hoverText=(t.lines.length||(t.surfaces||[]).length)&&!t.cur.length&&t.tool!=='align'?tkHoverText(p):'';const h=$('#tk-hint');if(h&&t.hoverText)h.textContent=t.hoverText;if(t.cur.length)tkDraw()});
   let rightMoved=false;
   const rightEnd=()=>{const t=S.tk;if(t.cur.length&&!t.pending)tkFinish()};
-  document.addEventListener('pointerup',e=>{if(!drag)return;const d=drag;drag=null;if(d.btn===2){rightMoved=d.moved;if(d.ctx&&!d.moved)rightEnd();return}if(!d.moved&&d.btn===0&&e.target.id==='tk-canvas')tkClick(tkToPlan(e))});
+  document.addEventListener('pointerup',e=>{if(!drag)return;const d=drag;drag=null;if(d.box){const b=S.tk.box;S.tk.box=null;if(d.moved&&b)tkVecBox(b[0],b[1]);else if(!d.moved)tkVecPick(tkToPlan(e),true);tkDraw();return}if(d.btn===2){rightMoved=d.moved;if(d.ctx&&!d.moved)rightEnd();return}if(!d.moved&&d.btn===0&&e.target.id==='tk-canvas')tkClick(tkToPlan(e))});
   // right-click ends the line. Some systems fire this on press (wait for release to tell a click from a drag), others after release.
   document.addEventListener('contextmenu',e=>{if(e.target.id!=='tk-canvas')return;e.preventDefault();if(drag&&drag.btn===2){drag.ctx=true;return}if(rightMoved){rightMoved=false;return}rightEnd()});
   document.addEventListener('dblclick',e=>{if(e.target.id!=='tk-canvas')return;const t=S.tk;if(t.cur.length>1){const a=t.cur[t.cur.length-1],b=t.cur[t.cur.length-2];if(Math.hypot(a[0]-b[0],a[1]-b[1])<6/t.view.z)t.cur.pop()}tkFinish()});
@@ -3453,6 +3469,139 @@ function tkImpApply(){
   closeModal();tkSave();t.view=null;tkMount();setTimeout(()=>{tkFit(true);tkDraw()},0);toast(`Imported ${[nS?nS+' surface'+(nS===1?'':'s'):'',nL?nL+' lines / points':''].filter(Boolean).join(' and ')}`);
 }
 
+
+/* ---- Vectorize: pull stroked line work out of a PDF sheet, grouped by CAD layer (when the PDF has them)
+   or by line style, so whole groups of contours can be sent to Existing or Proposed at once.
+   Works with pdf.js v3 (separate path ops) and v4/v5 (paths packed into constructPath). */
+function tkMatMul(A,B){return [A[0]*B[0]+A[2]*B[1],A[1]*B[0]+A[3]*B[1],A[0]*B[2]+A[2]*B[3],A[1]*B[2]+A[3]*B[3],A[0]*B[4]+A[2]*B[5]+A[4],A[1]*B[4]+A[3]*B[5]+A[5]]}
+const tkMatApply=(m,x,y)=>[m[0]*x+m[2]*y+m[4],m[1]*x+m[3]*y+m[5]];
+const tkHex=a=>typeof a[0]==='string'?a[0]:'#'+[a[0],a[1],a[2]].map(v=>Math.max(0,Math.min(255,Math.round(v>1||a.some(x=>x>1)?v:v*255))).toString(16).padStart(2,'0')).join('');
+function tkSimplify(pts,tol){if(pts.length<3)return pts;const keep=new Uint8Array(pts.length);keep[0]=keep[pts.length-1]=1;const st=[[0,pts.length-1]];
+  while(st.length){const [a,b]=st.pop();let md=0,mi=-1;for(let i=a+1;i<b;i++){const d=tkSegDist(pts[i],pts[a],pts[b]);if(d>md){md=d;mi=i}}if(md>tol){keep[mi]=1;st.push([a,mi],[mi,b])}}
+  return pts.filter((_,i)=>keep[i])}
+const tkPolyLen=pts=>{let L=0;for(let i=1;i<pts.length;i++)L+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]);return L};
+const tkVKey=pts=>{const a=pts[0],b=pts[pts.length-1];const k=p=>Math.round(p[0])+','+Math.round(p[1]);return [k(a),k(b)].sort().join('|')+'|'+Math.round(tkPolyLen(pts))};
+async function tkVectorize(n){
+  const t=S.tk;if(!t.pdf){toast('Vectorize works on PDF sheets.');return}
+  t.vecBusy=true;tkUI();
+  try{const lib=await tkPdfLib();const O=lib.OPS;const page=await t.pdf.getPage(n);const vp=page.getViewport({scale:1});
+    const ol=await page.getOperatorList();let cfg=null;try{cfg=await t.pdf.getOptionalContentConfig()}catch(e){}
+    const ocName=p=>{if(!p)return null;const id=p.id||(Array.isArray(p.ids)?p.ids[0]:null);if(!id||!cfg)return null;try{return cfg.getGroup(id)?.name||null}catch(e){return null}};
+    let ctm=[...vp.transform],stroke='#000000',lw=1,dash=false;const stack=[],mc=[];let pending=[];
+    const STROKE=new Set([O.stroke,O.closeStroke,O.fillStroke,O.eoFillStroke,O.closeFillStroke,O.closeEOFillStroke].filter(x=>x!=null));
+    const raw=new Map();  // style key → {info, segs:[pts]}
+    const emit=(subs,closeAll)=>{if(!subs.length)return;const sc=Math.sqrt(Math.abs(ctm[0]*ctm[3]-ctm[1]*ctm[2]))||1;const w=Math.round(lw*sc*20)/20;const layer=mc.filter(Boolean).pop()||'';
+      const key=layer+'|'+stroke+'|'+w+'|'+(dash?1:0);let g=raw.get(key);if(!g){g={layer,color:stroke,width:w,dash,segs:[]};raw.set(key,g)}
+      subs.forEach(s=>{if(closeAll&&s.length>2)s.push(s[0]);if(s.length>1)g.segs.push(s)})};
+    // user-space path → page points (already through the CTM)
+    const flat=(p0,c1,c2,p3,steps=8)=>{const out=[];for(let k=1;k<=steps;k++){const u=k/steps,v=1-u;out.push([v*v*v*p0[0]+3*v*v*u*c1[0]+3*v*u*u*c2[0]+u*u*u*p3[0],v*v*v*p0[1]+3*v*v*u*c1[1]+3*v*u*u*c2[1]+u*u*u*p3[1]])}return out};
+    const P=(x,y)=>tkMatApply(ctm,x,y);
+    const parseV5=data=>{const subs=[];let cur=null,start=null,last=null;for(let i=0;i<data.length;){const op=data[i++];
+        if(op===0){last=[data[i++],data[i++]];start=last;cur=[P(...last)];subs.push(cur)}
+        else if(op===1){last=[data[i++],data[i++]];if(!cur){cur=[P(...last)];subs.push(cur)}else cur.push(P(...last))}
+        else if(op===2){const c1=[data[i++],data[i++]],c2=[data[i++],data[i++]],p3=[data[i++],data[i++]];if(cur&&last)flat(last,c1,c2,p3).forEach(q=>cur.push(P(...q)));last=p3}
+        else if(op===3){const c=[data[i++],data[i++]],p3=[data[i++],data[i++]];if(cur&&last){const c1=[last[0]+2/3*(c[0]-last[0]),last[1]+2/3*(c[1]-last[1])],c2=[p3[0]+2/3*(c[0]-p3[0]),p3[1]+2/3*(c[1]-p3[1])];flat(last,c1,c2,p3).forEach(q=>cur.push(P(...q)))}last=p3}
+        else if(op===4){if(cur&&start){cur.push(P(...start));last=start;cur=null}}
+        else break}return subs};
+    const parseV3=(ops,args)=>{let j=0;let cur=pending.length?pending[pending.length-1]:null,last=cur?._last,start=cur?._start;
+      for(const op of ops){
+        if(op===O.moveTo){last=[args[j++],args[j++]];start=last;cur=[P(...last)];cur._start=start;pending.push(cur)}
+        else if(op===O.lineTo){last=[args[j++],args[j++]];if(!cur){cur=[P(...last)];pending.push(cur)}else cur.push(P(...last))}
+        else if(op===O.curveTo){const c1=[args[j++],args[j++]],c2=[args[j++],args[j++]],p3=[args[j++],args[j++]];if(cur&&last)flat(last,c1,c2,p3).forEach(q=>cur.push(P(...q)));last=p3}
+        else if(op===O.curveTo2){const c2=[args[j++],args[j++]],p3=[args[j++],args[j++]];if(cur&&last)flat(last,last,c2,p3).forEach(q=>cur.push(P(...q)));last=p3}
+        else if(op===O.curveTo3){const c1=[args[j++],args[j++]],p3=[args[j++],args[j++]];if(cur&&last)flat(last,c1,p3,p3).forEach(q=>cur.push(P(...q)));last=p3}
+        else if(op===O.rectangle){const x=args[j++],y=args[j++],w=args[j++],h=args[j++];cur=[P(x,y),P(x+w,y),P(x+w,y+h),P(x,y+h),P(x,y)];pending.push(cur);last=[x,y];start=last;cur=null}
+        else if(op===O.closePath){if(cur&&start){cur.push(P(...start));last=start}}
+        if(cur){cur._last=last;cur._start=start}}};
+    const F=ol.fnArray,A=ol.argsArray;
+    for(let i=0;i<F.length;i++){const fn=F[i],a=A[i];
+      switch(fn){
+        case O.save:stack.push([ctm,stroke,lw,dash]);break;
+        case O.restore:if(stack.length)[ctm,stroke,lw,dash]=stack.pop();break;
+        case O.transform:ctm=tkMatMul(ctm,a);break;
+        case O.paintFormXObjectBegin:stack.push([ctm,stroke,lw,dash]);if(Array.isArray(a[0])||ArrayBuffer.isView(a[0]))ctm=tkMatMul(ctm,Array.from(a[0]));break;
+        case O.paintFormXObjectEnd:if(stack.length)[ctm,stroke,lw,dash]=stack.pop();break;
+        case O.setStrokeRGBColor:stroke=tkHex(a);break;
+        case O.setLineWidth:lw=a[0];break;
+        case O.setDash:dash=!!(a[0]&&a[0].length);break;
+        case O.setGState:(a[0]||[]).forEach(([k,v])=>{if(k==='LW')lw=v;if(k==='D')dash=!!(v&&v[0]&&v[0].length)});break;
+        case O.beginMarkedContentProps:mc.push(a[0]==='OC'?ocName(a[1]):null);break;
+        case O.beginMarkedContent:mc.push(null);break;
+        case O.endMarkedContent:mc.pop();break;
+        case O.constructPath:
+          if(typeof a[0]==='number'&&Array.isArray(a[1])&&(a[1][0]==null||ArrayBuffer.isView(a[1][0])||Array.isArray(a[1][0]))&&!Array.isArray(a[0])){
+            const subs=a[1][0]?parseV5(a[1][0]):[];if(STROKE.has(a[0]))emit(subs,a[0]===O.closeStroke||a[0]===O.closeFillStroke||a[0]===O.closeEOFillStroke)}
+          else parseV3(a[0],a[1]);
+          break;
+        default:
+          if(STROKE.has(fn)){emit(pending,fn===O.closeStroke||fn===O.closeFillStroke||fn===O.closeEOFillStroke);pending=[]}
+          else if(fn===O.endPath||fn===O.fill||fn===O.eoFill)pending=[];
+      }
+    }
+    // join pieces that meet end to end (CAD exports often break contours into short segments), then simplify
+    const groups=[],paths=[];const used=new Set(t.lines.filter(l=>l.page===n&&l.vkey).map(l=>l.vkey));
+    [...raw.values()].forEach((g,gi)=>{const segs=g.segs;const key=p=>Math.round(p[0]*2)+','+Math.round(p[1]*2);const ends=new Map();const add=(k,i)=>{let a=ends.get(k);if(!a)ends.set(k,a=[]);a.push(i)};
+      segs.forEach((s,i)=>{add(key(s[0]),i);add(key(s[s.length-1]),i)});const done=new Uint8Array(segs.length);
+      const take=(k,self)=>{const a=ends.get(k);if(!a)return -1;for(const j of a)if(!done[j]&&j!==self)return j;return -1};
+      const chains=[];for(let i=0;i<segs.length;i++){if(done[i])continue;done[i]=1;let line=segs[i].slice();
+        for(let dir=0;dir<2;dir++){for(let guard=0;guard<5000;guard++){const endK=key(line[line.length-1]);if(endK===key(line[0])&&line.length>2)break;const j=take(endK,i);if(j<0)break;done[j]=1;let s=segs[j];if(key(s[0])!==endK)s=s.slice().reverse();line=line.concat(s.slice(1))}line.reverse()}
+        chains.push(line)}
+      // bridge small gaps (dashed linetypes are often exported as separate short strokes): join ends within ~4 pt that keep going the same way
+      const GAP=4;for(let pass=0;pass<3;pass++){let merged=0;const cellK=p=>Math.floor(p[0]/GAP)+','+Math.floor(p[1]/GAP);const E=new Map();
+        chains.forEach((c,ci)=>{if(!c)return;[0,1].forEach(end=>{const q=end?c[c.length-1]:c[0];const k=cellK(q);let a=E.get(k);if(!a)E.set(k,a=[]);a.push([ci,end])})});
+        const dirAt=(c,end)=>{const a=end?c[c.length-1]:c[0];let b=null;for(let k=1;k<c.length;k++){const q=end?c[c.length-1-k]:c[k];if(Math.hypot(q[0]-a[0],q[1]-a[1])>1){b=q;break}}if(!b)return null;const L=Math.hypot(a[0]-b[0],a[1]-b[1]);return [(a[0]-b[0])/L,(a[1]-b[1])/L]};
+        for(let ci=0;ci<chains.length;ci++){let c=chains[ci];if(!c)continue;for(let guard=0;guard<2000;guard++){const q=c[c.length-1];const d0=dirAt(c,1);if(!d0)break;const [cx,cy]=[Math.floor(q[0]/GAP),Math.floor(q[1]/GAP)];let best=null,bd=GAP;
+            for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++)(E.get((cx+di)+','+(cy+dj))||[]).forEach(([cj,end])=>{if(cj===ci||!chains[cj])return;const o=chains[cj];const r=end?o[o.length-1]:o[0];const dx=r[0]-q[0],dy=r[1]-q[1];const d=Math.hypot(dx,dy);if(d>=bd||d<1e-9&&false)return;
+              if(d>0.3&&(dx*d0[0]+dy*d0[1])/d<0.8)return;const d1=dirAt(o,end);if(d1&&(d0[0]*-d1[0]+d0[1]*-d1[1])<0.8)return;bd=d;best=[cj,end]});
+            if(!best)break;const [cj,end]=best;let o=chains[cj];chains[cj]=null;if(end)o=o.slice().reverse();c=c.concat(o);merged++}
+          chains[ci]=c}if(!merged)break}
+      chains.forEach(line=>{if(!line)return;line=tkSimplify(line,0.2);if(tkPolyLen(line)<6)return;const vkey=tkVKey(line);
+        paths.push({g:gi,pts:line,used:used.has(vkey),vkey,bb:[Math.min(...line.map(p=>p[0])),Math.min(...line.map(p=>p[1])),Math.max(...line.map(p=>p[0])),Math.max(...line.map(p=>p[1]))]})});
+      groups[gi]={id:gi,layer:g.layer,color:g.color,width:g.width,dash:g.dash,hidden:false}});
+    groups.forEach(g=>{const ps=paths.filter(p=>p.g===g.id);g.count=ps.length;g.len=ps.reduce((s,p)=>s+tkPolyLen(p.pts),0)});
+    // numeric text on the sheet — contour labels, used to fill in elevations
+    const labels=[];try{const tc=await page.getTextContent();tc.items.forEach(it=>{const s=String(it.str||'').trim().replace(/,/g,'');if(!/^-?\d{1,5}(\.\d{1,2})?$/.test(s))return;const m=it.transform;const ang=Math.atan2(m[1],m[0]);const h=Math.hypot(m[2],m[3])||it.height||8;const w=it.width||h*s.length*0.5;
+      const cx=m[4]+Math.cos(ang)*w/2-Math.sin(ang)*h*0.35,cy=m[5]+Math.sin(ang)*w/2+Math.cos(ang)*h*0.35;const [x,y]=tkMatApply(vp.transform,cx,cy);labels.push({x,y,v:+s})})}catch(e){}
+    t.vec=t.vec||{};t.vec[n]={groups:groups.filter(g=>g.count),paths,labels};t.vecSel=new Set();t.showVec=true;
+    const nn=paths.filter(p=>!p.used).length;toast(nn?`Found ${fmtN(nn,0)} lines in ${t.vec[n].groups.length} groups${groups.some(g=>g.layer)?' (by CAD layer)':' (by line style)'}${labels.length?` and ${fmtN(labels.length,0)} number labels`:''}. Send whole groups to Existing / Proposed, or pick lines.`:'No line work found on this sheet — it may be a scanned image. Trace it by hand instead.');
+    if(nn)t.tool='pick';
+  }catch(e){toast(errMsg(e))}finally{t.vecBusy=false;tkDraw();tkUI()}
+}
+const tkVec=()=>S.tk.vec?.[S.tk.page]||null;
+function tkVecPick(p,add){const t=S.tk,V=tkVec();if(!V)return;const sh=tkSheet(t.page);const q=tkP(sh,p);const tol=8/(t.view.z*(sh?.ftpu||1));let best=-1,bd=Infinity;
+  V.paths.forEach((P,i)=>{if(P.used||V.groups.find(g=>g.id===P.g)?.hidden)return;const b=P.bb;if(q[0]<b[0]-tol||q[0]>b[2]+tol||q[1]<b[1]-tol||q[1]>b[3]+tol)return;for(let k=1;k<P.pts.length;k++){const d=tkSegDist(q,P.pts[k-1],P.pts[k]);if(d<bd){bd=d;best=i}}});
+  if(best>=0&&bd<=tol){if(t.vecSel.has(best))t.vecSel.delete(best);else t.vecSel.add(best)}else if(!add)t.vecSel.clear();tkDraw();tkUI()}
+function tkVecBox(a,b){const t=S.tk,V=tkVec();if(!V)return;const sh=tkSheet(t.page);const c=[a,[b[0],a[1]],b,[a[0],b[1]]].map(p=>tkP(sh,p));const x0=Math.min(...c.map(p=>p[0])),x1=Math.max(...c.map(p=>p[0])),y0=Math.min(...c.map(p=>p[1])),y1=Math.max(...c.map(p=>p[1]));
+  V.paths.forEach((P,i)=>{if(P.used||V.groups.find(g=>g.id===P.g)?.hidden)return;const bb=P.bb;if(bb[0]>=x0&&bb[2]<=x1&&bb[1]>=y0&&bb[3]<=y1)t.vecSel.add(i)});tkDraw();tkUI()}
+// send paths to a layer; fill elevations from nearby number labels on the sheet
+function tkVecAssign(idxs,layer){const t=S.tk,V=tkVec();if(!V||!idxs.length)return;const sh=tkSheet(t.page);if(!tkScaled(t.page)){toast('Set the scale on this sheet first.');return}
+  const pick=new Set(idxs.filter(i=>!V.paths[i].used));const lines=[...pick].map(i=>V.paths[i]);
+  // each label belongs to the nearest line of ANY kind on the sheet; it only counts if that line is one being sent
+  const cell=20,grid=new Map();V.paths.forEach((P,pi)=>{for(let k=1;k<P.pts.length;k++){const a=P.pts[k-1],b=P.pts[k];const i0=Math.floor(Math.min(a[0],b[0])/cell),i1=Math.floor(Math.max(a[0],b[0])/cell),j0=Math.floor(Math.min(a[1],b[1])/cell),j1=Math.floor(Math.max(a[1],b[1])/cell);
+    if((i1-i0+1)*(j1-j0+1)>400)continue;for(let i=i0;i<=i1;i++)for(let j=j0;j<=j1;j++){const key=i+','+j;let arr=grid.get(key);if(!arr)grid.set(key,arr=[]);arr.push([pi,k])}}});
+  const votes=new Map();
+  V.labels.forEach(L=>{const i=Math.floor(L.x/cell),j=Math.floor(L.y/cell);let best=-1,bd=12;for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++)(grid.get((i+di)+','+(j+dj))||[]).forEach(([pi,k])=>{const P=V.paths[pi];const d=tkSegDist([L.x,L.y],P.pts[k-1],P.pts[k]);if(d<bd){bd=d;best=pi}});
+    if(best>=0&&pick.has(best)){let m=votes.get(best);if(!m)votes.set(best,m=new Map());m.set(L.v,(m.get(L.v)||0)+1/(bd+1))}});
+  let labeled=0;[...pick].forEach(pi=>{const P=V.paths[pi];const m=votes.get(pi)||new Map();let elev=null;if(m.size){elev=[...m.entries()].sort((a,b)=>b[1]-a[1])[0][0];labeled++}
+    t.lines.push({id:newId(),layer,kind:'line',pts:P.pts.map(p=>tkW(sh,p)),elev,page:t.page,src:'vector',vkey:P.vkey});P.used=true});
+  t.vecSel.clear();tkSave();tkDraw();tkUI();
+  const miss=lines.length-labeled;toast(`Sent ${fmtN(lines.length,0)} lines to ${layer==='ex'?'Existing':'Proposed'}.${labeled?` ${fmtN(labeled,0)} picked up elevations from labels on the sheet.`:''}${miss?` ${fmtN(miss,0)} still need an elevation — they show in red; use the Elevation tool or “Next missing”.`:''}`)}
+function tkNextMissing(){const t=S.tk;const xs=t.lines.filter(l=>l.kind!=='spot'&&!tkHasElev(l));if(!xs.length){toast('Every line has an elevation.');return}
+  const l=xs.find(x=>x.page===t.page)||xs[0];if(l.page&&l.page!==t.page){tkGoPage(l.page).then(()=>tkNextMissing());return}
+  const xsP=l.pts.map(p=>p[0]),ysP=l.pts.map(p=>p[1]);const c=$('#tk-canvas');const W=c.clientWidth,H=c.clientHeight;const bx=Math.min(...xsP),by=Math.min(...ysP),bw=Math.max(...xsP)-bx||20,bh=Math.max(...ysP)-by||20;
+  const z=Math.min(W/bw,H/bh)*0.6;t.view={z,ox:(W-bw*z)/2-bx*z,oy:(H-bh*z)/2-by*z};t.sel=l.id;t.tool='elev';t.layer=l.layer;tkAskRelabel(l);tkDraw()}
+function tkAskRelabel(l){const t=S.tk;t.sel=l.id;const def=tkHasElev(l)?l.elev:(t.lastRelabel!=null?+(t.lastRelabel+(+t.interval||1)*t.dir).toFixed(2):'');t.pending={type:'relabel',id:l.id,def,kind:l.kind};tkUI();tkDraw();setTimeout(()=>{const n=$('#tk-pv');if(n){n.focus();n.select()}},0)}
+
+function tkVecCard(){const t=S.tk,V=tkVec();if(!V)return '';const left=V.paths.filter(p=>!p.used);const gs=V.groups.map(g=>({...g,n:left.filter(p=>p.g===g.id).length})).filter(g=>g.n).sort((a,b)=>b.len-a.len);
+  const nm=g=>g.layer||`${g.dash?'Dashed':'Solid'} ${g.width} pt`;
+  return `<div class="tk-card"><div class="tk-h">Vector lines — sheet ${t.page}</div>
+    <label class="mh-use"><input type="checkbox" data-tkset="showVec"${t.showVec!==false?' checked':''}> Show vector lines</label>
+    ${t.vecSel.size?`<div class="tk-vsel"><b>${t.vecSel.size} selected</b><div class="adders"><button class="btn sm tk-ex" data-act="tk-vassign" data-v="ex">→ Existing</button><button class="btn sm tk-pr" data-act="tk-vassign" data-v="pr">→ Proposed</button><button class="btn sm ghost" data-act="tk-vclear">Clear</button></div></div>`
+      :`<p class="hint" style="margin:6px 0">Use <b>Pick</b> to click lines (Shift-drag to box-select), or send a whole group below. Hover a group to see it on the sheet.</p>`}
+    <div class="tk-vgroups">${gs.map(g=>`<div class="tk-vg${g.hidden?' off':''}" data-vg="${g.id}"><span class="tk-sw" style="background:${esc(g.color)}${g.dash?';background-image:repeating-linear-gradient(90deg,transparent 0 3px,var(--surface) 3px 5px)':''}"></span>
+      <div class="tk-vgn"><button class="linkish-sm" data-act="tk-vgsel" data-g="${g.id}" title="Select every line in this group">${esc(nm(g))}</button><div class="dim small">${g.layer?`${g.dash?'dashed · ':''}${g.width} pt · `:''}${fmtN(g.n,0)} line${g.n===1?'':'s'}</div></div>
+      <div class="tk-vga"><button class="btn sm tk-ex" data-act="tk-vgassign" data-g="${g.id}" data-v="ex" title="All to Existing">EX</button><button class="btn sm tk-pr" data-act="tk-vgassign" data-g="${g.id}" data-v="pr" title="All to Proposed">PR</button><button class="rm" data-act="tk-vghide" data-g="${g.id}" title="${g.hidden?'Show':'Hide'} this group">${g.hidden?'◌':'●'}</button></div></div>`).join('')||'<div class="dim small">Every line on this sheet has been assigned.</div>'}</div>
+    ${V.labels.length?`<p class="hint">${fmtN(V.labels.length,0)} number labels found — lines near a label get its elevation automatically.</p>`:'<p class="hint">No text labels found on this sheet, so elevations will need to be typed in (Elevation tool).</p>'}</div>`}
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;
@@ -3560,6 +3709,13 @@ document.addEventListener('click',e=>{
     case 'tk-sheetreset':{const k=S.tk;const sh=tkSheet(k.page);if(sh){const old={...sh};const n={...sh,rot:0,tx:0,ty:0,placed:!Object.keys(k.sheets).some(x=>+x!==k.page&&tkScaled(+x))};tkReplace(k.page,old,n);tkSave();k.view=null;tkFit();tkDraw();tkUI()}break}
     case 'tk-layer':S.tk.layer=t.dataset.v;tkPersist();tkUI();break;
     case 'tk-finish':tkFinish();break;
+    case 'tk-vectorize':tkVectorize(S.tk.page);break;
+    case 'tk-vassign':tkVecAssign([...S.tk.vecSel],t.dataset.v);break;
+    case 'tk-vclear':S.tk.vecSel.clear();tkDraw();tkUI();break;
+    case 'tk-vgsel':{const V=tkVec();if(V){V.paths.forEach((P,i)=>{if(!P.used&&P.g===+t.dataset.g)S.tk.vecSel.add(i)});S.tk.tool='pick';tkDraw();tkUI()}break}
+    case 'tk-vgassign':{const V=tkVec();if(V)tkVecAssign(V.paths.map((P,i)=>P.g===+t.dataset.g&&!P.used?i:-1).filter(i=>i>=0),t.dataset.v);break}
+    case 'tk-vghide':{const V=tkVec();const g=V&&V.groups.find(x=>x.id===+t.dataset.g);if(g){g.hidden=!g.hidden;S.tk.vecSel.forEach(i=>{if(V.paths[i].g===g.id)S.tk.vecSel.delete(i)});tkDraw();tkUI()}break}
+    case 'tk-nextmissing':S.tk.chain=true;tkNextMissing();break;
     case 'tkimp-go':tkImpApply();break;
     case 'tk-surfdel':{const k=S.tk;k.surfaces=(k.surfaces||[]).filter(x=>x.id!==t.dataset.id);tkSave();tkDraw();tkUI();break}
     case 'tk-undo':{const k=S.tk;if(k.pending)tkCancel();else if(k.cur.length){k.cur.pop();tkDraw();tkUI()}else if(k.lines.length){k.lines.pop();k.sel=null;tkSave();tkDraw();tkUI()}break}
@@ -3700,7 +3856,8 @@ document.addEventListener('change',e=>{
   if(M&&t.dataset.incl){M.plan.include[t.dataset.incl]=t.checked;renderModal();return}
   if(t.dataset.adupload!=null){uploadAddendum(+t.dataset.adupload,t.files[0]);return}
   if(M&&t.dataset.ad&&/priced|acknowledged|date/.test(t.dataset.ad)){renderModal();return}
-  if(t.dataset.tkset){const k=S.tk,key=t.dataset.tkset;if(key==='heat'||key==='others'){k[key]=t.checked;tkPersist();if(key==='others')tkEnsureSheets();tkDraw();tkUI();return}
+  if(t.dataset.tkset){const k=S.tk,key=t.dataset.tkset;if(key==='showVec'||key==='showPlan'){k[key]=t.checked;tkDraw();return}
+    if(key==='heat'||key==='others'){k[key]=t.checked;tkPersist();if(key==='others')tkEnsureSheets();tkDraw();tkUI();return}
     if(key==='otherAlpha'){k.otherAlpha=+t.value;tkPersist();tkDraw();return}
     k[key]=t.tagName==='SELECT'?+t.value:(t.value===''?0:+t.value);const had=!!k.res;tkSave();if(had&&['strip','section','shrink','swell'].includes(key))tkCompute();else tkUI();return}
   if(t.dataset.tksel){const k=S.tk;const l=k.lines.find(x=>x.id===k.sel);if(l&&t.value!==''){l.elev=+t.value;tkSave();tkDraw();tkUI()}return}
