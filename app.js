@@ -3106,7 +3106,7 @@ S.tk=(()=>{const d=tkBlank();let s=null;try{s=JSON.parse(localStorage.getItem(TK
   Object.entries(d.sheets||{}).forEach(([k,sh])=>{if(!sh.placed&&(sh.tx||sh.ty)&&!(d.lines||[]).some(l=>l.page===+k)&&d.perimPage!==+k){sh.tx=0;sh.ty=0}});
   Object.assign(d,{vecSel:new Set(),vec:{},tool:['scale','align','pick','elev'].includes(d.tool)?'pan':d.tool||'pan',cur:[],view:null,res:null,pending:null,sel:null,ver:0,imgs:{},pdf:null,img:null,align:null});return d})();
 function tkSave(){const t=S.tk;t.res=null;t.ver++;tkPersist()}
-function tkPersist(){const t=S.tk;const keys=['v','fileName','fileKind','page','pageCount','sheets','perim','perimPage','lines','interval','dir','layer','strip','section','shrink','swell','truck','heat','others','otherAlpha','origin'];const o={};keys.forEach(k=>o[k]=t[k]);
+function tkPersist(){const t=S.tk;const keys=['v','fileName','fileKind','page','pageCount','sheets','perim','perimPage','lines','interval','dir','layer','strip','section','shrink','swell','truck','heat','others','otherAlpha','origin','method'];const o={};keys.forEach(k=>o[k]=t[k]);
   const surf=(t.surfaces||[]).map(x=>({id:x.id,name:x.name,layer:x.layer,pts:Array.from(x.pts),tris:Array.from(x.tris)}));
   try{localStorage.setItem(TK_KEY,JSON.stringify({...o,surfaces:surf}));t.surfNotSaved=false}catch(e){try{localStorage.setItem(TK_KEY,JSON.stringify(o));t.surfNotSaved=surf.length>0}catch(_){}}}
 // ---- sheets
@@ -3147,9 +3147,26 @@ function tkSamples(layer,step){
   pads.sort((a,b)=>tkPolyArea(a.pts)-tkPolyArea(b.pts));
   return {x:Float64Array.from(xs),y:Float64Array.from(ys),zi,el,pads,n:xs.length,tins:tkSurf(layer)}
 }
+// Delaunay triangulation (Bowyer–Watson) of the traced points — the same kind of TIN AGTEK and Civil 3D build from contours
+function tkDelaunay(X,Y){const n=X.length;if(n<3)return new Uint32Array(0);let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;for(let i=0;i<n;i++){x0=Math.min(x0,X[i]);x1=Math.max(x1,X[i]);y0=Math.min(y0,Y[i]);y1=Math.max(y1,Y[i])}
+  const d=Math.max(x1-x0,y1-y0)||1,mx=(x0+x1)/2,my=(y0+y1)/2;const PX=Float64Array.from([...X,mx-20*d,mx,mx+20*d]),PY=Float64Array.from([...Y,my-d,my+20*d,my-d]);
+  const mk=(a,b,c)=>{const ax=PX[a],ay=PY[a],bx=PX[b],by=PY[b],cx=PX[c],cy=PY[c];const D=2*(ax*(by-cy)+bx*(cy-ay)+cx*(ay-by));if(Math.abs(D)<1e-12)return {a,b,c,x:0,y:0,r:Infinity};
+    const a2=ax*ax+ay*ay,b2=bx*bx+by*by,c2=cx*cx+cy*cy;const ux=(a2*(by-cy)+b2*(cy-ay)+c2*(ay-by))/D,uy=(a2*(cx-bx)+b2*(ax-cx)+c2*(bx-ax))/D;return {a,b,c,x:ux,y:uy,r:(ax-ux)**2+(ay-uy)**2}};
+  let tris=[mk(n,n+1,n+2)];
+  // insert in a spatially coherent order (row by row) — keeps the cavities small
+  const ord=[...Array(n).keys()].sort((i,j)=>Math.floor((Y[i]-y0)/d*40)-Math.floor((Y[j]-y0)/d*40)||(Math.floor((Y[i]-y0)/d*40)%2?X[j]-X[i]:X[i]-X[j]));
+  for(const i of ord){const px=PX[i],py=PY[i];const keep=[],edges=new Map();
+    for(const t of tris){if((px-t.x)**2+(py-t.y)**2<t.r){for(const [u,v] of [[t.a,t.b],[t.b,t.c],[t.c,t.a]]){const k=u<v?u+','+v:v+','+u;const e=edges.get(k);if(e)e.n++;else edges.set(k,{u,v,n:1})}}else keep.push(t)}
+    edges.forEach(e=>{if(e.n===1)keep.push(mk(e.u,e.v,i))});tris=keep}
+  const out=[];for(const t of tris)if(t.a<n&&t.b<n&&t.c<n)out.push(t.a,t.b,t.c);return Uint32Array.from(out)}
+function tkTinFrom(sm){if(sm._tin!==undefined)return sm._tin;const seen=new Map();const X=[],Y=[],Z=[];
+  for(let i=0;i<sm.n;i++){const k=Math.round(sm.x[i]*100)+','+Math.round(sm.y[i]*100);if(seen.has(k))continue;seen.set(k,1);X.push(sm.x[i]);Y.push(sm.y[i]);Z.push(sm.el[sm.zi[i]])}
+  if(X.length<3||new Set(Z).size<1)return sm._tin=null;const tris=tkDelaunay(X,Y);if(!tris.length)return sm._tin=null;
+  const pts=new Float64Array(X.length*3);for(let i=0;i<X.length;i++){pts[i*3]=X[i];pts[i*3+1]=Y[i];pts[i*3+2]=Z[i]}return sm._tin={pts,tris}}
 function tkZ(sm,px,py,best){
   for(const p of sm.pads)if(tkPip([px,py],p.pts))return p.elev;
   for(const s of sm.tins){const z=tinZ(s,px,py);if(isFinite(z))return z}
+  if(S.tk.method!=='smooth'&&sm.n>=3){const T=tkTinFrom(sm);if(T){const z=tinZ(T,px,py);if(isFinite(z))return z}}
   if(!sm.n)return NaN;if(sm.el.length===1)return sm.el[0];
   best.fill(Infinity);const {x,y,zi,n}=sm;
   for(let i=0;i<n;i++){const dx=x[i]-px,dy=y[i]-py,d=dx*dx+dy*dy;if(d<best[zi[i]])best[zi[i]]=d}
@@ -3157,7 +3174,7 @@ function tkZ(sm,px,py,best){
   let i2=-1;for(let i=0;i<best.length;i++)if(i!==i1&&(i2<0||best[i]<best[i2]))i2=i;
   const d1=Math.sqrt(best[i1]),d2=Math.sqrt(best[i2]);return d1+d2===0?sm.el[i1]:sm.el[i1]+(sm.el[i2]-sm.el[i1])*d1/(d1+d2);
 }
-function tkPrep(cellPx){const t=S.tk;const key=t.ver+':'+cellPx;if(t._prep&&t._prep.key===key)return t._prep;
+function tkPrep(cellPx){const t=S.tk;const key=t.ver+':'+cellPx+':'+(t.method||'tin');if(t._prep&&t._prep.key===key)return t._prep;
   const step=Math.max(cellPx/1.5,0.5);const ex=tkSamples('ex',step),pr=tkSamples('pr',step);
   return t._prep={key,ex,pr,bEx:new Float64Array(Math.max(1,ex.el.length)),bPr:new Float64Array(Math.max(1,pr.el.length))}}
 function tkRegion(){const t=S.tk;if(t.perim){const xs=t.perim.map(p=>p[0]),ys=t.perim.map(p=>p[1]);return {x0:Math.min(...xs),y0:Math.min(...ys),x1:Math.max(...xs),y1:Math.max(...ys),poly:t.perim}}
@@ -3175,7 +3192,7 @@ function tkCompute(){
     const ze0=tkZ(P.ex,px,py,P.bEx),zp0=tkZ(P.pr,px,py,P.bPr);const ze=ze0-strip,zp=zp0-sec;if(!isFinite(ze)||!isFinite(zp))continue;const d=zp-ze;dz[j*nx+i]=d;ZE[j*nx+i]=ze0;ZP[j*nx+i]=zp0;n++;
     if(d<0){cut+=-d*cA;maxC=Math.max(maxC,-d)}else{fill+=d*cA;maxF=Math.max(maxF,d)}}
   const area=n*cA;const stripCY=area*strip/27;if(!n){toast('The surfaces don’t overlap inside the perimeter.');return}
-  const cutCY=cut/27,fillCY=fill/27,need=fillCY/(1-(+t.shrink||0)/100);const net=cutCY-need;
+  const cutCY=cut/27,fillCY=fill/27,need=fillCY*(1+(+t.shrink||0)/100);const net=cutCY-need;
   t.res={x0,y0,cell,nx,ny,dz,ze:ZE,zp:ZP,cutCY,fillCY,need,net,area,stripCY,maxC,maxF,cells:n,cellFt:cell};tkUI();tkDraw();
 }
 // ---- view
@@ -3335,17 +3352,18 @@ function tkUI(){
     <div class="adders"><button class="btn sm" data-act="tk-selflip">Move to ${sel.layer==='ex'?'proposed':'existing'}</button><button class="btn sm danger" data-act="tk-seldel">Delete</button></div></div>`:''}
   <div class="tk-card"><div class="tk-h">Settings</div><div class="tk-set">
     <label class="f"><span>Contour interval <span class="dim">(ft)</span></span><input type="number" step="any" class="field" data-tkset="interval" value="${esc(t.interval)}"></label>
+    <label class="f" style="grid-column:1/-1">Surface between contours<select class="field" data-tkset="method"><option value="tin"${t.method!=='smooth'?' selected':''}>TIN — triangulated (like AGTEK)</option><option value="smooth"${t.method==='smooth'?' selected':''}>Smooth — nearest contours</option></select></label>
     <label class="f">Next contour<select class="field" data-tkset="dir"><option value="1"${t.dir>0?' selected':''}>Goes up</option><option value="-1"${t.dir<0?' selected':''}>Goes down</option></select></label>
     <label class="f"><span>Strip topsoil <span class="dim">(in)</span></span><input type="number" step="any" class="field" data-tkset="strip" value="${esc(t.strip)}"></label>
     <label class="f"><span>Subgrade below proposed <span class="dim">(in)</span></span><input type="number" step="any" class="field" data-tkset="section" value="${esc(t.section)}" title="Pavement / slab section under finished grade"></label>
-    <label class="f"><span>Shrink <span class="dim">(%)</span></span><input type="number" step="any" class="field" data-tkset="shrink" value="${esc(t.shrink)}"></label>
+    <label class="f" title="Fill × (1 + shrink) = bank yards needed — same as AGTEK’s fill Comp/Ratio (16% = 1.16)"><span>Shrink <span class="dim">(%)</span></span><input type="number" step="any" class="field" data-tkset="shrink" value="${esc(t.shrink)}"></label>
     <label class="f"><span>Swell <span class="dim">(%)</span></span><input type="number" step="any" class="field" data-tkset="swell" value="${esc(t.swell)}"></label></div></div>
   <div class="tk-card"><button class="btn primary" data-act="tk-calc" style="width:100%;justify-content:center">${r?'Recalculate':'Calculate cut / fill'}</button>
     ${r?`<div class="calc-main" style="margin-top:12px"><b>${fmtN(Math.abs(r.net),0)}</b><span>CY ${r.net>=0?'export':'import'}</span></div>
-      <div class="list">${[['Cut',fmtN(r.cutCY,0)+' CY'],['Fill (compacted)',fmtN(r.fillCY,0)+' CY'],[`Fill needs (${t.shrink}% shrink)`,fmtN(r.need,0)+' bank CY'],[r.net>=0?'Export':'Import',`${fmtN(Math.abs(r.net),0)} bank · ${fmtN(Math.abs(r.net)*(r.net>=0?1+(+t.swell||0)/100:1),0)} ${r.net>=0?'loose':'bank'} CY`],[r.net>=0?'Truck loads out':'Truck loads in',fmtN(Math.ceil(Math.abs(r.net)*(1+(+t.swell||0)/100)/(+t.truck||14)),0)+` @ ${t.truck||14} CY`],['Topsoil strip',`${fmtN(r.stripCY,0)} CY (${t.strip}″)`],['Area',`${fmtN(r.area,0)} SF · ${fmtN(r.area/43560,2)} ac`],['Deepest cut / fill',`${fmtN(r.maxC,1)}′ / ${fmtN(r.maxF,1)}′`]].map(([a,b])=>`<div class="li"><span class="dim">${a}</span><b class="num">${b}</b></div>`).join('')}</div>
+      <div class="list">${[['Cut',fmtN(r.cutCY,0)+' CY'],['Fill (compacted)',fmtN(r.fillCY,0)+' CY'],[`Fill needs (× ${fmtN(1+(+t.shrink||0)/100,2)})`,fmtN(r.need,0)+' bank CY'],[r.net>=0?'Export':'Import',`${fmtN(Math.abs(r.net),0)} bank · ${fmtN(Math.abs(r.net)*(r.net>=0?1+(+t.swell||0)/100:1),0)} ${r.net>=0?'loose':'bank'} CY`],[r.net>=0?'Truck loads out':'Truck loads in',fmtN(Math.ceil(Math.abs(r.net)*(1+(+t.swell||0)/100)/(+t.truck||14)),0)+` @ ${t.truck||14} CY`],['Topsoil strip',`${fmtN(r.stripCY,0)} CY (${t.strip}″)`],['Area',`${fmtN(r.area,0)} SF · ${fmtN(r.area/43560,2)} ac`],['Deepest cut / fill',`${fmtN(r.maxC,1)}′ / ${fmtN(r.maxF,1)}′`]].map(([a,b])=>`<div class="li"><span class="dim">${a}</span><b class="num">${b}</b></div>`).join('')}</div>
       <button class="btn sm" data-act="t3-open" style="margin-top:10px;width:100%;justify-content:center">🧊 3D view</button>
       <label class="mh-use" style="margin-top:8px"><input type="checkbox" data-tkset="heat"${t.heat?' checked':''}> Show cut / fill map <span class="tk-key"><i class="c"></i>cut <i class="f"></i>fill</span></label>
-      <p class="hint">Rough numbers from a ${fmtN(r.cellFt,1)}′ grid (${fmtN(r.cells,0)} cells).${(t.surfaces||[]).length?' TIN surfaces are read exactly; where there’s no TIN it falls back to the contours.':''} Between contours the grade is interpolated straight across; beyond the outermost contour it’s held between the last two. Trace contours past the perimeter for the best numbers.</p>`
+      <p class="hint">Rough numbers from a ${fmtN(r.cellFt,1)}′ grid (${fmtN(r.cells,0)} cells).${(t.surfaces||[]).length?' TIN surfaces are read exactly; where there’s no TIN it falls back to the contours.':''} ${t.method==='smooth'?'Between contours the grade runs straight across to the nearest contours.':'Surfaces are triangulated (TIN) from the traced points, like AGTEK; outside the TIN it falls back to the nearest contours.'} Trace contours past the perimeter for the best numbers.</p>`
       :'<p class="hint">Trace existing and proposed contours across the whole perimeter, then calculate.</p>'}</div>
   <div class="tk-card"><button class="btn sm ghost" data-act="tk-clear">${t.clearArm?'Click again to clear everything':'Clear takeoff'}</button></div>`;
 }
@@ -3881,7 +3899,7 @@ document.addEventListener('input',e=>{
   if(t.id==='pal-q'){S.pal.q=t.value;S.pal.i=0;renderPalette();return}
   if(t.dataset.t3exag!=null){T3.exag=+t.value;const v=$('#t3-exv');if(v)v.textContent=T3.exag;t3Build();t3Draw();return}
   if(t.dataset.tkset==='otherAlpha'){S.tk.otherAlpha=+t.value;tkDraw();return}
-  if(t.dataset.tkset&&t.type!=='checkbox'){S.tk[t.dataset.tkset]=t.tagName==='SELECT'?+t.value:t.value;return}
+  if(t.dataset.tkset&&t.type!=='checkbox'){if(t.tagName==='SELECT')return;S.tk[t.dataset.tkset]=t.value;return}
   if(M&&M.sup&&t.dataset.sup){M.sup.draft[t.dataset.sup]=t.value;const c=$('#sup-changes');if(c){const ch=supDiff();c.innerHTML=supChangesHtml(ch);const lg=c.closest('fieldset')?.querySelector('legend');if(lg)lg.textContent=`What will change (${ch.length})`}return}
   if(M&&M.sup&&t.dataset.supx){M.sup[t.dataset.supx]=t.value;return}
   if(M&&t.dataset.lg){logState()[t.dataset.lg]=t.value;return}
@@ -3937,7 +3955,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.tkset){const k=S.tk,key=t.dataset.tkset;if(key==='showVec'||key==='showPlan'){k[key]=t.checked;tkDraw();return}
     if(key==='heat'||key==='others'){k[key]=t.checked;tkPersist();if(key==='others')tkEnsureSheets();tkDraw();tkUI();return}
     if(key==='otherAlpha'){k.otherAlpha=+t.value;tkPersist();tkDraw();return}
-    k[key]=t.tagName==='SELECT'?+t.value:(t.value===''?0:+t.value);const had=!!k.res;tkSave();if(had&&['strip','section','shrink','swell'].includes(key))tkCompute();else tkUI();return}
+    k[key]=key==='method'?t.value:t.tagName==='SELECT'?+t.value:(t.value===''?0:+t.value);const had=!!k.res;tkSave();if(had&&['strip','section','shrink','swell','method'].includes(key))tkCompute();else tkUI();return}
   if(t.dataset.tksel){const k=S.tk;const l=k.lines.find(x=>x.id===k.sel);if(l&&t.value!==''){l.elev=+t.value;tkSave();tkDraw();tkUI()}return}
   if(t.dataset.tkimport!=null){if(t.files[0])tkImportFile(t.files[0]);t.value='';return}
   if(M&&M.kind==='tkimp'&&t.dataset.tkimp!=null){M.groups[+t.dataset.tkimp].layer=t.value;return}
