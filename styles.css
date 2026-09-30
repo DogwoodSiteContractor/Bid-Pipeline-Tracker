@@ -681,3 +681,10 @@ span.lg-file{cursor:default}
 .tk-key i{display:inline-block;width:10px;height:10px;border-radius:2px}.tk-key i.c{background:rgba(214,64,40,.55)}.tk-key i.f{background:rgba(37,102,192,.55)}
 @media (max-width:1100px){.tk-main{grid-template-columns:1fr}.tk-side{max-height:none}}
 .tk-prompt[hidden],.tk-empty[hidden]{display:none}
+.tk-surfs{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.tk-surf{display:grid;grid-template-columns:12px minmax(0,1fr) auto;gap:8px;align-items:center;font-size:13px}
+.tk-surf b{font-weight:600;overflow-wrap:anywhere}
+.tk-dot{width:10px;height:10px;border-radius:50%}.tk-dot.ex{background:var(--tk-ex)}.tk-dot.pr{background:var(--tk-pr)}
+.tkimp-row{display:grid;grid-template-columns:minmax(0,1fr) 90px 140px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.tkimp-row:last-of-type{border-bottom:0}
+.tkimp-hd{font-size:12px;font-weight:600;color:var(--ink-3);padding-top:0}

@@ -884,7 +884,7 @@ function focusKey(el){if(!el||!$('#modal')?.contains(el))return null;if(el.id)re
 function renderModal(first){
   if(!M)return;const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal}[M.kind]();
+  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='import'||M.kind==='jlog'?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -3059,10 +3059,12 @@ async function supSave(){
 const TK_KEY='bp-takeoff';const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
 const TK_TOOLS=[['pan','✋','Move','Drag to move, scroll to zoom'],['scale','📏','Scale','Click two points a known distance apart'],['perim','⬠','Perimeter','Click around the limits of work; click the first point to close'],
   ['line','〰','Contour','Click along a contour; double-click or Enter to finish'],['pad','▭','Pad','Flat area (building pad, pond bottom): click around it; click the first point to close'],['spot','✚','Spot','Click a spot elevation'],['select','➚','Select','Click a line to change its elevation or delete it']];
-function tkBlank(){return {v:1,fileName:'',imgW:0,imgH:0,page:1,pages:0,ftpx:null,scalePts:null,perim:null,lines:[],interval:1,dir:1,layer:'ex',tool:'pan',strip:6,section:0,shrink:15,swell:25,truck:14,heat:true}}
-S.tk=(()=>{const d=tkBlank();try{const s=JSON.parse(localStorage.getItem(TK_KEY)||'null');if(s)Object.assign(d,s)}catch(e){}d.tool=d.tool||'pan';d.cur=[];d.view=null;d.res=null;d.pending=null;d.sel=null;d.ver=0;return d})();
+function tkBlank(){return {v:1,space:'plan',surfaces:[],origin:null,fileName:'',imgW:0,imgH:0,page:1,pages:0,ftpx:null,scalePts:null,perim:null,lines:[],interval:1,dir:1,layer:'ex',tool:'pan',strip:6,section:0,shrink:15,swell:25,truck:14,heat:true}}
+S.tk=(()=>{const d=tkBlank();try{const s=JSON.parse(localStorage.getItem(TK_KEY)||'null');if(s)Object.assign(d,s)}catch(e){}d.surfaces=(d.surfaces||[]).map(x=>({...x,pts:Float64Array.from(x.pts||[]),tris:Uint32Array.from(x.tris||[])}));d.tool=d.tool||'pan';d.cur=[];d.view=null;d.res=null;d.pending=null;d.sel=null;d.ver=0;return d})();
 function tkSave(){const t=S.tk;t.res=null;t.ver++;tkPersist()}
-function tkPersist(){const t=S.tk;try{const {fileName,imgW,imgH,page,ftpx,scalePts,perim,lines,interval,dir,layer,strip,section,shrink,swell,truck,heat}=t;localStorage.setItem(TK_KEY,JSON.stringify({v:1,fileName,imgW,imgH,page,ftpx,scalePts,perim,lines,interval,dir,layer,strip,section,shrink,swell,truck,heat}))}catch(e){}}
+function tkPersist(){const t=S.tk;const keys=['fileName','imgW','imgH','page','ftpx','scalePts','perim','lines','interval','dir','layer','strip','section','shrink','swell','truck','heat','space','origin'];const o={v:1};keys.forEach(k=>o[k]=t[k]);
+  const surf=(t.surfaces||[]).map(x=>({id:x.id,name:x.name,layer:x.layer,pts:Array.from(x.pts),tris:Array.from(x.tris)}));
+  try{localStorage.setItem(TK_KEY,JSON.stringify({...o,surfaces:surf}));t.surfNotSaved=false}catch(e){try{localStorage.setItem(TK_KEY,JSON.stringify(o));t.surfNotSaved=surf.length>0}catch(_){}}}
 const tkLines=l=>S.tk.lines.filter(x=>x.layer===l);
 const tkLastElev=(layer,kind)=>{const xs=S.tk.lines.filter(x=>x.layer===layer&&(!kind||x.kind===kind));return xs.length?xs[xs.length-1].elev:null};
 function tkPip(p,poly){let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const [xi,yi]=poly[i],[xj,yj]=poly[j];if(((yi>p[1])!==(yj>p[1]))&&(p[0]<(xj-xi)*(p[1]-yi)/(yj-yi)+xi))c=!c}return c}
@@ -3077,10 +3079,11 @@ function tkSamples(layer,step){
     const e=pts[pts.length-1];xs.push(e[0]);ys.push(e[1]);zs.push(l.elev)});
   const el=[...new Set(zs)].sort((a,b)=>a-b);const zi=new Int32Array(zs.map(z=>el.indexOf(z)));
   pads.sort((a,b)=>tkPolyArea(a.pts)-tkPolyArea(b.pts));
-  return {x:Float64Array.from(xs),y:Float64Array.from(ys),zi,el,pads,n:xs.length}
+  return {x:Float64Array.from(xs),y:Float64Array.from(ys),zi,el,pads,n:xs.length,tins:tkSurf(layer)}
 }
 function tkZ(sm,px,py,best){
   for(const p of sm.pads)if(tkPip([px,py],p.pts))return p.elev;
+  for(const s of sm.tins){const z=tinZ(s,px,py);if(isFinite(z))return z}
   if(!sm.n)return NaN;if(sm.el.length===1)return sm.el[0];
   best.fill(Infinity);const {x,y,zi,n}=sm;
   for(let i=0;i<n;i++){const dx=x[i]-px,dy=y[i]-py,d=dx*dx+dy*dy;if(d<best[zi[i]])best[zi[i]]=d}
@@ -3091,24 +3094,27 @@ function tkZ(sm,px,py,best){
 function tkPrep(cellPx){const t=S.tk;const key=t.ver+':'+cellPx;if(t._prep&&t._prep.key===key)return t._prep;
   const step=Math.max(cellPx/1.5,0.5);const ex=tkSamples('ex',step),pr=tkSamples('pr',step);
   return t._prep={key,ex,pr,bEx:new Float64Array(Math.max(1,ex.el.length)),bPr:new Float64Array(Math.max(1,pr.el.length))}}
-function tkCellPx(){const t=S.tk;if(!t.perim)return 10;const xs=t.perim.map(p=>p[0]),ys=t.perim.map(p=>p[1]);const w=Math.max(...xs)-Math.min(...xs),h=Math.max(...ys)-Math.min(...ys);return Math.max(1,Math.sqrt(w*h/14000))}
+function tkRegion(){const t=S.tk;if(t.perim){const xs=t.perim.map(p=>p[0]),ys=t.perim.map(p=>p[1]);return {x0:Math.min(...xs),y0:Math.min(...ys),x1:Math.max(...xs),y1:Math.max(...ys),poly:t.perim}}
+  const a=tkSurfBBox('pr'),b=tkSurfBBox('ex');const r=a&&b?{x0:Math.max(a.x0,b.x0),y0:Math.max(a.y0,b.y0),x1:Math.min(a.x1,b.x1),y1:Math.min(a.y1,b.y1)}:(a||b);return r&&r.x1>r.x0&&r.y1>r.y0?{...r,poly:null}:null}
+function tkCellPx(){const r=tkRegion();if(!r)return 10;const w=r.x1-r.x0,h=r.y1-r.y0;return Math.max(S.tk.space==='world'?0.25:1,Math.sqrt(w*h/14000))}
 function tkCompute(){
   const t=S.tk;const warn=[];
-  if(!t.ftpx){toast('Set the scale first.');return}if(!t.perim){toast('Draw the perimeter first.');return}
-  if(!tkLines('ex').length||!tkLines('pr').length){toast('Trace at least one existing and one proposed contour, pad or spot.');return}
-  const cell=tkCellPx();const P=tkPrep(cell);const xs=t.perim.map(p=>p[0]),ys=t.perim.map(p=>p[1]);const x0=Math.min(...xs),y0=Math.min(...ys);
-  const nx=Math.ceil((Math.max(...xs)-x0)/cell),ny=Math.ceil((Math.max(...ys)-y0)/cell);const dz=new Float32Array(nx*ny).fill(NaN);
+  if(!t.ftpx){toast('Set the scale first.');return}
+  const has=l=>tkLines(l).length||tkSurf(l).length;if(!has('ex')||!has('pr')){toast('Add an existing and a proposed surface — trace contours, pads or spots, or import a TIN.');return}
+  const R=tkRegion();if(!R){toast(t.space==='world'?'Draw a perimeter, or import surfaces that overlap.':'Draw the perimeter first.');return}
+  const cell=tkCellPx();const P=tkPrep(cell);const x0=R.x0,y0=R.y0;
+  const nx=Math.ceil((R.x1-x0)/cell),ny=Math.ceil((R.y1-y0)/cell);const dz=new Float32Array(nx*ny).fill(NaN);
   const cA=Math.pow(cell*t.ftpx,2);const strip=(+t.strip||0)/12,sec=(+t.section||0)/12;let cut=0,fill=0,n=0,maxC=0,maxF=0;
-  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const px=x0+(i+0.5)*cell,py=y0+(j+0.5)*cell;if(!tkPip([px,py],t.perim))continue;
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const px=x0+(i+0.5)*cell,py=y0+(j+0.5)*cell;if(R.poly&&!tkPip([px,py],R.poly))continue;
     const ze=tkZ(P.ex,px,py,P.bEx)-strip,zp=tkZ(P.pr,px,py,P.bPr)-sec;if(!isFinite(ze)||!isFinite(zp))continue;const d=zp-ze;dz[j*nx+i]=d;n++;
     if(d<0){cut+=-d*cA;maxC=Math.max(maxC,-d)}else{fill+=d*cA;maxF=Math.max(maxF,d)}}
-  const area=tkPolyArea(t.perim)*t.ftpx*t.ftpx;const stripCY=area*strip/27;
+  const area=n*cA;const stripCY=area*strip/27;if(!n){toast('The surfaces don’t overlap inside the perimeter.');return}
   const cutCY=cut/27,fillCY=fill/27,need=fillCY/(1-(+t.shrink||0)/100);const net=cutCY-need;
   t.res={x0,y0,cell,nx,ny,dz,cutCY,fillCY,need,net,area,stripCY,maxC,maxF,cells:n,cellFt:cell*t.ftpx};tkUI();tkDraw();
 }
 // ---- view
 function tkFit(){const t=S.tk;const c=$('#tk-canvas');if(!c)return;const W=c.clientWidth,H=c.clientHeight;let bw=t.imgW,bh=t.imgH,bx=0,by=0;
-  if(!bw){const pts=[...(t.perim||[]),...t.lines.flatMap(l=>l.pts)];if(pts.length){const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);bx=Math.min(...xs);by=Math.min(...ys);bw=Math.max(...xs)-bx||100;bh=Math.max(...ys)-by||100}else{bw=1000;bh=700}}
+  if(!bw||t.space==='world'){bw=0;const pts=[...(t.perim||[]),...t.lines.flatMap(l=>l.pts)];[tkSurfBBox('ex'),tkSurfBBox('pr')].forEach(b=>{if(b)pts.push([b.x0,b.y0],[b.x1,b.y1])});if(pts.length){const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);bx=Math.min(...xs);by=Math.min(...ys);bw=Math.max(...xs)-bx||100;bh=Math.max(...ys)-by||100}else{bw=1000;bh=700}}
   const z=Math.min(W/bw,H/bh)*0.95;t.view={z,ox:(W-bw*z)/2-bx*z,oy:(H-bh*z)/2-by*z}}
 function tkMount(){const c=$('#tk-canvas');if(!c)return;const dpr=window.devicePixelRatio||1;c.width=Math.round(c.clientWidth*dpr);c.height=Math.round(c.clientHeight*dpr);if(!S.tk.view)tkFit();tkDraw();tkUI()}
 const tkToPlan=(e)=>{const c=$('#tk-canvas');const r=c.getBoundingClientRect();const v=S.tk.view;return [(e.clientX-r.left-v.ox)/v.z,(e.clientY-r.top-v.oy)/v.z]};
@@ -3117,7 +3123,10 @@ function tkDraw(){
   const c=$('#tk-canvas');if(!c||!S.tk.view)return;const t=S.tk,v=t.view,ctx=c.getContext('2d'),dpr=window.devicePixelRatio||1,C=tkColors();
   ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=C.bg;ctx.fillRect(0,0,c.width,c.height);
   ctx.setTransform(dpr*v.z,0,0,dpr*v.z,dpr*v.ox,dpr*v.oy);const px=1/v.z;
-  if(t.img)ctx.drawImage(t.img,0,0,t.imgW,t.imgH);else if(t.imgW){ctx.fillStyle='#fff';ctx.fillRect(0,0,t.imgW,t.imgH)}
+  if(t.space!=='world'){if(t.img)ctx.drawImage(t.img,0,0,t.imgW,t.imgH);else if(t.imgW){ctx.fillStyle='#fff';ctx.fillRect(0,0,t.imgW,t.imgH)}}
+  (t.surfaces||[]).forEach(sf=>{const P=sf.pts,T=sf.tris;const col=sf.layer==='ex'?C.ex:C.pr;
+    if(T.length/3<=40000){ctx.beginPath();for(let k=0;k<T.length;k+=3){const a=T[k]*3,b=T[k+1]*3,c=T[k+2]*3;ctx.moveTo(P[a],P[a+1]);ctx.lineTo(P[b],P[b+1]);ctx.lineTo(P[c],P[c+1]);ctx.closePath()}ctx.strokeStyle=col;ctx.globalAlpha=0.22;ctx.lineWidth=px;ctx.stroke();ctx.globalAlpha=1}
+    const E=tinEdges(sf);ctx.beginPath();for(let k=0;k<E.length;k+=2){ctx.moveTo(P[E[k]*3],P[E[k]*3+1]);ctx.lineTo(P[E[k+1]*3],P[E[k+1]*3+1])}ctx.strokeStyle=col;ctx.lineWidth=2.5*px;ctx.setLineDash(sf.layer==='ex'?[8*px,4*px]:[]);ctx.stroke();ctx.setLineDash([])});
   // cut / fill map
   if(t.res&&t.heat){const r=t.res;if(!r.heatCv)r.heatCv=tkHeat(r);ctx.imageSmoothingEnabled=false;ctx.drawImage(r.heatCv,r.x0,r.y0,r.nx*r.cell,r.ny*r.cell);ctx.imageSmoothingEnabled=true}  const path=(pts,close)=>{ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));if(close)ctx.closePath()};
   const label=(txt,x,y,col)=>{ctx.font=`600 ${12*px}px system-ui,sans-serif`;const w=ctx.measureText(txt).width;ctx.fillStyle='rgba(255,255,255,.85)';ctx.fillRect(x-w/2-3*px,y-8*px,w+6*px,15*px);ctx.fillStyle=col;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(txt,x,y)};
@@ -3137,7 +3146,7 @@ function tkHeat(r){const cv=document.createElement('canvas');cv.width=r.nx;cv.he
   for(let k=0;k<r.dz.length;k++){const d=r.dz[k];if(!isFinite(d))continue;const a=Math.min(1,Math.abs(d)/m);const o=k*4;if(d<0){im.data[o]=214;im.data[o+1]=64;im.data[o+2]=40}else{im.data[o]=37;im.data[o+1]=102;im.data[o+2]=192}im.data[o+3]=Math.round(255*(0.15+0.5*a))}
   cx.putImageData(im,0,0);return cv}
 function tkHoverText(p){const t=S.tk;if(!t.ftpx)return '';const P=tkPrep(tkCellPx());const ze=tkZ(P.ex,p[0],p[1],P.bEx),zp=tkZ(P.pr,p[0],p[1],P.bPr);
-  const parts=[];if(isFinite(ze))parts.push('Existing '+fmtE(ze));if(isFinite(zp))parts.push('Proposed '+fmtE(zp));if(isFinite(ze)&&isFinite(zp)){const d=(zp-(+t.section||0)/12)-(ze-(+t.strip||0)/12);parts.push(d<0?`Cut ${fmtN(-d,2)}′`:`Fill ${fmtN(d,2)}′`)}return parts.join(' · ')}
+  const parts=[];if(t.space==='world'&&t.origin)parts.push(`N ${fmtN(t.origin[1]-p[1],2)} · E ${fmtN(t.origin[0]+p[0],2)}`);if(isFinite(ze))parts.push('Existing '+fmtE(ze));if(isFinite(zp))parts.push('Proposed '+fmtE(zp));if(isFinite(ze)&&isFinite(zp)){const d=(zp-(+t.section||0)/12)-(ze-(+t.strip||0)/12);parts.push(d<0?`Cut ${fmtN(-d,2)}′`:`Fill ${fmtN(d,2)}′`)}return parts.join(' · ')}
 // ---- actions
 function tkClick(p){
   const t=S.tk;if(t.pending)return;
@@ -3187,18 +3196,22 @@ function tkUI(){
     ${TK_TOOLS.slice(3).map(tb).join('')}<span class="tk-sep"></span>
     <button class="btn sm" data-act="tk-finish"${t.cur.length?'':' disabled'}>Finish ↵</button><button class="btn sm ghost" data-act="tk-undo"${t.cur.length||t.lines.length?'':' disabled'} title="Undo last point or line">Undo</button><button class="btn sm ghost" data-act="tk-fit" title="Fit to screen">Fit</button>`;
   function tb([k,ic,l,tip]){return `<button class="tk-tool${t.tool===k?' on':''}${(k==='line'||k==='pad'||k==='spot')?(t.layer==='ex'?' ex':' pr'):''}" data-act="tk-tool" data-v="${k}" title="${esc(tip)}"><span aria-hidden="true">${ic}</span>${l}</button>`}
-  const em=$('#tk-empty');if(em)em.hidden=!!(t.img||t.imgW);
+  const em=$('#tk-empty');if(em)em.hidden=!!(t.img||t.imgW||t.space==='world'||t.lines.length);
   if(hint)hint.textContent=t.hoverText||(tool?tool[3]+(['line','pad','spot'].includes(t.tool)?` — ${t.layer==='ex'?'existing':'proposed'}`:''):'');
   if(pr){pr.hidden=!t.pending;if(t.pending)pr.innerHTML=t.pending.type==='scale'?`<b>Distance between those points</b><div><input type="number" step="any" class="field" id="tk-pv" placeholder="feet"> <span class="dim">ft</span> <button class="btn sm primary" data-act="tk-commit">Set scale</button> <button class="btn sm ghost" data-act="tk-cancel">Cancel</button></div>`
     :`<b>${t.pending.kind==='pad'?'Pad':t.pending.kind==='spot'?'Spot':'Contour'} elevation — ${t.layer==='ex'?'existing':'proposed'}</b><div><input type="number" step="any" class="field" id="tk-pv" value="${esc(t.pending.def)}"> <button class="btn sm primary" data-act="tk-commit">Add ↵</button> <button class="btn sm ghost" data-act="tk-cancel">Cancel</button></div>`}
   if(!side)return;const r=t.res;const sel=t.lines.find(l=>l.id===t.sel);const cnt=l=>{const xs=tkLines(l);const el=xs.map(x=>x.elev);return xs.length?`${xs.length} · ${fmtN(Math.min(...el),2)}–${fmtN(Math.max(...el),2)}`:'none yet'};
   const step=(ok,txt)=>`<li class="${ok?'done':''}">${ok?'✓':'○'} ${txt}</li>`;
-  side.innerHTML=`<div class="tk-card"><div class="tk-h">Plan</div>
-    <label class="btn sm" style="cursor:pointer">${t.loading?'Loading…':t.fileName?'Replace plan':'Upload plan (PDF or image)'}<input type="file" accept="application/pdf,image/*" data-tkfile hidden></label>
+  const surfList=(t.surfaces||[]).map(x=>`<div class="tk-surf"><span class="tk-dot ${x.layer}"></span><div><b>${esc(x.name)}</b><div class="dim small">${x.layer==='ex'?'Existing':'Proposed'} TIN · ${fmtN(x.tris.length/3,0)} triangles</div></div><button class="rm" data-act="tk-surfdel" data-id="${x.id}" aria-label="Remove surface">×</button></div>`).join('');
+  side.innerHTML=`<div class="tk-card"><div class="tk-h">${t.space==='world'?'Surfaces':'Plan'}</div>
+    ${t.space==='world'?'':`<label class="btn sm" style="cursor:pointer">${t.loading?'Loading…':t.fileName?'Replace plan':'Upload plan (PDF or image)'}<input type="file" accept="application/pdf,image/*" data-tkfile hidden></label>`}
+    <label class="btn sm" style="cursor:pointer;margin-top:6px">Import surface (LandXML / DXF)<input type="file" accept=".xml,.dxf" data-tkimport hidden></label>
+    ${surfList?`<div class="tk-surfs">${surfList}</div>`:''}${t.surfNotSaved?'<p class="hint">These surfaces are too big to remember in this browser — import them again next time.</p>':''}
+    ${t.space==='world'?'<p class="hint">Working in real coordinates (feet). Plan images can’t be lined up with surfaces yet — clear the takeoff to trace on a plan.</p>':''}
     ${t.fileName?`<div class="small dim" style="margin-top:6px;overflow-wrap:anywhere">${esc(t.fileName)}${t.pages>1?'':''}</div>`:''}
     ${t.pages>1?`<label class="f" style="margin-top:6px">Sheet<select class="field" data-tkpage>${Array.from({length:t.pages},(_,i)=>`<option value="${i+1}"${t.page===i+1?' selected':''}>Page ${i+1}</option>`).join('')}</select></label>`:''}
-    ${!t.img&&t.lines.length?`<p class="hint">Your lines are saved. Upload the same plan to see it under them.</p>`:''}</div>
-  <div class="tk-card"><div class="tk-h">Steps</div><ol class="tk-steps">${step(t.img||t.imgW,'Upload the plan')}${step(t.ftpx,t.ftpx?`Scale set (${fmtN(1/t.ftpx,1)} px per ft)`:'Set the scale')}${step(t.perim,t.perim?`Perimeter — ${fmtN(tkPolyArea(t.perim)*(t.ftpx||0)**2/43560,2)} ac`:'Draw the perimeter')}${step(tkLines('ex').length,`Existing — ${cnt('ex')}`)}${step(tkLines('pr').length,`Proposed — ${cnt('pr')}`)}${step(r,'Calculate')}</ol></div>
+    ${t.space!=='world'&&!t.img&&t.lines.length?`<p class="hint">Your lines are saved. Upload the same plan to see it under them.</p>`:''}</div>
+  <div class="tk-card"><div class="tk-h">Steps</div><ol class="tk-steps">${t.space==='world'?step(true,'Real coordinates (ft)'):step(t.img||t.imgW,'Upload the plan')+step(t.ftpx,t.ftpx?`Scale set (${fmtN(1/t.ftpx,1)} px per ft)`:'Set the scale')}${step(t.perim,t.perim?`Perimeter — ${fmtN(tkPolyArea(t.perim)*(t.ftpx||0)**2/43560,2)} ac`:t.space==='world'?'Perimeter (optional — else where the surfaces overlap)':'Draw the perimeter')}${step(tkLines('ex').length||tkSurf('ex').length,`Existing — ${tkSurf('ex').length?tkSurf('ex').length+' TIN'+(tkLines('ex').length?' + ':''):''}${tkLines('ex').length||!tkSurf('ex').length?cnt('ex'):''}`)}${step(tkLines('pr').length||tkSurf('pr').length,`Proposed — ${tkSurf('pr').length?tkSurf('pr').length+' TIN'+(tkLines('pr').length?' + ':''):''}${tkLines('pr').length||!tkSurf('pr').length?cnt('pr'):''}`)}${step(r,'Calculate')}</ol></div>
   ${sel?`<div class="tk-card tk-selcard"><div class="tk-h">Selected ${sel.kind==='pad'?'pad':sel.kind==='spot'?'spot':'contour'} · ${sel.layer==='ex'?'existing':'proposed'}</div>
     <label class="f">Elevation<input type="number" step="any" class="field" id="tk-selev" data-tksel="elev" value="${esc(sel.elev)}"></label>
     <div class="adders"><button class="btn sm" data-act="tk-selflip">Move to ${sel.layer==='ex'?'proposed':'existing'}</button><button class="btn sm danger" data-act="tk-seldel">Delete</button></div></div>`:''}
@@ -3213,20 +3226,20 @@ function tkUI(){
     ${r?`<div class="calc-main" style="margin-top:12px"><b>${fmtN(Math.abs(r.net),0)}</b><span>CY ${r.net>=0?'export':'import'}</span></div>
       <div class="list">${[['Cut',fmtN(r.cutCY,0)+' CY'],['Fill (compacted)',fmtN(r.fillCY,0)+' CY'],[`Fill needs (${t.shrink}% shrink)`,fmtN(r.need,0)+' bank CY'],[r.net>=0?'Export':'Import',`${fmtN(Math.abs(r.net),0)} bank · ${fmtN(Math.abs(r.net)*(r.net>=0?1+(+t.swell||0)/100:1),0)} ${r.net>=0?'loose':'bank'} CY`],[r.net>=0?'Truck loads out':'Truck loads in',fmtN(Math.ceil(Math.abs(r.net)*(1+(+t.swell||0)/100)/(+t.truck||14)),0)+` @ ${t.truck||14} CY`],['Topsoil strip',`${fmtN(r.stripCY,0)} CY (${t.strip}″)`],['Area',`${fmtN(r.area,0)} SF · ${fmtN(r.area/43560,2)} ac`],['Deepest cut / fill',`${fmtN(r.maxC,1)}′ / ${fmtN(r.maxF,1)}′`]].map(([a,b])=>`<div class="li"><span class="dim">${a}</span><b class="num">${b}</b></div>`).join('')}</div>
       <label class="mh-use" style="margin-top:8px"><input type="checkbox" data-tkset="heat"${t.heat?' checked':''}> Show cut / fill map <span class="tk-key"><i class="c"></i>cut <i class="f"></i>fill</span></label>
-      <p class="hint">Rough numbers from a ${fmtN(r.cellFt,1)}′ grid (${fmtN(r.cells,0)} cells). Between contours the grade is interpolated straight across; beyond the outermost contour it’s held between the last two. Trace contours past the perimeter for the best numbers.</p>`
+      <p class="hint">Rough numbers from a ${fmtN(r.cellFt,1)}′ grid (${fmtN(r.cells,0)} cells).${(t.surfaces||[]).length?' TIN surfaces are read exactly; where there’s no TIN it falls back to the contours.':''} Between contours the grade is interpolated straight across; beyond the outermost contour it’s held between the last two. Trace contours past the perimeter for the best numbers.</p>`
       :'<p class="hint">Trace existing and proposed contours across the whole perimeter, then calculate.</p>'}</div>
   <div class="tk-card"><button class="btn sm ghost" data-act="tk-clear">${t.clearArm?'Click again to clear everything':'Clear takeoff'}</button></div>`;
 }
 function tkView(){return `<div class="tk-wrap"><div class="tk-bar" id="tk-bar"></div>
   <div class="tk-main"><div class="tk-stage"><canvas id="tk-canvas" tabindex="0" aria-label="Plan takeoff canvas"></canvas><div class="tk-prompt" id="tk-prompt" hidden></div><div class="tk-hint" id="tk-hint"></div>
-    ${!S.tk.img&&!S.tk.imgW?'<div class="tk-empty" id="tk-empty"><b>Upload a plan to start</b><span>PDF or image of the grading sheet. Then set the scale, draw the perimeter, and trace the existing and proposed contours.</span></div>':''}</div>
+    ${!S.tk.img&&!S.tk.imgW?'<div class="tk-empty" id="tk-empty"><b>Upload a plan or import surfaces</b><span>Upload a PDF or image of the grading sheet and trace the contours — or import existing and proposed TINs from LandXML or DXF.</span></div>':''}</div>
   <aside class="tk-side" id="tk-side"></aside></div></div>`}
 // pointer / wheel / key handling for the canvas
 (function(){let drag=null;
   document.addEventListener('pointerdown',e=>{if(e.target.id!=='tk-canvas')return;e.target.focus({preventScroll:true});drag={x:e.clientX,y:e.clientY,ox:S.tk.view.ox,oy:S.tk.view.oy,moved:false,btn:e.button};e.target.setPointerCapture(e.pointerId)});
   document.addEventListener('pointermove',e=>{if(e.target.id!=='tk-canvas'&&!drag)return;const t=S.tk;if(!t.view)return;
     if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>4)drag.moved=true;if(drag.moved){t.view.ox=drag.ox+dx;t.view.oy=drag.oy+dy;tkDraw()}return}
-    const p=tkToPlan(e);t.hover=p;t.hoverText=t.ftpx&&t.lines.length&&!t.cur.length?tkHoverText(p):'';const h=$('#tk-hint');if(h&&t.hoverText)h.textContent=t.hoverText;if(t.cur.length)tkDraw()});
+    const p=tkToPlan(e);t.hover=p;t.hoverText=t.ftpx&&(t.lines.length||(t.surfaces||[]).length)&&!t.cur.length?tkHoverText(p):'';const h=$('#tk-hint');if(h&&t.hoverText)h.textContent=t.hoverText;if(t.cur.length)tkDraw()});
   document.addEventListener('pointerup',e=>{if(!drag)return;const d=drag;drag=null;if(!d.moved&&d.btn===0&&e.target.id==='tk-canvas')tkClick(tkToPlan(e))});
   document.addEventListener('dblclick',e=>{if(e.target.id!=='tk-canvas')return;const t=S.tk;if(t.cur.length>1){const a=t.cur[t.cur.length-1],b=t.cur[t.cur.length-2];if(Math.hypot(a[0]-b[0],a[1]-b[1])<6/t.view.z)t.cur.pop()}tkFinish()});
   document.addEventListener('wheel',e=>{if(e.target.id!=='tk-canvas')return;e.preventDefault();const t=S.tk,v=t.view;const r=e.target.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;const f=Math.exp(-e.deltaY*0.0015);const z=Math.max(0.02,Math.min(40,v.z*f));
@@ -3239,6 +3252,92 @@ function tkView(){return `<div class="tk-wrap"><div class="tk-bar" id="tk-bar"><
     else if((e.key==='Backspace'||e.key==='Delete')&&t.sel){e.preventDefault();t.lines=t.lines.filter(l=>l.id!==t.sel);t.sel=null;tkSave();tkDraw();tkUI()}});
   window.addEventListener('resize',()=>{if($('#tk-canvas'))tkMount()});
 })();
+
+
+/* ---- surfaces: LandXML TINs and DXF (3D faces → TIN, contour polylines → lines, points → spots)
+   Imported data is in real coordinates (feet): x = Easting − origin, y = −(Northing − origin) so north is up. */
+const M2FT=3.280839895;
+function tinIndex(s){if(s._idx)return s._idx;const P=s.pts,T=s.tris,nt=T.length/3;let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  for(let i=0;i<P.length;i+=3){x0=Math.min(x0,P[i]);x1=Math.max(x1,P[i]);y0=Math.min(y0,P[i+1]);y1=Math.max(y1,P[i+1])}
+  const g=Math.max(1,Math.min(400,Math.ceil(Math.sqrt(nt/2))));const cw=(x1-x0)/g||1,ch=(y1-y0)/g||1;const cells=Array.from({length:g*g},()=>[]);
+  for(let t=0;t<nt;t++){const a=T[t*3]*3,b=T[t*3+1]*3,c=T[t*3+2]*3;const mnx=Math.min(P[a],P[b],P[c]),mxx=Math.max(P[a],P[b],P[c]),mny=Math.min(P[a+1],P[b+1],P[c+1]),mxy=Math.max(P[a+1],P[b+1],P[c+1]);
+    const i0=Math.max(0,Math.floor((mnx-x0)/cw)),i1=Math.min(g-1,Math.floor((mxx-x0)/cw)),j0=Math.max(0,Math.floor((mny-y0)/ch)),j1=Math.min(g-1,Math.floor((mxy-y0)/ch));
+    for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++)cells[j*g+i].push(t)}
+  return s._idx={x0,y0,x1,y1,g,cw,ch,cells}}
+function tinZ(s,x,y){const I=tinIndex(s);if(x<I.x0||x>I.x1||y<I.y0||y>I.y1)return NaN;const i=Math.min(I.g-1,Math.floor((x-I.x0)/I.cw)),j=Math.min(I.g-1,Math.floor((y-I.y0)/I.ch));const P=s.pts,T=s.tris;
+  for(const t of I.cells[j*I.g+i]){const a=T[t*3]*3,b=T[t*3+1]*3,c=T[t*3+2]*3;const x1=P[a],y1=P[a+1],x2=P[b],y2=P[b+1],x3=P[c],y3=P[c+1];
+    const d=(y2-y3)*(x1-x3)+(x3-x2)*(y1-y3);if(!d)continue;const l1=((y2-y3)*(x-x3)+(x3-x2)*(y-y3))/d,l2=((y3-y1)*(x-x3)+(x1-x3)*(y-y3))/d,l3=1-l1-l2;
+    if(l1>=-1e-9&&l2>=-1e-9&&l3>=-1e-9)return l1*P[a+2]+l2*P[b+2]+l3*P[c+2]}return NaN}
+function tinEdges(s){if(s._edges)return s._edges;const T=s.tris,cnt=new Map();const k=(a,b)=>a<b?a*4294967296+b:b*4294967296+a;
+  for(let t=0;t<T.length;t+=3)for(const [a,b] of [[T[t],T[t+1]],[T[t+1],T[t+2]],[T[t+2],T[t]]]){const key=k(a,b);cnt.set(key,(cnt.get(key)||0)+1)}
+  const bnd=[];cnt.forEach((n,key)=>{if(n===1)bnd.push(Math.floor(key/4294967296),key%4294967296)});return s._edges=Uint32Array.from(bnd)}
+const tkSurf=layer=>(S.tk.surfaces||[]).filter(s=>s.layer===layer);
+function tkSurfBBox(layer){let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;tkSurf(layer).forEach(s=>{const I=tinIndex(s);x0=Math.min(x0,I.x0);y0=Math.min(y0,I.y0);x1=Math.max(x1,I.x1);y1=Math.max(y1,I.y1)});return isFinite(x0)?{x0,y0,x1,y1}:null}
+const tkGuessLayer=n=>/(^|[^a-z])(eg|ex|exist|existing|og|orig|original|topo|survey)([^a-z]|$)/i.test(n)?'ex':/(^|[^a-z])(fg|pr|prop|proposed|fin|finish|finished|design|dsgn|grade)([^a-z]|$)/i.test(n)?'pr':'';
+// LandXML: <Surface name><Definition><Pnts><P id="1">N E Z</P>…</Pnts><Faces><F>1 2 3</F>…
+function parseLandXML(txt){
+  const doc=new DOMParser().parseFromString(txt,'application/xml');if(doc.querySelector('parsererror'))throw new Error('That XML file couldn’t be read.');
+  const units=doc.querySelector('Units > *');const metric=units&&/metric/i.test(units.tagName)||/meter/i.test(units?.getAttribute('linearUnit')||'');const f=metric?M2FT:1;
+  const out=[];doc.querySelectorAll('Surface').forEach(sf=>{const ids=new Map();const pts=[];
+    sf.querySelectorAll('Definition > Pnts > P').forEach(p=>{const v=p.textContent.trim().split(/\s+/).map(Number);if(v.length<3||v.some(x=>!isFinite(x)))return;ids.set(p.getAttribute('id'),pts.length/3);pts.push(v[1]*f,v[0]*f,v[2]*f)});
+    const tris=[];sf.querySelectorAll('Definition > Faces > F').forEach(F=>{if(F.getAttribute('i')==='1')return;const v=F.textContent.trim().split(/\s+/);if(v.length<3)return;const a=ids.get(v[0]),b=ids.get(v[1]),c=ids.get(v[2]);if(a!=null&&b!=null&&c!=null)tris.push(a,b,c)});
+    if(tris.length)out.push({name:sf.getAttribute('name')||'Surface',en:pts,tris})});
+  if(!out.length)throw new Error('No TIN surfaces (points and faces) found in that LandXML file.');return {surfaces:out,lines:[],units:metric?'meters → feet':'feet'}}
+// ASCII DXF: 3DFACE → TIN per layer; LWPOLYLINE / POLYLINE / LINE at one elevation → contours; POINT → spots
+function parseDXF(txt){
+  if(txt.startsWith('AutoCAD Binary DXF'))throw new Error('That’s a binary DXF. Save it as an ASCII DXF and try again.');
+  const L=txt.split(/\r?\n/);const pairs=[];for(let i=0;i+1<L.length;i+=2)pairs.push([parseInt(L[i],10),L[i+1].trim()]);
+  let unit=1;for(let i=0;i<pairs.length;i++)if(pairs[i][0]===9&&pairs[i][1]==='$INSUNITS'){const u=+pairs[i+1]?.[1];unit=u===6?M2FT:u===1?1/12:u===4?1/304.8:u===5?1/30.48:1;break}
+  let i=pairs.findIndex(p=>p[0]===2&&p[1]==='ENTITIES');if(i<0)throw new Error('No drawing entities found in that DXF.');
+  const layers={};const lay=n=>layers[n]=layers[n]||{name:n,faces:[],lines:[],spots:[]};
+  const ents=[];let cur=null;for(i=i+1;i<pairs.length;i++){const [c,v]=pairs[i];if(c===0){if(cur)ents.push(cur);if(v==='ENDSEC')break;cur={type:v,g:[]};continue}if(cur)cur.g.push([c,v])}
+  const val=(e,c)=>{const p=e.g.find(x=>x[0]===c);return p?+p[1]:0};
+  for(let k=0;k<ents.length;k++){const e=ents[k];const ln=(e.g.find(x=>x[0]===8)||[0,'0'])[1];
+    if(e.type==='3DFACE'){const P=[[val(e,10),val(e,20),val(e,30)],[val(e,11),val(e,21),val(e,31)],[val(e,12),val(e,22),val(e,32)],[val(e,13),val(e,23),val(e,33)]];lay(ln).faces.push(P.slice(0,3));
+      if(P[3][0]!==P[2][0]||P[3][1]!==P[2][1])lay(ln).faces.push([P[0],P[2],P[3]])}
+    else if(e.type==='LWPOLYLINE'){const z=val(e,38);const xs=e.g.filter(x=>x[0]===10).map(x=>+x[1]),ys=e.g.filter(x=>x[0]===20).map(x=>+x[1]);const pts=xs.map((x,j)=>[x,ys[j]]);if((val(e,70)&1)&&pts.length>2)pts.push(pts[0]);if(pts.length>1)lay(ln).lines.push({pts,z})}
+    else if(e.type==='POLYLINE'){const vs=[];let j=k+1;for(;j<ents.length&&ents[j].type==='VERTEX';j++)vs.push([val(ents[j],10),val(ents[j],20),val(ents[j],30)]);k=j;
+      if((val(e,70)&64)){continue}  // polyface mesh — not supported
+      if(vs.length>1){const zs=vs.map(v=>v[2]);const flat=Math.max(...zs)-Math.min(...zs)<1e-6;const z=flat?zs[0]||val(e,30):null;const pts=vs.map(v=>[v[0],v[1]]);if((val(e,70)&1))pts.push(pts[0]);
+        if(z!=null)lay(ln).lines.push({pts,z});else vs.forEach(v=>lay(ln).spots.push(v))}}
+    else if(e.type==='LINE'){const z1=val(e,30),z2=val(e,31);if(Math.abs(z1-z2)<1e-6)lay(ln).lines.push({pts:[[val(e,10),val(e,20)],[val(e,11),val(e,21)]],z:z1})}
+    else if(e.type==='POINT')lay(ln).spots.push([val(e,10),val(e,20),val(e,30)])}
+  const surfaces=[],lines=[];Object.values(layers).forEach(l=>{
+    if(l.faces.length){const map=new Map(),en=[],tris=[];const id=p=>{const k=p[0].toFixed(3)+','+p[1].toFixed(3);let x=map.get(k);if(x==null){x=en.length/3;map.set(k,x);en.push(p[0]*unit,p[1]*unit,p[2]*unit)}return x};
+      l.faces.forEach(f=>{const a=id(f[0]),b=id(f[1]),c=id(f[2]);if(a!==b&&b!==c&&a!==c)tris.push(a,b,c)});
+      surfaces.push({name:l.name,en,tris})}  // en = [E, N, Z, …] like LandXML
+    l.lines.forEach(x=>{if(x.z)lines.push({layerName:l.name,kind:'line',en:x.pts.map(p=>[p[0]*unit,p[1]*unit]),elev:x.z*unit})});
+    l.spots.forEach(s=>{if(s[2])lines.push({layerName:l.name,kind:'spot',en:[[s[0]*unit,s[1]*unit]],elev:s[2]*unit})})});
+  if(!surfaces.length&&!lines.length)throw new Error('Nothing with elevations found — no 3D faces, contour polylines with an elevation, or points.');
+  return {surfaces,lines,units:unit===1?'feet':unit===M2FT?'meters → feet':'converted to feet'}}
+async function tkImportFile(file){
+  const t=S.tk;t.loading=true;tkUI();
+  try{const txt=await file.text();const data=/\.dxf$/i.test(file.name)||/^\s*0\s*\r?\n\s*SECTION/.test(txt.slice(0,200))?parseDXF(txt):parseLandXML(txt);
+    const groups=[...data.surfaces.map((s,i)=>({key:'s'+i,name:s.name,kind:'TIN',count:`${fmtN(s.tris.length/3,0)} triangles`,layer:tkGuessLayer(s.name)}))];
+    const byLayer={};data.lines.forEach(l=>{(byLayer[l.layerName]=byLayer[l.layerName]||[]).push(l)});
+    Object.entries(byLayer).forEach(([n,xs])=>{const c=xs.filter(x=>x.kind==='line').length,sp=xs.length-c;groups.push({key:'l:'+n,name:n,kind:c?'Contours':'Points',count:[c?`${c} lines`:'',sp?`${sp} points`:''].filter(Boolean).join(' · '),layer:tkGuessLayer(n)})});
+    if(groups.length===1&&!groups[0].layer)groups[0].layer=tkSurf('ex').length||tkLines('ex').length?'pr':'ex';
+    M={kind:'tkimp',file:file.name,data,groups,byLayer,units:data.units};showModal()}
+  catch(e){toast(errMsg(e))}finally{t.loading=false;tkUI()}
+}
+function tkImpModal(){const x=M;const t=S.tk;const planLines=t.space!=='world'&&(t.lines.length||t.perim);
+  return mhead('Import surfaces',`${x.file} · units: ${x.units}`)+`<div class="mbody">
+  ${planLines?'<div class="notice" style="margin-bottom:12px">This takeoff has lines traced on a plan image. Surfaces use real coordinates, so importing starts a new takeoff in real coordinates and clears the traced lines, scale and perimeter.</div>':''}
+  <fieldset><legend>What’s in the file</legend><div class="tkimp-row tkimp-hd"><span>Name / layer</span><span>Type</span><span>Import as</span></div>
+  ${x.groups.map((g,i)=>`<div class="tkimp-row"><div><b>${esc(g.name)}</b><div class="dim small">${esc(g.count)}</div></div><span class="small">${esc(g.kind)}</span>
+    <select class="field" data-tkimp="${i}"><option value=""${!g.layer?' selected':''}>Skip</option><option value="ex"${g.layer==='ex'?' selected':''}>Existing</option><option value="pr"${g.layer==='pr'?' selected':''}>Proposed</option></select></div>`).join('')}
+  <p class="hint">TINs are used as-is. Contour lines and points come in as traced lines you can select and edit. Anything on a layer you skip is ignored.</p></fieldset></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="tkimp-go">Import</button></div></div>`}
+function tkImpApply(){
+  const t=S.tk;const x=M;const pick=x.groups.filter(g=>g.layer);if(!pick.length){toast('Pick Existing or Proposed for at least one item.');return}
+  if(t.space!=='world'){Object.assign(t,{space:'world',ftpx:1,scalePts:null,perim:null,lines:[],surfaces:[],origin:null,img:null,imgW:0,imgH:0,fileName:'',pdf:null,pages:0,cur:[],sel:null})}
+  const s0=x.data.surfaces[0];const first=s0?[s0.en[0],s0.en[1]]:(x.data.lines[0]?.en[0]||[0,0]);if(!t.origin)t.origin=[Math.round(first[0]),Math.round(first[1])];const [E0,N0]=t.origin;
+  let nS=0,nL=0;
+  pick.forEach(g=>{if(g.key[0]==='s'){const s=x.data.surfaces[+g.key.slice(1)];const P=new Float64Array(s.en.length);for(let k=0;k<s.en.length;k+=3){P[k]=s.en[k]-E0;P[k+1]=-(s.en[k+1]-N0);P[k+2]=s.en[k+2]}
+      t.surfaces=(t.surfaces||[]).filter(o=>!(o.name===s.name&&o.layer===g.layer));t.surfaces.push({id:newId(),name:s.name,layer:g.layer,pts:P,tris:Uint32Array.from(s.tris)});nS++}
+    else x.byLayer[g.key.slice(2)].forEach(l=>{t.lines.push({id:newId(),layer:g.layer,kind:l.kind,pts:l.en.map(([e,n])=>[e-E0,-(n-N0)]),elev:+l.elev.toFixed(3),src:g.name});nL++})});
+  closeModal();t.view=null;tkSave();tkMount();toast(`Imported ${[nS?nS+' surface'+(nS===1?'':'s'):'',nL?nL+' lines / points':''].filter(Boolean).join(' and ')}`);
+}
 
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
@@ -3341,9 +3440,11 @@ document.addEventListener('click',e=>{
     case 'sup-cancel':M.sup=null;renderModal();break;
     case 'sup-save':if(!M.sup.busy)supSave();break;
     case 'sup-rmclient':M.sup.draft.client_ids=M.sup.draft.client_ids.filter(x=>x!==t.dataset.id);renderModal();break;
-    case 'tk-tool':{const k=S.tk;k.tool=t.dataset.v;k.cur=[];k.pending=null;if(k.tool!=='select')k.sel=null;tkDraw();tkUI();break}
+    case 'tk-tool':{const k=S.tk;if(k.space==='world'&&t.dataset.v==='scale'){toast('The surfaces are already in feet — no scale needed.');break}k.tool=t.dataset.v;k.cur=[];k.pending=null;if(k.tool!=='select')k.sel=null;tkDraw();tkUI();break}
     case 'tk-layer':S.tk.layer=t.dataset.v;tkPersist();tkUI();break;
     case 'tk-finish':tkFinish();break;
+    case 'tkimp-go':tkImpApply();break;
+    case 'tk-surfdel':{const k=S.tk;k.surfaces=(k.surfaces||[]).filter(x=>x.id!==t.dataset.id);tkSave();tkDraw();tkUI();break}
     case 'tk-undo':{const k=S.tk;if(k.pending)tkCancel();else if(k.cur.length){k.cur.pop();tkDraw();tkUI()}else if(k.lines.length){k.lines.pop();k.sel=null;tkSave();tkDraw();tkUI()}break}
     case 'tk-fit':tkFit();tkDraw();break;
     case 'tk-commit':tkCommit();break;
@@ -3352,7 +3453,7 @@ document.addEventListener('click',e=>{
     case 'tk-seldel':{const k=S.tk;k.lines=k.lines.filter(l=>l.id!==k.sel);k.sel=null;tkSave();tkDraw();tkUI();break}
     case 'tk-selflip':{const k=S.tk;const l=k.lines.find(x=>x.id===k.sel);if(l){l.layer=l.layer==='ex'?'pr':'ex';tkSave();tkDraw();tkUI()}break}
     case 'tk-clear':{const k=S.tk;if(!k.clearArm){k.clearArm=true;tkUI();setTimeout(()=>{k.clearArm=false;tkUI()},4000);break}
-      const keep={img:k.img,imgW:k.imgW,imgH:k.imgH,fileName:k.fileName,pdf:k.pdf,pages:k.pages,page:k.page,view:k.view};Object.assign(k,tkBlank(),keep,{cur:[],res:null,pending:null,sel:null,clearArm:false,tool:'scale'});tkSave();tkDraw();tkUI();toast('Takeoff cleared');break}
+      const world=k.space==='world';const keep=world?{}:{img:k.img,imgW:k.imgW,imgH:k.imgH,fileName:k.fileName,pdf:k.pdf,pages:k.pages,page:k.page,view:k.view};Object.assign(k,tkBlank(),keep,{cur:[],res:null,pending:null,sel:null,clearArm:false,tool:world?'pan':'scale',surfNotSaved:false});if(world)k.view=null;tkSave();tkMount();toast('Takeoff cleared');break}
     case 'close':closeModal();break;
     case 'save':saveModal();break;
     case 'del':deleteModal();break;
@@ -3480,8 +3581,10 @@ document.addEventListener('change',e=>{
   if(t.dataset.tkset){const k=S.tk,key=t.dataset.tkset;if(key==='heat'){k.heat=t.checked;tkPersist();tkDraw();return}
     k[key]=t.tagName==='SELECT'?+t.value:(t.value===''?0:+t.value);const had=!!k.res;tkSave();if(had&&['strip','section','shrink','swell'].includes(key))tkCompute();else tkUI();return}
   if(t.dataset.tksel){const k=S.tk;const l=k.lines.find(x=>x.id===k.sel);if(l&&t.value!==''){l.elev=+t.value;tkSave();tkDraw();tkUI()}return}
+  if(t.dataset.tkimport!=null){if(t.files[0])tkImportFile(t.files[0]);t.value='';return}
+  if(M&&M.kind==='tkimp'&&t.dataset.tkimp!=null){M.groups[+t.dataset.tkimp].layer=t.value;return}
   if(t.dataset.tkfile!=null){if(t.files[0])tkLoadFile(t.files[0]);return}
-  if(t.dataset.tkpage){const n=+t.value;S.tk.loading=true;tkUI();tkRenderPage(n).then(()=>{S.tk.view=null;tkSave();tkMount()}).catch(e=>toast(errMsg(e))).finally(()=>{S.tk.loading=false;tkUI()});return}
+  if(t.dataset.tkpage!=null){const n=+t.value;S.tk.loading=true;tkUI();tkRenderPage(n).then(()=>{S.tk.view=null;tkSave();tkMount()}).catch(e=>toast(errMsg(e))).finally(()=>{S.tk.loading=false;tkUI()});return}
   if(t.dataset.docupload!=null){if(t.files.length)uploadDocs([...t.files]);return}
   if(t.dataset.lgfiles!=null&&M){const L=logState();L.files.push(...t.files);renderModal();return}
   if(t.dataset.prole){setRole(t.dataset.prole,t.value);return}
