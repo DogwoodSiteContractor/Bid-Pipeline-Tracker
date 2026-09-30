@@ -588,7 +588,7 @@ const FLAGS=[['followup','Needs GC follow-up',b=>needsFollowUp(b)],['quotes','Qu
 function bidHaystack(b){return [b.name,b.location,normProjectType(b.project_type),b.bid_type,b.status,b.units?b.units+' units':'',b.notes,b.awarded_to,
   estName(b.lead_estimator_id),...(b.support_estimator_ids||[]).map(estName),...(b.client_ids||[]).map(clientName),
   ...Object.values(b.client_contacts||{}),...(b.client_ids||[]).flatMap(id=>(byId(S.clients,id)?.contacts||[]).map(c=>c.name||'')),...scopeItems(b).map(x=>x.name),...quotesFor(b.id).map(q=>vendorOf(q.vendor_id)?.company||''),
-  ...addenda(b).map(a=>a.description||''),...S.bid_log.filter(e=>e.bid_id===b.id).map(e=>e.body||'')].join(' • ').toLowerCase()}
+  ...addenda(b).map(a=>a.description||''),...S.bid_log.filter(e=>e.bid_id===b.id).map(e=>e.body||''),...supFormerNames(b)].join(' • ').toLowerCase()}
 const matchesQuery=(hay,q)=>q.split(/\s+/).filter(Boolean).every(t=>hay.includes(t));
 
 function dueMatch(b,f){
@@ -695,7 +695,7 @@ function listView(list){
   const rows=list.map(b=>{const it=scopeItems(b),qs=quotesFor(b.id),done=it.filter(x=>x.status==='Complete').length,rec=qs.filter(q=>q.status==='Received').length;const picked=S.selMode&&sel.has(b.id);
     return `<tr class="click${picked?' picked':''}" data-act="open-bid" data-id="${b.id}" tabindex="0">
       ${S.selMode?`<td class="ck"><span class="pickbox" aria-hidden="true">${picked?'✓':''}</span></td>`:''}
-      <td><div class="proj">${esc(b.name)}${b.archived_at?' <span class="pill na" style="font-size:11px">Archived</span>':''}</div><div class="dim small">${[normProjectType(b.project_type),unitsText(b),b.location].filter(Boolean).map(esc).join(' · ')}</div></td>
+      <td><div class="proj">${esc(b.name)}${b.archived_at?' <span class="pill na" style="font-size:11px">Archived</span>':''} ${supTag(b)}</div><div class="dim small">${[normProjectType(b.project_type),unitsText(b),b.location].filter(Boolean).map(esc).join(' · ')}</div></td>
       <td class="small">${(b.client_ids||[]).slice(0,2).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}${clientWon(b,id)?' ✓':''}</div>`).join('')}${(b.client_ids||[]).length>2?`<div class="dim">+${b.client_ids.length-2} more</div>`:''}${(b.client_ids||[]).length?'':'<span class="dim">—</span>'}</td>
       <td class="small">${b.lead_estimator_id?`<span class="who">${avatar(b.lead_estimator_id,22)}${esc(estName(b.lead_estimator_id))}</span>`:'<span class="dim">—</span>'}</td>
       <td>${dueCell(b)}</td>
@@ -761,7 +761,7 @@ function palItems(){
   if(q&&!isPM()){
     const bids=(role()==='estimator'?S.bids.filter(assigned):S.bids).filter(b=>matchesQuery(bidHaystack(b),q))
       .sort((a,b)=>((b.name||'').toLowerCase().includes(q)-(a.name||'').toLowerCase().includes(q))||(live(b)-live(a))||(a.due_date||'9').localeCompare(b.due_date||'9'));
-    bids.slice(0,8).forEach(b=>add('Bids',b.name,[b.status,b.due_date?fmtDate(b.due_date):'',clientsLine(b,1).replace(/<[^>]+>/g,'')].filter(Boolean).join(' · '),()=>openBid(b.id),pill(b.status,BID_CLS[b.status])));
+    bids.slice(0,8).forEach(b=>add('Bids',b.name,[b.status,b.due_date?fmtDate(b.due_date):'',clientsLine(b,1).replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")].filter(Boolean).join(' · '),()=>openBid(b.id),pill(b.status,BID_CLS[b.status])));
     S.clients.filter(c=>matchesQuery([c.company,c.type,...(c.contacts||[]).map(x=>x.name+' '+x.email)].join(' ').toLowerCase(),q)).slice(0,5)
       .forEach(c=>add('Clients & GCs',c.company,[c.type,...(c.contacts||[]).map(x=>x.name).filter(Boolean).slice(0,2)].filter(Boolean).join(' · '),()=>{const d=clone(c);M={kind:'client',draft:d};showModal()}));
     S.vendors.filter(v=>matchesQuery([v.company,v.trade,v.vendor_type,v.contact_name,...vendorScopes(v)].join(' ').toLowerCase(),q)).slice(0,5)
@@ -795,7 +795,7 @@ function card(b){
   const team=[b.lead_estimator_id,...(b.support_estimator_ids||[])].filter(id=>byId(S.estimators,id));
   const picked=S.selMode&&S.sel?.has(b.id);
   return `<div class="card${picked?' picked':''}" role="button" tabindex="0" data-act="open-bid" data-id="${b.id}"${S.selMode?` aria-pressed="${picked?'true':'false'}"`:''}>${S.selMode?`<span class="pickbox" aria-hidden="true">${picked?'✓':''}</span>`:''}
-   <div class="card-top"><div><h3>${esc(b.name)}${b.archived_at?' <span class="pill na" style="font-size:11px;vertical-align:3px">Archived</span>':''}</h3><div class="meta">${clientsLine(b)}</div>${b.project_type||unitsText(b)?`<div class="meta" style="margin-top:1px">${[normProjectType(b.project_type),unitsText(b)].filter(Boolean).map(esc).join(' · ')}</div>`:''}</div>${pill(b.status,BID_CLS[b.status])}</div>
+   <div class="card-top"><div><h3>${esc(b.name)}${b.archived_at?' <span class="pill na" style="font-size:11px;vertical-align:3px">Archived</span>':''}</h3>${supTag(b,true)}<div class="meta">${clientsLine(b)}</div>${b.project_type||unitsText(b)?`<div class="meta" style="margin-top:1px">${[normProjectType(b.project_type),unitsText(b)].filter(Boolean).map(esc).join(' · ')}</div>`:''}</div>${pill(b.status,BID_CLS[b.status])}</div>
    ${progress(b)}
    <div class="row">${dueCell(b)}<div style="text-align:right">${v?`<div class="val">${money(v)}</div><div class="dim small">${b.use_for==='without'?'Without':'With'} site improvements</div>`:`<div class="dim small">Proposal ${esc((b.proposal_status||'Not Started').toLowerCase())}</div>`}</div></div>
    <div class="scopes">${scopePills(b)}</div>
@@ -955,6 +955,7 @@ function pickerFinish(){
 }
 function bidModal(){
   if(M.picker)return pickerView();
+  if(M.sup)return supView();
   const archNote=M.draft.archived_at?`<div class="notice" style="margin-bottom:14px">🗄 Archived ${fmtDate(String(M.draft.archived_at).slice(0,10))}. It’s hidden from the pipeline and dashboard but all its history is kept.${isAdmin()?' Click <b>Restore</b> to bring it back.':''}</div>`:'';
   const b=M.draft;const admin=isAdmin();const work=canWork(b);const isNew=b._new;
   const ests=S.estimators.filter(e=>e.active!==false||e.id===b.lead_estimator_id||b.support_estimator_ids.includes(e.id));
@@ -964,7 +965,7 @@ function bidModal(){
   const outcome=isSent(b)||DECIDED.includes(b.status);
   const sub=isNew?'Project details, team, scope, vendor quotes and files':admin?'Last saved '+(b.updated_at?new Date(b.updated_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—'):work?'You’re on this bid, so you can update anything here except who’s assigned to it.':'Read-only';
   const files=isNew?[]:filesFor(b.id);
-  return mhead(isNew?'New bid':b.name||'Untitled bid',sub)+`<div class="mbody">${archNote}
+  return mhead(isNew?'New bid':b.name||'Untitled bid',sub)+`<div class="mbody">${archNote}${supBanner(b)}
   ${isNew?'':`<div class="panel pad" style="margin-bottom:14px">${progress(b,{lg:true,quotes:b.quotes})}</div>`}
   <fieldset><legend>Project</legend><div class="fg">
     <label class="f s2">Project name ${work?'<span class="req">required</span>':''}<input class="field" ${bf('name')} placeholder="e.g. Riverside Commerce Park"></label>
@@ -1040,7 +1041,7 @@ function bidModal(){
 
   <fieldset><legend>Notes</legend><textarea class="field" data-bf="notes" placeholder="Scope clarifications, bid strategy, site conditions…"${DIS()}>${esc(b.notes||'')}</textarea></fieldset>
   </div>
-  <div class="mfoot"><div style="display:flex;gap:8px">${admin&&!isNew?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button><button class="btn" data-act="${b.archived_at?'bid-restore':'bid-archive'}">${b.archived_at?'Restore':'Archive'}</button>${b.status==='Awarded'?`<button class="btn" data-act="create-job">${S.jobs.some(j=>j.bid_id===b.id)?'Open job':'Create job'}</button>`:''}`:''}</div>
+  <div class="mfoot"><div style="display:flex;gap:8px;flex-wrap:wrap">${work&&!isNew?'<button class="btn" data-act="sup-start" title="Same project, new name or details — keeps everything and records the change">↻ Supersede</button>':''}${admin&&!isNew?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button><button class="btn" data-act="${b.archived_at?'bid-restore':'bid-archive'}">${b.archived_at?'Restore':'Archive'}</button>${b.status==='Awarded'?`<button class="btn" data-act="create-job">${S.jobs.some(j=>j.bid_id===b.id)?'Open job':'Create job'}</button>`:''}`:''}</div>
   <div class="r"><button class="btn" data-act="close">${admin||work?'Cancel':'Close'}</button>${work?`<button class="btn primary" data-act="save">${isNew?'Create bid':'Save changes'}</button>`:''}</div></div>`;
 }
 function clientsSection(b,work){
@@ -2423,6 +2424,44 @@ function riserSearch(sizes,X,rMin,rMax,target){
   })(0,0,0);
   return best?sizes.map((ft,i)=>({ft,n:best.c[i]})).filter(p=>p.n>0):[];
 }
+// ADS StormTech chambers — typical published sizes (in / CF). Verify against the current ADS spec sheet; all are overridable in the calculator.
+const CHAMBERS={
+  'SC-160LP':{w:25,h:12,len:85.4,vol:6.85,capLen:0,capVol:0,sp:6,found:6,cover:6},
+  'SC-310':{w:34,h:16,len:85.4,vol:14.7,capLen:0,capVol:0,sp:6,found:6,cover:6},
+  'SC-740':{w:51,h:30,len:85.4,vol:45.9,capLen:0,capVol:0,sp:6,found:6,cover:6},
+  'DC-780':{w:51,h:30,len:85.4,vol:46.2,capLen:0,capVol:0,sp:6,found:9,cover:6},
+  'MC-3500':{w:77,h:45,len:86,vol:109.9,capLen:22.5,capVol:14.9,sp:6,found:9,cover:12},
+  'MC-4500':{w:100,h:60,len:48.3,vol:106.5,capLen:35.1,capVol:35.7,sp:9,found:9,cover:12},
+  'MC-7200':{w:100,h:60,len:79.1,vol:175.9,capLen:38,capVol:39.5,sp:9,found:9,cover:12},
+  'Custom':{w:51,h:30,len:85.4,vol:45.9,capLen:0,capVol:0,sp:6,found:6,cover:6}};
+const chamberSpec=v=>CHAMBERS[v.model]||CHAMBERS['SC-740'];
+function retPipe(v){const type=validPipeType(v.ptype);const lib=pipeLib(type);const size=lib?+lib.size:+v.size||sizesFor(type)[0];const od=odFor(type,size)||size+2;const wall=wallFor(type,od,size);return {od,id:Math.max(od-2*wall,0.1),label:pipeLabel(type,size)}}
+function drawRet(v,r){
+  const g=r.g;const pitch=g.unitW+g.sp;let slots=[...Array(g.rows).keys()];let cut=false;
+  if(g.rows>14){slots=[0,1,2,3,4,5,'gap',g.rows-2,g.rows-1];cut=true}
+  const sysW=slots.length*g.unitW+(slots.length-1)*g.sp;const bedW=cut?sysW+2*g.per:Math.max(g.W,sysW+2*g.per);
+  const side=Math.max(1.5,bedW*0.06);const sw=bedW+2*side;const yTop=Math.max(g.top,g.tc)+0.9,yBot=g.bot-0.8;const sh=yTop-yBot;
+  const kx=Math.max(4,Math.min(60,540/sw));const ky=Math.max(kx,Math.min(60,230/sh,kx*2.5));const ex=ky/kx;const LAB=205,PT=6;
+  const X=x=>(side+x)*kx,Y=y=>PT+(yTop-y)*ky;const x0=(bedW-sysW)/2;let b='';
+  b+=`<rect x="0" y="${Y(g.top)}" width="${sw*kx}" height="${Y(yBot)-Y(g.top)}" fill="url(#dwSoil)"/>`;
+  b+=`<rect x="${X(0)}" y="${Y(g.bc)}" width="${bedW*kx}" height="${(g.bc-g.bot)*ky}" fill="url(#dwStone)" class="dw-stoneedge"/>`;
+  b+=`<rect x="${X(0)}" y="${Y(g.top)}" width="${bedW*kx}" height="${Math.max(0,(g.top-g.bc)*ky)}" fill="url(#dwStone2)" class="dw-stoneedge"/>`;
+  slots.forEach((s,i)=>{const xl=x0+i*pitch,xr=xl+g.unitW,cx=(xl+xr)/2;
+    if(s==='gap'){b+=svgT(X(cx),Y(g.bc+g.h*0.45),'⋯','dw-sec','middle')+svgT(X(cx),Y(g.bc+g.h*0.45)+14,`${g.rows} rows`,'dw-dimt dw-halo','middle');return}
+    if(g.pipe){const R=g.od/2,Ri=g.id/2,cy=g.bc+R;b+=`<ellipse cx="${X(cx)}" cy="${Y(cy)}" rx="${(R*kx).toFixed(1)}" ry="${(R*ky).toFixed(1)}" class="dw-pipe"/><ellipse cx="${X(cx)}" cy="${Y(cy)}" rx="${(Ri*kx).toFixed(1)}" ry="${(Ri*ky).toFixed(1)}" class="dw-pipein"/>`}
+    else{const rx=g.unitW/2*kx,ry=g.h*ky,t=Math.max(1.5,Math.min(4,rx*0.08));
+      b+=`<path d="M${X(xl)} ${Y(g.bc)} A${rx} ${ry} 0 0 1 ${X(xr)} ${Y(g.bc)} Z" class="dw-ch"/><path d="M${X(xl)+t} ${Y(g.bc)} A${rx-t} ${ry-t} 0 0 1 ${X(xr)-t} ${Y(g.bc)} Z" class="dw-pipein"/>`}});
+  b+=`<rect x="${X(0)}" y="${Y(g.top)}" width="${bedW*kx}" height="${(g.top-g.bot)*ky}" class="dw-bed"/>`;
+  b+=`<line x1="0" x2="${sw*kx}" y1="${Y(g.top)}" y2="${Y(g.top)}" class="dw-grade"/>`;
+  if(g.tc>g.top)b+=`<line x1="${X(0)}" x2="${X(bedW)}" y1="${Y(g.top)}" y2="${Y(g.top)}" class="dw-over"/>`;
+  const xr=sw*kx+10;const lab=spread([[g.top,'Top of stone '+fmtE(g.top)],[g.tc,`Top of ${g.pipe?'pipe':'chambers'} `+fmtE(g.tc)],[g.bc,`Bottom of ${g.pipe?'pipe':'chambers'} `+fmtE(g.bc)],[g.bot,'Bottom of stone '+fmtE(g.bot)]].map(([e,t])=>({ty:Y(e),y:Y(e)+4,t})),14);
+  lab.forEach(l=>b+=`<line x1="${X(bedW)+2}" x2="${xr-2}" y1="${l.ty}" y2="${l.ty}" class="dw-ext"/><line x1="${xr-2}" x2="${xr+4}" y1="${l.ty}" y2="${l.y-4}" class="dw-ext"/>`+svgT(xr+7,l.y,l.t,'dw-dimt'));
+  const xl=X(0)-8;b+=dimV(xl,Y(g.bot),Y(g.bc));if((g.bc-g.bot)*ky>=12)b+=svgT(xl-5,(Y(g.bot)+Y(g.bc))/2+4,fmtN(g.found*12,1)+'″','dw-dimt dw-halo','end');
+  if(g.top>g.tc){b+=dimV(xl,Y(g.tc),Y(g.top));if((g.top-g.tc)*ky>=12)b+=svgT(xl-5,(Y(g.tc)+Y(g.top))/2+4,fmtN((g.top-g.tc)*12,1)+'″','dw-dimt dw-halo','end')}
+  const Wp=sw*kx+LAB,Hp=Math.max(sh*ky+PT,lab[lab.length-1].y+6);
+  const legend=`<div class="dw-legend"><span><i class="lg-stone"></i>Under: ${esc(v.mat1)}</span><span><i class="lg-stone2"></i>Around & over: ${esc(v.mat2)}</span><span><i class="lg-pipe"></i>${g.pipe?esc(retPipe(v).label):esc(v.model)+' chamber'}</span><span><i class="lg-soil"></i>Native</span></div>`;
+  return `<div class="dw-h"><b>System section</b><span class="dim small">Across the rows · ${ex>1.05?`vertical scale ×${fmtN(ex,1)}`:'to scale'}${cut?' · middle rows not shown':''}</span></div>`+svgWrap(Wp,Hp,b,'Section across the stone bed and chamber rows')+legend;
+}
 const CALCS=[
  {id:'pipe',group:'Pipe & utilities',name:'Pipe bedding & stone backfill',icon:'◯',
   desc:'Stone around a pipe in a trench: bedding under the pipe, the pipe zone, and cover over the crown — less the space the pipe takes up. The trench section redraws as you type.',
@@ -2520,6 +2559,66 @@ const CALCS=[
     {k:'pct',label:'Slope',unit:'%',def:1,show:v=>v.mode==='down'},{k:'dn',label:'Downstream invert',unit:'ft',def:97.5,show:v=>v.mode==='slope'}],
   calc:v=>{if(v.mode==='slope'){const fall=v.up-v.dn;const pct=v.len?fall/v.len*100:0;return {main:[fmtN(pct,3),'%'],out:[['Slope',fmtN(pct,3)+'%'],['Fall',fmtN(fall,3)+' ft'],['Ft per ft',fmtN(fall/v.len,5)],['Inches per 100 LF',fmtN(pct*12,2)+'"']],math:[`Fall = ${v.up} − ${v.dn} = ${fmtN(fall,3)} ft`,`Slope = ${fmtN(fall,3)} ÷ ${v.len} × 100 = ${fmtN(pct,3)}%`]}}
     const fall=v.len*v.pct/100;return {main:[fmtN(v.up-fall,2),'ft invert'],out:[['Downstream invert',fmtN(v.up-fall,3)+' ft'],['Fall',fmtN(fall,3)+' ft ('+fmtN(fall*12,1)+'")'],['Ft per ft',fmtN(v.pct/100,5)]],math:[`Fall = ${v.len} × ${v.pct}% = ${fmtN(fall,3)} ft`,`Downstream invert = ${v.up} − ${fmtN(fall,3)} = ${fmtN(v.up-fall,3)} ft`]}}},
+ {id:'retention',group:'Stormwater',name:'Underground detention / retention',icon:'⌓',
+  desc:'Stone for an underground system of ADS StormTech chambers or round pipe: one stone under the system, another around and over it. Also gives storage, fabric and excavation. The section redraws as you type.',
+  fields:[{k:'sys',label:'System',type:'select',options:[['chamber','Chambers (ADS StormTech)'],['pipe','Round pipe']],def:'chamber'},
+    {k:'model',label:'Chamber',type:'select',options:Object.keys(CHAMBERS).map(k=>[k,k==='Custom'?'Custom — enter the sizes':k]),def:'SC-740',show:v=>v.sys==='chamber'},
+    {k:'caps',label:'End caps',type:'select',options:[['yes','With end caps'],['no','No end caps']],def:'yes',show:v=>v.sys==='chamber'},
+    {k:'ptype',label:'Pipe',type:'select',options:()=>pipeTypeOpts(),def:'HDPE corrugated',show:v=>v.sys==='pipe'},
+    {k:'size',label:'Nominal size',unit:'in',type:'select',options:v=>pipeSizes(v.ptype).map(n=>[String(n),n+'″']),def:'48',show:v=>v.sys==='pipe'&&!pipeLib(v.ptype)},
+    {k:'rows',label:'Rows',def:4},
+    {k:'perRow',label:'Chambers per row',def:10,show:v=>v.sys==='chamber'},
+    {k:'runLen',label:'Pipe length per row',unit:'LF',def:100,show:v=>v.sys==='pipe'},
+    {k:'sp',label:'Space between rows',unit:'in',auto:v=>v.sys==='pipe'?12:chamberSpec(v).sp,help:'Clear space, row to row.'},
+    {k:'perim',label:'Stone past the system',unit:'in',def:12,help:'Sides and ends, out to the edge of the stone bed.'},
+    {k:'bedMode',label:'Bed size',type:'select',options:[['layout','Figure it from the layout'],['plans','Enter it from the plans']],def:'layout'},
+    {k:'bedL',label:'Bed length',unit:'ft',def:80,show:v=>v.bedMode==='plans'},{k:'bedW',label:'Bed width',unit:'ft',def:25,show:v=>v.bedMode==='plans'},
+    {k:'bot',label:'Bottom of stone elevation',unit:'ft',step:'0.01',def:100,help:'Bottom of the pond / stone bed.'},
+    {k:'found',label:'Bottom of stone to bottom of system',unit:'in',auto:v=>v.sys==='pipe'?6:chamberSpec(v).found,help:'The stone under the chambers or pipe.'},
+    {k:'top',label:'Top of stone elevation',unit:'ft',step:'0.01',auto:v=>+(v.bot+(v.found+(v.sys==='pipe'?retPipe(v).od:chamberSpec(v).h)+(v.sys==='pipe'?12:chamberSpec(v).cover))/12).toFixed(2),help:'Blank = the minimum cover over the system.'},
+    matField('mat1','Stone under the system'),{...densField('dens1','mat1'),label:'Weight — under'},
+    matField('mat2','Stone around & over the system'),{...densField('dens2','mat2'),label:'Weight — around & over'},
+    {k:'por',label:'Stone voids',unit:'%',def:40,help:'For storage. 40% is the usual design value.'},
+    {k:'waste',label:'Waste / overrun',unit:'%',def:5},
+    {k:'cw',label:'Chamber width',unit:'in',step:'0.1',auto:v=>chamberSpec(v).w,show:v=>v.sys==='chamber'},
+    {k:'chh',label:'Chamber height',unit:'in',step:'0.1',auto:v=>chamberSpec(v).h,show:v=>v.sys==='chamber'},
+    {k:'cl',label:'Installed length',unit:'in',step:'0.1',auto:v=>chamberSpec(v).len,show:v=>v.sys==='chamber'},
+    {k:'cv',label:'Chamber storage',unit:'CF each',step:'0.1',auto:v=>chamberSpec(v).vol,show:v=>v.sys==='chamber'},
+    {k:'capL',label:'End cap added length',unit:'in',step:'0.1',auto:v=>chamberSpec(v).capLen,show:v=>v.sys==='chamber'&&v.caps==='yes'},
+    {k:'capV',label:'End cap storage',unit:'CF each',step:'0.1',auto:v=>chamberSpec(v).capVol,show:v=>v.sys==='chamber'&&v.caps==='yes'}],
+  calc:v=>{
+    const pipe=v.sys==='pipe';const spec=chamberSpec(v);const rows=Math.max(1,Math.round(v.rows||1));const sp=v.sp/12,per=v.perim/12;
+    let unitW,h,rowLen,displaced,unitStore,count='',nUnits=0,nCaps=0,minCover,minFound;
+    if(pipe){const P=retPipe(v);unitW=P.od/12;h=P.od/12;rowLen=v.runLen;const aO=Math.PI*Math.pow(P.od/24,2),aI=Math.PI*Math.pow(P.id/24,2);
+      displaced=rows*rowLen*aO;unitStore=rows*rowLen*aI;count=`${fmtN(rows*rowLen,0)} LF of ${P.label}`;minCover=12;minFound=6}
+    else{const cw=v.cw||spec.w,ch=v.chh||spec.h,cl=v.cl||spec.len,cv=v.cv??spec.vol;const caps=v.caps==='yes';const capL=caps?(v.capL??spec.capLen):0,capV=caps?(v.capV??spec.capVol):0;
+      nUnits=rows*Math.max(1,Math.round(v.perRow||1));nCaps=caps?rows*2:0;unitW=cw/12;h=ch/12;rowLen=Math.max(1,Math.round(v.perRow||1))*cl/12+2*capL/12;
+      displaced=nUnits*cv+nCaps*capV;unitStore=displaced;count=`${fmtN(nUnits,0)} ${v.model} chambers${nCaps?` + ${nCaps} end caps`:''}`;minCover=spec.cover;minFound=spec.found}
+    const layW=rows*unitW+(rows-1)*sp+2*per,layL=rowLen+2*per;const plans=v.bedMode==='plans';const W=plans?v.bedW:layW,L=plans?v.bedL:layL,A=W*L;
+    const bc=v.bot+v.found/12,tc=bc+h,top=v.top;const depth=top-v.bot;
+    const foundCF=A*v.found/12;const embCF=Math.max(0,A*(top-bc)-displaced);
+    const t1=foundCF/27*v.dens1*(1+v.waste/100),t2=embCF/27*v.dens2*(1+v.waste/100);const stoneStore=(foundCF+embCF)*v.por/100;const store=unitStore+stoneStore;
+    const fabric=(2*A+2*(L+W)*Math.max(0,depth))/9*1.1;const exc=A*Math.max(0,depth)/27;const cover=(top-tc)*12;
+    const warn=[];
+    if(top<tc-1e-6)warn.push(`The top of stone is below the top of the ${pipe?'pipe':'chambers'} (${fmtE(tc)}).`);
+    else if(cover<minCover-0.01)warn.push(`Only ${fmtN(cover,1)}″ of stone over the ${pipe?'pipe':'chambers'} — ${pipe?'':'ADS calls for '}at least ${minCover}″${pipe?' is typical':' for this model'}.`);
+    if(v.found<minFound-0.01)warn.push(`${fmtN(v.found,1)}″ of stone under the system is less than the ${minFound}″ ${pipe?'typical':'minimum for this model'}.`);
+    if(plans&&(v.bedW<layW-0.01||v.bedL<layL-0.01))warn.push(`The bed from the plans (${fmtN(v.bedL,1)}′ × ${fmtN(v.bedW,1)}′) is smaller than the layout needs (${fmtN(layL,1)}′ × ${fmtN(layW,1)}′).`);
+    if(!pipe&&v.model==='Custom')warn.push('Custom chamber — check the sizes and storage against the spec sheet.');
+    return {main:[fmtN(t1+t2,1),'tons of stone'],warn,
+      out:[[pipe?'Pipe':'Chambers',count],['Stone bed',`${fmtN(L,1)}′ × ${fmtN(W,1)}′ · ${fmtN(A,0)} SF`],
+        [`Under — ${v.mat1}`,`${fmtN(foundCF/27,1)} CY · ${fmtN(t1,1)} tons`],[`Around & over — ${v.mat2}`,`${fmtN(embCF/27,1)} CY · ${fmtN(t2,1)} tons`],
+        ['Top of stone',fmtE(top)],[`Top of ${pipe?'pipe':'chambers'}`,fmtE(tc)],[`Bottom of ${pipe?'pipe':'chambers'}`,fmtE(bc)],['Bottom of stone',fmtE(v.bot)],
+        [`Stone over the ${pipe?'pipe':'chambers'}`,fmtN(cover,1)+'″'],
+        ['Storage — '+(pipe?'pipe':'chambers'),fmtN(unitStore,0)+' CF'],['Storage — stone voids',fmtN(stoneStore,0)+' CF'],['Total storage',`${fmtN(store,0)} CF · ${fmtN(store/43560,3)} ac-ft`],
+        ['Geotextile (wrap + 10%)',fmtN(fabric,0)+' SY'],['Bed excavation',fmtN(exc,1)+' CY']],
+      math:[pipe?`Row length = ${fmtN(rowLen,2)} ft`:`Row length = ${Math.round(v.perRow)} × ${fmtN((v.cl||spec.len),1)}″${nCaps?` + 2 end caps × ${fmtN(v.capL??spec.capLen,1)}″`:''} = ${fmtN(rowLen,2)} ft`,
+        `Layout = ${rows} rows × ${fmtN(unitW*12,1)}″ + ${rows-1} × ${fmtN(v.sp,1)}″ spacing + 2 × ${v.perim}″ = ${fmtN(layW,2)} ft wide × ${fmtN(layL,2)} ft long${plans?' (using the bed from the plans instead)':''}`,
+        `Under stone = ${fmtN(A,0)} SF × ${fmtN(v.found,1)}″ ÷ 12 = ${fmtN(foundCF,0)} CF = ${fmtN(foundCF/27,1)} CY × ${v.dens1} × ${1+v.waste/100} = ${fmtN(t1,1)} tons`,
+        `Around & over = ${fmtN(A,0)} SF × ${fmtN(top-bc,3)} ft − ${fmtN(displaced,0)} CF of ${pipe?'pipe':'chambers'} = ${fmtN(embCF,0)} CF = ${fmtN(embCF/27,1)} CY × ${v.dens2} × ${1+v.waste/100} = ${fmtN(t2,1)} tons`,
+        `Storage = ${fmtN(unitStore,0)} CF + ${v.por}% × ${fmtN(foundCF+embCF,0)} CF of stone = ${fmtN(store,0)} CF`],
+      g:{pipe,rows,unitW,h,sp,per,W,layW,bot:v.bot,bc,tc,top,found:v.found/12,od:pipe?retPipe(v).od/12:0,id:pipe?retPipe(v).id/12:0}}},
+  draw:drawRet},
  {id:'volume',group:'Earthwork',name:'Cut / fill volume',icon:'▱',
   desc:'Volume from an area and a depth, adjusted for shrink (fill) or swell (haul).',
   fields:[{k:'area',label:'Area',def:1},{k:'au',label:'Area in',type:'select',options:AREA_UNITS,def:'ac'},{k:'depth',label:'Average depth',def:1},{k:'du',label:'Depth in',type:'select',options:[['ft','Feet'],['in','Inches']],def:'ft'},
@@ -2698,6 +2797,7 @@ function mhExtraHtml(v){
 // ---- drawings (inline SVG, colors come from the stylesheet so they follow light / dark)
 function svgWrap(w,h,body,label){return `<svg class="dw" viewBox="0 0 ${Math.round(w)} ${Math.round(h)}" style="max-width:${Math.round(w)}px" role="img" aria-label="${esc(label)}"><defs>
   <pattern id="dwStone" width="7" height="7" patternUnits="userSpaceOnUse"><rect width="7" height="7" class="dw-st"/><circle cx="1.8" cy="1.8" r="1.1" class="dw-std"/><circle cx="5.2" cy="4.8" r=".9" class="dw-std"/><circle cx="1.4" cy="5.7" r=".55" class="dw-std"/></pattern>
+  <pattern id="dwStone2" width="8" height="8" patternUnits="userSpaceOnUse"><rect width="8" height="8" class="dw-st2"/><circle cx="2" cy="2.4" r="1.4" class="dw-std2"/><circle cx="6" cy="6" r="1.1" class="dw-std2"/></pattern>
   <pattern id="dwSoil" width="9" height="9" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="9" height="9" class="dw-soil"/><line x1="0" y1="0" x2="0" y2="9" class="dw-soilh"/></pattern></defs>${body}</svg>`}
 const svgT=(x,y,t,cls='',anchor='start')=>`<text x="${x.toFixed(1)}" y="${y.toFixed(1)}" class="dw-t ${cls}" text-anchor="${anchor}">${esc(t)}</text>`;
 function dimV(x,y1,y2,label,side='r'){const a=Math.min(y1,y2),b=Math.max(y1,y2);return `<line x1="${x}" x2="${x}" y1="${a}" y2="${b}" class="dw-dim"/><line x1="${x-4}" x2="${x+4}" y1="${a}" y2="${a}" class="dw-dim"/><line x1="${x-4}" x2="${x+4}" y1="${b}" y2="${b}" class="dw-dim"/>`}
@@ -2875,6 +2975,77 @@ function jobNotes(job){
     <div class="lg-list">${shown.map(e=>logEntryHtml(e,{readOnly:true})).join('')||'<div class="dim small">The estimators didn’t leave any notes on this bid.</div>'}</div></div>`;
 }
 
+
+/* =====================================================================
+   SUPERSEDE — the same project comes back under a new name or with new
+   details. Replaces those details on the same bid (quotes, files, scopes
+   and the estimator log all stay) and keeps a dated history.
+   ===================================================================== */
+const SUP_FIELDS=[['name','Project name'],['location','Location'],['project_type','Project type'],['units','Number of units'],['bid_type','Bid type'],['size','Size'],['status','Bid status'],['due_date','Bid due date'],['due_time','Due time'],['walk_date','Site walk / pre-bid'],['rfi_date','RFI deadline'],['client_ids','Bidding to']];
+const supHistory=b=>Array.isArray(b?.supersede_history)?b.supersede_history:[];
+const supFirstName=b=>{const h=supHistory(b);const c=h.length&&(h[0].changes||[]).find(x=>x.field==='name');return c?c.from:null};
+const supFormerNames=b=>[...new Set(supHistory(b).flatMap(h=>(h.changes||[]).filter(x=>x.field==='name').map(x=>x.from)).filter(n=>n&&n!==b.name))];
+const supVal=(k,v)=>k==='client_ids'?(v||[]).map(clientName).join(', ')||'—':k==='due_date'||k==='walk_date'||k==='rfi_date'?(v?fmtDate(v):'—'):k==='units'?(v==null||v===''?'—':String(v)):String(v??'')||'—';
+function supTag(b,small){const h=supHistory(b);if(!h.length)return '';const last=h[h.length-1];const was=supFormerNames(b);
+  return `<span class="sup-tag" title="Superseded ${esc(fmtDate(last.date))}${was.length?' · formerly '+esc(was.join(', ')):''}">↻ Superseded ${esc(fmtShort(last.date))}</span>${small&&was.length?`<div class="dim small sup-was">Formerly ${esc(was[was.length-1])}</div>`:''}`}
+function supBanner(b){
+  const h=supHistory(b);if(!h.length||b._new)return '';const last=h[h.length-1];const orig=supFirstName(b);
+  return `<div class="notice sup-banner"><div><b>↻ Superseded ${esc(fmtDate(last.date))}</b>${h.length>1?` <span class="dim">(${h.length} times)</span>`:''}
+    <div class="small">Originally entered ${b.created_at?esc(fmtDate(String(b.created_at).slice(0,10))):'—'}${orig?` as “${esc(orig)}”`:''}</div></div>
+    <details class="sup-hist"><summary>History</summary>${h.slice().reverse().map(x=>`<div class="sup-rec"><div class="small"><b>${esc(fmtDate(x.date))}</b> · ${esc(x.by||'Someone')}${x.reason?` — ${esc(x.reason)}`:''}</div>
+      ${(x.changes||[]).length?`<ul>${x.changes.map(c=>`<li><span class="dim">${esc(c.label)}:</span> <s>${esc(supVal(c.field,c.from))}</s> → <b>${esc(supVal(c.field,c.to))}</b></li>`).join('')}</ul>`:'<div class="dim small">No details changed.</div>'}</div>`).join('')}
+      <div class="sup-rec dim small">Originally entered ${b.created_at?esc(fmtDate(String(b.created_at).slice(0,10))):'—'}</div></details></div>`;
+}
+function supStart(){const b=M.draft;M.sup={draft:{name:b.name||'',location:b.location||'',project_type:b.project_type||'',units:b.units??'',bid_type:b.bid_type||'',size:b.size||'',status:b.status,due_date:b.due_date||'',due_time:b.due_time||'',walk_date:b.walk_date||'',rfi_date:b.rfi_date||'',client_ids:[...(b.client_ids||[])]},date:todayStr(),reason:'',busy:false};renderModal();setTimeout(()=>{const n=$('#sup-name');if(n){n.focus();n.select()}},0)}
+function supDiff(){const b=M.draft,d=M.sup.draft;return SUP_FIELDS.map(([k,label])=>{let from=b[k],to=d[k];
+  if(k==='client_ids'){from=[...(from||[])];to=[...(to||[])];return JSON.stringify(from.slice().sort())===JSON.stringify(to.slice().sort())?null:{field:k,label,from,to}}
+  if(k==='units'){from=num(from);to=num(to)}else{from=from??'';to=typeof to==='string'?to.trim():to??''}
+  return String(from??'')===String(to??'')?null:{field:k,label,from,to}}).filter(Boolean)}
+function supView(){
+  const b=M.draft,S2=M.sup,d=S2.draft;const ch=supDiff();const inp=(k,type='text',ph='')=>`<input class="field" type="${type}" id="sup-${k}" data-sup="${k}" value="${esc(d[k]??'')}"${ph?` placeholder="${esc(ph)}"`:''}>`;
+  const selx=(k,opts)=>`<select class="field" id="sup-${k}" data-sup="${k}">${opts.map(o=>`<option${d[k]===o?' selected':''}>${esc(o)}</option>`).join('')}</select>`;
+  const avail=S.clients.filter(c=>!d.client_ids.includes(c.id)).sort((a,c)=>a.company.localeCompare(c.company));
+  return mhead('Supersede this project',`Replaces the project details on “${b.name}”. Quotes, files, scopes and the estimator log stay with it.`)+`<div class="mbody">
+  <div class="notice" style="margin-bottom:14px">Originally entered <b>${b.created_at?esc(fmtDate(String(b.created_at).slice(0,10))):'—'}</b>${supHistory(b).length?` · superseded ${supHistory(b).length} time${supHistory(b).length===1?'':'s'} before`:''}. Change whatever is new — only the fields you change are recorded.</div>
+  <fieldset><legend>New project details</legend><div class="fg">
+    <label class="f s2">Project name <span class="req">required</span>${inp('name','text','New project name')}</label>
+    <label class="f s2">Location${inp('location','text','City, county or address')}</label>
+    <label class="f">Project type${selx('project_type',PROJECT_TYPES)}</label>
+    <label class="f">Number of units${inp('units','number')}</label>
+    <label class="f">Bid type${selx('bid_type',BID_TYPES)}</label>
+    <label class="f">Size${inp('size')}</label>
+    <label class="f">Bid status${selx('status',BID_ST)}</label>
+    <label class="f">Bid due date${inp('due_date','date')}</label>
+    <label class="f">Due time${inp('due_time','time')}</label>
+    <label class="f">Site walk / pre-bid${inp('walk_date','date')}</label>
+    <label class="f">RFI deadline${inp('rfi_date','date')}</label>
+  </div>
+  <div class="f" style="margin-top:12px;font-size:13px;font-weight:500;color:var(--ink-2)">Bidding to
+    <div class="tagrow">${d.client_ids.map(id=>`<span class="tag">${esc(clientName(id))}<button class="rm" data-act="sup-rmclient" data-id="${id}" aria-label="Remove">×</button></span>`).join('')||'<span class="dim">No GCs</span>'}
+    <select class="field" data-act="sup-addclient" style="width:auto"><option value="">+ Add GC</option>${avail.map(c=>`<option value="${c.id}">${esc(c.company)}</option>`).join('')}</select></div></div></fieldset>
+  <fieldset><legend>Supersede record</legend><div class="fg">
+    <label class="f">Superseded on<input class="field" type="date" id="sup-date" data-supx="date" value="${esc(S2.date)}"></label>
+    <label class="f s3">Reason<input class="field" id="sup-reason" data-supx="reason" value="${esc(S2.reason)}" placeholder="e.g. New developer — project renamed, rebid with revised plans"></label></div></fieldset>
+  <fieldset><legend>What will change (${ch.length})</legend><div id="sup-changes">${supChangesHtml(ch)}</div></fieldset>
+  </div><div class="mfoot"><div></div><div class="r"><button class="btn" data-act="sup-cancel">Back</button><button class="btn primary" data-act="sup-save"${S2.busy?' disabled':''}>${S2.busy?'Saving…':'Supersede project'}</button></div></div>`;
+}
+function supChangesHtml(ch){return ch.length?`<ul class="sup-list">${ch.map(c=>`<li><span class="dim">${esc(c.label)}:</span> <s>${esc(supVal(c.field,c.from))}</s> → <b>${esc(supVal(c.field,c.to))}</b></li>`).join('')}</ul>`:'<div class="dim small">Nothing changed yet. Edit the details above.</div>'}
+async function supSave(){
+  const S2=M.sup;const d=S2.draft;const b=M.draft;
+  if(!String(d.name||'').trim()){toast('Add a project name.');$('#sup-name')?.focus();return}
+  const ch=supDiff();if(!ch.length&&!S2.reason.trim()){toast('Change something or add a reason.');return}
+  const rec={id:newId(),date:S2.date||todayStr(),at:new Date().toISOString(),by:myName(),by_user:S.session.user.id,reason:S2.reason.trim(),changes:ch};
+  const hist=[...supHistory(byId(S.bids,b.id)||b),rec];
+  const upd={supersede_history:hist,superseded_at:new Date(rec.date+'T12:00:00').toISOString(),updated_by:S.session.user.id};
+  ch.forEach(c=>{upd[c.field]=c.field==='units'?c.to:c.field==='client_ids'?c.to:(['due_date','due_time','walk_date','rfi_date'].includes(c.field)?nullIfEmpty(c.to):c.to)});
+  if(ch.some(c=>c.field==='client_ids')){const keep=new Set(d.client_ids);upd.client_proposals=Object.fromEntries(Object.entries(b.client_proposals||{}).filter(([k])=>keep.has(k)));upd.client_contacts=Object.fromEntries(Object.entries(b.client_contacts||{}).filter(([k])=>keep.has(k)));if(b.awarded_client_id&&!keep.has(b.awarded_client_id))upd.awarded_client_id=null}
+  S2.busy=true;renderModal();
+  try{await run(sb.from('bids').update(upd).eq('id',b.id));await loadTable('bids');
+    ch.forEach(c=>b[c.field]=c.to??'');b.supersede_history=hist;b.superseded_at=upd.superseded_at;if(upd.client_proposals){b.client_proposals=upd.client_proposals;b.client_contacts=upd.client_contacts;if('awarded_client_id' in upd)b.awarded_client_id=''}
+    M.sup=null;renderModal();toast(`Superseded — now “${b.name}”`)}
+  catch(e){S2.busy=false;renderModal();toast(/supersede_history|superseded_at/.test(errMsg(e))?'Run supabase/update-12-supersede.sql in Supabase first.':errMsg(e))}
+}
+
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;
@@ -2972,6 +3143,10 @@ document.addEventListener('click',e=>{
     case 'lg-rmfile':logState().files.splice(+t.dataset.i,1);renderModal();break;
     case 'lg-open':openLogFile(t.dataset.path,t.dataset.name);break;
     case 'jn-filter':S.jt.nf=t.dataset.v;render();break;
+    case 'sup-start':if(M&&M.kind==='bid'&&canWork(M.draft)){supStart();M.sup.draft.project_type=normProjectType(M.sup.draft.project_type)||'Commercial'}break;
+    case 'sup-cancel':M.sup=null;renderModal();break;
+    case 'sup-save':if(!M.sup.busy)supSave();break;
+    case 'sup-rmclient':M.sup.draft.client_ids=M.sup.draft.client_ids.filter(x=>x!==t.dataset.id);renderModal();break;
     case 'close':closeModal();break;
     case 'save':saveModal();break;
     case 'del':deleteModal();break;
@@ -3045,6 +3220,8 @@ document.addEventListener('input',e=>{
   if(t.dataset.jtq!=null){S.jt.q=t.value;render();return}
   if(t.dataset.jtf&&t.tagName==='INPUT'){S.jt[t.dataset.jtf]=t.value;render();return}
   if(t.id==='pal-q'){S.pal.q=t.value;S.pal.i=0;renderPalette();return}
+  if(M&&M.sup&&t.dataset.sup){M.sup.draft[t.dataset.sup]=t.value;const c=$('#sup-changes');if(c){const ch=supDiff();c.innerHTML=supChangesHtml(ch);const lg=c.closest('fieldset')?.querySelector('legend');if(lg)lg.textContent=`What will change (${ch.length})`}return}
+  if(M&&M.sup&&t.dataset.supx){M.sup[t.dataset.supx]=t.value;return}
   if(M&&t.dataset.lg){logState()[t.dataset.lg]=t.value;return}
   if(M&&t.dataset.lge&&M.lg?.edit){M.lg.edit[t.dataset.lge]=t.value;return}
   if(t.dataset.cf){const c=calcDef();calcRaw(c)[t.dataset.cf]=t.value;if(c.id==='pipe'&&(t.dataset.cf==='ptype'||t.dataset.cf==='size'))delete calcRaw(c).od;saveCalc();refreshCalc(t.tagName==='SELECT');return}
@@ -3113,6 +3290,7 @@ document.addEventListener('change',e=>{
     case 'tradeF':S.q.trade=t.value;render();break;
     case 'vscopeF':S.q.vscope=t.value;render();break;
     case 'vtypeF':S.q.vtype=t.value;render();break;
+    case 'sup-addclient':if(t.value&&M.sup){M.sup.draft.client_ids.push(t.value);renderModal()}break;
     case 'add-support':if(t.value){M.draft.support_estimator_ids.push(t.value);renderModal()}break;
     case 'add-client':if(t.value){M.draft.client_ids.push(t.value);const first=byId(S.clients,t.value)?.contacts?.[0]?.name;if(first)M.draft.client_contacts[t.value]=first;renderModal()}break;
     case 'add-quote':if(t.value){addQuote(t.value);renderModal()}break;

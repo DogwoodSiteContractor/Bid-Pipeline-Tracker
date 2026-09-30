@@ -542,9 +542,9 @@ table.bpt .field.n{width:150px;text-align:right;padding:6px 8px}
 }
 
 /* ---------- calculator drawings + manhole ---------- */
-:root{--dw-soil:#E9E0CC;--dw-soilh:#D6C8AA;--dw-back:#F3ECDD;--dw-st:#CFC8B8;--dw-std:#857C6C;--dw-pipe:#9AA0A4;--dw-in:#FFFFFF;--dw-conc:#C7CBC6;--dw-ring:#A9AEA9;--dw-frame:#3E4642;--dw-line:#4B5550;--dw-dim:#2566C0;--dw-bad:#C2410C;--dw-bench:#E5E8E3}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--dw-soil:#2F2A22;--dw-soilh:#3D372C;--dw-back:#38322A;--dw-st:#5A564D;--dw-std:#A39C8C;--dw-pipe:#7B8288;--dw-in:#1C201F;--dw-conc:#5B605C;--dw-ring:#737973;--dw-frame:#B0B8B2;--dw-line:#B0B8B2;--dw-dim:#6FA8EC;--dw-bad:#F08A4B;--dw-bench:#2A2F2D}}
-:root[data-theme="dark"]{--dw-soil:#2F2A22;--dw-soilh:#3D372C;--dw-back:#38322A;--dw-st:#5A564D;--dw-std:#A39C8C;--dw-pipe:#7B8288;--dw-in:#1C201F;--dw-conc:#5B605C;--dw-ring:#737973;--dw-frame:#B0B8B2;--dw-line:#B0B8B2;--dw-dim:#6FA8EC;--dw-bad:#F08A4B;--dw-bench:#2A2F2D}
+:root{--dw-st2:#DCCFB0;--dw-std2:#9C8453;--dw-ch:#3F4A45;--dw-soil:#E9E0CC;--dw-soilh:#D6C8AA;--dw-back:#F3ECDD;--dw-st:#CFC8B8;--dw-std:#857C6C;--dw-pipe:#9AA0A4;--dw-in:#FFFFFF;--dw-conc:#C7CBC6;--dw-ring:#A9AEA9;--dw-frame:#3E4642;--dw-line:#4B5550;--dw-dim:#2566C0;--dw-bad:#C2410C;--dw-bench:#E5E8E3}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--dw-st2:#5E5440;--dw-std2:#B8A57A;--dw-ch:#9AA59F;--dw-soil:#2F2A22;--dw-soilh:#3D372C;--dw-back:#38322A;--dw-st:#5A564D;--dw-std:#A39C8C;--dw-pipe:#7B8288;--dw-in:#1C201F;--dw-conc:#5B605C;--dw-ring:#737973;--dw-frame:#B0B8B2;--dw-line:#B0B8B2;--dw-dim:#6FA8EC;--dw-bad:#F08A4B;--dw-bench:#2A2F2D}}
+:root[data-theme="dark"]{--dw-st2:#5E5440;--dw-std2:#B8A57A;--dw-ch:#9AA59F;--dw-soil:#2F2A22;--dw-soilh:#3D372C;--dw-back:#38322A;--dw-st:#5A564D;--dw-std:#A39C8C;--dw-pipe:#7B8288;--dw-in:#1C201F;--dw-conc:#5B605C;--dw-ring:#737973;--dw-frame:#B0B8B2;--dw-line:#B0B8B2;--dw-dim:#6FA8EC;--dw-bad:#F08A4B;--dw-bench:#2A2F2D}
 .calc-left{display:flex;flex-direction:column;gap:18px;min-width:0}
 .calc-sub{border-top:1px solid var(--line);padding-top:14px}
 .calc-sub .sec-h{align-items:center;margin-bottom:8px}
@@ -631,3 +631,18 @@ span.lg-file{cursor:default}
 .linkish-sm{background:none;border:0;padding:0;cursor:pointer;color:var(--accent);font-weight:600;font-size:inherit}
 .linkish-sm:hover{text-decoration:underline}
 @media (max-width:640px){.lg-form{grid-template-columns:1fr 1fr}.lg-form>:last-child{grid-column:1/-1}}
+
+/* ---------- supersede ---------- */
+.sup-tag{display:inline-block;font-size:11.5px;font-weight:600;color:var(--info);background:var(--info-soft);border-radius:999px;padding:1px 8px;margin-top:4px;white-space:nowrap;vertical-align:2px}
+.sup-was{margin-top:2px}
+.sup-banner{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.sup-hist summary{cursor:pointer;font-weight:600}
+.sup-hist[open]{flex-basis:100%}
+.sup-rec{border-top:1px solid color-mix(in srgb,var(--info) 25%,transparent);padding:8px 0 4px;margin-top:6px}
+.sup-rec ul,.sup-list{margin:4px 0 0;padding-left:18px;font-size:13.5px;color:var(--ink);display:flex;flex-direction:column;gap:3px}
+.sup-rec s,.sup-list s{color:var(--ink-3)}
+
+.dw-st2{fill:var(--dw-st2)}.dw-std2{fill:var(--dw-std2)}
+.dw-ch{fill:var(--dw-ch);stroke:var(--dw-line);stroke-width:.8}
+.dw-bed{fill:none;stroke:var(--dw-line);stroke-width:1.4;stroke-dasharray:6 3}
+.lg-stone2{background:radial-gradient(circle at 40% 40%,var(--dw-std2) 1.3px,transparent 1.7px) 0 0/6px 6px,var(--dw-st2)}
