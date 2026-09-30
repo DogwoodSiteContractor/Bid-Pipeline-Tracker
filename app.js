@@ -3169,14 +3169,14 @@ function tkCompute(){
   const has=l=>tkLines(l).length||tkSurf(l).length;if(!has('ex')||!has('pr')){toast('Add an existing and a proposed surface — trace contours, pads or spots, or import a TIN.');return}
   const R=tkRegion();if(!R){toast((t.surfaces||[]).length?'Draw a perimeter, or import surfaces that overlap.':'Draw the perimeter first.');return}
   const cell=tkCellPx();const P=tkPrep(cell);const x0=R.x0,y0=R.y0;
-  const nx=Math.ceil((R.x1-x0)/cell),ny=Math.ceil((R.y1-y0)/cell);const dz=new Float32Array(nx*ny).fill(NaN);
+  const nx=Math.ceil((R.x1-x0)/cell),ny=Math.ceil((R.y1-y0)/cell);const dz=new Float32Array(nx*ny).fill(NaN),ZE=new Float32Array(nx*ny).fill(NaN),ZP=new Float32Array(nx*ny).fill(NaN);
   const cA=cell*cell;const strip=(+t.strip||0)/12,sec=(+t.section||0)/12;let cut=0,fill=0,n=0,maxC=0,maxF=0;
   for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const px=x0+(i+0.5)*cell,py=y0+(j+0.5)*cell;if(R.poly&&!tkPip([px,py],R.poly))continue;
-    const ze=tkZ(P.ex,px,py,P.bEx)-strip,zp=tkZ(P.pr,px,py,P.bPr)-sec;if(!isFinite(ze)||!isFinite(zp))continue;const d=zp-ze;dz[j*nx+i]=d;n++;
+    const ze0=tkZ(P.ex,px,py,P.bEx),zp0=tkZ(P.pr,px,py,P.bPr);const ze=ze0-strip,zp=zp0-sec;if(!isFinite(ze)||!isFinite(zp))continue;const d=zp-ze;dz[j*nx+i]=d;ZE[j*nx+i]=ze0;ZP[j*nx+i]=zp0;n++;
     if(d<0){cut+=-d*cA;maxC=Math.max(maxC,-d)}else{fill+=d*cA;maxF=Math.max(maxF,d)}}
   const area=n*cA;const stripCY=area*strip/27;if(!n){toast('The surfaces don’t overlap inside the perimeter.');return}
   const cutCY=cut/27,fillCY=fill/27,need=fillCY/(1-(+t.shrink||0)/100);const net=cutCY-need;
-  t.res={x0,y0,cell,nx,ny,dz,cutCY,fillCY,need,net,area,stripCY,maxC,maxF,cells:n,cellFt:cell};tkUI();tkDraw();
+  t.res={x0,y0,cell,nx,ny,dz,ze:ZE,zp:ZP,cutCY,fillCY,need,net,area,stripCY,maxC,maxF,cells:n,cellFt:cell};tkUI();tkDraw();
 }
 // ---- view
 
@@ -3343,6 +3343,7 @@ function tkUI(){
   <div class="tk-card"><button class="btn primary" data-act="tk-calc" style="width:100%;justify-content:center">${r?'Recalculate':'Calculate cut / fill'}</button>
     ${r?`<div class="calc-main" style="margin-top:12px"><b>${fmtN(Math.abs(r.net),0)}</b><span>CY ${r.net>=0?'export':'import'}</span></div>
       <div class="list">${[['Cut',fmtN(r.cutCY,0)+' CY'],['Fill (compacted)',fmtN(r.fillCY,0)+' CY'],[`Fill needs (${t.shrink}% shrink)`,fmtN(r.need,0)+' bank CY'],[r.net>=0?'Export':'Import',`${fmtN(Math.abs(r.net),0)} bank · ${fmtN(Math.abs(r.net)*(r.net>=0?1+(+t.swell||0)/100:1),0)} ${r.net>=0?'loose':'bank'} CY`],[r.net>=0?'Truck loads out':'Truck loads in',fmtN(Math.ceil(Math.abs(r.net)*(1+(+t.swell||0)/100)/(+t.truck||14)),0)+` @ ${t.truck||14} CY`],['Topsoil strip',`${fmtN(r.stripCY,0)} CY (${t.strip}″)`],['Area',`${fmtN(r.area,0)} SF · ${fmtN(r.area/43560,2)} ac`],['Deepest cut / fill',`${fmtN(r.maxC,1)}′ / ${fmtN(r.maxF,1)}′`]].map(([a,b])=>`<div class="li"><span class="dim">${a}</span><b class="num">${b}</b></div>`).join('')}</div>
+      <button class="btn sm" data-act="t3-open" style="margin-top:10px;width:100%;justify-content:center">🧊 3D view</button>
       <label class="mh-use" style="margin-top:8px"><input type="checkbox" data-tkset="heat"${t.heat?' checked':''}> Show cut / fill map <span class="tk-key"><i class="c"></i>cut <i class="f"></i>fill</span></label>
       <p class="hint">Rough numbers from a ${fmtN(r.cellFt,1)}′ grid (${fmtN(r.cells,0)} cells).${(t.surfaces||[]).length?' TIN surfaces are read exactly; where there’s no TIN it falls back to the contours.':''} Between contours the grade is interpolated straight across; beyond the outermost contour it’s held between the last two. Trace contours past the perimeter for the best numbers.</p>`
       :'<p class="hint">Trace existing and proposed contours across the whole perimeter, then calculate.</p>'}</div>
@@ -3602,6 +3603,78 @@ function tkVecCard(){const t=S.tk,V=tkVec();if(!V)return '';const left=V.paths.f
       <div class="tk-vgn"><button class="linkish-sm" data-act="tk-vgsel" data-g="${g.id}" title="Select every line in this group">${esc(nm(g))}</button><div class="dim small">${g.layer?`${g.dash?'dashed · ':''}${g.width} pt · `:''}${fmtN(g.n,0)} line${g.n===1?'':'s'}</div></div>
       <div class="tk-vga"><button class="btn sm tk-ex" data-act="tk-vgassign" data-g="${g.id}" data-v="ex" title="All to Existing">EX</button><button class="btn sm tk-pr" data-act="tk-vgassign" data-g="${g.id}" data-v="pr" title="All to Proposed">PR</button><button class="rm" data-act="tk-vghide" data-g="${g.id}" title="${g.hidden?'Show':'Hide'} this group">${g.hidden?'◌':'●'}</button></div></div>`).join('')||'<div class="dim small">Every line on this sheet has been assigned.</div>'}</div>
     ${V.labels.length?`<p class="hint">${fmtN(V.labels.length,0)} number labels found — lines near a label get its elevation automatically.</p>`:'<p class="hint">No text labels found on this sheet, so elevations will need to be typed in (Elevation tool).</p>'}</div>`}
+
+/* ---- 3D view of the cut / fill result: a small WebGL viewer (no library needed).
+   Drag to orbit, right-drag or Shift-drag to pan, scroll to zoom. */
+const T3={open:false,yaw:-0.7,pitch:0.62,dist:null,pan:[0,0],exag:null,show:'both',gl:null};
+const m4={
+  persp(f,a,n,fa){const t=1/Math.tan(f/2);return [t/a,0,0,0,0,t,0,0,0,0,(fa+n)/(n-fa),-1,0,0,2*fa*n/(n-fa),0]},
+  mul(a,b){const o=new Array(16);for(let i=0;i<4;i++)for(let j=0;j<4;j++){let s=0;for(let k=0;k<4;k++)s+=a[k*4+j]*b[i*4+k];o[i*4+j]=s}return o},
+  look(e,c,u){const z=norm3([e[0]-c[0],e[1]-c[1],e[2]-c[2]]),x=norm3(cross3(u,z)),y=cross3(z,x);return [x[0],y[0],z[0],0,x[1],y[1],z[1],0,x[2],y[2],z[2],0,-dot3(x,e),-dot3(y,e),-dot3(z,e),1]}};
+const dot3=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],cross3=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],norm3=a=>{const l=Math.hypot(...a)||1;return [a[0]/l,a[1]/l,a[2]/l]};
+function t3Open(){const r=S.tk.res;if(!r||!r.ze){toast('Calculate first, then open the 3D view.');return}
+  let w=$('#tk3d-wrap');if(!w){w=document.createElement('div');w.id='tk3d-wrap';document.body.appendChild(w)}
+  const ext=Math.max(r.nx,r.ny)*r.cell;const zs=[];for(let k=0;k<r.ze.length;k+=7){if(isFinite(r.ze[k]))zs.push(r.ze[k]);if(isFinite(r.zp[k]))zs.push(r.zp[k])}
+  const relief=(Math.max(...zs)-Math.min(...zs))||1;if(T3.exag==null||T3.forRes!==r){T3.exag=Math.max(1,Math.min(20,Math.round(ext*0.12/relief)));T3.forRes=r;T3.dist=null;T3.pan=[0,0]}
+  w.innerHTML=`<div class="t3-box" role="dialog" aria-label="3D cut and fill view"><div class="t3-head"><b>3D cut / fill</b>
+    <div class="seg t3-seg">${[['both','Both'],['pr','Proposed'],['ex','Existing']].map(([k,l])=>`<button class="${T3.show===k?'on':''}" data-act="t3-show" data-v="${k}">${l}</button>`).join('')}</div>
+    <label class="t3-ex">Vertical × <input type="range" min="1" max="20" step="1" value="${T3.exag}" data-t3exag> <b id="t3-exv">${T3.exag}</b></label>
+    <button class="btn sm" data-act="t3-reset">Reset view</button><button class="btn sm" data-act="t3-close">Close</button></div>
+    <div class="t3-stage"><canvas id="tk3d"></canvas><div class="t3-legend"><span><i style="background:#D64028"></i>Cut</span><span><i style="background:#2566C0"></i>Fill</span><span><i style="background:#C8B48C"></i>Existing${T3.show==='both'?' (grid)':''}</span>
+      <span class="dim">Cut ${fmtN(r.cutCY,0)} CY · Fill ${fmtN(r.fillCY,0)} CY · deepest ${fmtN(r.maxC,1)}′ / ${fmtN(r.maxF,1)}′</span></div>
+    <div class="t3-help">Drag to turn · right-drag or Shift-drag to move · scroll to zoom</div></div></div>`;
+  T3.open=true;t3Build();t3Draw()}
+function t3Close(){T3.open=false;const w=$('#tk3d-wrap');if(w)w.innerHTML='';T3.gl=null}
+function t3Build(){
+  const r=S.tk.res,cv=$('#tk3d');if(!cv)return;const dpr=window.devicePixelRatio||1;cv.width=cv.clientWidth*dpr;cv.height=cv.clientHeight*dpr;
+  const gl=cv.getContext('webgl',{antialias:true,premultipliedAlpha:false});if(!gl){cv.parentNode.insertAdjacentHTML('beforeend','<div class="empty">3D needs WebGL, which this browser has turned off.</div>');return}
+  // downsample to ≤ 180 × 180 vertices
+  const step=Math.max(1,Math.ceil(Math.max(r.nx,r.ny)/180));const nx=Math.ceil(r.nx/step),ny=Math.ceil(r.ny/step);
+  const at=(arr,i,j)=>{let s=0,c=0;for(let a=0;a<step;a++)for(let b=0;b<step;b++){const ii=i*step+a,jj=j*step+b;if(ii<r.nx&&jj<r.ny){const v=arr[jj*r.nx+ii];if(isFinite(v)){s+=v;c++}}}return c?s/c:NaN};
+  const E=new Float32Array(nx*ny),P=new Float32Array(nx*ny),D=new Float32Array(nx*ny);for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){E[j*nx+i]=at(r.ze,i,j);P[j*nx+i]=at(r.zp,i,j);D[j*nx+i]=at(r.dz,i,j)}
+  let zmin=Infinity;for(let k=0;k<E.length;k++){if(isFinite(E[k]))zmin=Math.min(zmin,E[k]);if(isFinite(P[k]))zmin=Math.min(zmin,P[k])}
+  const cs=r.cell*step,cx=nx*cs/2,cz=ny*cs/2,ex=T3.exag;const m=Math.max(r.maxC,r.maxF,0.5);
+  const mesh=(Z,colFn)=>{const pos=[],nrm=[],col=[];const V=(i,j)=>[i*cs-cx,(Z[j*nx+i]-zmin)*ex,j*cs-cz];
+    const N=(i,j)=>{const z=k=>Z[k];const l=i>0&&isFinite(z(j*nx+i-1))?V(i-1,j):V(i,j),rr=i<nx-1&&isFinite(z(j*nx+i+1))?V(i+1,j):V(i,j),u=j>0&&isFinite(z((j-1)*nx+i))?V(i,j-1):V(i,j),d=j<ny-1&&isFinite(z((j+1)*nx+i))?V(i,j+1):V(i,j);
+      return norm3(cross3([d[0]-u[0],d[1]-u[1],d[2]-u[2]],[rr[0]-l[0],rr[1]-l[1],rr[2]-l[2]]))};
+    const push=(i,j)=>{pos.push(...V(i,j));nrm.push(...N(i,j));col.push(...colFn(j*nx+i))};
+    for(let j=0;j<ny-1;j++)for(let i=0;i<nx-1;i++){const a=j*nx+i,b=a+1,c=a+nx,d=c+1;const ok=k=>isFinite(Z[k]);
+      if(ok(a)&&ok(b)&&ok(c)){push(i,j);push(i+1,j);push(i,j+1)}if(ok(b)&&ok(d)&&ok(c)){push(i+1,j);push(i+1,j+1);push(i,j+1)}}
+    return {pos:new Float32Array(pos),nrm:new Float32Array(nrm),col:new Float32Array(col),n:pos.length/3}};
+  const mix=(a,b,u)=>[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u,a[2]+(b[2]-a[2])*u,1];const NEU=[0.9,0.9,0.87],RED=[0.84,0.2,0.12],BLU=[0.1,0.36,0.78];
+  const prCol=k=>{const d=D[k];if(!isFinite(d))return [0.8,0.8,0.8,1];if(Math.abs(d)<0.05)return [...NEU,1];const u=Math.min(1,Math.sqrt(Math.abs(d)/m));return mix(NEU,d<0?RED:BLU,0.25+0.75*u)};
+  const exCol=()=>[0.78,0.71,0.55,1];
+  const vs=`attribute vec3 p;attribute vec3 n;attribute vec4 c;uniform mat4 M;uniform vec3 L;varying vec4 vc;varying float vl;void main(){gl_Position=M*vec4(p,1.0);vc=c;vl=0.38+0.62*max(dot(normalize(n),L),0.0);}`;
+  const fs=`precision mediump float;varying vec4 vc;varying float vl;uniform float A;void main(){gl_FragColor=vec4(vc.rgb*vl,A);}`;
+  const sh=(t,s)=>{const o=gl.createShader(t);gl.shaderSource(o,s);gl.compileShader(o);return o};const pr=gl.createProgram();gl.attachShader(pr,sh(gl.VERTEX_SHADER,vs));gl.attachShader(pr,sh(gl.FRAGMENT_SHADER,fs));gl.linkProgram(pr);gl.useProgram(pr);
+  const buf=m=>{const b={n:m.n};['pos','nrm','col'].forEach(k=>{b[k]=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b[k]);gl.bufferData(gl.ARRAY_BUFFER,m[k],gl.STATIC_DRAW)});return b};
+  // existing ground as a wire grid, so it reads over the coloured design surface
+  const grid=(()=>{const pos=[],nrm=[],col=[];const k=Math.max(1,Math.round(Math.max(nx,ny)/45));const V=(i,j)=>[i*cs-cx,(E[j*nx+i]-zmin)*ex+0.02*ex,j*cs-cz];const seg=(a,b,ia,ja,ib,jb)=>{if(!isFinite(E[a])||!isFinite(E[b]))return;pos.push(...V(ia,ja),...V(ib,jb));nrm.push(0,1,0,0,1,0);col.push(0.36,0.25,0.12,1,0.36,0.25,0.12,1)};
+    for(let j=0;j<ny;j+=k)for(let i=0;i<nx-1;i++)seg(j*nx+i,j*nx+i+1,i,j,i+1,j);for(let i=0;i<nx;i+=k)for(let j=0;j<ny-1;j++)seg(j*nx+i,(j+1)*nx+i,i,j,i,j+1);
+    return {pos:new Float32Array(pos),nrm:new Float32Array(nrm),col:new Float32Array(col),n:pos.length/3}})();
+  T3.gl={gl,pr,pro:buf(mesh(P,prCol)),exi:buf(mesh(E,exCol)),wire:buf(grid),ext:Math.max(nx,ny)*cs,loc:{p:gl.getAttribLocation(pr,'p'),n:gl.getAttribLocation(pr,'n'),c:gl.getAttribLocation(pr,'c'),M:gl.getUniformLocation(pr,'M'),L:gl.getUniformLocation(pr,'L'),A:gl.getUniformLocation(pr,'A')}};
+  if(T3.dist==null)T3.dist=T3.gl.ext*1.25}
+function t3Draw(){const G=T3.gl;if(!G)return;const {gl,loc}=G;const cv=gl.canvas;gl.viewport(0,0,cv.width,cv.height);
+  const bg=getComputedStyle(document.documentElement).getPropertyValue('--surface-2').trim()||'#f3f4f1';const hx=bg.startsWith('#')&&bg.length===7?bg:'#f3f4f1';
+  gl.clearColor(parseInt(hx.slice(1,3),16)/255,parseInt(hx.slice(3,5),16)/255,parseInt(hx.slice(5,7),16)/255,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.enable(gl.DEPTH_TEST);
+  const d=T3.dist,tgt=[T3.pan[0],0,T3.pan[1]];const eye=[tgt[0]+d*Math.cos(T3.pitch)*Math.sin(T3.yaw),tgt[1]+d*Math.sin(T3.pitch),tgt[2]+d*Math.cos(T3.pitch)*Math.cos(T3.yaw)];
+  const P=m4.persp(0.8,cv.width/cv.height,G.ext*0.01,G.ext*10),V=m4.look(eye,tgt,[0,1,0]);gl.uniformMatrix4fv(loc.M,false,new Float32Array(m4.mul(P,V)));gl.uniform3fv(loc.L,norm3([0.4,0.9,0.3]));
+  const draw=(b,alpha,mode)=>{if(!b.n)return;[['pos','p',3],['nrm','n',3],['col','c',4]].forEach(([k,a,s])=>{gl.bindBuffer(gl.ARRAY_BUFFER,b[k]);gl.enableVertexAttribArray(loc[a]);gl.vertexAttribPointer(loc[a],s,gl.FLOAT,false,0,0)});gl.uniform1f(loc.A,alpha);gl.drawArrays(mode??gl.TRIANGLES,0,b.n)};
+  gl.disable(gl.BLEND);gl.depthMask(true);
+  if(T3.show!=='ex')draw(G.pro,1);if(T3.show==='ex')draw(G.exi,1);
+  if(T3.show==='both'){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);draw(G.wire,0.75,gl.LINES);gl.disable(gl.BLEND)}}
+(function(){let d=null;
+  document.addEventListener('pointerdown',e=>{if(e.target.id!=='tk3d')return;d={x:e.clientX,y:e.clientY,pan:e.button===2||e.shiftKey};e.target.setPointerCapture(e.pointerId)});
+  document.addEventListener('pointermove',e=>{if(!d||!T3.open)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;d.x=e.clientX;d.y=e.clientY;
+    if(d.pan){const s=T3.dist/700,c=Math.cos(T3.yaw),n=Math.sin(T3.yaw);T3.pan[0]+=(-c*dx-n*dy)*s;T3.pan[1]+=(n*dx-c*dy)*s}
+    else{T3.yaw-=dx*0.008;T3.pitch=Math.max(0.05,Math.min(1.5,T3.pitch+dy*0.006))}t3Draw()});
+  document.addEventListener('pointerup',()=>{d=null});
+  document.addEventListener('contextmenu',e=>{if(e.target.id==='tk3d')e.preventDefault()});
+  document.addEventListener('wheel',e=>{if(e.target.id!=='tk3d')return;e.preventDefault();T3.dist=Math.max(1,T3.dist*Math.exp(e.deltaY*0.0012));t3Draw()},{passive:false});
+  document.addEventListener('keydown',e=>{if(T3.open&&e.key==='Escape')t3Close()});
+  window.addEventListener('resize',()=>{if(T3.open){t3Build();t3Draw()}});
+})();
+
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;
@@ -3709,6 +3782,10 @@ document.addEventListener('click',e=>{
     case 'tk-sheetreset':{const k=S.tk;const sh=tkSheet(k.page);if(sh){const old={...sh};const n={...sh,rot:0,tx:0,ty:0,placed:!Object.keys(k.sheets).some(x=>+x!==k.page&&tkScaled(+x))};tkReplace(k.page,old,n);tkSave();k.view=null;tkFit();tkDraw();tkUI()}break}
     case 'tk-layer':S.tk.layer=t.dataset.v;tkPersist();tkUI();break;
     case 'tk-finish':tkFinish();break;
+    case 't3-open':t3Open();break;
+    case 't3-close':t3Close();break;
+    case 't3-reset':T3.yaw=-0.7;T3.pitch=0.62;T3.dist=T3.gl?T3.gl.ext*1.25:null;T3.pan=[0,0];t3Draw();break;
+    case 't3-show':T3.show=t.dataset.v;document.querySelectorAll('[data-act=t3-show]').forEach(b=>b.classList.toggle('on',b.dataset.v===T3.show));t3Draw();break;
     case 'tk-vectorize':tkVectorize(S.tk.page);break;
     case 'tk-vassign':tkVecAssign([...S.tk.vecSel],t.dataset.v);break;
     case 'tk-vclear':S.tk.vecSel.clear();tkDraw();tkUI();break;
@@ -3802,6 +3879,7 @@ document.addEventListener('input',e=>{
   if(t.dataset.jtq!=null){S.jt.q=t.value;render();return}
   if(t.dataset.jtf&&t.tagName==='INPUT'){S.jt[t.dataset.jtf]=t.value;render();return}
   if(t.id==='pal-q'){S.pal.q=t.value;S.pal.i=0;renderPalette();return}
+  if(t.dataset.t3exag!=null){T3.exag=+t.value;const v=$('#t3-exv');if(v)v.textContent=T3.exag;t3Build();t3Draw();return}
   if(t.dataset.tkset==='otherAlpha'){S.tk.otherAlpha=+t.value;tkDraw();return}
   if(t.dataset.tkset&&t.type!=='checkbox'){S.tk[t.dataset.tkset]=t.tagName==='SELECT'?+t.value:t.value;return}
   if(M&&M.sup&&t.dataset.sup){M.sup.draft[t.dataset.sup]=t.value;const c=$('#sup-changes');if(c){const ch=supDiff();c.innerHTML=supChangesHtml(ch);const lg=c.closest('fieldset')?.querySelector('legend');if(lg)lg.textContent=`What will change (${ch.length})`}return}

@@ -714,3 +714,18 @@ th.sorted{color:var(--ink)}th.sorted .ov-arr{opacity:1;color:var(--accent)}
 .tk-vga{display:flex;gap:4px;align-items:center}.tk-vga .btn.sm{padding:3px 7px;font-size:12px}
 .btn.tk-ex{color:var(--tk-ex);border-color:color-mix(in srgb,var(--tk-ex) 45%,var(--line))}.btn.tk-pr{color:var(--tk-pr);border-color:color-mix(in srgb,var(--tk-pr) 45%,var(--line))}
 .tk-vsel{background:color-mix(in srgb,#E8590C 9%,transparent);border-radius:8px;padding:8px 10px;margin:8px 0}
+
+/* ---------- 3D cut / fill ---------- */
+#tk3d-wrap:empty{display:none}
+#tk3d-wrap{position:fixed;inset:0;z-index:60;background:rgba(10,14,12,.55);display:flex;align-items:center;justify-content:center;padding:16px}
+.t3-box{background:var(--surface);border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35);width:min(1400px,100%);height:min(900px,100%);display:flex;flex-direction:column;overflow:hidden}
+.t3-head{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid var(--line)}
+.t3-head>b{font-size:16px;margin-right:auto}
+.t3-seg{padding:3px}.t3-seg button{padding:5px 10px;font-size:13px}
+.t3-ex{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-2)}
+.t3-stage{position:relative;flex:1;min-height:0;background:var(--surface-2)}
+#tk3d{width:100%;height:100%;display:block;cursor:grab;touch-action:none}
+#tk3d:active{cursor:grabbing}
+.t3-legend{position:absolute;left:12px;top:10px;display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12.5px;background:color-mix(in srgb,var(--surface) 88%,transparent);padding:6px 10px;border-radius:8px}
+.t3-legend span{display:inline-flex;align-items:center;gap:5px}.t3-legend i{width:12px;height:12px;border-radius:3px;display:inline-block}
+.t3-help{position:absolute;right:12px;bottom:10px;font-size:12px;color:var(--ink-3);background:color-mix(in srgb,var(--surface) 88%,transparent);padding:4px 8px;border-radius:6px}
