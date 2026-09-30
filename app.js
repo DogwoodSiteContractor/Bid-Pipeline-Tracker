@@ -439,8 +439,38 @@ function amtCell(b,key){
   if(!a.length)return '<span class="dim">—</span>';
   const lo=Math.min(...a),hi=Math.max(...a);return lo===hi?money(hi):`${moneyK(lo)}–${moneyK(hi)}`;
 }
-function overviewTable(list){
-  const groups=OV_GROUPS.filter(([l,g])=>['Earthwork','Underground','Erosion / demo'].includes(l)||list.some(b=>scopeItems(b).some(x=>g.includes(x.group||groupOf(x.name)))));
+// ---- Projects overview: sort by any column, filter by status / estimator / GC / type / due / proposal
+const OV_KEY='bp-ov';const ovDefault=()=>({sort:'due',dir:1,q:'',status:'',est:'',client:'',type:'',due:'',prop:''});
+S.ov=(()=>{const d=ovDefault();try{Object.assign(d,JSON.parse(localStorage.getItem(OV_KEY)||'{}'))}catch(e){}return d})();
+const saveOv=()=>{try{localStorage.setItem(OV_KEY,JSON.stringify(S.ov))}catch(e){}};
+function amtVal(b,key){const base=num(b[key]);if(base!=null)return base;const a=(b.client_ids||[]).map(id=>num(propOf(b,id)[key])).filter(v=>v!=null);return a.length?Math.max(...a):null}
+function groupRank(b,groups){const it=scopeItems(b).filter(x=>groups.includes(x.group||groupOf(x.name)));if(!it.length)return null;const done=it.filter(x=>x.status==='Complete').length;return done/it.length+(it.some(x=>x.status==='In Progress')&&done<it.length?0.001:0)}
+function ovSortVal(b,k){
+  if(k==='name')return (b.name||'').toLowerCase();if(k==='client')return (b.client_ids||[]).map(clientName).sort()[0]?.toLowerCase()||null;
+  if(k==='due')return b.due_date||null;if(k==='proposal')return PROPOSAL_ST.indexOf(b.proposal_status||'Not Started');
+  if(k==='with')return amtVal(b,'amount_with');if(k==='without')return amtVal(b,'amount_without');if(k==='value')return bidValue(b)||null;
+  if(k==='contact')return lastTouch(b)||null;if(k==='status')return BID_ST.indexOf(b.status);
+  if(k.startsWith('g:')){const g=OV_GROUPS.find(x=>x[0]===k.slice(2));return g?groupRank(b,g[1]):null}return null}
+function ovApply(list){const O=S.ov;const q=O.q.trim().toLowerCase();
+  const out=list.filter(b=>{if(q&&!matchesQuery(bidHaystack(b),q))return false;if(O.status&&b.status!==O.status)return false;
+    if(O.est&&b.lead_estimator_id!==O.est&&!(b.support_estimator_ids||[]).includes(O.est))return false;if(O.client&&!(b.client_ids||[]).includes(O.client))return false;
+    if(O.type&&normProjectType(b.project_type)!==O.type)return false;if(O.prop&&(b.proposal_status||'Not Started')!==O.prop)return false;
+    if(O.due){const d=b.due_date?daysUntil(b.due_date):null;if(O.due==='none'?d!=null:d==null)return false;if(O.due==='past'&&!(d<0))return false;if(O.due==='7'&&!(d>=0&&d<=7))return false;if(O.due==='30'&&!(d>=0&&d<=30))return false}
+    return true});
+  const k=O.sort,dir=O.dir;return out.map((b,i)=>({b,i,v:ovSortVal(b,k)})).sort((x,y)=>{const a=x.v,c=y.v;if(a==null&&c==null)return x.i-y.i;if(a==null)return 1;if(c==null)return -1;const r=typeof a==='string'?a.localeCompare(c):a-c;return r*dir||(x.b.due_date||'9').localeCompare(y.b.due_date||'9')}).map(x=>x.b)}
+function ovBar(all,shown){const O=S.ov;const opt=(k,label,opts)=>`<select class="field" data-ovf="${k}" aria-label="${esc(label)}"><option value="">${esc(label)}</option>${opts.map(([v,l])=>`<option value="${esc(v)}"${O[k]===v?' selected':''}>${esc(l)}</option>`).join('')}</select>`;
+  const ests=S.estimators.filter(e=>all.some(b=>b.lead_estimator_id===e.id||(b.support_estimator_ids||[]).includes(e.id))).sort((a,b)=>a.name.localeCompare(b.name));
+  const gcs=[...new Set(all.flatMap(b=>b.client_ids||[]))].map(id=>[id,clientName(id)]).sort((a,b)=>a[1].localeCompare(b[1]));
+  const types=[...new Set(all.map(b=>normProjectType(b.project_type)).filter(Boolean))].sort();const st=ACTIVE.filter(x=>all.some(b=>b.status===x));
+  const any=O.q||O.status||O.est||O.client||O.type||O.due||O.prop;
+  return `<div class="ov-bar"><div class="pv-search"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><input id="ov-q" class="field" data-ovq placeholder="Search projects, GCs, scopes, notes…" value="${esc(O.q)}" aria-label="Search the projects overview"></div>
+    ${opt('status','All statuses',st.map(x=>[x,x]))}${opt('due','Any due date',[['past','Past due'],['7','Due in 7 days'],['30','Due in 30 days'],['none','No due date']])}
+    ${ests.length?opt('est','All estimators',ests.map(e=>[e.id,e.name])):''}${gcs.length?opt('client','All GCs',gcs):''}${types.length>1?opt('type','All types',types.map(x=>[x,x])):''}${opt('prop','Any proposal',PROPOSAL_ST.map(x=>[x,x]))}
+    ${any?'<button class="btn sm ghost" data-act="ov-clear">Clear</button>':''}<span class="dim small ov-count">${shown===all.length?`${all.length} bid${all.length===1?'':'s'}`:`Showing ${shown} of ${all.length}`}</span></div>`}
+function overviewTable(all){
+  const list=ovApply(all);const O=S.ov;
+  const groups=OV_GROUPS.filter(([l,g])=>['Earthwork','Underground','Erosion / demo'].includes(l)||all.some(b=>scopeItems(b).some(x=>g.includes(x.group||groupOf(x.name)))));
+  const th=(k,label,cls='')=>`<th class="${cls}${O.sort===k?' sorted':''}" aria-sort="${O.sort===k?(O.dir>0?'ascending':'descending'):'none'}"><button class="ov-sort" data-act="ov-sort" data-k="${k}">${label}<span class="ov-arr" aria-hidden="true">${O.sort===k?(O.dir>0?'▲':'▼'):'↕'}</span></button></th>`;
   const rows=list.map(b=>`<tr class="click" data-act="open-bid" data-id="${b.id}">
     <td><div class="proj">${esc(b.name)}</div><div class="dim small" style="white-space:nowrap">${[normProjectType(b.project_type),unitsText(b),b.lead_estimator_id?estName(b.lead_estimator_id):''].filter(Boolean).map(esc).join(' · ')}</div></td>
     <td>${(b.client_ids||[]).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}</div>`).join('')||'<span class="dim">—</span>'}</td>
@@ -452,8 +482,8 @@ function overviewTable(list){
     <td class="r num" style="font-weight:700">${bidValue(b)?money(bidValue(b))+` <span class="dim small">${b.use_for==='without'?'w/o':'w/'}</span>`:'<span class="dim">—</span>'}</td>
     <td>${lastTouch(b)?fmtShort(lastTouch(b)):'<span class="dim">—</span>'}</td>
     <td>${pill(b.status,BID_CLS[b.status])}</td></tr>`).join('');
-  return `<div class="panel scroll"><table class="ov"><thead><tr><th>Project</th><th>GC / client</th><th>Due date</th>${groups.map(([l])=>`<th>${l}</th>`).join('')}<th>Proposal</th><th class="r">W/ site impr.</th><th class="r">W/O site impr.</th><th class="r">Dashboard $</th><th>Last GC contact</th><th>Status</th></tr></thead>
-   <tbody>${rows||`<tr><td colspan="${9+groups.length}"><div class="empty"><b>No active bids</b>${isAdmin()?'Click <b>+ New bid</b> to add one.':''}</div></td></tr>`}</tbody></table></div>`;
+  return `${all.length?ovBar(all,list.length):''}<div class="panel scroll"><table class="ov"><thead><tr>${th('name','Project')}${th('client','GC / client')}${th('due','Due date')}${groups.map(([l])=>th('g:'+l,l)).join('')}${th('proposal','Proposal')}${th('with','W/ site impr.','r')}${th('without','W/O site impr.','r')}${th('value','Dashboard $','r')}${th('contact','Last GC contact')}${th('status','Status')}</tr></thead>
+   <tbody>${rows||`<tr><td colspan="${9+groups.length}"><div class="empty">${all.length?'<b>No bids match these filters</b><button class="btn sm" data-act="ov-clear">Clear filters</button>':`<b>No active bids</b>${isAdmin()?'Click <b>+ New bid</b> to add one.':''}`}</div></td></tr>`}</tbody></table></div>`;
 }
 function closedTable(list){
   return `<div class="panel scroll"><table><thead><tr><th>Project</th><th>GC / client</th><th>Due date</th><th class="r">W/ site impr.</th><th class="r">W/O site impr.</th><th class="r">Contract</th><th>Status</th></tr></thead><tbody>
@@ -3541,6 +3571,8 @@ document.addEventListener('click',e=>{
     case 'tk-selflip':{const k=S.tk;const l=k.lines.find(x=>x.id===k.sel);if(l){l.layer=l.layer==='ex'?'pr':'ex';tkSave();tkDraw();tkUI()}break}
     case 'tk-clear':{const k=S.tk;if(!k.clearArm){k.clearArm=true;tkUI();setTimeout(()=>{k.clearArm=false;tkUI()},4000);break}
       const keep={img:k.img,pdf:k.pdf,imgs:k.imgs,fileName:k.fileName,fileKind:k.fileKind,pageCount:k.pageCount,page:k.page};Object.assign(k,tkBlank(),keep,{cur:[],res:null,pending:null,sel:null,align:null,clearArm:false,tool:tkHasSheet()?'scale':'pan',surfNotSaved:false,view:null});tkSave();tkMount();toast('Takeoff cleared');break}
+    case 'ov-sort':{const k=t.dataset.k;if(S.ov.sort===k)S.ov.dir=-S.ov.dir;else{S.ov.sort=k;S.ov.dir=['value','with','without','contact','g:Earthwork','g:Underground','g:Erosion / demo','g:Paving','g:Other'].includes(k)?-1:1}saveOv();render();break}
+    case 'ov-clear':Object.assign(S.ov,{q:'',status:'',est:'',client:'',type:'',due:'',prop:''});saveOv();render();break;
     case 'close':closeModal();break;
     case 'save':saveModal();break;
     case 'del':deleteModal();break;
@@ -3620,6 +3652,8 @@ document.addEventListener('input',e=>{
   if(M&&M.sup&&t.dataset.supx){M.sup[t.dataset.supx]=t.value;return}
   if(M&&t.dataset.lg){logState()[t.dataset.lg]=t.value;return}
   if(M&&t.dataset.lge&&M.lg?.edit){M.lg.edit[t.dataset.lge]=t.value;return}
+  if(t.dataset.ovq!=null){S.ov.q=t.value;saveOv();render();return}
+  if(t.dataset.ovf&&t.tagName==='SELECT'){S.ov[t.dataset.ovf]=t.value;saveOv();render();return}
   if(t.dataset.cf){const c=calcDef();calcRaw(c)[t.dataset.cf]=t.value;if(c.id==='pipe'&&(t.dataset.cf==='ptype'||t.dataset.cf==='size'))delete calcRaw(c).od;saveCalc();refreshCalc(t.tagName==='SELECT');return}
   if(t.dataset.mh){const c=calcDef();const raw=calcRaw(c);mhDefaults(raw);setCalcPath(raw,t.dataset.mh,t.type==='checkbox'?t.checked:t.value);saveCalc();refreshCalc(t.tagName==='SELECT');return}
   if(M&&M.kind==='pipes'&&t.dataset.pf){const[i,k]=t.dataset.pf.split('.');M.draft[+i][k]=t.value;return}

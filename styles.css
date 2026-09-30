@@ -693,3 +693,16 @@ span.lg-file{cursor:default}
 .tk-sheetinfo{margin-top:8px;color:var(--ink-2);display:flex;flex-direction:column;gap:2px}
 .tk-tool:disabled{opacity:.4;cursor:default}
 .tk-bar .btn.sm{padding:5px 9px}
+
+/* ---------- projects overview: sort + filter ---------- */
+.ov-bar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+.ov-bar .pv-search{flex:1 1 260px;max-width:420px}
+.ov-bar select.field{width:auto;max-width:190px;padding:7px 8px;font-size:13.5px}
+.ov-count{margin-left:auto;white-space:nowrap}
+.ov-sort{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:5px;font:inherit;color:inherit}
+.ov-sort:hover{color:var(--ink)}
+.ov-sort:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}
+th.r .ov-sort{flex-direction:row}
+.ov-arr{font-size:10px;opacity:.35}
+th.sorted{color:var(--ink)}th.sorted .ov-arr{opacity:1;color:var(--accent)}
+@media (max-width:700px){.ov-bar select.field{flex:1 1 45%;max-width:none}.ov-count{margin-left:0}}
