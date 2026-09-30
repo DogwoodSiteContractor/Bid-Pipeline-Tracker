@@ -654,11 +654,11 @@ span.lg-file{cursor:default}
 .tk-wrap{display:flex;flex-direction:column;gap:10px}
 .tk-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:6px}
 .tk-sep{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
-.tk-tool{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;background:none;border-radius:7px;padding:6px 10px;font-size:13.5px;font-weight:600;color:var(--ink-2);cursor:pointer}
+.tk-tool{display:inline-flex;align-items:center;gap:5px;border:1px solid transparent;background:none;border-radius:7px;padding:6px 7px;font-size:13px;font-weight:600;color:var(--ink-2);cursor:pointer}
 .tk-tool:hover{background:var(--surface)}
 .tk-tool.on{background:var(--surface);border-color:var(--line);color:var(--ink);box-shadow:var(--shadow)}
 .tk-tool.on.ex{border-color:var(--tk-ex);color:var(--tk-ex)}.tk-tool.on.pr{border-color:var(--tk-pr);color:var(--tk-pr)}
-.tk-layer{padding:3px}.tk-layer button{padding:5px 10px;font-size:13px}
+.tk-layer{padding:3px}.tk-layer button{padding:5px 8px;font-size:12.5px}
 .tk-layer button.on:first-child{color:var(--tk-ex)}.tk-layer button.on:last-child{color:var(--tk-pr)}
 .tk-main{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:12px;align-items:start}
 .tk-stage{position:relative;height:min(72vh,760px);min-height:420px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface-2)}
@@ -688,3 +688,8 @@ span.lg-file{cursor:default}
 .tkimp-row{display:grid;grid-template-columns:minmax(0,1fr) 90px 140px;gap:10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
 .tkimp-row:last-of-type{border-bottom:0}
 .tkimp-hd{font-size:12px;font-weight:600;color:var(--ink-3);padding-top:0}
+.tk-al{margin:2px 0 4px;padding-left:18px;display:flex;flex-direction:column;gap:3px;font-size:13px;color:var(--ink-3);max-width:340px}
+.tk-al li.now{color:var(--ink);font-weight:600}.tk-al li.done{color:var(--good)}
+.tk-sheetinfo{margin-top:8px;color:var(--ink-2);display:flex;flex-direction:column;gap:2px}
+.tk-tool:disabled{opacity:.4;cursor:default}
+.tk-bar .btn.sm{padding:5px 9px}
