@@ -277,7 +277,7 @@ function render(){
   if(!navOk(S.view))S.view=navItems()[0][0];
   main.innerHTML=views[S.view]();
   if(fid){const n=document.getElementById(fid);if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}
-  loadThumbs();
+  loadThumbs();if(S.view==='calc'&&$('#tk-canvas'))tkMount();
 }
 function navItems(){
   if(role()==='pm')return [['jobs','Jobs'],['calc','Calculators']];
@@ -2619,6 +2619,9 @@ const CALCS=[
         `Storage = ${fmtN(unitStore,0)} CF + ${v.por}% × ${fmtN(foundCF+embCF,0)} CF of stone = ${fmtN(store,0)} CF`],
       g:{pipe,rows,unitW,h,sp,per,W,layW,bot:v.bot,bc,tc,top,found:v.found/12,od:pipe?retPipe(v).od/12:0,id:pipe?retPipe(v).id/12:0}}},
   draw:drawRet},
+ {id:'takeoff',group:'Earthwork',name:'Cut / fill from plans',icon:'⛰',
+  desc:'Upload the grading plan, set the scale, draw the perimeter, then trace the existing and proposed contours. Gives rough cut, fill and import / export, with a cut / fill map on the plan.',
+  fields:[],calc:()=>null,view:()=>tkView()},
  {id:'volume',group:'Earthwork',name:'Cut / fill volume',icon:'▱',
   desc:'Volume from an area and a depth, adjusted for shrink (fill) or swell (haul).',
   fields:[{k:'area',label:'Area',def:1},{k:'au',label:'Area in',type:'select',options:AREA_UNITS,def:'ac'},{k:'depth',label:'Average depth',def:1},{k:'du',label:'Depth in',type:'select',options:[['ft','Feet'],['in','Inches']],def:'ft'},
@@ -2743,15 +2746,15 @@ function vCalc(){
       ${CALC_GROUPS.map(g=>{const xs=list.filter(x=>x.group===g);return xs.length?`<div class="calc-g">${esc(g)}</div>${xs.map(x=>`<button class="calc-it${x.id===c.id?' on':''}" data-act="calc-pick" data-id="${x.id}"><span class="calc-ic" aria-hidden="true">${x.icon}</span>${esc(x.name)}</button>`).join('')}`:''}).join('')||'<div class="empty">No match.</div>'}
     </aside>
     <section class="calc-body">
-      <div class="panel pad"><div class="sec-h" style="margin:0 0 4px"><h2>${esc(c.name)}</h2><button class="linkbtn" data-act="calc-reset">Reset</button></div><p class="dim small" style="margin:0 0 14px">${esc(c.desc)}</p>
-        <div class="calc-grid">
+      <div class="panel pad"><div class="sec-h" style="margin:0 0 4px"><h2>${esc(c.name)}</h2>${c.view?'':'<button class="linkbtn" data-act="calc-reset">Reset</button>'}</div><p class="dim small" style="margin:0 0 14px">${esc(c.desc)}</p>
+        ${c.view?c.view():`<div class="calc-grid">
           <div class="calc-left">
             <div class="fg calc-fields" id="calc-fields">${c.fields.map(f=>calcFieldHtml(c,f,v)).join('')}</div>
             ${c.extra?`<div id="calc-extra">${c.extra(v)}</div>`:''}
             ${c.draw?`<div class="calc-draw" id="calc-draw">${calcDrawHtml(c,run)}</div>`:''}
           </div>
           <div class="calc-res" id="calc-res" aria-live="polite">${calcResultHtml(c,run)}</div>
-        </div>
+        </div>`}
         ${c.fields.some(f=>f.type==='material')?`<p class="hint">Weights are typical in-place values. Your quarry’s ticket is the final word — type your own weight to override${isAdmin()?', or update the list under <b>Material weights</b>':''}.</p>`:''}
         ${c.id==='pipe'||c.id==='manhole'?`<p class="hint">Standard pipe outside diameters are typical values. ${calcPipes().length?'Pipes under <b>My pipes</b> use the numbers in your pipe library.':'Add the exact pipes you use to the pipe library'+(isAdmin()?' with <b>Pipe library</b> above':' — ask an admin')+' and they’ll show up at the top of the list.'}</p>`:''}
         ${c.id==='manhole'?'<p class="hint">Wall and floor thicknesses, base heights and riser sizes vary by precaster — match them to your supplier’s shop drawings before you order.</p>':''}
@@ -3046,6 +3049,197 @@ async function supSave(){
   catch(e){S2.busy=false;renderModal();toast(/supersede_history|superseded_at/.test(errMsg(e))?'Run supabase/update-12-supersede.sql in Supabase first.':errMsg(e))}
 }
 
+
+/* =====================================================================
+   EARTHWORK TAKEOFF FROM PLANS — upload a plan, set the scale, draw the
+   perimeter, trace existing and proposed contours (plus pads and spot
+   elevations), and get rough cut / fill / import / export.
+   Lines are stored in plan-pixel coordinates and remembered per browser.
+   ===================================================================== */
+const TK_KEY='bp-takeoff';const PDFJS='https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
+const TK_TOOLS=[['pan','✋','Move','Drag to move, scroll to zoom'],['scale','📏','Scale','Click two points a known distance apart'],['perim','⬠','Perimeter','Click around the limits of work; click the first point to close'],
+  ['line','〰','Contour','Click along a contour; double-click or Enter to finish'],['pad','▭','Pad','Flat area (building pad, pond bottom): click around it; click the first point to close'],['spot','✚','Spot','Click a spot elevation'],['select','➚','Select','Click a line to change its elevation or delete it']];
+function tkBlank(){return {v:1,fileName:'',imgW:0,imgH:0,page:1,pages:0,ftpx:null,scalePts:null,perim:null,lines:[],interval:1,dir:1,layer:'ex',tool:'pan',strip:6,section:0,shrink:15,swell:25,truck:14,heat:true}}
+S.tk=(()=>{const d=tkBlank();try{const s=JSON.parse(localStorage.getItem(TK_KEY)||'null');if(s)Object.assign(d,s)}catch(e){}d.tool=d.tool||'pan';d.cur=[];d.view=null;d.res=null;d.pending=null;d.sel=null;d.ver=0;return d})();
+function tkSave(){const t=S.tk;t.res=null;t.ver++;tkPersist()}
+function tkPersist(){const t=S.tk;try{const {fileName,imgW,imgH,page,ftpx,scalePts,perim,lines,interval,dir,layer,strip,section,shrink,swell,truck,heat}=t;localStorage.setItem(TK_KEY,JSON.stringify({v:1,fileName,imgW,imgH,page,ftpx,scalePts,perim,lines,interval,dir,layer,strip,section,shrink,swell,truck,heat}))}catch(e){}}
+const tkLines=l=>S.tk.lines.filter(x=>x.layer===l);
+const tkLastElev=(layer,kind)=>{const xs=S.tk.lines.filter(x=>x.layer===layer&&(!kind||x.kind===kind));return xs.length?xs[xs.length-1].elev:null};
+function tkPip(p,poly){let c=false;for(let i=0,j=poly.length-1;i<poly.length;j=i++){const [xi,yi]=poly[i],[xj,yj]=poly[j];if(((yi>p[1])!==(yj>p[1]))&&(p[0]<(xj-xi)*(p[1]-yi)/(yj-yi)+xi))c=!c}return c}
+function tkPolyArea(poly){let a=0;for(let i=0,j=poly.length-1;i<poly.length;j=i++)a+=(poly[j][0]+poly[i][0])*(poly[j][1]-poly[i][1]);return Math.abs(a/2)}
+function tkSegDist(p,a,b){const dx=b[0]-a[0],dy=b[1]-a[1];const L=dx*dx+dy*dy;let t=L?((p[0]-a[0])*dx+(p[1]-a[1])*dy)/L:0;t=Math.max(0,Math.min(1,t));const x=a[0]+t*dx-p[0],y=a[1]+t*dy-p[1];return Math.sqrt(x*x+y*y)}
+// ---- surfaces: densify lines into samples; a point's elevation = between the nearest two different contours
+function tkSamples(layer,step){
+  const xs=[],ys=[],zs=[];const pads=[];let tot=0;tkLines(layer).forEach(l=>{const pts=l.kind==='pad'?[...l.pts,l.pts[0]]:l.pts;for(let i=0;i<pts.length-1;i++)tot+=Math.hypot(pts[i+1][0]-pts[i][0],pts[i+1][1]-pts[i][1])});step=Math.max(step,tot/6000);
+  tkLines(layer).forEach(l=>{if(!isFinite(l.elev))return;const pts=l.kind==='pad'?[...l.pts,l.pts[0]]:l.pts;if(l.kind==='pad')pads.push(l);
+    if(l.kind==='spot'){xs.push(pts[0][0]);ys.push(pts[0][1]);zs.push(l.elev);return}
+    for(let i=0;i<pts.length-1;i++){const [x1,y1]=pts[i],[x2,y2]=pts[i+1];const n=Math.max(1,Math.ceil(Math.hypot(x2-x1,y2-y1)/step));for(let k=0;k<n;k++){xs.push(x1+(x2-x1)*k/n);ys.push(y1+(y2-y1)*k/n);zs.push(l.elev)}}
+    const e=pts[pts.length-1];xs.push(e[0]);ys.push(e[1]);zs.push(l.elev)});
+  const el=[...new Set(zs)].sort((a,b)=>a-b);const zi=new Int32Array(zs.map(z=>el.indexOf(z)));
+  pads.sort((a,b)=>tkPolyArea(a.pts)-tkPolyArea(b.pts));
+  return {x:Float64Array.from(xs),y:Float64Array.from(ys),zi,el,pads,n:xs.length}
+}
+function tkZ(sm,px,py,best){
+  for(const p of sm.pads)if(tkPip([px,py],p.pts))return p.elev;
+  if(!sm.n)return NaN;if(sm.el.length===1)return sm.el[0];
+  best.fill(Infinity);const {x,y,zi,n}=sm;
+  for(let i=0;i<n;i++){const dx=x[i]-px,dy=y[i]-py,d=dx*dx+dy*dy;if(d<best[zi[i]])best[zi[i]]=d}
+  let i1=0;for(let i=1;i<best.length;i++)if(best[i]<best[i1])i1=i;
+  let i2=-1;for(let i=0;i<best.length;i++)if(i!==i1&&(i2<0||best[i]<best[i2]))i2=i;
+  const d1=Math.sqrt(best[i1]),d2=Math.sqrt(best[i2]);return d1+d2===0?sm.el[i1]:sm.el[i1]+(sm.el[i2]-sm.el[i1])*d1/(d1+d2);
+}
+function tkPrep(cellPx){const t=S.tk;const key=t.ver+':'+cellPx;if(t._prep&&t._prep.key===key)return t._prep;
+  const step=Math.max(cellPx/1.5,0.5);const ex=tkSamples('ex',step),pr=tkSamples('pr',step);
+  return t._prep={key,ex,pr,bEx:new Float64Array(Math.max(1,ex.el.length)),bPr:new Float64Array(Math.max(1,pr.el.length))}}
+function tkCellPx(){const t=S.tk;if(!t.perim)return 10;const xs=t.perim.map(p=>p[0]),ys=t.perim.map(p=>p[1]);const w=Math.max(...xs)-Math.min(...xs),h=Math.max(...ys)-Math.min(...ys);return Math.max(1,Math.sqrt(w*h/14000))}
+function tkCompute(){
+  const t=S.tk;const warn=[];
+  if(!t.ftpx){toast('Set the scale first.');return}if(!t.perim){toast('Draw the perimeter first.');return}
+  if(!tkLines('ex').length||!tkLines('pr').length){toast('Trace at least one existing and one proposed contour, pad or spot.');return}
+  const cell=tkCellPx();const P=tkPrep(cell);const xs=t.perim.map(p=>p[0]),ys=t.perim.map(p=>p[1]);const x0=Math.min(...xs),y0=Math.min(...ys);
+  const nx=Math.ceil((Math.max(...xs)-x0)/cell),ny=Math.ceil((Math.max(...ys)-y0)/cell);const dz=new Float32Array(nx*ny).fill(NaN);
+  const cA=Math.pow(cell*t.ftpx,2);const strip=(+t.strip||0)/12,sec=(+t.section||0)/12;let cut=0,fill=0,n=0,maxC=0,maxF=0;
+  for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const px=x0+(i+0.5)*cell,py=y0+(j+0.5)*cell;if(!tkPip([px,py],t.perim))continue;
+    const ze=tkZ(P.ex,px,py,P.bEx)-strip,zp=tkZ(P.pr,px,py,P.bPr)-sec;if(!isFinite(ze)||!isFinite(zp))continue;const d=zp-ze;dz[j*nx+i]=d;n++;
+    if(d<0){cut+=-d*cA;maxC=Math.max(maxC,-d)}else{fill+=d*cA;maxF=Math.max(maxF,d)}}
+  const area=tkPolyArea(t.perim)*t.ftpx*t.ftpx;const stripCY=area*strip/27;
+  const cutCY=cut/27,fillCY=fill/27,need=fillCY/(1-(+t.shrink||0)/100);const net=cutCY-need;
+  t.res={x0,y0,cell,nx,ny,dz,cutCY,fillCY,need,net,area,stripCY,maxC,maxF,cells:n,cellFt:cell*t.ftpx};tkUI();tkDraw();
+}
+// ---- view
+function tkFit(){const t=S.tk;const c=$('#tk-canvas');if(!c)return;const W=c.clientWidth,H=c.clientHeight;let bw=t.imgW,bh=t.imgH,bx=0,by=0;
+  if(!bw){const pts=[...(t.perim||[]),...t.lines.flatMap(l=>l.pts)];if(pts.length){const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);bx=Math.min(...xs);by=Math.min(...ys);bw=Math.max(...xs)-bx||100;bh=Math.max(...ys)-by||100}else{bw=1000;bh=700}}
+  const z=Math.min(W/bw,H/bh)*0.95;t.view={z,ox:(W-bw*z)/2-bx*z,oy:(H-bh*z)/2-by*z}}
+function tkMount(){const c=$('#tk-canvas');if(!c)return;const dpr=window.devicePixelRatio||1;c.width=Math.round(c.clientWidth*dpr);c.height=Math.round(c.clientHeight*dpr);if(!S.tk.view)tkFit();tkDraw();tkUI()}
+const tkToPlan=(e)=>{const c=$('#tk-canvas');const r=c.getBoundingClientRect();const v=S.tk.view;return [(e.clientX-r.left-v.ox)/v.z,(e.clientY-r.top-v.oy)/v.z]};
+function tkColors(){const cs=getComputedStyle(document.documentElement);const g=k=>cs.getPropertyValue(k).trim();return {ex:g('--tk-ex')||'#8B5E34',pr:g('--tk-pr')||'#2566C0',per:g('--tk-per')||'#D9480F',ink:g('--ink')||'#1B211E',bg:g('--surface-2')||'#F3F4F1'}}
+function tkDraw(){
+  const c=$('#tk-canvas');if(!c||!S.tk.view)return;const t=S.tk,v=t.view,ctx=c.getContext('2d'),dpr=window.devicePixelRatio||1,C=tkColors();
+  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=C.bg;ctx.fillRect(0,0,c.width,c.height);
+  ctx.setTransform(dpr*v.z,0,0,dpr*v.z,dpr*v.ox,dpr*v.oy);const px=1/v.z;
+  if(t.img)ctx.drawImage(t.img,0,0,t.imgW,t.imgH);else if(t.imgW){ctx.fillStyle='#fff';ctx.fillRect(0,0,t.imgW,t.imgH)}
+  // cut / fill map
+  if(t.res&&t.heat){const r=t.res;if(!r.heatCv)r.heatCv=tkHeat(r);ctx.imageSmoothingEnabled=false;ctx.drawImage(r.heatCv,r.x0,r.y0,r.nx*r.cell,r.ny*r.cell);ctx.imageSmoothingEnabled=true}  const path=(pts,close)=>{ctx.beginPath();pts.forEach((p,i)=>i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));if(close)ctx.closePath()};
+  const label=(txt,x,y,col)=>{ctx.font=`600 ${12*px}px system-ui,sans-serif`;const w=ctx.measureText(txt).width;ctx.fillStyle='rgba(255,255,255,.85)';ctx.fillRect(x-w/2-3*px,y-8*px,w+6*px,15*px);ctx.fillStyle=col;ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillText(txt,x,y)};
+  if(t.perim){path(t.perim,true);ctx.strokeStyle=C.per;ctx.lineWidth=3*px;ctx.setLineDash([10*px,5*px]);ctx.stroke();ctx.setLineDash([])}
+  t.lines.forEach((l,li)=>{const col=l.layer==='ex'?C.ex:C.pr;const sel=t.sel===l.id;ctx.strokeStyle=col;ctx.lineWidth=(sel?4:2)*px;ctx.setLineDash(l.layer==='ex'?[6*px,4*px]:[]);
+    if(l.kind==='spot'){const [x,y]=l.pts[0];ctx.setLineDash([]);ctx.beginPath();ctx.moveTo(x-6*px,y);ctx.lineTo(x+6*px,y);ctx.moveTo(x,y-6*px);ctx.lineTo(x,y+6*px);ctx.stroke();label(fmtE(l.elev),x,y-14*px,col);return}
+    path(l.pts,l.kind==='pad');if(l.kind==='pad'){ctx.fillStyle=l.layer==='ex'?'rgba(139,94,52,.12)':'rgba(37,102,192,.12)';ctx.fill()}ctx.stroke();ctx.setLineDash([]);
+    if(sel){ctx.fillStyle=col;l.pts.forEach(p=>{ctx.beginPath();ctx.arc(p[0],p[1],3.5*px,0,7);ctx.fill()})}
+    const mi=Math.floor((l.pts.length-1)*(0.15+((li*0.37)%0.7)));const m=l.pts[mi],n=l.pts[Math.min(l.pts.length-1,mi+1)];label(String(+l.elev.toFixed(2)),(m[0]+n[0])/2,(m[1]+n[1])/2,col)});
+  // in progress
+  const cur=t.cur;if(cur.length){const col=t.tool==='perim'?C.per:t.tool==='scale'?'#7A3EB1':t.layer==='ex'?C.ex:C.pr;const pts=t.hover&&!t.pending?[...cur,t.hover]:cur;
+    path(pts,false);ctx.strokeStyle=col;ctx.lineWidth=2*px;ctx.setLineDash([4*px,3*px]);ctx.stroke();ctx.setLineDash([]);ctx.fillStyle=col;cur.forEach(p=>{ctx.beginPath();ctx.arc(p[0],p[1],3.5*px,0,7);ctx.fill()});
+    if((t.tool==='perim'||t.tool==='pad')&&cur.length>2){ctx.beginPath();ctx.arc(cur[0][0],cur[0][1],8*px,0,7);ctx.strokeStyle=col;ctx.stroke()}}
+  if(t.scalePts&&t.tool==='scale'&&!cur.length){ctx.strokeStyle='#7A3EB1';ctx.lineWidth=2*px;path(t.scalePts,false);ctx.stroke()}
+}
+function tkHeat(r){const cv=document.createElement('canvas');cv.width=r.nx;cv.height=r.ny;const cx=cv.getContext('2d');const im=cx.createImageData(r.nx,r.ny);const m=Math.max(r.maxC,r.maxF,0.5);
+  for(let k=0;k<r.dz.length;k++){const d=r.dz[k];if(!isFinite(d))continue;const a=Math.min(1,Math.abs(d)/m);const o=k*4;if(d<0){im.data[o]=214;im.data[o+1]=64;im.data[o+2]=40}else{im.data[o]=37;im.data[o+1]=102;im.data[o+2]=192}im.data[o+3]=Math.round(255*(0.15+0.5*a))}
+  cx.putImageData(im,0,0);return cv}
+function tkHoverText(p){const t=S.tk;if(!t.ftpx)return '';const P=tkPrep(tkCellPx());const ze=tkZ(P.ex,p[0],p[1],P.bEx),zp=tkZ(P.pr,p[0],p[1],P.bPr);
+  const parts=[];if(isFinite(ze))parts.push('Existing '+fmtE(ze));if(isFinite(zp))parts.push('Proposed '+fmtE(zp));if(isFinite(ze)&&isFinite(zp)){const d=(zp-(+t.section||0)/12)-(ze-(+t.strip||0)/12);parts.push(d<0?`Cut ${fmtN(-d,2)}′`:`Fill ${fmtN(d,2)}′`)}return parts.join(' · ')}
+// ---- actions
+function tkClick(p){
+  const t=S.tk;if(t.pending)return;
+  if(t.tool==='select'){const tol=10/t.view.z;let best=null,bd=Infinity;t.lines.forEach(l=>{const pts=l.kind==='pad'?[...l.pts,l.pts[0]]:l.pts;let d=l.kind==='spot'?Math.hypot(pts[0][0]-p[0],pts[0][1]-p[1]):Infinity;for(let i=0;i<pts.length-1;i++)d=Math.min(d,tkSegDist(p,pts[i],pts[i+1]));if(d<bd){bd=d;best=l}});
+    t.sel=best&&bd<tol?best.id:null;tkDraw();tkUI();return}
+  if(t.tool==='pan')return;
+  if(t.tool==='spot'){t.cur=[p];tkAskElev();return}
+  if((t.tool==='perim'||t.tool==='pad')&&t.cur.length>2&&Math.hypot(p[0]-t.cur[0][0],p[1]-t.cur[0][1])<10/t.view.z){tkFinish();return}
+  t.cur.push(p);if(t.tool==='scale'&&t.cur.length===2){t.pending={type:'scale'};tkUI();tkDraw();setTimeout(()=>$('#tk-pv')?.focus(),0);return}
+  tkDraw();tkUI();
+}
+function tkFinish(){const t=S.tk;if(t.pending)return;
+  if(t.tool==='perim'){if(t.cur.length<3){toast('Click at least 3 points.');return}t.perim=t.cur;t.cur=[];tkSave();t.tool='line';toast('Perimeter set — now trace the existing contours.');tkDraw();tkUI();return}
+  if(t.tool==='line'&&t.cur.length<2){t.cur=[];tkDraw();tkUI();return}
+  if(t.tool==='pad'&&t.cur.length<3){toast('Click at least 3 points.');return}
+  if(t.tool==='line'||t.tool==='pad')tkAskElev()}
+function tkAskElev(){const t=S.tk;const kind=t.tool==='pad'?'pad':t.tool==='spot'?'spot':'line';const last=tkLastElev(t.layer,kind==='line'?'line':null);
+  const def=last==null?'':kind==='line'?+(last+(+t.interval||1)*t.dir).toFixed(2):last;t.pending={type:'elev',kind,def};tkUI();tkDraw();setTimeout(()=>{const n=$('#tk-pv');if(n){n.focus();n.select()}},0)}
+function tkCommit(){const t=S.tk;const P=t.pending;if(!P)return;const val=+($('#tk-pv')?.value);
+  if(P.type==='scale'){if(!(val>0)){toast('Type the distance in feet.');return}const [a,b]=t.cur;const d=Math.hypot(b[0]-a[0],b[1]-a[1]);if(d<2){toast('Pick two points farther apart.');return}
+    t.ftpx=val/d;t.scalePts=t.cur;t.cur=[];t.pending=null;t.tool=t.perim?'line':'perim';tkSave();toast(`Scale set — ${fmtN(val,2)} ft over ${fmtN(d,0)} px`);tkDraw();tkUI();return}
+  if(!isFinite(val)||$('#tk-pv').value===''){toast('Type the elevation.');return}
+  t.lines.push({id:newId(),layer:t.layer,kind:P.kind,pts:t.cur,elev:val});t.cur=[];t.pending=null;tkSave();tkDraw();tkUI()}
+function tkCancel(){const t=S.tk;t.cur=[];t.pending=null;tkDraw();tkUI()}
+async function tkLoadFile(file){
+  const t=S.tk;const isPdf=/pdf$/i.test(file.type)||/\.pdf$/i.test(file.name);t.loading=true;tkUI();
+  try{if(isPdf){const lib=await tkPdfLib();const buf=await file.arrayBuffer();t.pdf=await lib.getDocument({data:buf}).promise;t.pages=t.pdf.numPages;const same=t.fileName===file.name;t.fileName=file.name;await tkRenderPage(same?Math.min(t.page||1,t.pages):1)}
+    else{const url=URL.createObjectURL(file);const img=new Image();await new Promise((res,rej)=>{img.onload=res;img.onerror=()=>rej(new Error('Couldn’t read that image.'));img.src=url});
+      const same=t.fileName===file.name&&t.imgW===img.naturalWidth;t.pdf=null;t.pages=0;t.page=1;t.img=img;t.imgW=img.naturalWidth;t.imgH=img.naturalHeight;t.fileName=file.name;if(!same)tkNewPlan()}
+    t.view=null;tkSave();tkMount();}
+  catch(e){toast(errMsg(e))}finally{t.loading=false;tkUI()}
+}
+function tkNewPlan(){}  // lines are kept; the user can Clear if it's a different plan
+const PDFJS_SRC=[PDFJS,'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/','https://unpkg.com/pdfjs-dist@3.11.174/build/'];let PDFJSP=null;
+function tkPdfLib(){return PDFJSP||(PDFJSP=new Promise((res,rej)=>{if(window.pdfjsLib)return res(window.pdfjsLib);
+  const tryAt=i=>{if(i>=PDFJS_SRC.length){PDFJSP=null;return rej(new Error('Couldn’t load the PDF reader. Check your connection, or save the sheet as a PNG or JPG and upload that.'))}
+    const base=PDFJS_SRC[i];const sc=document.createElement('script');sc.src=base+'pdf.min.js';sc.onload=()=>{if(!window.pdfjsLib){tryAt(i+1);return}window.pdfjsLib.GlobalWorkerOptions.workerSrc=base+'pdf.worker.min.js';res(window.pdfjsLib)};sc.onerror=()=>{sc.remove();tryAt(i+1)};document.head.appendChild(sc)};tryAt(0)}))}
+async function tkRenderPage(n){const t=S.tk;const page=await t.pdf.getPage(n);const v1=page.getViewport({scale:1});const sc=Math.min(4000/Math.max(v1.width,v1.height),4);const vp=page.getViewport({scale:sc});
+  const cv=document.createElement('canvas');cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);await page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;
+  t.img=cv;t.imgW=cv.width;t.imgH=cv.height;t.page=n;}
+// ---- side panel + toolbar (re-rendered in place so the canvas keeps its state)
+function tkUI(){
+  const t=S.tk;const bar=$('#tk-bar'),side=$('#tk-side'),pr=$('#tk-prompt'),hint=$('#tk-hint');if(!bar)return;
+  const tool=TK_TOOLS.find(x=>x[0]===t.tool);
+  bar.innerHTML=`${TK_TOOLS.slice(0,3).map(tb).join('')}<span class="tk-sep"></span>
+    <div class="seg tk-layer"><button class="${t.layer==='ex'?'on':''}" data-act="tk-layer" data-v="ex">Existing</button><button class="${t.layer==='pr'?'on':''}" data-act="tk-layer" data-v="pr">Proposed</button></div>
+    ${TK_TOOLS.slice(3).map(tb).join('')}<span class="tk-sep"></span>
+    <button class="btn sm" data-act="tk-finish"${t.cur.length?'':' disabled'}>Finish ↵</button><button class="btn sm ghost" data-act="tk-undo"${t.cur.length||t.lines.length?'':' disabled'} title="Undo last point or line">Undo</button><button class="btn sm ghost" data-act="tk-fit" title="Fit to screen">Fit</button>`;
+  function tb([k,ic,l,tip]){return `<button class="tk-tool${t.tool===k?' on':''}${(k==='line'||k==='pad'||k==='spot')?(t.layer==='ex'?' ex':' pr'):''}" data-act="tk-tool" data-v="${k}" title="${esc(tip)}"><span aria-hidden="true">${ic}</span>${l}</button>`}
+  const em=$('#tk-empty');if(em)em.hidden=!!(t.img||t.imgW);
+  if(hint)hint.textContent=t.hoverText||(tool?tool[3]+(['line','pad','spot'].includes(t.tool)?` — ${t.layer==='ex'?'existing':'proposed'}`:''):'');
+  if(pr){pr.hidden=!t.pending;if(t.pending)pr.innerHTML=t.pending.type==='scale'?`<b>Distance between those points</b><div><input type="number" step="any" class="field" id="tk-pv" placeholder="feet"> <span class="dim">ft</span> <button class="btn sm primary" data-act="tk-commit">Set scale</button> <button class="btn sm ghost" data-act="tk-cancel">Cancel</button></div>`
+    :`<b>${t.pending.kind==='pad'?'Pad':t.pending.kind==='spot'?'Spot':'Contour'} elevation — ${t.layer==='ex'?'existing':'proposed'}</b><div><input type="number" step="any" class="field" id="tk-pv" value="${esc(t.pending.def)}"> <button class="btn sm primary" data-act="tk-commit">Add ↵</button> <button class="btn sm ghost" data-act="tk-cancel">Cancel</button></div>`}
+  if(!side)return;const r=t.res;const sel=t.lines.find(l=>l.id===t.sel);const cnt=l=>{const xs=tkLines(l);const el=xs.map(x=>x.elev);return xs.length?`${xs.length} · ${fmtN(Math.min(...el),2)}–${fmtN(Math.max(...el),2)}`:'none yet'};
+  const step=(ok,txt)=>`<li class="${ok?'done':''}">${ok?'✓':'○'} ${txt}</li>`;
+  side.innerHTML=`<div class="tk-card"><div class="tk-h">Plan</div>
+    <label class="btn sm" style="cursor:pointer">${t.loading?'Loading…':t.fileName?'Replace plan':'Upload plan (PDF or image)'}<input type="file" accept="application/pdf,image/*" data-tkfile hidden></label>
+    ${t.fileName?`<div class="small dim" style="margin-top:6px;overflow-wrap:anywhere">${esc(t.fileName)}${t.pages>1?'':''}</div>`:''}
+    ${t.pages>1?`<label class="f" style="margin-top:6px">Sheet<select class="field" data-tkpage>${Array.from({length:t.pages},(_,i)=>`<option value="${i+1}"${t.page===i+1?' selected':''}>Page ${i+1}</option>`).join('')}</select></label>`:''}
+    ${!t.img&&t.lines.length?`<p class="hint">Your lines are saved. Upload the same plan to see it under them.</p>`:''}</div>
+  <div class="tk-card"><div class="tk-h">Steps</div><ol class="tk-steps">${step(t.img||t.imgW,'Upload the plan')}${step(t.ftpx,t.ftpx?`Scale set (${fmtN(1/t.ftpx,1)} px per ft)`:'Set the scale')}${step(t.perim,t.perim?`Perimeter — ${fmtN(tkPolyArea(t.perim)*(t.ftpx||0)**2/43560,2)} ac`:'Draw the perimeter')}${step(tkLines('ex').length,`Existing — ${cnt('ex')}`)}${step(tkLines('pr').length,`Proposed — ${cnt('pr')}`)}${step(r,'Calculate')}</ol></div>
+  ${sel?`<div class="tk-card tk-selcard"><div class="tk-h">Selected ${sel.kind==='pad'?'pad':sel.kind==='spot'?'spot':'contour'} · ${sel.layer==='ex'?'existing':'proposed'}</div>
+    <label class="f">Elevation<input type="number" step="any" class="field" id="tk-selev" data-tksel="elev" value="${esc(sel.elev)}"></label>
+    <div class="adders"><button class="btn sm" data-act="tk-selflip">Move to ${sel.layer==='ex'?'proposed':'existing'}</button><button class="btn sm danger" data-act="tk-seldel">Delete</button></div></div>`:''}
+  <div class="tk-card"><div class="tk-h">Settings</div><div class="tk-set">
+    <label class="f"><span>Contour interval <span class="dim">(ft)</span></span><input type="number" step="any" class="field" data-tkset="interval" value="${esc(t.interval)}"></label>
+    <label class="f">Next contour<select class="field" data-tkset="dir"><option value="1"${t.dir>0?' selected':''}>Goes up</option><option value="-1"${t.dir<0?' selected':''}>Goes down</option></select></label>
+    <label class="f"><span>Strip topsoil <span class="dim">(in)</span></span><input type="number" step="any" class="field" data-tkset="strip" value="${esc(t.strip)}"></label>
+    <label class="f"><span>Subgrade below proposed <span class="dim">(in)</span></span><input type="number" step="any" class="field" data-tkset="section" value="${esc(t.section)}" title="Pavement / slab section under finished grade"></label>
+    <label class="f"><span>Shrink <span class="dim">(%)</span></span><input type="number" step="any" class="field" data-tkset="shrink" value="${esc(t.shrink)}"></label>
+    <label class="f"><span>Swell <span class="dim">(%)</span></span><input type="number" step="any" class="field" data-tkset="swell" value="${esc(t.swell)}"></label></div></div>
+  <div class="tk-card"><button class="btn primary" data-act="tk-calc" style="width:100%;justify-content:center">${r?'Recalculate':'Calculate cut / fill'}</button>
+    ${r?`<div class="calc-main" style="margin-top:12px"><b>${fmtN(Math.abs(r.net),0)}</b><span>CY ${r.net>=0?'export':'import'}</span></div>
+      <div class="list">${[['Cut',fmtN(r.cutCY,0)+' CY'],['Fill (compacted)',fmtN(r.fillCY,0)+' CY'],[`Fill needs (${t.shrink}% shrink)`,fmtN(r.need,0)+' bank CY'],[r.net>=0?'Export':'Import',`${fmtN(Math.abs(r.net),0)} bank · ${fmtN(Math.abs(r.net)*(r.net>=0?1+(+t.swell||0)/100:1),0)} ${r.net>=0?'loose':'bank'} CY`],[r.net>=0?'Truck loads out':'Truck loads in',fmtN(Math.ceil(Math.abs(r.net)*(1+(+t.swell||0)/100)/(+t.truck||14)),0)+` @ ${t.truck||14} CY`],['Topsoil strip',`${fmtN(r.stripCY,0)} CY (${t.strip}″)`],['Area',`${fmtN(r.area,0)} SF · ${fmtN(r.area/43560,2)} ac`],['Deepest cut / fill',`${fmtN(r.maxC,1)}′ / ${fmtN(r.maxF,1)}′`]].map(([a,b])=>`<div class="li"><span class="dim">${a}</span><b class="num">${b}</b></div>`).join('')}</div>
+      <label class="mh-use" style="margin-top:8px"><input type="checkbox" data-tkset="heat"${t.heat?' checked':''}> Show cut / fill map <span class="tk-key"><i class="c"></i>cut <i class="f"></i>fill</span></label>
+      <p class="hint">Rough numbers from a ${fmtN(r.cellFt,1)}′ grid (${fmtN(r.cells,0)} cells). Between contours the grade is interpolated straight across; beyond the outermost contour it’s held between the last two. Trace contours past the perimeter for the best numbers.</p>`
+      :'<p class="hint">Trace existing and proposed contours across the whole perimeter, then calculate.</p>'}</div>
+  <div class="tk-card"><button class="btn sm ghost" data-act="tk-clear">${t.clearArm?'Click again to clear everything':'Clear takeoff'}</button></div>`;
+}
+function tkView(){return `<div class="tk-wrap"><div class="tk-bar" id="tk-bar"></div>
+  <div class="tk-main"><div class="tk-stage"><canvas id="tk-canvas" tabindex="0" aria-label="Plan takeoff canvas"></canvas><div class="tk-prompt" id="tk-prompt" hidden></div><div class="tk-hint" id="tk-hint"></div>
+    ${!S.tk.img&&!S.tk.imgW?'<div class="tk-empty" id="tk-empty"><b>Upload a plan to start</b><span>PDF or image of the grading sheet. Then set the scale, draw the perimeter, and trace the existing and proposed contours.</span></div>':''}</div>
+  <aside class="tk-side" id="tk-side"></aside></div></div>`}
+// pointer / wheel / key handling for the canvas
+(function(){let drag=null;
+  document.addEventListener('pointerdown',e=>{if(e.target.id!=='tk-canvas')return;e.target.focus({preventScroll:true});drag={x:e.clientX,y:e.clientY,ox:S.tk.view.ox,oy:S.tk.view.oy,moved:false,btn:e.button};e.target.setPointerCapture(e.pointerId)});
+  document.addEventListener('pointermove',e=>{if(e.target.id!=='tk-canvas'&&!drag)return;const t=S.tk;if(!t.view)return;
+    if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>4)drag.moved=true;if(drag.moved){t.view.ox=drag.ox+dx;t.view.oy=drag.oy+dy;tkDraw()}return}
+    const p=tkToPlan(e);t.hover=p;t.hoverText=t.ftpx&&t.lines.length&&!t.cur.length?tkHoverText(p):'';const h=$('#tk-hint');if(h&&t.hoverText)h.textContent=t.hoverText;if(t.cur.length)tkDraw()});
+  document.addEventListener('pointerup',e=>{if(!drag)return;const d=drag;drag=null;if(!d.moved&&d.btn===0&&e.target.id==='tk-canvas')tkClick(tkToPlan(e))});
+  document.addEventListener('dblclick',e=>{if(e.target.id!=='tk-canvas')return;const t=S.tk;if(t.cur.length>1){const a=t.cur[t.cur.length-1],b=t.cur[t.cur.length-2];if(Math.hypot(a[0]-b[0],a[1]-b[1])<6/t.view.z)t.cur.pop()}tkFinish()});
+  document.addEventListener('wheel',e=>{if(e.target.id!=='tk-canvas')return;e.preventDefault();const t=S.tk,v=t.view;const r=e.target.getBoundingClientRect();const mx=e.clientX-r.left,my=e.clientY-r.top;const f=Math.exp(-e.deltaY*0.0015);const z=Math.max(0.02,Math.min(40,v.z*f));
+    v.ox=mx-(mx-v.ox)*z/v.z;v.oy=my-(my-v.oy)*z/v.z;v.z=z;tkDraw()},{passive:false});
+  document.addEventListener('keydown',e=>{if(S.view!=='calc'||calcDef().id!=='takeoff')return;const t=S.tk;
+    if(e.target.id==='tk-pv'){if(e.key==='Enter'){e.preventDefault();tkCommit()}else if(e.key==='Escape'){e.preventDefault();tkCancel()}return}
+    if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement?.tagName))return;
+    if(e.key==='Enter'&&t.cur.length){e.preventDefault();tkFinish()}else if(e.key==='Escape'&&(t.cur.length||t.pending)){e.preventDefault();tkCancel()}
+    else if((e.key==='Backspace'||e.key==='Delete')&&t.cur.length){e.preventDefault();t.cur.pop();tkDraw();tkUI()}
+    else if((e.key==='Backspace'||e.key==='Delete')&&t.sel){e.preventDefault();t.lines=t.lines.filter(l=>l.id!==t.sel);t.sel=null;tkSave();tkDraw();tkUI()}});
+  window.addEventListener('resize',()=>{if($('#tk-canvas'))tkMount()});
+})();
+
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;
@@ -3147,6 +3341,18 @@ document.addEventListener('click',e=>{
     case 'sup-cancel':M.sup=null;renderModal();break;
     case 'sup-save':if(!M.sup.busy)supSave();break;
     case 'sup-rmclient':M.sup.draft.client_ids=M.sup.draft.client_ids.filter(x=>x!==t.dataset.id);renderModal();break;
+    case 'tk-tool':{const k=S.tk;k.tool=t.dataset.v;k.cur=[];k.pending=null;if(k.tool!=='select')k.sel=null;tkDraw();tkUI();break}
+    case 'tk-layer':S.tk.layer=t.dataset.v;tkPersist();tkUI();break;
+    case 'tk-finish':tkFinish();break;
+    case 'tk-undo':{const k=S.tk;if(k.pending)tkCancel();else if(k.cur.length){k.cur.pop();tkDraw();tkUI()}else if(k.lines.length){k.lines.pop();k.sel=null;tkSave();tkDraw();tkUI()}break}
+    case 'tk-fit':tkFit();tkDraw();break;
+    case 'tk-commit':tkCommit();break;
+    case 'tk-cancel':tkCancel();break;
+    case 'tk-calc':{const b=$('[data-act=tk-calc]');if(b){b.textContent='Calculating…';b.disabled=true}setTimeout(()=>{try{tkCompute()}finally{tkUI()}},30);break}
+    case 'tk-seldel':{const k=S.tk;k.lines=k.lines.filter(l=>l.id!==k.sel);k.sel=null;tkSave();tkDraw();tkUI();break}
+    case 'tk-selflip':{const k=S.tk;const l=k.lines.find(x=>x.id===k.sel);if(l){l.layer=l.layer==='ex'?'pr':'ex';tkSave();tkDraw();tkUI()}break}
+    case 'tk-clear':{const k=S.tk;if(!k.clearArm){k.clearArm=true;tkUI();setTimeout(()=>{k.clearArm=false;tkUI()},4000);break}
+      const keep={img:k.img,imgW:k.imgW,imgH:k.imgH,fileName:k.fileName,pdf:k.pdf,pages:k.pages,page:k.page,view:k.view};Object.assign(k,tkBlank(),keep,{cur:[],res:null,pending:null,sel:null,clearArm:false,tool:'scale'});tkSave();tkDraw();tkUI();toast('Takeoff cleared');break}
     case 'close':closeModal();break;
     case 'save':saveModal();break;
     case 'del':deleteModal();break;
@@ -3220,6 +3426,7 @@ document.addEventListener('input',e=>{
   if(t.dataset.jtq!=null){S.jt.q=t.value;render();return}
   if(t.dataset.jtf&&t.tagName==='INPUT'){S.jt[t.dataset.jtf]=t.value;render();return}
   if(t.id==='pal-q'){S.pal.q=t.value;S.pal.i=0;renderPalette();return}
+  if(t.dataset.tkset&&t.type!=='checkbox'){S.tk[t.dataset.tkset]=t.tagName==='SELECT'?+t.value:t.value;return}
   if(M&&M.sup&&t.dataset.sup){M.sup.draft[t.dataset.sup]=t.value;const c=$('#sup-changes');if(c){const ch=supDiff();c.innerHTML=supChangesHtml(ch);const lg=c.closest('fieldset')?.querySelector('legend');if(lg)lg.textContent=`What will change (${ch.length})`}return}
   if(M&&M.sup&&t.dataset.supx){M.sup[t.dataset.supx]=t.value;return}
   if(M&&t.dataset.lg){logState()[t.dataset.lg]=t.value;return}
@@ -3270,6 +3477,11 @@ document.addEventListener('change',e=>{
   if(M&&t.dataset.incl){M.plan.include[t.dataset.incl]=t.checked;renderModal();return}
   if(t.dataset.adupload!=null){uploadAddendum(+t.dataset.adupload,t.files[0]);return}
   if(M&&t.dataset.ad&&/priced|acknowledged|date/.test(t.dataset.ad)){renderModal();return}
+  if(t.dataset.tkset){const k=S.tk,key=t.dataset.tkset;if(key==='heat'){k.heat=t.checked;tkPersist();tkDraw();return}
+    k[key]=t.tagName==='SELECT'?+t.value:(t.value===''?0:+t.value);const had=!!k.res;tkSave();if(had&&['strip','section','shrink','swell'].includes(key))tkCompute();else tkUI();return}
+  if(t.dataset.tksel){const k=S.tk;const l=k.lines.find(x=>x.id===k.sel);if(l&&t.value!==''){l.elev=+t.value;tkSave();tkDraw();tkUI()}return}
+  if(t.dataset.tkfile!=null){if(t.files[0])tkLoadFile(t.files[0]);return}
+  if(t.dataset.tkpage){const n=+t.value;S.tk.loading=true;tkUI();tkRenderPage(n).then(()=>{S.tk.view=null;tkSave();tkMount()}).catch(e=>toast(errMsg(e))).finally(()=>{S.tk.loading=false;tkUI()});return}
   if(t.dataset.docupload!=null){if(t.files.length)uploadDocs([...t.files]);return}
   if(t.dataset.lgfiles!=null&&M){const L=logState();L.files.push(...t.files);renderModal();return}
   if(t.dataset.prole){setRole(t.dataset.prole,t.value);return}

@@ -646,3 +646,38 @@ span.lg-file{cursor:default}
 .dw-ch{fill:var(--dw-ch);stroke:var(--dw-line);stroke-width:.8}
 .dw-bed{fill:none;stroke:var(--dw-line);stroke-width:1.4;stroke-dasharray:6 3}
 .lg-stone2{background:radial-gradient(circle at 40% 40%,var(--dw-std2) 1.3px,transparent 1.7px) 0 0/6px 6px,var(--dw-st2)}
+
+/* ---------- cut / fill takeoff from plans ---------- */
+:root{--tk-ex:#8B5E34;--tk-pr:#2566C0;--tk-per:#D9480F}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--tk-ex:#C9955F;--tk-pr:#6FA8EC;--tk-per:#F0783C}}
+:root[data-theme="dark"]{--tk-ex:#C9955F;--tk-pr:#6FA8EC;--tk-per:#F0783C}
+.tk-wrap{display:flex;flex-direction:column;gap:10px}
+.tk-bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:6px}
+.tk-sep{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
+.tk-tool{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;background:none;border-radius:7px;padding:6px 10px;font-size:13.5px;font-weight:600;color:var(--ink-2);cursor:pointer}
+.tk-tool:hover{background:var(--surface)}
+.tk-tool.on{background:var(--surface);border-color:var(--line);color:var(--ink);box-shadow:var(--shadow)}
+.tk-tool.on.ex{border-color:var(--tk-ex);color:var(--tk-ex)}.tk-tool.on.pr{border-color:var(--tk-pr);color:var(--tk-pr)}
+.tk-layer{padding:3px}.tk-layer button{padding:5px 10px;font-size:13px}
+.tk-layer button.on:first-child{color:var(--tk-ex)}.tk-layer button.on:last-child{color:var(--tk-pr)}
+.tk-main{display:grid;grid-template-columns:minmax(0,1fr) 290px;gap:12px;align-items:start}
+.tk-stage{position:relative;height:min(72vh,760px);min-height:420px;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface-2)}
+#tk-canvas{display:block;width:100%;height:100%;cursor:crosshair;touch-action:none;outline:none}
+.tk-prompt{position:absolute;left:12px;top:12px;background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;font-size:13.5px;z-index:2}
+.tk-prompt .field{width:120px;display:inline-block}
+.tk-hint{position:absolute;left:12px;bottom:10px;right:12px;font-size:12.5px;color:var(--ink-2);background:color-mix(in srgb,var(--surface) 88%,transparent);border-radius:6px;padding:4px 8px;pointer-events:none;width:fit-content;max-width:calc(100% - 24px)}
+.tk-hint:empty{display:none}
+.tk-empty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;text-align:center;padding:24px;color:var(--ink-2);pointer-events:none}
+.tk-empty b{font-size:16px;color:var(--ink)}.tk-empty span{max-width:380px;font-size:13.5px}
+.tk-side{display:flex;flex-direction:column;gap:10px;max-height:min(72vh,760px);overflow:auto}
+.tk-card{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:var(--surface)}
+.tk-selcard{border-color:var(--accent)}
+.tk-h{font-size:12px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);margin-bottom:8px}
+.tk-steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:4px;font-size:13.5px;color:var(--ink-2)}
+.tk-steps li.done{color:var(--ink)}
+.tk-set{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tk-set .f{font-size:12.5px}
+.tk-key{display:inline-flex;gap:4px;align-items:center;margin-left:6px;font-size:12px;color:var(--ink-3)}
+.tk-key i{display:inline-block;width:10px;height:10px;border-radius:2px}.tk-key i.c{background:rgba(214,64,40,.55)}.tk-key i.f{background:rgba(37,102,192,.55)}
+@media (max-width:1100px){.tk-main{grid-template-columns:1fr}.tk-side{max-height:none}}
+.tk-prompt[hidden],.tk-empty[hidden]{display:none}
