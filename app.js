@@ -3341,7 +3341,7 @@ function tkUI(){
   </div>`:'';
   side.innerHTML=`<div class="tk-card"><div class="tk-h">Plan & surfaces</div>
     <label class="btn sm" style="cursor:pointer">${t.loading?'Loading…':t.fileName?(sheet?'Replace plan':'Re-open plan'):'Upload plan (PDF or image)'}<input type="file" accept="application/pdf,image/*" data-tkfile hidden></label>
-    <label class="btn sm" style="cursor:pointer;margin-top:6px">Import surface (LandXML / DXF)<input type="file" accept=".xml,.dxf" data-tkimport hidden></label>
+    <label class="btn sm" style="cursor:pointer;margin-top:6px">Import surface (LandXML / DXF)<input type="file" accept=".xml,.landxml,.dxf,.dwg,.htm,.html,text/xml,application/xml" data-tkimport hidden></label>
     ${t.fileName?`<div class="small dim" style="margin-top:6px;overflow-wrap:anywhere">${esc(t.fileName)}${t.pageCount>1?` · ${t.pageCount} sheets`:''}</div>`:''}
     ${!sheet&&t.fileName&&t.lines.some(l=>l.page)?`<p class="hint">Your lines are saved. Re-open <b>${esc(t.fileName)}</b> to see the sheets under them.</p>`:''}
     ${surfList?`<div class="tk-surfs">${surfList}</div>`:''}${t.surfNotSaved?'<p class="hint">These surfaces are too big to remember in this browser — import them again next time.</p>':''}</div>
@@ -3425,13 +3425,26 @@ function tkSurfBBox(layer){let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity
 const tkGuessLayer=n=>/(^|[^a-z])(eg|ex|exist|existing|og|orig|original|topo|survey)([^a-z]|$)/i.test(n)?'ex':/(^|[^a-z])(fg|pr|prop|proposed|fin|finish|finished|design|dsgn|grade)([^a-z]|$)/i.test(n)?'pr':'';
 // LandXML: <Surface name><Definition><Pnts><P id="1">N E Z</P>…</Pnts><Faces><F>1 2 3</F>…
 function parseLandXML(txt){
-  const doc=new DOMParser().parseFromString(txt,'application/xml');if(doc.querySelector('parsererror'))throw new Error('That XML file couldn’t be read.');
-  const units=doc.querySelector('Units > *');const metric=units&&/metric/i.test(units.tagName)||/meter/i.test(units?.getAttribute('linearUnit')||'');const f=metric?M2FT:1;
-  const out=[];doc.querySelectorAll('Surface').forEach(sf=>{const ids=new Map();const pts=[];
-    sf.querySelectorAll('Definition > Pnts > P').forEach(p=>{const v=p.textContent.trim().split(/\s+/).map(Number);if(v.length<3||v.some(x=>!isFinite(x)))return;ids.set(p.getAttribute('id'),pts.length/3);pts.push(v[1]*f,v[0]*f,v[2]*f)});
-    const tris=[];sf.querySelectorAll('Definition > Faces > F').forEach(F=>{if(F.getAttribute('i')==='1')return;const v=F.textContent.trim().split(/\s+/);if(v.length<3)return;const a=ids.get(v[0]),b=ids.get(v[1]),c=ids.get(v[2]);if(a!=null&&b!=null&&c!=null)tris.push(a,b,c)});
-    if(tris.length)out.push({name:sf.getAttribute('name')||'Surface',en:pts,tris})});
-  if(!out.length)throw new Error('No TIN surfaces (points and faces) found in that LandXML file.');return {surfaces:out,lines:[],units:metric?'meters → feet':'feet'}}
+  const doc=new DOMParser().parseFromString(txt,'application/xml');if(doc.getElementsByTagName('parsererror').length)throw new Error('That XML file couldn’t be read — it may be cut off or not really XML.');
+  const all=(el,n)=>Array.from(el.getElementsByTagNameNS('*',n));const nums=s=>String(s||'').trim().split(/[\s,]+/).map(Number).filter(x=>isFinite(x));
+  const U=all(doc,'Units')[0]?.children?.[0];const metric=!!U&&(/metric/i.test(U.localName)||/meter/i.test(U.getAttribute('linearUnit')||''));const f=metric?M2FT:1;
+  const out=[],found={surf:0,faces:0,pts:0,brk:0,cont:0};
+  const fromPoints=(name,en)=>{// no faces in the file: triangulate the points ourselves
+    let P=en;if(P.length/3>15000){const k=Math.ceil(P.length/3/15000);const q=[];for(let i=0;i<P.length;i+=3*k)q.push(P[i],P[i+1],P[i+2]);P=q}
+    const n=P.length/3;if(n<3)return;let mx=0,my=0;for(let i=0;i<n;i++){mx+=P[i*3];my+=P[i*3+1]}mx/=n;my/=n;
+    const X=[],Y=[];for(let i=0;i<n;i++){X.push(P[i*3]-mx);Y.push(P[i*3+1]-my)}const tris=tkDelaunay(X,Y);if(tris.length)out.push({name,en:P,tris:Array.from(tris),built:true})};
+  all(doc,'Surface').forEach(sf=>{found.surf++;const name=sf.getAttribute('name')||'Surface '+found.surf;const ids=new Map();const pts=[];
+    all(sf,'P').filter(p=>p.parentElement?.localName==='Pnts').forEach((p,i)=>{const v=nums(p.textContent);if(v.length<3)return;ids.set(p.getAttribute('id')||String(i+1),pts.length/3);pts.push(v[1]*f,v[0]*f,v[2]*f)});found.pts+=pts.length/3;
+    const tris=[];all(sf,'F').filter(F=>F.parentElement?.localName==='Faces').forEach(F=>{if(F.getAttribute('i')==='1')return;const v=String(F.textContent).trim().split(/\s+/);if(v.length<3)return;const a=ids.get(v[0]),b=ids.get(v[1]),c=ids.get(v[2]);if(a!=null&&b!=null&&c!=null)tris.push(a,b,c)});found.faces+=tris.length/3;
+    if(tris.length){out.push({name,en:pts,tris});return}
+    // points / breaklines / contours only → build the TIN here
+    const en=pts.slice();
+    all(sf,'Breakline').forEach(bl=>{found.brk++;const L=all(bl,'PntList3D')[0];const v=nums(L?.textContent);for(let i=0;i+2<v.length;i+=3)en.push(v[i+1]*f,v[i]*f,v[i+2]*f)});
+    all(sf,'Contour').forEach(c=>{found.cont++;const z=+c.getAttribute('elev');const L=all(c,'PntList2D')[0]||all(c,'PntList3D')[0];const v=nums(L?.textContent);const st=L?.localName==='PntList3D'?3:2;if(!isFinite(z)&&st===2)return;for(let i=0;i+st-1<v.length;i+=st)en.push(v[i+1]*f,v[i]*f,(st===3?v[i+2]:z)*f)});
+    fromPoints(name,en)});
+  if(!out.length){const cg=[];all(doc,'CgPoint').forEach(p=>{const v=nums(p.textContent);if(v.length>=3)cg.push(v[1]*f,v[0]*f,v[2]*f)});found.pts+=cg.length/3;if(cg.length)fromPoints('Points',cg)}
+  if(!out.length)throw new Error(`No surface data found in that LandXML file (${found.surf} surface${found.surf===1?'':'s'}, ${found.pts} points, ${found.faces} triangles, ${found.brk} breaklines, ${found.cont} contours). In AGTEK, export the surface itself (existing / design) as LandXML.`);
+  return {surfaces:out,lines:[],units:metric?'meters → feet':'feet'}}
 // ASCII DXF: 3DFACE → TIN per layer; LWPOLYLINE / POLYLINE / LINE at one elevation → contours; POINT → spots
 function parseDXF(txt){
   if(txt.startsWith('AutoCAD Binary DXF'))throw new Error('That’s a binary DXF. Save it as an ASCII DXF and try again.');
@@ -3461,8 +3474,8 @@ function parseDXF(txt){
   return {surfaces,lines,units:unit===1?'feet':unit===M2FT?'meters → feet':'converted to feet'}}
 async function tkImportFile(file){
   const t=S.tk;t.loading=true;tkUI();
-  try{const txt=await file.text();const data=/\.dxf$/i.test(file.name)||/^\s*0\s*\r?\n\s*SECTION/.test(txt.slice(0,200))?parseDXF(txt):parseLandXML(txt);
-    const groups=[...data.surfaces.map((s,i)=>({key:'s'+i,name:s.name,kind:'TIN',count:`${fmtN(s.tris.length/3,0)} triangles`,layer:tkGuessLayer(s.name)}))];
+  try{if(/\.dwg$/i.test(file.name))throw new Error('DWG files can’t be read in the browser yet. Save it as DXF first — in AutoCAD / Civil 3D use SAVEAS → “AutoCAD DXF”, or run it through the free ODA File Converter — then import the .dxf.');const txt=await file.text();const isDxf=/\.dxf$/i.test(file.name)||/^\s*0\s*\r?\n\s*SECTION/.test(txt.slice(0,200));if(!isDxf&&!/<(\w+:)?LandXML[\s>]/i.test(txt.slice(0,5000))&&!/<(\w+:)?(Surface|CgPoint)[\s>]/i.test(txt))throw new Error('That file isn’t LandXML or DXF. In AGTEK, export the surface as LandXML (.xml).');const data=isDxf?parseDXF(txt):parseLandXML(txt);
+    const groups=[...data.surfaces.map((s,i)=>({key:'s'+i,name:s.name,kind:'TIN',count:`${fmtN(s.tris.length/3,0)} triangles${s.built?' (built from points)':''}`,layer:tkGuessLayer(s.name)}))];
     const byLayer={};data.lines.forEach(l=>{(byLayer[l.layerName]=byLayer[l.layerName]||[]).push(l)});
     Object.entries(byLayer).forEach(([n,xs])=>{const c=xs.filter(x=>x.kind==='line').length,sp=xs.length-c;groups.push({key:'l:'+n,name:n,kind:c?'Contours':'Points',count:[c?`${c} lines`:'',sp?`${sp} points`:''].filter(Boolean).join(' · '),layer:tkGuessLayer(n)})});
     if(groups.length===1&&!groups[0].layer)groups[0].layer=tkSurf('ex').length||tkLines('ex').length?'pr':'ex';
