@@ -98,9 +98,9 @@ const BRAND=CFG.brand||{};
 })();
 
 /* ---------- state ---------- */
-const TABLES=['bids','quotes','bid_files','estimators','clients','vendors','settings','jobs','job_items','job_costs'];
+const TABLES=['bids','quotes','bid_files','bid_log','estimators','clients','vendors','settings','jobs','job_items','job_costs'];
 const S={loading:true,session:null,profile:null,profileFor:null,needPassword:/type=(invite|recovery)/.test(INITIAL_HASH),authView:'login',authMsg:null,
-  bids:[],quotes:[],bid_files:[],estimators:[],clients:[],vendors:[],profiles:[],settings:{},jobs:[],job_items:[],job_costs:[],pms:[],
+  bids:[],quotes:[],bid_files:[],bid_log:[],tableErr:{},estimators:[],clients:[],vendors:[],profiles:[],settings:{},jobs:[],job_items:[],job_costs:[],pms:[],
   view:'dashboard',dash:'precon',filter:'active',q:{},estF:'',clientF:'',year:new Date().getFullYear()};
 let channel=null;
 
@@ -222,8 +222,8 @@ const myName=()=>S.profile?.full_name||myEst()?.name||S.session?.user?.email||''
 /* ---------- data ---------- */
 async function loadTable(t){
   const {data,error}=await sb.from(t).select('*');
-  if(error){console.error(t,error);return}
-  S.lastLoaded=new Date();
+  if(error){console.error(t,error);if(S.tableErr&&!S.tableErr[t]){S.tableErr[t]=true;schedule()}return}
+  if(S.tableErr)delete S.tableErr[t];S.lastLoaded=new Date();
   if(t==='settings')S.settings=Object.fromEntries((data||[]).map(r=>[r.key,r.value||{}]));
   else S[t]=t==='bids'?(data||[]).map(normBid):(data||[]);
   schedule();
@@ -277,6 +277,7 @@ function render(){
   if(!navOk(S.view))S.view=navItems()[0][0];
   main.innerHTML=views[S.view]();
   if(fid){const n=document.getElementById(fid);if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}
+  loadThumbs();
 }
 function navItems(){
   if(role()==='pm')return [['jobs','Jobs'],['calc','Calculators']];
@@ -587,7 +588,7 @@ const FLAGS=[['followup','Needs GC follow-up',b=>needsFollowUp(b)],['quotes','Qu
 function bidHaystack(b){return [b.name,b.location,normProjectType(b.project_type),b.bid_type,b.status,b.units?b.units+' units':'',b.notes,b.awarded_to,
   estName(b.lead_estimator_id),...(b.support_estimator_ids||[]).map(estName),...(b.client_ids||[]).map(clientName),
   ...Object.values(b.client_contacts||{}),...(b.client_ids||[]).flatMap(id=>(byId(S.clients,id)?.contacts||[]).map(c=>c.name||'')),...scopeItems(b).map(x=>x.name),...quotesFor(b.id).map(q=>vendorOf(q.vendor_id)?.company||''),
-  ...addenda(b).map(a=>a.description||'')].join(' • ').toLowerCase()}
+  ...addenda(b).map(a=>a.description||''),...S.bid_log.filter(e=>e.bid_id===b.id).map(e=>e.body||'')].join(' • ').toLowerCase()}
 const matchesQuery=(hay,q)=>q.split(/\s+/).filter(Boolean).every(t=>hay.includes(t));
 
 function dueMatch(b,f){
@@ -887,6 +888,7 @@ function renderModal(first){
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='import'||M.kind==='jlog'?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
+  loadThumbs();
 }
 function mhead(t,s){return `<div class="mhead"><div><h2>${esc(t)}</h2>${s?`<p>${esc(s)}</p>`:''}</div><button class="x" data-act="close" aria-label="Close">×</button></div>`}
 const DIS=()=>M&&M.kind==='bid'?(canWork(M.draft)?'':' disabled'):(isAdmin()?'':' disabled');
@@ -988,6 +990,8 @@ function bidModal(){
 
 
   ${scopeSection(b,work)}
+
+  ${logSection(b,work)}
 
   <fieldset><legend>Proposal</legend><div class="fg">
     <label class="f">Proposal status${sel('proposal_status',PROPOSAL_ST)}</label>
@@ -1137,6 +1141,8 @@ function subQuoteNote(it){
   const rec=qs.filter(q=>q.status==='Received').length,req=qs.filter(q=>q.status==='Requested').length;
   return ` · <span style="color:var(--${rec?'good':'warn'});font-weight:600">Sub quotes: ${rec} in${req?`, ${req} waiting`:''}</span>`;
 }
+function logLink(it,work){if(M.draft._new||!logOn())return '';const n=S.bid_log.filter(e=>e.bid_id===M.draft.id&&e.scope===it.name).length;
+  return n||work?` · <button class="linkish-sm" data-act="lg-scope" data-v="${esc(it.name)}">${n?`📝 ${n} note${n===1?'':'s'}`:'+ Note'}</button>`:''}
 function scopeRow(it,i,work,team){
   const signed=it.status==='Complete';const canUnsign=work&&(isAdmin()||it.signed_by_user===S.session.user.id);
   let right;
@@ -1144,7 +1150,7 @@ function scopeRow(it,i,work,team){
   else if(M.signing===i)right=`<div class="signing"><input class="field" id="sign-init" maxlength="4" value="${esc(myInitials())}" aria-label="Your initials" style="width:74px;text-transform:uppercase;font-weight:700"><button class="btn sm primary" data-act="sign-confirm" data-i="${i}">Confirm sign-off</button><button class="btn sm ghost" data-act="sign-cancel">Cancel</button></div>`;
   else right=`<div class="signing"><select class="field" data-sf="${i}.status"${work?'':' disabled'} style="width:140px">${['Not Started','In Progress'].map(x=>`<option${(it.status||'Not Started')===x?' selected':''}>${x}</option>`).join('')}</select>${work?`<button class="btn sm" data-act="sign-start" data-i="${i}">Sign off</button>`:''}</div>`;
   return `<div class="scope-row${signed?' is-signed':''}">
-   <div><b style="font-weight:600">${esc(it.name)}</b><div class="dim small">${esc(it.group||'')}${subQuoteNote(it)}</div></div>
+   <div><b style="font-weight:600">${esc(it.name)}</b><div class="dim small">${esc(it.group||'')}${subQuoteNote(it)}${logLink(it,work)}</div></div>
    <select class="field perf-${performOf(it)==='Self perform'?'self':performOf(it)==='Sub'?'sub':'both'}" data-sf="${i}.perform" title="Who performs this scope"${work&&!signed?'':' disabled'}>${PERFORM.map(x=>`<option${performOf(it)===x?' selected':''}>${x}</option>`).join('')}</select>
    <select class="field" data-sf="${i}.assignee_id" title="Who is doing this scope"${work&&!signed?'':' disabled'}><option value="">Whole team</option>${team.map(id=>`<option value="${id}"${it.assignee_id===id?' selected':''}>${esc(estName(id))}</option>`).join('')}</select>
    ${right}
@@ -1914,14 +1920,15 @@ function vJob(){
     <div class="tbars">${COST_TYPES.map(t=>{const x=js.byType[t];if(!x.bud&&!x.act)return '';const over=x.act>x.bud;
       return `<div class="tb" title="${t}: ${money(x.act)} spent of ${money(x.bud)} budget"><span class="lab">${t}</span><div class="track"><div class="bud" style="width:${x.bud/typeMax*100}%"></div><div class="act${over?' over':''}" style="width:${x.act/typeMax*100}%"></div></div><span class="v">${money(x.act)} <span class="dim">/ ${moneyK(x.bud)}</span></span></div>`}).join('')||'<div class="dim small">No budget yet.</div>'}</div>
     <div class="legend small" style="margin-top:8px"><span><i class="lg bud"></i>Budget</span><span><i class="lg act"></i>Actual</span><span><i class="lg over"></i>Over budget</span></div></div>`;
-  const tabs=`<div class="bar" style="margin-top:6px">${[['lines',`${job.structure==='cost_codes'?'Cost codes':'Bid items'} (${js.items.length})`],['log',`Cost log (${js.costs.length})`]].map(([k,l])=>`<button class="chip ${jt.tab===k?'on':''}" data-act="jt-tab" data-v="${k}">${l}</button>`).join('')}</div>`;
+  const nNotes=S.bid_log.filter(e=>job.bid_id&&e.bid_id===job.bid_id).length;const showNotes=job.bid_id&&logOn();if(jt.tab==='notes'&&!showNotes)jt.tab='lines';
+  const tabs=`<div class="bar" style="margin-top:6px">${[['lines',`${job.structure==='cost_codes'?'Cost codes':'Bid items'} (${js.items.length})`],['log',`Cost log (${js.costs.length})`],...(showNotes?[['notes',`Estimator notes (${nNotes})`]]:[])].map(([k,l])=>`<button class="chip ${jt.tab===k?'on':''}" data-act="jt-tab" data-v="${k}">${l}</button>`).join('')}</div>`;
   return `<button class="linkbtn" data-act="nav" data-v="jobs" style="margin-bottom:8px">← All jobs</button>
   <div class="head"><div><h1>${job.job_number?`<span class="dim" style="font-weight:600">${esc(job.job_number)}</span> `:''}${esc(job.name)}</h1>
     <p>${[job.client_id?clientName(job.client_id):'',job.location,pmName(job.pm_user_id)?'PM: '+pmName(job.pm_user_id):'',job.start_date?fmtShort(job.start_date)+(job.end_date?' – '+fmtDate(job.end_date):''):'',(+job.overhead_pct||+job.markup_pct)?`OH ${+job.overhead_pct||0}% · markup ${+job.markup_pct||0}%`:''].filter(Boolean).map(esc).join(' · ')} ${pill(job.status,JOB_CLS[job.status])} ${pill(h,hc)}</p></div>
     <div class="tools"><button class="btn" data-act="edit-job">Job details</button><button class="btn" data-act="export-job">Export</button><button class="btn" data-act="import" data-type="jobcosts"${js.items.length?'':' disabled title="Add budget lines first"'}>Import costs</button><button class="btn primary" data-act="log-costs"${js.items.length?'':' disabled title="Add budget lines first"'}>+ Log costs</button></div></div>
   ${tiles}
   <div class="grid2" style="margin-bottom:22px"><div class="panel pad">${costChart(job,js)}</div>${burn}</div>
-  ${tabs}${jt.tab==='log'?costLog(job,js):linesTable(job,js)}`;
+  ${tabs}${jt.tab==='log'?costLog(job,js):jt.tab==='notes'?jobNotes(job):linesTable(job,js)}`;
 }
 
 function linesTable(job,js){
@@ -2774,6 +2781,100 @@ function matsModal(){return mhead('Material weights','Used by every calculator t
   <div class="adders"><button class="btn sm" data-act="mat-add">+ Add material</button><button class="btn sm ghost" data-act="mat-defaults">Reset to typical values</button></div><p class="hint">Tons per cubic yard, in place. Ask your quarry for the numbers on their tickets.</p></fieldset></div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="save">Save weights</button></div></div>`}
 
+
+/* =====================================================================
+   ESTIMATOR LOG — dated notes on a bid (whole project or one scope),
+   with photos / files. Saves right away, separate from the bid's Save.
+   ===================================================================== */
+const LOG_CATS=[['Site visit','hot'],['Takeoff','info'],['Assumption',''],['Clarification / exclusion',''],['Question / RFI','warn'],['Risk / concern','bad'],['Pricing','good'],['Call / meeting',''],['General','na']];
+const logCls=c=>(LOG_CATS.find(x=>x[0]===c)||[,''])[1];
+const logFor=id=>S.bid_log.filter(e=>e.bid_id===id).sort((a,b)=>(!!b.pinned-!!a.pinned)||String(b.entry_date).localeCompare(String(a.entry_date))||String(b.created_at).localeCompare(String(a.created_at)));
+const logOn=()=>!S.tableErr?.bid_log;
+const isImg=a=>/^image\//.test(a.type||'')||/\.(jpe?g|png|gif|webp|heic|heif)$/i.test(a.name||'');
+const canEditLog=e=>isAdmin()||(e.created_by===S.session.user.id&&(!M||M.kind!=='bid'||canWork(M.draft)));
+function logState(){return M.lg=M.lg||{scope:'',cat:'Site visit',date:todayStr(),body:'',files:[],filter:'all',busy:false,edit:null,arm:null}}
+function logEntryHtml(e,opts={}){
+  const L=opts.readOnly?{}:logState();const mine=!opts.readOnly&&canEditLog(e);const atts=Array.isArray(e.attachments)?e.attachments:[];
+  if(L.edit&&L.edit.id===e.id){const x=L.edit;return `<div class="lg-entry editing">
+    <div class="lg-form"><select class="field" id="lge-cat" data-lge="cat" aria-label="Type">${LOG_CATS.map(([c])=>`<option${x.cat===c?' selected':''}>${esc(c)}</option>`).join('')}</select>
+    <select class="field" id="lge-scope" data-lge="scope" aria-label="Scope">${logScopeOpts(x.scope)}</select>
+    <input type="date" class="field" id="lge-date" data-lge="date" value="${esc(x.date)}" aria-label="Date"></div>
+    <textarea class="field lg-text" id="lge-body" data-lge="body" rows="5">${esc(x.body)}</textarea>
+    <div class="adders"><button class="btn sm primary" data-act="lg-edit-save">${L.busy?'Saving…':'Save'}</button><button class="btn sm ghost" data-act="lg-edit-cancel">Cancel</button></div></div>`}
+  const edited=e.edited_at?` · <span title="Edited ${esc(new Date(e.edited_at).toLocaleString('en-US'))}">edited</span>`:'';
+  return `<div class="lg-entry${e.pinned?' pinned':''}">
+    <div class="lg-head"><div class="lg-tags">${e.pinned?'<span class="lg-pin" title="Pinned">📌</span>':''}${pill(e.category||'General',logCls(e.category))}<span class="lg-scope">${esc(e.scope||'Whole project')}</span></div>
+      <div class="lg-meta">${fmtDate(String(e.entry_date).slice(0,10))} · ${esc(e.created_by_name||'Someone')}${edited}</div></div>
+    ${e.body?`<div class="lg-body">${esc(e.body)}</div>`:''}
+    ${atts.length?`<div class="lg-atts">${atts.map(a=>isImg(a)?`<button class="lg-ph" data-act="lg-open" data-path="${esc(a.path)}" data-name="${esc(a.name)}" title="${esc(a.name)}"><img data-thumb="${esc(a.path)}" alt="${esc(a.name)}"${S.thumbs[a.path]?` src="${esc(S.thumbs[a.path])}"`:''}></button>`
+      :`<button class="lg-file" data-act="dl" data-path="${esc(a.path)}" data-name="${esc(a.name)}">📄 ${esc(a.name)}</button>`).join('')}</div>`:''}
+    ${mine?`<div class="lg-acts"><button class="linkbtn" data-act="lg-pin" data-id="${e.id}">${e.pinned?'Unpin':'Pin'}</button><button class="linkbtn" data-act="lg-edit" data-id="${e.id}">Edit</button><button class="linkbtn${L.arm===e.id?' danger-t':''}" data-act="lg-del" data-id="${e.id}">${L.arm===e.id?'Click again to delete':'Delete'}</button></div>`:''}
+  </div>`;
+}
+function logScopeOpts(cur){const names=[...new Set([...(M?.draft?.scope_items||[]).map(x=>x.name),...(M?.draft?.id?logFor(M.draft.id).map(e=>e.scope).filter(Boolean):[])])];
+  return `<option value=""${!cur?' selected':''}>Whole project</option>${names.map(n=>`<option${cur===n?' selected':''}>${esc(n)}</option>`).join('')}`}
+function logSection(b,work){
+  if(b._new)return `<fieldset id="lg-fs"><legend>Estimator log</legend><p class="hint" style="margin:0">Create the bid first, then log site visits, assumptions, questions and anything else you find — for the whole project or one scope.</p></fieldset>`;
+  if(!logOn())return `<fieldset id="lg-fs"><legend>Estimator log</legend><p class="hint" style="margin:0">${isAdmin()?'To turn on the estimator log, run <b>supabase/update-11-estimator-log.sql</b> in Supabase.':'The estimator log isn’t set up yet — ask your admin.'}</p></fieldset>`;
+  const L=logState();const all=logFor(b.id);const n=s=>all.filter(e=>(e.scope||'')===s).length;
+  const scopes=[...new Set(all.map(e=>e.scope||''))];const shown=L.filter==='all'?all:all.filter(e=>(e.scope||'')===L.filter);
+  const chips=all.length?`<div class="bar lg-filter">${[['all',`All (${all.length})`],...scopes.sort((a,c)=>(a===''?-1:c===''?1:a.localeCompare(c))).map(s=>[s,`${s||'Whole project'} (${n(s)})`])].map(([k,l])=>`<button class="chip ${L.filter===k?'on':''}" data-act="lg-filter" data-v="${esc(k)}">${esc(l)}</button>`).join('')}</div>`:'';
+  const composer=work?`<div class="lg-compose">
+    <div class="lg-form"><label class="f">Type<select class="field" id="lg-cat" data-lg="cat">${LOG_CATS.map(([c])=>`<option${L.cat===c?' selected':''}>${esc(c)}</option>`).join('')}</select></label>
+    <label class="f">Scope<select class="field" id="lg-scope" data-lg="scope">${logScopeOpts(L.scope)}</select></label>
+    <label class="f">Date<input type="date" class="field" id="lg-date" data-lg="date" value="${esc(L.date)}"></label></div>
+    <textarea class="field lg-text" id="lg-body" data-lg="body" rows="4" placeholder="What did you see or do? e.g. Walked the site with the super — existing 18″ CMP at the NE corner is crushed, not shown on the plans. Assuming we replace 60 LF.">${esc(L.body)}</textarea>
+    ${L.files.length?`<div class="lg-atts">${L.files.map((f,i)=>`<span class="lg-file">${isImg(f)?'🖼':'📄'} ${esc(f.name)}<button class="rm" data-act="lg-rmfile" data-i="${i}" aria-label="Remove">×</button></span>`).join('')}</div>`:''}
+    <div class="adders" style="align-items:center"><button class="btn sm primary" data-act="lg-post"${L.busy?' disabled':''}>${L.busy?'Saving…':'Add to log'}</button>
+      <label class="btn sm" style="cursor:pointer">Attach photos / files<input type="file" multiple data-lgfiles style="display:none"></label>
+      <span class="dim small">Saves right away — you don’t need to save the bid.</span></div></div>`:'';
+  return `<fieldset id="lg-fs"><legend>Estimator log${all.length?` <span class="dim" style="font-weight:500">(${all.length})</span>`:''}</legend>
+    ${composer}${chips}
+    <div class="lg-list">${shown.map(e=>logEntryHtml(e)).join('')||`<div class="dim small">${all.length?'No notes for this scope yet.':'No notes yet.'+(work?' Log site visits, assumptions, questions and risks as you go — for the whole project or one scope.':'')}</div>`}</div>
+  </fieldset>`;
+}
+async function postLog(){
+  const L=logState();const body=L.body.trim();if(!body&&!L.files.length){toast('Write a note first.');$('#lg-body')?.focus();return}
+  const bidId=M.draft.id;L.busy=true;renderModal();
+  try{const attachments=[];for(const f of L.files){const path=await uploadTo(bidId,'log',f);attachments.push({path,name:f.name,size:f.size,type:f.type||''})}
+    await run(sb.from('bid_log').insert({bid_id:bidId,scope:L.scope||'',category:L.cat,entry_date:L.date||todayStr(),body,attachments,created_by:S.session.user.id,created_by_name:myName()}));
+    await loadTable('bid_log');if(M&&M.lg){Object.assign(M.lg,{body:'',files:[],busy:false});renderModal()}toast('Added to the log');
+  }catch(e){if(M&&M.lg){M.lg.busy=false;renderModal()}toast(errMsg(e))}
+}
+async function saveLogEdit(){
+  const L=logState();const x=L.edit;if(!x)return;if(!x.body.trim()&&!(byId(S.bid_log,x.id)?.attachments||[]).length){toast('The note is empty.');return}
+  L.busy=true;renderModal();
+  try{await run(sb.from('bid_log').update({body:x.body.trim(),category:x.cat,scope:x.scope||'',entry_date:x.date||todayStr(),edited_at:new Date().toISOString()}).eq('id',x.id));
+    await loadTable('bid_log');L.edit=null;L.busy=false;renderModal();toast('Note updated')}
+  catch(e){L.busy=false;renderModal();toast(errMsg(e))}
+}
+async function delLog(id){
+  const L=logState();if(L.arm!==id){L.arm=id;renderModal();return}
+  const e=byId(S.bid_log,id);L.arm=null;
+  try{await run(sb.from('bid_log').delete().eq('id',id));const paths=(e?.attachments||[]).map(a=>a.path).filter(Boolean);if(paths.length)try{await sb.storage.from(BUCKET).remove(paths)}catch(_){}
+    await loadTable('bid_log');renderModal();toast('Note deleted')}catch(err){renderModal();toast(errMsg(err))}
+}
+async function pinLog(id){const e=byId(S.bid_log,id);if(!e)return;try{await run(sb.from('bid_log').update({pinned:!e.pinned}).eq('id',id));await loadTable('bid_log');renderModal()}catch(err){toast(errMsg(err))}}
+// photo thumbnails: private bucket, so fetch short-lived signed links and cache them
+S.thumbs={};
+async function loadThumbs(){
+  const imgs=[...document.querySelectorAll('img[data-thumb]:not([src])')];
+  for(const img of imgs){const p=img.dataset.thumb;if(S.thumbs[p]===0)continue;
+    if(S.thumbs[p]){img.src=S.thumbs[p];continue}S.thumbs[p]=0;
+    try{const {data,error}=await sb.storage.from(BUCKET).createSignedUrl(p,3600);if(error)throw error;S.thumbs[p]=data.signedUrl;
+      document.querySelectorAll(`img[data-thumb="${CSS.escape(p)}"]`).forEach(n=>n.src=data.signedUrl)}catch(e){delete S.thumbs[p]}}
+}
+async function openLogFile(path,name){try{const {data,error}=await sb.storage.from(BUCKET).createSignedUrl(path,600);if(error)throw error;window.open(data.signedUrl,'_blank','noopener')}catch(e){download(path,name)}}
+// Job page: the estimator's notes from the bid, read-only
+function jobNotes(job){
+  const all=S.bid_log.filter(e=>e.bid_id===job.bid_id).sort((a,b)=>(!!b.pinned-!!a.pinned)||String(b.entry_date).localeCompare(String(a.entry_date)));
+  const f=S.jt.nf||'all';const scopes=[...new Set(all.map(e=>e.scope||''))];const shown=f==='all'?all:all.filter(e=>(e.scope||'')===f);
+  return `<div class="panel pad"><div class="sec-h" style="margin:0 0 6px"><h2>Estimator notes</h2><span>From the bid · read-only</span></div>
+    <p class="dim small" style="margin:0 0 10px">What the estimating team saw, assumed and asked while bidding this job.</p>
+    ${all.length>1&&scopes.length>1?`<div class="bar lg-filter">${[['all',`All (${all.length})`],...scopes.map(s=>[s,`${s||'Whole project'} (${all.filter(e=>(e.scope||'')===s).length})`])].map(([k,l])=>`<button class="chip ${f===k?'on':''}" data-act="jn-filter" data-v="${esc(k)}">${esc(l)}</button>`).join('')}</div>`:''}
+    <div class="lg-list">${shown.map(e=>logEntryHtml(e,{readOnly:true})).join('')||'<div class="dim small">The estimators didn’t leave any notes on this bid.</div>'}</div></div>`;
+}
+
 /* ---------- events ---------- */
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;
@@ -2860,6 +2961,17 @@ document.addEventListener('click',e=>{
     case 'pl-add':M.draft.push({id:newId(),name:'',size:'',od:'',idIn:''});renderModal();document.getElementById('pf-'+(M.draft.length-1)+'-name')?.focus();break;
     case 'pl-rm':M.draft.splice(+t.dataset.i,1);renderModal();break;
     case 'mat-defaults':M.draft=clone(DEFAULT_MATERIALS);renderModal();break;
+    case 'lg-post':if(!logState().busy)postLog();break;
+    case 'lg-filter':logState().filter=t.dataset.v;renderModal();break;
+    case 'lg-scope':{const L=logState();L.filter=t.dataset.v;L.scope=t.dataset.v;L.edit=null;renderModal();const fs=$('#lg-fs');fs?.scrollIntoView({block:'start',behavior:'smooth'});setTimeout(()=>$('#lg-body')?.focus({preventScroll:true}),300);break}
+    case 'lg-edit':{const e=byId(S.bid_log,t.dataset.id);if(e){const L=logState();L.arm=null;L.edit={id:e.id,body:e.body||'',cat:e.category||'General',scope:e.scope||'',date:String(e.entry_date).slice(0,10)};renderModal();$('#lge-body')?.focus()}break}
+    case 'lg-edit-cancel':logState().edit=null;renderModal();break;
+    case 'lg-edit-save':if(!logState().busy)saveLogEdit();break;
+    case 'lg-del':delLog(t.dataset.id);break;
+    case 'lg-pin':pinLog(t.dataset.id);break;
+    case 'lg-rmfile':logState().files.splice(+t.dataset.i,1);renderModal();break;
+    case 'lg-open':openLogFile(t.dataset.path,t.dataset.name);break;
+    case 'jn-filter':S.jt.nf=t.dataset.v;render();break;
     case 'close':closeModal();break;
     case 'save':saveModal();break;
     case 'del':deleteModal();break;
@@ -2933,6 +3045,8 @@ document.addEventListener('input',e=>{
   if(t.dataset.jtq!=null){S.jt.q=t.value;render();return}
   if(t.dataset.jtf&&t.tagName==='INPUT'){S.jt[t.dataset.jtf]=t.value;render();return}
   if(t.id==='pal-q'){S.pal.q=t.value;S.pal.i=0;renderPalette();return}
+  if(M&&t.dataset.lg){logState()[t.dataset.lg]=t.value;return}
+  if(M&&t.dataset.lge&&M.lg?.edit){M.lg.edit[t.dataset.lge]=t.value;return}
   if(t.dataset.cf){const c=calcDef();calcRaw(c)[t.dataset.cf]=t.value;if(c.id==='pipe'&&(t.dataset.cf==='ptype'||t.dataset.cf==='size'))delete calcRaw(c).od;saveCalc();refreshCalc(t.tagName==='SELECT');return}
   if(t.dataset.mh){const c=calcDef();const raw=calcRaw(c);mhDefaults(raw);setCalcPath(raw,t.dataset.mh,t.type==='checkbox'?t.checked:t.value);saveCalc();refreshCalc(t.tagName==='SELECT');return}
   if(M&&M.kind==='pipes'&&t.dataset.pf){const[i,k]=t.dataset.pf.split('.');M.draft[+i][k]=t.value;return}
@@ -2980,6 +3094,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.adupload!=null){uploadAddendum(+t.dataset.adupload,t.files[0]);return}
   if(M&&t.dataset.ad&&/priced|acknowledged|date/.test(t.dataset.ad)){renderModal();return}
   if(t.dataset.docupload!=null){if(t.files.length)uploadDocs([...t.files]);return}
+  if(t.dataset.lgfiles!=null&&M){const L=logState();L.files.push(...t.files);renderModal();return}
   if(t.dataset.prole){setRole(t.dataset.prole,t.value);return}
   if(t.dataset.plink!=null){linkEstimator(t.dataset.plink,t.value);return}
   if(t.dataset.pname){setProfileName(t.dataset.pname,t.value.trim());return}
