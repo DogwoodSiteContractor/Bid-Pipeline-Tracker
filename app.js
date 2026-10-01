@@ -250,12 +250,13 @@ async function afterLogin(){
     await Promise.all(TABLES.map(loadTable));
     await loadProfiles();
     await loadPms();
+    await loadEstIndex();
     if(channel)sb.removeChannel(channel);
-    channel=sb.channel('bid-pipeline').on('postgres_changes',{event:'*',schema:'public'},p=>{if(TABLES.includes(p.table))debounceLoad(p.table)}).subscribe();
+    channel=sb.channel('bid-pipeline').on('postgres_changes',{event:'*',schema:'public'},p=>{if(TABLES.includes(p.table))debounceLoad(p.table);if(p.table==='estimates')estRemote(p)}).subscribe();
   }
   S.loading=false;schedule();
 }
-function resetData(){TABLES.forEach(t=>{if(t!=='settings')S[t]=[]});S.settings={};S.profiles=[];S.profile=null;S.profileFor=null;S.view='dashboard';S.dash='precon';if(channel){sb.removeChannel(channel);channel=null}}
+function resetData(){TABLES.forEach(t=>{if(t!=='settings')S[t]=[]});S.est=null;S.estIndex=[];S.settings={};S.profiles=[];S.profile=null;S.profileFor=null;S.view='dashboard';S.dash='precon';if(channel){sb.removeChannel(channel);channel=null}}
 function errMsg(e){const m=(e&&(e.message||e.error_description))||'Something went wrong.';
   if(/row-level security|permission denied/i.test(m))return 'You don’t have permission to make that change.';
   if(/Failed to fetch|NetworkError/i.test(m))return 'Can’t reach the server. Check your connection and try again.';
@@ -275,11 +276,13 @@ function render(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;
-  const views={dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb};
-  const navOk=v=>navItems().some(n=>n[0]===v)||(v==='job'&&navItems().some(n=>n[0]==='jobs'));
+  const views={dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,estimate:vEstimate};
+  const navOk=v=>navItems().some(n=>n[0]===v)||(v==='job'&&navItems().some(n=>n[0]==='jobs'))||(v==='estimate'&&['admin','estimator','board'].includes(role()));
   if(!navOk(S.view))S.view=navItems()[0][0];
+  const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
   main.innerHTML=views[S.view]();
-  if(fid){const n=document.getElementById(fid);if(n){n.focus();try{n.setSelectionRange(pos,pos)}catch(e){}}}
+  keep.forEach(([id,top])=>{const e=id&&document.getElementById(id);if(e)e.scrollTop=top});
+  if(fid){const n=document.getElementById(fid);if(n){n.focus({preventScroll:true});try{n.setSelectionRange(pos,pos)}catch(e){}if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();if(S.view==='calc'&&$('#tk-canvas'))tkMount();
 }
 function navItems(){
@@ -928,8 +931,8 @@ function focusKey(el){if(!el||!$('#modal')?.contains(el))return null;if(el.id)re
 function renderModal(first){
   if(!M)return;const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal}[M.kind]();
-  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass'].includes(M.kind)?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
+  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal}[M.kind]();
+  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl'].includes(M.kind)?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();
@@ -1037,6 +1040,8 @@ function bidModal(){
   ${scopeSection(b,work)}
 
   ${logSection(b,work)}
+
+  ${estBidBlock(b,work)}
 
   <fieldset><legend>Proposal</legend><div class="fg">
     <label class="f">Proposal status${sel('proposal_status',PROPOSAL_ST)}</label>
@@ -3724,12 +3729,12 @@ function t3Draw(){const G=T3.gl;if(!G)return;const {gl,loc}=G;const cv=gl.canvas
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;
   if(a==='pal-close'){if(e.target===t)palClose();return}
-  if(a==='backdrop'){if(e.target===t&&!(M&&(M.picker||M.running||M.plan||M.kind==='cbimp'||M.kind==='cbmass')))closeModal();return}
+  if(a==='backdrop'){if(e.target===t&&!(M&&(M.picker||M.running||M.plan||M.kind==='cbimp'||M.kind==='cbmass'||M.kind==='cbtpl')))closeModal();return}
   switch(a){
     case 'auth-view':S.authView=t.dataset.v;S.authMsg=null;render();break;
     case 'signout':palClose();sb.auth.signOut();break;
     case 'recheck':S.profileFor=null;S.profile=null;render();afterLogin();break;
-    case 'nav':S.selMode=false;S.sel=new Set();S.view=t.dataset.v;closeModal();render();window.scrollTo(0,0);break;
+    case 'nav':if(S.est&&S.est.dirty)estSave();S.selMode=false;S.sel=new Set();S.view=t.dataset.v;closeModal();render();window.scrollTo(0,0);break;
     case 'dash':S.dash=t.dataset.v;render();break;
     case 'kpi-filter':S.view='pipeline';S.filter=t.dataset.v;savePv();render();window.scrollTo(0,0);break;
     case 'filter':S.filter=t.dataset.v;savePv();render();break;
@@ -4027,13 +4032,16 @@ document.addEventListener('change',e=>{
    Crews are built from labor + equipment and priced live, so a wage or
    rate change flows into every crew that uses it.
    ===================================================================== */
-const CB_BOOKS=[['material','Materials','material'],['labor','Labor','labor rate'],['equipment','Equipment','equipment'],['crew','Crews','crew']];
+const CB_BOOKS=[['material','Materials','material'],['labor','Labor','labor rate'],['equipment','Equipment','equipment'],['crew','Crews','crew'],['activity','Activities','activity'],['biditem','Bid items','bid item']];
+const CB_TPL=new Set(['activity','biditem']);const CB_IMPORTABLE=new Set(['material','labor','equipment']);
 const CB_MAT_TYPES=['Material','Subcontract','Trucking','Other'];
 const CB_OWN=['Owned','Rented'];
 const CB_CATS={material:['Stone & aggregate','Pipe','Precast structures','Fittings & accessories','Concrete','Asphalt','Erosion control','Geotextile & geogrid','Seed & landscape','Dump / disposal fees','Other'],
   labor:['Superintendent','Foreman','Operator','Pipe layer','Laborer','Truck driver','Mechanic'],
   equipment:['Excavator','Dozer','Loader','Skid steer','Motor grader','Roller / compactor','Scraper','Truck','Water truck','Trailer','Small tools','Other'],
-  crew:['Earthwork','Underground','Erosion control','Paving','Concrete','Demo','Other']};
+  crew:['Earthwork','Underground','Erosion control','Paving','Concrete','Demo','Other'],
+  activity:['Earthwork','Underground','Erosion control','Paving','Concrete','Demo','General conditions','Other'],
+  biditem:['Earthwork','Underground','Erosion control','Paving','Concrete','Demo','General conditions','Other']};
 const CB_UNITS=['EA','LF','SF','SY','CY','TON','GAL','LB','LS','HR','DAY','LOAD','AC','BAG','ROLL'];
 // k = where it lives (column, or data.x); t = type; m = can be mass-updated / is a price field
 const CB_FIELDS={
@@ -4070,7 +4078,9 @@ const CB_FIELDS={
     {k:'code',l:'Code',t:'text',al:['code']},
     {k:'description',l:'Crew name',t:'text',req:1,al:['description','crew','name']},
     {k:'category',l:'Category',t:'cat',al:['category']},
-    {k:'notes',l:'Notes',t:'text',al:['notes']}]};
+    {k:'notes',l:'Notes',t:'text',al:['notes']}],
+  activity:[{k:'code',l:'Code',t:'text',al:['code']},{k:'description',l:'Activity',t:'text',req:1,al:['description','activity','name']},{k:'category',l:'Category',t:'cat',al:['category']},{k:'notes',l:'Notes',t:'text',al:['notes']}],
+  biditem:[{k:'code',l:'Code',t:'text',al:['code']},{k:'description',l:'Bid item',t:'text',req:1,al:['description','item','name']},{k:'category',l:'Category',t:'cat',al:['category']},{k:'notes',l:'Notes',t:'text',al:['notes']}]};
 const CB_KEY='bp-cb',CB_MAPKEY='bp-cbmap';
 S.cb=(()=>{const d={book:'material',sort:'code',dir:1,cat:'',vendor:'',inactive:false};try{Object.assign(d,JSON.parse(localStorage.getItem(CB_KEY)||'{}'))}catch(e){}return {...d,sel:new Set(),limit:400}})();
 function cbSaveUi(){const c=S.cb;try{localStorage.setItem(CB_KEY,JSON.stringify({book:c.book,sort:c.sort,dir:c.dir,inactive:c.inactive}))}catch(e){}}
@@ -4080,7 +4090,7 @@ const cbById=id=>byId(S.codebook,id);
 const cbD=x=>x&&x.data&&typeof x.data==='object'?x.data:{};
 const cbGet=(x,k)=>k.startsWith('data.')?cbD(x)[k.slice(5)]:x[k];
 function cbSet(x,k,v){if(k.startsWith('data.')){x.data={...cbD(x),[k.slice(5)]:v}}else x[k]=v}
-const cbUnit=x=>x.book==='labor'||x.book==='equipment'||x.book==='crew'?'HR':(x.unit||'');
+const cbUnit=x=>x.book==='labor'||x.book==='equipment'||x.book==='crew'?'HR':CB_TPL.has(x.book)?(cbD(x).unit||''):(x.unit||'');
 const cbName=x=>x?[x.code,x.description].filter(Boolean).join(' · '):'Removed item';
 const cbEditable=()=>isAdmin();
 // ---- pricing
@@ -4092,6 +4102,7 @@ function cbCost(x){if(!x)return null;const d=cbD(x);
   if(x.book==='labor'){const L=cbLabor(d);return L?L.st:num(x.cost)}
   if(x.book==='equipment'){const r=num(d.rate),o=num(d.op);return r==null&&o==null?num(x.cost):(r||0)+(o||0)}
   if(x.book==='crew')return cbCrew(x).total;
+  if(CB_TPL.has(x.book)){const r=tplCalc(x);return r?r.unit:null}
   return num(x.cost)}
 const cbAge=x=>x.price_date?-daysUntil(x.price_date):null;
 function cbHist(x,f,o,n,src,note){const h=Array.isArray(x.price_history)?x.price_history.slice():[];h.push({d:todayStr(),by:myName(),f,o:o??null,n:n??null,src,...(note?{note}:{})});x.price_history=h.slice(-25)}
@@ -4120,13 +4131,18 @@ function vCb(){
     material:[th('code','Code'),th('description','Description'),th('category','Category'),th('unit','Unit'),th('cost','Unit cost',1),th('vendor','Vendor'),th('price_date','Price date')],
     labor:[th('code','Code'),th('description','Craft'),th('category','Category'),th('data.base','Base',1),th('data.fringe','Fringe',1),th('data.burden','Burden',1),th('cost','Loaded $/hr',1),th('price_date','Updated')],
     equipment:[th('code','Code'),th('description','Description'),th('category','Category'),th('data.own','Owned / rented'),th('data.rate','Rate',1),th('data.op','Operating',1),th('cost','Total $/hr',1),th('price_date','Updated')],
-    crew:[th('code','Code'),th('description','Crew'),th('category','Category'),'<th>Members</th>',th('men','Crew size',1),'<th class="r">Labor $/hr</th>','<th class="r">Equip $/hr</th>',th('cost','Crew $/hr',1)]}[bk];
+    crew:[th('code','Code'),th('description','Crew'),th('category','Category'),'<th>Members</th>',th('men','Crew size',1),'<th class="r">Labor $/hr</th>','<th class="r">Equip $/hr</th>',th('cost','Crew $/hr',1)],
+    activity:[th('code','Code'),th('description','Activity'),th('category','Category'),'<th>Crew</th>','<th>Production</th>','<th>Costs</th>',th('cost','Unit cost',1)],
+    biditem:[th('code','Code'),th('description','Bid item'),th('category','Category'),'<th>Unit</th>','<th>Activities</th>',th('cost','Unit cost',1)]}[bk];
   const pd=x=>x.price_date?`<span class="${stale(x)?'cb-stale':''}" title="${stale(x)?'Price is more than 6 months old':''}">${fmtShort(x.price_date)}${String(x.price_date).slice(0,4)!==String(new Date().getFullYear())?', '+String(x.price_date).slice(2,4):''}</span>`:'<span class="dim">—</span>';
   const row=x=>{const d=cbD(x);const inact=x.active===false?' '+pill('Inactive','na'):'';
     const cells={
       material:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}${d.type&&d.type!=='Material'?` <span class="pill cb-type">${esc(d.type)}</span>`:''}</td><td class="small">${esc(x.category)}</td><td class="small">${esc(x.unit)}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${esc(vendorOf(x.vendor_id)?.company||'')}</td><td class="small">${pd(x)}</td>`,
       labor:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="r num">${money2(num(d.base))}</td><td class="r num">${num(d.fringe)?money2(d.fringe):'<span class="dim">—</span>'}</td><td class="r num">${num(d.burden)!=null?fmtN(d.burden,1)+'%':'<span class="dim">—</span>'}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${pd(x)}</td>`,
       equipment:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="small">${esc(d.own||'Owned')}</td><td class="r num">${money2(num(d.rate))}</td><td class="r num">${num(d.op)?money2(d.op):'<span class="dim">—</span>'}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${pd(x)}</td>`,
+      activity:()=>{const a=d.act||{};const r=tplCalc(x)||{};const pm=PROD_MODES.find(m=>m[0]===(a.mode||'uph'));const kinds=[...new Set((a.res||[]).map(z=>(RES_KINDS.find(k=>k[0]===z.kind)||RES_KINDS[5])[1]))];
+        return `<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="small">${a.crew?esc(a.crew.name):'<span class="dim">—</span>'}</td><td class="small">${num(a.prod)?`${fmtN(a.prod,2)} ${esc(pm[0]==='uph'||pm[0]==='upd'?pm[1].replace('units',d.unit||a.unit||'units'):pm[1])}`:'<span class="dim">—</span>'}</td><td class="small">${kinds.join(', ')||'<span class="dim">—</span>'}</td><td class="r num"><b>${r.unit!=null?money2(r.unit):'—'}</b>${d.unit?`<span class="dim small">/${esc(d.unit)}</span>`:''}</td>`},
+      biditem:()=>{const it=d.item||{};const r=tplCalc(x)||{};return `<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="small">${esc(d.unit||'')}</td><td class="small cb-mem">${(it.acts||[]).map(a=>esc(a.desc||'Activity')).slice(0,4).join(', ')||'<span class="dim">None</span>'}${(it.acts||[]).length>4?` <span class="dim">+${it.acts.length-4}</span>`:''}</td><td class="r num"><b>${r.unit!=null?money2(r.unit):'—'}</b>${d.unit?`<span class="dim small">/${esc(d.unit)}</span>`:''}</td>`},
       crew:()=>{const C=cbCrew(x);const mem=(d.members||[]).map(m=>{const it=cbById(m.id);return it?`${fmtN(+m.qty||0,2)}× ${esc(it.description)}`:''}).filter(Boolean);
         return `<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="small cb-mem">${mem.slice(0,4).join(', ')||'<span class="dim">No members</span>'}${mem.length>4?` <span class="dim">+${mem.length-4} more</span>`:''}${C.missing?` <span class="pill bad" title="Some members were deleted from the codebook">${C.missing} missing</span>`:''}</td><td class="r num">${fmtN(C.men,2)}</td><td class="r num">${money2(C.labor)}</td><td class="r num">${money2(C.equip)}</td><td class="r num"><b>${money2(C.total)}</b></td>`}}[bk]();
     return `<tr class="click${c.sel.has(x.id)?' cb-on':''}${x.active===false?' cb-inactive':''}" data-act="cb-open" data-id="${x.id}" tabindex="0">${admin?`<td class="cb-ck" data-act="cb-noop"><input type="checkbox" data-cbsel="${x.id}" aria-label="Select"${c.sel.has(x.id)?' checked':''}></td>`:''}${cells}</tr>`};
@@ -4141,9 +4157,9 @@ function vCb(){
     <button class="btn sm danger${c.delArm?' arm':''}" data-act="cb-bulk-del">${c.delArm?`Click again to delete ${sel.length}`:'Delete'}</button><button class="linkbtn" data-act="cb-selclear">Clear</button></div>`:'';
   const tabs=`<div class="seg cb-tabs" role="tablist">${CB_BOOKS.map(([k,l])=>`<button class="${k===bk?'on':''}" data-act="cb-tab" data-v="${k}" role="tab" aria-selected="${k===bk}">${l}<small>${(n=>n+(n===1?' item':' items'))(cbList(k).filter(x=>x.active!==false).length)}</small></button>`).join('')}</div>`;
   const missing=S.tableErr&&S.tableErr.codebook;
-  const empty=missing?'':`<div class="empty"><b>${all.length?`No ${Label.toLowerCase()} match`:`No ${Label.toLowerCase()} yet`}</b>${all.length?'Try another search or filter.':admin?(bk==='crew'?'Add labor and equipment first, then build crews from them.':`Add them one at a time, or bring in your list with <b>Import from Excel</b>.`):'An admin sets these up.'}</div>`;
+  const empty=missing?'':`<div class="empty"><b>${all.length?`No ${Label.toLowerCase()} match`:`No ${Label.toLowerCase()} yet`}</b>${all.length?'Try another search or filter.':admin?(bk==='crew'?'Add labor and equipment first, then build crews from them.':CB_TPL.has(bk)?`Build one here, or save one from an estimate with <b>→ Codebook</b>.`:`Add them one at a time, or bring in your list with <b>Import from Excel</b>.`):'An admin sets these up.'}</div>`;
   return `<div class="head"><div><h1>Codebooks</h1><p>The materials, labor, equipment and crews your estimates are built from${admin?'':' · view only'}</p></div>
-    <div class="tools">${admin&&bk!=='crew'?'<button class="btn" data-act="cb-imp">Import from Excel</button>':''}<button class="btn" data-act="cb-export">Export to Excel</button>${admin?`<button class="btn primary" data-act="cb-new">+ Add ${esc(one)}</button>`:''}</div></div>
+    <div class="tools">${admin&&CB_IMPORTABLE.has(bk)?'<button class="btn" data-act="cb-imp">Import from Excel</button>':''}<button class="btn" data-act="cb-export">Export to Excel</button>${admin?`<button class="btn primary" data-act="cb-new">+ Add ${esc(one)}</button>`:''}</div></div>
   ${missing?`<div class="notice"><b>One setup step:</b> run <b>update-13-codebooks.sql</b> in Supabase (SQL Editor → New query → paste → Run), then refresh this page.</div>`:''}
   ${tabs}
   <div class="bar cb-bar"><input id="q-cb" class="field search" data-q="cb" placeholder="Search ${esc(Label.toLowerCase())}" value="${esc(S.q.cb||'')}">
@@ -4160,8 +4176,10 @@ function vCb(){
 
 /* ---------- item editor ---------- */
 function cbNew(book){const c=S.cb;const d={id:newId(),book,code:'',description:'',category:c.cat||'',unit:book==='material'?'':'HR',cost:null,data:{},vendor_id:book==='material'&&c.vendor&&c.vendor!=='none'?c.vendor:null,price_date:todayStr(),price_history:[],active:true,notes:''};
+  if(book==='activity')d.data={act:estNewAct(),qty:1,unit:''};if(book==='biditem')d.data={item:estNewItem({items:[]},{code:''}),qty:1,unit:'LS'};
   if(book==='material')d.data={type:'Material',tax:true};if(book==='labor')d.data={ot:1.5};if(book==='equipment')d.data={own:'Owned'};if(book==='crew')d.data={members:[]};return d}
-function cbOpen(id){const x=cbById(id);if(!x)return;const d=clone(x);d.data=cbD(d);if(d.book==='crew')d.data.members=(d.data.members||[]).map(m=>({...m}));M={kind:'cbitem',draft:d,orig:clone(x)};showModal()}
+function cbOpen(id){const x=cbById(id);if(!x)return;const d=clone(x);d.data=cbD(d);
+  if(CB_TPL.has(d.book)){if(d.book==='activity'){d.data.act=d.data.act||estNewAct();d.data.act.res=d.data.act.res||[]}else{d.data.item=d.data.item||estNewItem({items:[]},{code:''});d.data.item.acts=(d.data.item.acts||[]).map(a=>({...a,res:a.res||[]}))}estApplyStale(estStale(d.data));M={kind:'cbtpl',draft:d,orig:clone(x)};showModal();return}if(d.book==='crew')d.data.members=(d.data.members||[]).map(m=>({...m}));M={kind:'cbitem',draft:d,orig:clone(x)};showModal()}
 function cbFieldHtml(f,d,dis){const v=cbGet(d,f.k);const id='cbe-'+f.k.replace('.','-');const a=`id="${id}" data-cbe="${f.k}"${dis}`;
   if(f.t==='sel')return `<label class="f">${f.l}<select class="field" ${a}>${f.opts.map(o=>`<option${(v||f.opts[0])===o?' selected':''}>${o}</option>`).join('')}</select></label>`;
   if(f.t==='bool')return `<label class="check cb-bool"><input type="checkbox" ${a}${v!==false?' checked':''}> ${f.l}</label>`;
@@ -4213,6 +4231,8 @@ async function cbSaveItem(){const d=M.draft;const btn=$('#modal [data-act=cb-sav
   try{if(!String(d.description||'').trim())throw new Error('Add a description.');
     const code=String(d.code||'').trim();if(code&&cbList(d.book).some(x=>x.id!==d.id&&String(x.code).trim().toLowerCase()===code.toLowerCase()))throw new Error(`Code ${code} is already used in this codebook.`);
     if(d.book==='crew')d.data.members=(d.data.members||[]).filter(m=>m.id&&num(m.qty)>0);
+    if(d.book==='activity'){d.data.act.code=String(d.code||'').trim();d.data.act.desc=String(d.description||'').trim();d.data.act.unit=d.data.unit||d.data.act.unit||''}
+    if(d.book==='biditem'){d.data.item.code='';d.data.item.desc=String(d.description||'').trim();d.data.item.unit=d.data.unit||d.data.item.unit||'LS';d.data.item.qty=num(d.data.qty)||1}
     const o=M.orig;if(o){let priced=false;CB_FIELDS[d.book].filter(f=>f.m).forEach(f=>{const a=num(cbGet(o,f.k)),b=num(cbGet(d,f.k));if(a!==b){cbHist(d,f.k,a,b,'edit');priced=true}});
       if(priced&&d.price_date===o.price_date)d.price_date=todayStr()}
     else CB_FIELDS[d.book].filter(f=>f.m).forEach(f=>{const b=num(cbGet(d,f.k));if(b!=null)cbHist(d,f.k,null,b,'edit')});
@@ -4266,7 +4286,8 @@ async function cbExport(){let X;try{X=await loadXLSX()}catch(e){toast(errMsg(e))
   const wb=X.utils.book_new();
   CB_BOOKS.forEach(([bk,Label])=>{const F=CB_FIELDS[bk];const list=cbList(bk).slice().sort((a,b)=>String(a.code).localeCompare(String(b.code),undefined,{numeric:true})||String(a.description).localeCompare(b.description));
     let head,rows;
-    if(bk==='crew'){head=['Code','Crew name','Category','Members','Crew size','Labor $/hr','Equipment $/hr','Crew $/hr','Notes'];
+    if(CB_TPL.has(bk)){head=['Code','Description','Category','Unit','Unit cost','Notes'];rows=list.map(x=>[x.code,x.description,x.category,cbD(x).unit||'',+(cbCost(x)||0).toFixed(2),x.notes||''])}
+    else if(bk==='crew'){head=['Code','Crew name','Category','Members','Crew size','Labor $/hr','Equipment $/hr','Crew $/hr','Notes'];
       rows=list.map(x=>{const C=cbCrew(x);return [x.code,x.description,x.category,(cbD(x).members||[]).map(m=>{const it=cbById(m.id);return it?`${m.qty}× ${it.code||it.description}`:''}).filter(Boolean).join('; '),C.men,+C.labor.toFixed(2),+C.equip.toFixed(2),+C.total.toFixed(2),x.notes||'']})}
     else{head=[...F.map(f=>f.l),...(bk==='material'?[]:[bk==='labor'?'Loaded $/hr':'Total $/hr']),'Active'];
       rows=list.map(x=>[...F.map(f=>{const v=cbGet(x,f.k);if(f.t==='vendor')return vendorOf(v)?.company||'';if(f.t==='bool')return v===false?'No':'Yes';if(f.t==='date')return v||'';if(['money','pct','num'].includes(f.t))return num(v)??'';if(f.t==='sel')return v||f.opts[0];return v??''}),...(bk==='material'?[]:[+(cbCost(x)||0).toFixed(2)]),x.active===false?'No':'Yes'])}
@@ -4274,7 +4295,7 @@ async function cbExport(){let X;try{X=await loadXLSX()}catch(e){toast(errMsg(e))
   X.writeFile(wb,`codebooks-${todayStr()}.xlsx`)}
 
 /* ---------- import with column mapping ---------- */
-function cbImpStart(){const bk=S.cb.book==='crew'?'material':S.cb.book;M={kind:'cbimp',book:bk,step:'file',opt:{existing:'update',vendor:'',cat:'',date:todayStr()}};showModal();loadXLSX().catch(()=>{})}
+function cbImpStart(){const bk=CB_IMPORTABLE.has(S.cb.book)?S.cb.book:'material';M={kind:'cbimp',book:bk,step:'file',opt:{existing:'update',vendor:'',cat:'',date:todayStr()}};showModal();loadXLSX().catch(()=>{})}
 async function cbImpRead(file){const X=await loadXLSX();const wb=X.read(await file.arrayBuffer(),{type:'array'});
   const sheets={};wb.SheetNames.forEach(n=>{const rows=X.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''});if(rows.some(r=>r.some(c=>String(c).trim()!=='')))sheets[n]=rows});
   const names=Object.keys(sheets);if(!names.length)throw new Error('That file doesn’t have anything in it.');
@@ -4393,11 +4414,11 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'cb-tab':c.book=t.dataset.v;c.cat='';c.vendor='';c.limit=400;c.delArm=false;S.q.cb='';cbSaveUi();render();break;
     case 'cb-sort':{const k=t.dataset.k;if(c.sort===k)c.dir=-c.dir;else{c.sort=k;c.dir=['cost','data.base','data.fringe','data.burden','data.rate','data.op','men','price_date'].includes(k)?-1:1}cbSaveUi();render();break}
     case 'cb-more':c.limit+=400;render();break;
-    case 'cb-new':if(cbEditable()){M={kind:'cbitem',isNew:true,draft:cbNew(c.book)};showModal();setTimeout(()=>$('#cbe-code')?.focus(),0)}break;
+    case 'cb-new':if(cbEditable()){M={kind:CB_TPL.has(c.book)?'cbtpl':'cbitem',isNew:true,draft:cbNew(c.book)};showModal();setTimeout(()=>$('#cbe-code')?.focus(),0)}break;
     case 'cb-open':cbOpen(t.dataset.id);break;
     case 'cb-save':cbSaveItem();break;
     case 'cb-del':cbDelItem();break;
-    case 'cb-dup':{const d=clone(M.draft);d.id=newId();d.code=d.code?d.code+'-COPY':'';d.description=d.description+' (copy)';d.price_history=[];M={kind:'cbitem',isNew:true,draft:d};renderModal();$('#cbe-code')?.select();break}
+    case 'cb-dup':{const d=clone(M.draft);d.id=newId();d.code=d.code?d.code+'-COPY':'';d.description=d.description+' (copy)';d.price_history=[];M={kind:M.kind,isNew:true,draft:d};renderModal();$('#cbe-code')?.select();break}
     case 'cb-m-rm':M.draft.data.members.splice(+t.dataset.i,1);renderModal();break;
     case 'cb-selclear':c.sel.clear();c.delArm=false;render();break;
     case 'cb-mass':cbMassStart(!!t.dataset.all);break;
@@ -4416,7 +4437,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   if(M&&M.cbArm&&a!=='cb-del'){M.cbArm=false;renderModal()}
 });
 document.addEventListener('input',e=>{const t=e.target;
-  if(M&&M.kind==='cbitem'&&t.dataset.cbe&&t.type!=='checkbox'&&t.tagName!=='SELECT'){const f=CB_FIELDS[M.draft.book].find(x=>x.k===t.dataset.cbe);const n=f&&['money','pct','num'].includes(f.t);cbSet(M.draft,t.dataset.cbe,n?num(t.value):t.value);
+  if(M&&(M.kind==='cbitem'||M.kind==='cbtpl')&&t.dataset.cbe&&t.type!=='checkbox'&&t.tagName!=='SELECT'){const f=CB_FIELDS[M.draft.book].find(x=>x.k===t.dataset.cbe);const n=f&&['money','pct','num'].includes(f.t);cbSet(M.draft,t.dataset.cbe,n?num(t.value):t.value);
     const box=$('#cb-calcbox');if(box)box.innerHTML=cbCalcHtml(M.draft);return}
   if(M&&M.kind==='cbitem'&&t.dataset.cbm&&t.tagName==='INPUT'){const [i,k]=t.dataset.cbm.split('.');M.draft.data.members[+i][k]=t.value;renderModal();return}
   if(M&&M.kind==='cbmass'&&t.dataset.cbmass&&t.tagName==='INPUT'){M[t.dataset.cbmass]=t.value;if(['val','date'].includes(t.dataset.cbmass))renderModal();return}
@@ -4428,7 +4449,7 @@ document.addEventListener('change',e=>{const t=e.target;const c=S.cb;
   if(t.dataset.cbselall!=null){c.delArm=false;const ids=(S.cbShownIds||[]).slice(0,c.limit);ids.forEach(id=>t.checked?c.sel.add(id):c.sel.delete(id));render();return}
   if(t.dataset.cbf){const k=t.dataset.cbf;c[k]=t.type==='checkbox'?t.checked:t.value;c.limit=400;cbSaveUi();render();return}
   if(t.dataset.cbbulk){let v=t.value;const k=t.dataset.cbbulk;if(!v)return;if(v==='__new'){v=(prompt('New category name')||'').trim();if(!v){render();return}}if(v==='__none')v=null;cbBulkSet(k,v);return}
-  if(M&&M.kind==='cbitem'&&t.dataset.cbe&&(t.type==='checkbox'||t.tagName==='SELECT'||t.type==='date')){const k=t.dataset.cbe;cbSet(M.draft,k,t.type==='checkbox'?t.checked:t.value||(k==='vendor_id'?null:''));renderModal();return}
+  if(M&&(M.kind==='cbitem'||M.kind==='cbtpl')&&t.dataset.cbe&&(t.type==='checkbox'||t.tagName==='SELECT'||t.type==='date')){const k=t.dataset.cbe;cbSet(M.draft,k,t.type==='checkbox'?t.checked:t.value||(k==='vendor_id'?null:''));renderModal();return}
   if(M&&M.kind==='cbitem'&&t.dataset.cbm&&t.tagName==='SELECT'){const [i]=t.dataset.cbm.split('.');M.draft.data.members[+i].id=t.value;renderModal();return}
   if(M&&M.kind==='cbitem'&&t.dataset.cbmadd!=null){if(t.value){const mem=M.draft.data.members=M.draft.data.members||[];const ex=mem.find(m=>m.id===t.value);if(ex)ex.qty=(num(ex.qty)||0)+1;else mem.push({id:t.value,qty:1})}renderModal();return}
   if(M&&M.kind==='cbmass'&&t.dataset.cbmass&&(t.tagName==='SELECT'||t.type==='date')){M[t.dataset.cbmass]=t.value;if(t.dataset.cbmass==='field'){const f=CB_FIELDS[M.book].find(x=>x.k===t.value);if(f.t==='pct'&&M.op==='pct')M.op='add'}renderModal();return}
@@ -4440,6 +4461,305 @@ document.addEventListener('change',e=>{const t=e.target;const c=S.cb;
 });
 document.addEventListener('keydown',e=>{if((e.key==='Enter')&&M&&M.kind==='cbitem'&&e.target.dataset?.cbe&&e.target.tagName==='INPUT'&&cbEditable()){e.preventDefault();cbSaveItem()}});
 
+
+/* =====================================================================
+   ESTIMATES — one per bid. Bid items → activities → crew + resources.
+   An activity's crew hours come from its quantity and production rate;
+   labor and equipment cost = crew $/hr × hours. Extra resources are
+   priced per unit of the activity, per crew hour, or as a total.
+   Prices are copied from the codebook when added (so a submitted bid
+   doesn't move when prices change); "Update prices" pulls current ones.
+   The whole estimate is one JSON document saved with a version number,
+   so two people saving at once get a warning instead of overwriting.
+   ===================================================================== */
+const RES_KINDS=[['labor','Labor','LAB'],['equipment','Equipment','EQ'],['material','Material','MAT'],['sub','Subcontract','SUB'],['trucking','Trucking','TRK'],['other','Other','OTH']];
+const COST_KEYS=['labor','equipment','material','sub','trucking','other'];
+const COST_LABEL={labor:'Labor',equipment:'Equipment',material:'Material',sub:'Subcontract',trucking:'Trucking',other:'Other',tax:'Sales tax'};
+const PROD_MODES=[['uph','units / hr'],['upd','units / day'],['hrs','crew hours'],['days','crew days']];
+const BASIS=[['unit','per unit'],['hour','per crew hr'],['total','total']];
+const r2=n=>Math.round((+n||0)*100)/100;
+S.est=null;S.estIndex=[];S.estMissing=false;
+function estBlank(){return {v:1,settings:{hpd:10},markup:{tax:0,oh:10,profit:10,bond:0,ret:5},items:[]}}
+function estNorm(d){d=d&&typeof d==='object'?d:{};const b=estBlank();d.settings={...b.settings,...(d.settings||{})};d.markup={...b.markup,...(d.markup||{})};d.items=Array.isArray(d.items)?d.items:[];
+  d.items.forEach(it=>{it.acts=Array.isArray(it.acts)?it.acts:[];it.acts.forEach(a=>{a.res=Array.isArray(a.res)?a.res:[]})});return d}
+function estNextCode(d){const n=(d.items||[]).map(i=>parseInt(i.code,10)).filter(x=>!isNaN(x));return String(n.length?Math.max(...n)+10:10)}
+function estNewItem(d,o={}){return {id:newId(),code:estNextCode(d),desc:'',qty:1,unit:'LS',group:'',alt:false,override:null,notes:'',acts:[],...o}}
+function estNewAct(o={}){return {id:newId(),code:'',desc:'',qty:null,unit:'',mode:'uph',prod:null,crew:null,res:[],...o}}
+function resKindOf(x){if(x.book==='labor')return 'labor';if(x.book==='equipment')return 'equipment';const t=cbD(x).type;return t==='Subcontract'?'sub':t==='Trucking'?'trucking':t==='Other'?'other':'material'}
+function resFromCb(x){const k=resKindOf(x);const timed=k==='labor'||k==='equipment';
+  return {id:newId(),kind:k,cb:x.id,code:x.code||'',desc:x.description,unit:timed?'HR':x.unit||'',basis:timed?'hour':'unit',factor:1,waste:k==='material'?num(cbD(x).waste)||0:0,price:+(cbCost(x)||0).toFixed(4),tax:k==='material'&&cbD(x).tax!==false}}
+function resCustom(k){const timed=k==='labor'||k==='equipment';return {id:newId(),kind:k,cb:null,code:'',desc:'',unit:timed?'HR':k==='sub'?'LS':'',basis:timed?'hour':k==='sub'?'total':'unit',factor:1,waste:0,price:null,tax:k==='material'}}
+function crewSnap(x){const C=cbCrew(x);return {id:x.id,code:x.code||'',name:x.description,labor:+C.labor.toFixed(4),equip:+C.equip.toFixed(4),men:C.men}}
+
+/* ---------- math ---------- */
+function actCalc(a,itemQty,ctx){const hpd=num(ctx.hpd)||10;const q=a.qty==null||a.qty===''?(num(itemQty)||0):(num(a.qty)||0);const pv=num(a.prod);let hrs=0;
+  switch(a.mode){case 'upd':hrs=pv>0?q/pv*hpd:0;break;case 'hrs':hrs=pv||0;break;case 'days':hrs=(pv||0)*hpd;break;default:hrs=pv>0?q/pv:0}
+  const c={labor:0,equipment:0,material:0,sub:0,trucking:0,other:0,tax:0};let mh=0;const cr=a.crew;
+  if(cr){c.labor+=(num(cr.labor)||0)*hrs;c.equipment+=(num(cr.equip)||0)*hrs;mh+=(num(cr.men)||0)*hrs}
+  const res=(a.res||[]).map(r=>{const f=num(r.factor)||0;const base=r.basis==='unit'?f*q:r.basis==='hour'?f*hrs:f;const qty=base*(1+(num(r.waste)||0)/100);const cost=qty*(num(r.price)||0);
+    const k=COST_KEYS.includes(r.kind)?r.kind:'other';c[k]+=cost;const tax=r.kind==='material'&&r.tax&&ctx.tax?cost*ctx.tax/100:0;c.tax+=tax;if(k==='labor')mh+=qty;return {qty,cost,tax}});
+  const total=COST_KEYS.reduce((s,k)=>s+c[k],0)+c.tax;return {q,hrs,days:hrs/hpd,mh,c,res,total,unit:q?total/q:0}}
+function sumC(list){const c={labor:0,equipment:0,material:0,sub:0,trucking:0,other:0,tax:0};list.forEach(x=>Object.keys(c).forEach(k=>c[k]+=x.c[k]||0));return c}
+function itemCalc(it,ctx){const acts=(it.acts||[]).map(a=>actCalc(a,it.qty,ctx));const total=acts.reduce((s,a)=>s+a.total,0);const q=num(it.qty)||0;
+  return {acts,c:sumC(acts),total,mh:acts.reduce((s,a)=>s+a.mh,0),q,unit:q?total/q:0}}
+function estCtx(d){return {hpd:num(d.settings?.hpd)||10,tax:num(d.markup?.tax)||0}}
+function estCalc(d){const ctx=estCtx(d);const items=d.items.map(it=>itemCalc(it,ctx));const isBase=i=>!d.items[i].alt;
+  const base=items.filter((x,i)=>isBase(i));const cost=base.reduce((s,x)=>s+x.total,0);const m=d.markup||{};
+  const oh=cost*(num(m.oh)||0)/100,profit=(cost+oh)*(num(m.profit)||0)/100,bond=(cost+oh+profit)*(num(m.bond)||0)/100;const calcTotal=cost+oh+profit+bond;
+  const F=cost>0?calcTotal/cost:(1+(num(m.oh)||0)/100)*(1+(num(m.profit)||0)/100)*(1+(num(m.bond)||0)/100);
+  items.forEach((x,i)=>{const ov=num(d.items[i].override);x.calcUnit=x.q?r2(x.unit*F):0;x.ov=ov!=null&&x.q>0;x.unitPrice=x.ov?ov:x.calcUnit;x.price=x.q?r2(x.unitPrice*x.q):r2(x.total*F);x.margin=x.price-x.total});
+  const total=items.reduce((s,x,i)=>s+(isBase(i)?x.price:0),0),alts=items.reduce((s,x,i)=>s+(isBase(i)?0:x.price),0);
+  return {ctx,items,c:sumC(base),cost,mh:base.reduce((s,x)=>s+x.mh,0),oh,profit,bond,calcTotal,F,total,alts,adj:total-calcTotal,ret:total*(num(m.ret)||0)/100,margin:total-cost,marginPct:total?(total-cost)/total*100:0}}
+// codebook prices that moved since they were copied in
+function estStale(d){const out=[];const acts=[];(d.items||[]).forEach(it=>(it.acts||[]).forEach(a=>acts.push(a)));if(d.act)acts.push(d.act);if(d.item)(d.item.acts||[]).forEach(a=>acts.push(a));
+  acts.forEach(a=>{if(a.crew){const x=cbById(a.crew.id);if(x){const s=crewSnap(x);if(Math.abs(s.labor-(+a.crew.labor||0))>.004||Math.abs(s.equip-(+a.crew.equip||0))>.004||s.men!==(+a.crew.men||0))out.push({a,crew:s})}}
+    (a.res||[]).forEach(r=>{if(!r.cb)return;const x=cbById(r.cb);if(!x)return;const c=cbCost(x);if(c!=null&&Math.abs(c-(+r.price||0))>.004)out.push({r,price:+c.toFixed(4)})})});return out}
+function estApplyStale(list){list.forEach(s=>{if(s.crew)s.a.crew={...s.a.crew,...s.crew};else s.r.price=s.price})}
+// a fresh copy of a template, with new ids and today's codebook prices
+function actFromTpl(src){const a=clone(src);a.id=newId();a.qty=null;a.res=(a.res||[]).map(r=>({...r,id:newId()}));estApplyStale(estStale({act:a}));return a}
+
+/* ---------- loading / saving ---------- */
+const estCanEdit=()=>{const b=byId(S.bids,S.est?.bidId);return !!b&&canWork(b)};
+async function loadEstIndex(){if(!sb||!['admin','estimator','board'].includes(role()))return;
+  const {data,error}=await sb.from('estimates').select('id,bid_id,version,total_cost,total_price,updated_at,updated_by_name');
+  if(error){S.estMissing=/estimates|does not exist|schema cache/i.test(error.message||'');return}S.estMissing=false;S.estIndex=data||[];schedule()}
+const estOf=bidId=>S.estIndex.find(e=>e.bid_id===bidId);
+async function estOpen(bidId){closeModal();S.view='estimate';S.estBid=bidId;S.est={bidId,loading:true};render();window.scrollTo(0,0);
+  try{const {data,error}=await sb.from('estimates').select('*').eq('bid_id',bidId).maybeSingle();if(error)throw error;
+    S.est={bidId,row:data?{id:data.id,version:data.version,updated_at:data.updated_at,updated_by_name:data.updated_by_name}:null,data:data?estNorm(data.data):null,sel:null,tab:(S.est&&S.est.tab)||'items',dirty:false};
+    if(S.est.data)S.est.sel=S.est.data.items[0]?.id||null}
+  catch(e){S.est={bidId,err:/estimates|does not exist|schema cache/i.test(errMsg(e))?'missing':errMsg(e)}}render()}
+async function estCreate(mode,src){const b=byId(S.bids,S.est.bidId);if(!b)return;let d=estBlank();
+  try{if(mode==='scopes')scopeItems(b).forEach(s=>d.items.push(estNewItem(d,{desc:s.name,group:s.name})));
+    if(mode==='copy'){if(!src)throw new Error('Pick an estimate to copy.');const r=await run(sb.from('estimates').select('data').eq('id',src).maybeSingle());if(!r)throw new Error('That estimate isn’t available.');d=estNorm(clone(r.data))}
+    const R=estCalc(d);const row={id:newId(),bid_id:b.id,data:d,version:1,total_cost:r2(R.cost),total_price:r2(R.total),updated_by_name:myName()};
+    await run(sb.from('estimates').insert(row));S.est={bidId:b.id,row:{id:row.id,version:1,updated_at:new Date().toISOString(),updated_by_name:myName()},data:d,sel:d.items[0]?.id||null,tab:'items',dirty:false};
+    loadEstIndex();render()}catch(e){toast(errMsg(e))}}
+function estTouch(){const E=S.est;if(!E||!E.row)return;E.dirty=true;E.saveErr=null;clearTimeout(E._t);E._t=setTimeout(estSave,1200)}
+async function estSave(){const E=S.est;if(!E||!E.row||!E.dirty||E.saving||E.conflict||!estCanEdit())return;clearTimeout(E._t);E.saving=true;E.dirty=false;estStatus();
+  const R=estCalc(E.data);const v=E.row.version;
+  try{const rows=await run(sb.from('estimates').update({data:E.data,version:v+1,total_cost:r2(R.cost),total_price:r2(R.total),updated_by_name:myName()}).eq('id',E.row.id).eq('version',v).select('id,version,updated_at'));
+    if(!rows||!rows.length){E.conflict=true;E.dirty=true}else{E.row.version=v+1;E.row.updated_at=rows[0].updated_at||new Date().toISOString();E.row.updated_by_name=myName();
+      const ix=estOf(E.bidId);if(ix)Object.assign(ix,{version:v+1,total_cost:r2(R.cost),total_price:r2(R.total),updated_at:E.row.updated_at,updated_by_name:myName()})}}
+  catch(e){E.dirty=true;E.saveErr=errMsg(e)}
+  E.saving=false;if(E.conflict&&S.view==='estimate')render();else estStatus();if(E.dirty&&!E.conflict&&!E.saveErr)E._t=setTimeout(estSave,1200)}
+function estStatusText(){const E=S.est;if(!E||!E.row)return '';if(E.conflict)return '<b class="bad-t">Not saved — someone else changed this estimate</b>';if(E.saveErr)return `<b class="bad-t">Not saved: ${esc(E.saveErr)}</b> <button class="linkbtn" data-act="est-retry">Try again</button>`;
+  if(E.saving)return 'Saving…';if(E.dirty)return 'Unsaved changes…';const t=E.row.updated_at?new Date(E.row.updated_at):null;return `Saved${t?' '+t.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):''}${E.row.updated_by_name?' by '+esc(E.row.updated_by_name):''}`}
+function estStatus(){const el=$('#est-status');if(el)el.innerHTML=estStatusText()}
+function estRemote(p){clearTimeout(estRemote._t);estRemote._t=setTimeout(loadEstIndex,400);const E=S.est;const n=p.new||{};
+  if(E&&E.saving){setTimeout(()=>estRemote(p),600);return}
+  if(!E||!E.row||n.bid_id!==E.bidId||!(n.version>E.row.version))return;if(E.dirty||E.saving){E.conflict=true;if(S.view==='estimate')render()}else estOpen(E.bidId)}
+window.addEventListener('beforeunload',e=>{if(S.est&&(S.est.dirty||S.est.saving)){estSave();e.preventDefault();e.returnValue=''}});
+
+/* ---------- editing context (the estimate, or a template in the codebook) ---------- */
+function EC(){if(M&&M.kind==='cbtpl')return {root:M.draft.data,ro:!cbEditable(),ctx:{hpd:10,tax:0},tpl:true,redraw:()=>renderModal()};
+  const E=S.est;return {root:E&&E.data,ro:!estCanEdit()||!!(E&&E.conflict),ctx:E&&E.data?estCtx(E.data):{hpd:10,tax:0},tpl:false,redraw:()=>{estTouch();render()}}}
+function epGet(o,p){return String(p).split('.').reduce((x,k)=>x==null?x:x[k],o)}
+function epSet(o,p,v){const ks=String(p).split('.');const last=ks.pop();const t=ks.reduce((x,k)=>x[k],o);t[last]=v}
+function epParent(o,p){const ks=String(p).split('.');const i=+ks.pop();return {arr:epGet(o,ks.join('.')),i}}
+const epId=p=>'ep-'+String(p).replace(/\./g,'_');
+function epIn(p,v,o={}){const ro=EC().ro?' disabled':'';return `<input class="field${o.n?' num':''}${o.cls?' '+o.cls:''}" id="${epId(p)}" data-ep="${p}"${o.n?' data-ept="n" type="number" step="any" inputmode="decimal"':''}${o.list?` list="${o.list}"`:''} value="${esc(v??'')}"${o.ph!=null?` placeholder="${esc(o.ph)}"`:''}${o.title?` title="${esc(o.title)}"`:''}${o.aria?` aria-label="${esc(o.aria)}"`:''}${ro}>`}
+function epSel(p,v,opts,o={}){const ro=EC().ro?' disabled':'';return `<select class="field${o.cls?' '+o.cls:''}" id="${epId(p)}" data-ep="${p}"${o.aria?` aria-label="${esc(o.aria)}"`:''}${ro}>${opts.map(([k,l])=>`<option value="${k}"${String(v)===String(k)?' selected':''}>${esc(l)}</option>`).join('')}</select>`}
+// searchable list of codebook items for "add a cost"
+let EST_PICK={key:null,html:'',map:new Map()};
+function estPick(){const key=S.codebook.length+':'+(S.lastLoaded?.getTime?.()||0);if(EST_PICK.key===key)return EST_PICK;const map=new Map();const opts=[];
+  ['labor','equipment','material'].forEach(b=>cbList(b).filter(x=>x.active!==false).sort((a,c)=>String(a.description).localeCompare(c.description)).forEach(x=>{const k=resKindOf(x);
+    const lab=`${x.description}${x.code?' ('+x.code+')':''} — ${money2(cbCost(x))}/${b==='material'?x.unit||'unit':'hr'} · ${COST_LABEL[k]}`;map.set(lab,x.id);opts.push(`<option value="${esc(lab)}">`)}));
+  return EST_PICK={key,html:`<datalist id="est-cbl">${opts.join('')}</datalist>`,map}}
+const crewOpts=()=>cbList('crew').filter(x=>x.active!==false).sort((a,b)=>String(a.description).localeCompare(b.description));
+
+/* ---------- activity card (shared by estimates and the activity codebook) ---------- */
+function actCardHtml(a,p,r,itemQty,o={}){const ec=EC();const ro=ec.ro;const crews=crewOpts();const q=r.q;
+  const crewSel=`<select class="field est-crewsel" data-epcrew="${p}" aria-label="Crew"${ro?' disabled':''}><option value="">No crew</option>${a.crew&&!crews.some(c=>c.id===a.crew.id)?`<option value="${esc(a.crew.id)}" selected>${esc(a.crew.name)} (removed)</option>`:''}${crews.map(c=>`<option value="${c.id}"${a.crew&&a.crew.id===c.id?' selected':''}>${esc(c.description)} — ${money2(cbCost(c))}/hr</option>`).join('')}</select>`;
+  const stale=new Set(estStale({act:a}).map(s=>s.r||'crew'));
+  const unitOf=x=>esc(x.unit||(x.basis==='hour'?'HR':''));
+  const resRow=(x,i)=>{const rp=`${p}.res.${i}`;const rr=r.res[i]||{qty:0,cost:0};const kind=RES_KINDS.find(k=>k[0]===x.kind)||RES_KINDS[5];const cb=x.cb?cbById(x.cb):null;
+    return `<tr><td><span class="est-tag k-${x.kind}">${kind[2]}</span></td>
+      <td class="est-rdesc">${x.cb?`<div class="est-cbname">${esc(x.desc)}${x.code?` <span class="dim small">${esc(x.code)}</span>`:''}${!cb?' <span class="pill bad">removed from codebook</span>':''}</div>`:epIn(rp+'.desc',x.desc,{ph:`${kind[1]} description`,aria:'Description'})}</td>
+      <td class="est-fac">${epIn(rp+'.factor',x.factor,{n:1,aria:'Quantity factor'})}${epSel(rp+'.basis',x.basis,BASIS,{aria:'Basis'})}</td>
+      <td class="r num small est-q">${qtyFmt(rr.qty)} ${x.cb?unitOf(x):epIn(rp+'.unit',x.unit,{cls:'est-unit',ph:'unit',aria:'Unit',list:'cb-units'})}</td>
+      <td class="est-w">${x.kind==='material'?epIn(rp+'.waste',x.waste,{n:1,ph:'0',aria:'Waste %',title:'Waste %'}):''}</td>
+      <td class="est-p">${epIn(rp+'.price',x.price,{n:1,ph:'0.00',aria:'Unit price',cls:stale.has(x)?'est-stale':''})}${stale.has(x)?`<span class="est-stale-dot" title="Codebook price is now ${money2(cbCost(cb))}">●</span>`:''}</td>
+      <td class="r num"><b>${money(rr.cost+rr.tax)}</b>${rr.tax?`<div class="dim small">incl. ${money2(rr.tax)} tax</div>`:''}</td>
+      <td>${ro?'':`<button class="rm" data-act="ep-del" data-p="${rp}" aria-label="Remove">×</button>`}</td></tr>`};
+  const P=EST_PICK;
+  return `<div class="est-act" id="act-${a.id}">
+    <div class="est-act-h">${o.noHead?'':`${epIn(p+'.code',a.code,{cls:'est-code',ph:'Code',aria:'Activity code'})}${epIn(p+'.desc',a.desc,{cls:'est-adesc',ph:'Activity — e.g. Excavate & lay pipe',aria:'Activity description'})}`}
+      ${o.noHead?'':`<span class="est-aq">${epIn(p+'.qty',a.qty,{n:1,ph:itemQty!=null?qtyFmt(itemQty):'Qty',aria:'Activity quantity',title:'Leave blank to use the bid item quantity'})}${epIn(p+'.unit',a.unit,{cls:'est-unit',ph:o.unit||'unit',list:'cb-units',aria:'Unit'})}</span>`}
+      ${ro||o.noHead?'':`<span class="est-actbtns"><button class="btn sm ghost" data-act="ep-mv" data-p="${p}" data-d="-1" title="Move up" aria-label="Move up">↑</button><button class="btn sm ghost" data-act="ep-mv" data-p="${p}" data-d="1" title="Move down" aria-label="Move down">↓</button><button class="btn sm ghost" data-act="ep-dup" data-p="${p}" title="Duplicate">⧉</button>${!ec.tpl&&cbEditable()?`<button class="btn sm ghost" data-act="ep-tocb" data-p="${p}" data-k="activity" title="Save to the Activities codebook">→ Codebook</button>`:''}<button class="btn sm ghost danger-t${S.epArm===p?' arm':''}" data-act="ep-del" data-p="${p}">${S.epArm===p?'Delete?':'×'}</button></span>`}</div>
+    <div class="est-prod"><label>Crew ${crewSel}${stale.has('crew')?'<span class="est-stale-dot" title="Crew rates changed in the codebook">●</span>':''}</label>
+      <label>Production ${epIn(p+'.prod',a.prod,{n:1,ph:'0',aria:'Production',cls:'est-prodv'})}${epSel(p+'.mode',a.mode||'uph',PROD_MODES.map(([k,l])=>[k,k==='uph'||k==='upd'?l.replace('units',a.unit||o.unit||'units'):l]),{aria:'Production basis'})}</label>
+      <span class="est-hrs">${r.hrs?`<b>${fmtN(r.hrs,1)}</b> crew hrs · <b>${fmtN(r.days,2)}</b> days${r.mh?` · <b>${fmtN(r.mh,1)}</b> MH`:''}`:'<span class="dim">Set a production rate to get hours</span>'}${a.crew?` · <span class="dim">${esc(a.crew.name)} ${money2((+a.crew.labor||0)+(+a.crew.equip||0))}/hr</span>`:''}</span></div>
+    ${a.res.length?`<div class="est-rtable"><table><thead><tr><th></th><th>Cost</th><th>Qty × basis</th><th class="r">Total qty</th><th>Waste</th><th>Unit $</th><th class="r">Cost</th><th></th></tr></thead><tbody>${a.res.map(resRow).join('')}</tbody></table></div>`:''}
+    ${ro?'':`<div class="est-addres"><input class="field" list="est-cbl" data-epadd="${p}" placeholder="+ Add labor, equipment or material from the codebook — type to search" aria-label="Add a cost from the codebook">
+      <select class="field" data-epcustom="${p}" aria-label="Add a custom cost"><option value="">+ Custom…</option>${RES_KINDS.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></div>`}
+    <div class="est-act-f">${COST_KEYS.filter(k=>r.c[k]).map(k=>`<span>${COST_LABEL[k]} <b>${money(r.c[k])}</b></span>`).join('')}${r.c.tax?`<span>Tax <b>${money(r.c.tax)}</b></span>`:''}
+      <span class="est-tot">Activity <b>${money(r.total)}</b>${q?` · <b>${money2(r.unit)}</b>/${esc(a.unit||o.unit||'unit')}`:''}</span></div></div>`}
+
+/* ---------- estimate page ---------- */
+function vEstimate(){const E=S.est;const b=byId(S.bids,S.estBid);
+  if(!b)return `<div class="empty"><b>That bid isn’t available.</b><button class="btn" data-act="nav" data-v="pipeline">Back to pipeline</button></div>`;
+  const back=`<button class="linkbtn est-back" data-act="est-back">← Back to bid</button>`;
+  if(!E||E.loading)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="auth"><div class="spin"></div></div>`;
+  if(E.err==='missing'||S.estMissing)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="notice"><b>One setup step:</b> run <b>update-14-estimates.sql</b> in Supabase (SQL Editor → New query → paste → Run), then refresh.</div>`;
+  if(E.err)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="err">${esc(E.err)}</div>`;
+  if(!E.row){const work=canWork(b);const others=S.estIndex.filter(x=>x.bid_id!==b.id).map(x=>({x,b:byId(S.bids,x.bid_id)})).filter(o=>o.b).sort((p,q)=>String(q.x.updated_at).localeCompare(String(p.x.updated_at)));
+    return `<div class="head"><div>${back}<h1>Start the estimate</h1><p>${esc(b.name)}${b.location?' · '+esc(b.location):''}</p></div></div>
+    ${work?`<div class="est-start">
+      <button class="est-opt" data-act="est-create" data-v="blank"><b>Blank estimate</b><span>Start with an empty list of bid items.</span></button>
+      <button class="est-opt" data-act="est-create" data-v="scopes"${scopeItems(b).length?'':' disabled'}><b>From this bid’s scopes</b><span>${scopeItems(b).length?`One bid item per scope (${scopeItems(b).length}) — ${esc(scopeItems(b).slice(0,4).map(s=>s.name).join(', '))}${scopeItems(b).length>4?'…':''}`:'This bid has no scopes yet.'}</span></button>
+      <div class="est-opt"><b>Copy another estimate</b><span>Similar job? Start from its bid items, activities and prices.</span>
+        <div class="est-copy"><select class="field" id="est-copysrc"><option value="">${others.length?'Pick a bid…':'No other estimates yet'}</option>${others.map(o=>`<option value="${o.x.id}">${esc(o.b.name)} — ${money(o.x.total_price)}</option>`).join('')}</select><button class="btn primary" data-act="est-create" data-v="copy"${others.length?'':' disabled'}>Copy</button></div></div></div>
+      <p class="hint">Bid items are built from activities. Each activity uses a crew and a production rate to get hours, then adds materials, subs, trucking and other costs from your codebooks.</p>`
+    :'<div class="empty"><b>No estimate yet</b>The estimators on this bid start it.</div>'}`}
+  const d=E.data;const R=estCalc(d);const ro=EC().ro;estPick();const stale=estStale(d);
+  const tabs=[['items','Bid items'],['res','Resources'],['sum','Markup & totals']];
+  const kpi=(l,v,s,c)=>`<div class="est-kpi${c?' '+c:''}"><span>${l}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
+  const body=E.tab==='res'?estResView(d,R):E.tab==='sum'?estSumView(d,R,b,ro):estItemsView(d,R,ro);
+  return `<div class="head est-headrow"><div>${back}<h1>${esc(b.name)}</h1><p class="small"><b>Estimate</b> · <span id="est-status">${estStatusText()}</span></p></div>
+    <div class="tools">${stale.length&&!ro?`<button class="btn" data-act="est-stale" title="Codebook prices changed since they were added">↻ Update ${stale.length} price${stale.length===1?'':'s'}</button>`:''}<button class="btn" data-act="est-export">Export to Excel</button></div></div>
+  ${E.conflict?`<div class="err est-conflict"><b>Someone else saved this estimate while you were working.</b> Your last changes haven’t been saved. <button class="btn sm" data-act="est-reload">Load their version</button> <button class="btn sm danger" data-act="est-keep">Keep mine (overwrite theirs)</button></div>`:''}
+  ${ro&&!E.conflict?'<div class="notice">View only — you’re not on this bid’s estimating team.</div>':''}
+  <div class="est-kpis">${kpi('Direct cost',money(R.cost),`${fmtN(R.mh,0)} man-hours`)}${kpi('Markup',money(R.total-R.cost),R.cost?`${fmtN((R.total/R.cost-1)*100,1)}% on cost`:'')}${kpi('Bid total',money(R.total),R.alts?`+ ${money(R.alts)} alternates`:`${d.items.filter(i=>!i.alt).length} bid items`,'main')}${kpi('Margin',R.total?fmtN(R.marginPct,1)+'%':'—','of bid total')}${kpi('Retainage held',money(R.ret),`${fmtN(num(d.markup.ret)||0,1)}%`)}</div>
+  <div class="seg est-tabs" role="tablist">${tabs.map(([k,l])=>`<button class="${E.tab===k?'on':''}" data-act="est-tab" data-v="${k}" role="tab">${l}</button>`).join('')}</div>
+  ${body}${EST_PICK.html}<datalist id="cb-units">${CB_UNITS.map(u=>`<option value="${u}">`).join('')}</datalist>`}
+function estItemsView(d,R,ro){const E=S.est;let si=d.items.findIndex(i=>i.id===E.sel);if(si<0&&d.items.length){si=0;E.sel=d.items[0].id}
+  const tpls=cbList('biditem').filter(x=>x.active!==false).sort((a,b)=>String(a.code||a.description).localeCompare(String(b.code||b.description),undefined,{numeric:true}));
+  const list=`<div class="panel est-list" id="est-list" data-keepscroll><table><thead><tr><th>Item</th><th>Description</th><th class="r">Qty</th><th class="r">Cost</th><th class="r">Unit price</th><th class="r">Total</th></tr></thead><tbody>
+    ${d.items.map((it,i)=>{const x=R.items[i];return `<tr class="click${i===si?' on':''}${it.alt?' est-alt':''}" data-act="est-sel" data-id="${it.id}" tabindex="0"><td class="num">${esc(it.code)}</td><td class="est-ldesc">${esc(it.desc)||'<span class="dim">Untitled</span>'}${it.alt?' <span class="pill info">Alt</span>':''}${x.ov?' <span class="pill warn" title="Unit price overridden">Override</span>':''}${!it.acts.length?' <span class="pill na">No activities</span>':''}</td>
+      <td class="r num small">${qtyFmt(it.qty)} ${esc(it.unit||'')}</td><td class="r num small">${money(x.total)}</td><td class="r num">${money2(x.unitPrice)}</td><td class="r num"><b>${money(x.price)}</b></td></tr>`}).join('')||`<tr><td colspan="6"><div class="empty"><b>No bid items yet</b>${ro?'':'Add one below.'}</div></td></tr>`}</tbody>
+    <tfoot><tr><td></td><td><b>Base bid</b></td><td></td><td class="r num">${money(R.cost)}</td><td></td><td class="r num"><b>${money(R.total)}</b></td></tr>${R.alts?`<tr><td></td><td class="dim">Alternates</td><td></td><td></td><td></td><td class="r num dim">${money(R.alts)}</td></tr>`:''}</tfoot></table>
+    ${ro?'':`<div class="est-listadd"><button class="btn primary sm" data-act="ep-add-item">+ Bid item</button>${tpls.length?`<select class="field sm" data-epitem><option value="">+ From bid item codebook…</option>${tpls.map(t=>`<option value="${t.id}">${esc((t.code?t.code+' · ':'')+t.description)}</option>`).join('')}</select>`:''}</div>`}</div>`;
+  return `<div class="est-grid">${list}<div class="est-detail">${si>=0?estItemHtml(d,si,R.items[si],ro):`<div class="panel pad empty"><b>Add your first bid item</b>Then build it from activities — a crew and production rate, plus materials, subs and trucking.</div>`}</div></div>`}
+function estItemHtml(d,i,x,ro){const it=d.items[i];const p=`items.${i}`;const scopes=scopeItems(byId(S.bids,S.est.bidId)||{}).map(s=>s.name);
+  const tpls=cbList('activity').filter(t=>t.active!==false).sort((a,b)=>String(a.description).localeCompare(b.description));
+  return `<div class="panel pad est-item">
+    <div class="est-item-h"><div class="fg">
+      <label class="f">Item #${epIn(p+'.code',it.code,{aria:'Item number'})}</label>
+      <label class="f s3">Description${epIn(p+'.desc',it.desc,{ph:'e.g. 8″ PVC sanitary sewer'})}</label>
+      <label class="f">Quantity${epIn(p+'.qty',it.qty,{n:1,cls:it.qty==null||it.qty===''?'est-need':''})}</label>
+      <label class="f">Unit${epIn(p+'.unit',it.unit,{list:'cb-units'})}</label>
+      <label class="f">Scope${epIn(p+'.group',it.group,{list:'est-scopes',ph:'Optional'})}<datalist id="est-scopes">${scopes.map(s=>`<option value="${esc(s)}">`).join('')}</datalist></label>
+      <label class="f">Unit price override${epIn(p+'.override',it.override,{n:1,ph:x.calcUnit?money2(x.calcUnit).replace('$',''):'Calculated',title:'Leave blank to use the calculated unit price'})}</label>
+    </div>
+    <div class="est-item-opts"><label class="check small"><input type="checkbox" data-ep="${p}.alt" data-ept="b"${it.alt?' checked':''}${ro?' disabled':''}> Alternate — priced, but not in the base bid</label>
+      ${ro?'':`<span class="est-actbtns"><button class="btn sm" data-act="ep-mv" data-p="${p}" data-d="-1">↑ Up</button><button class="btn sm" data-act="ep-mv" data-p="${p}" data-d="1">↓ Down</button><button class="btn sm" data-act="ep-dup" data-p="${p}">Duplicate</button>${cbEditable()?`<button class="btn sm" data-act="ep-tocb" data-p="${p}" data-k="biditem" title="Save to the Bid items codebook">Save to codebook</button>`:''}<button class="btn sm danger${S.epArm===p?' arm':''}" data-act="ep-del" data-p="${p}">${S.epArm===p?'Click again to delete':'Delete'}</button></span>`}</div></div>
+    <div class="est-isum"><div><span>Cost</span><b>${money(x.total)}</b></div><div><span>Unit cost</span><b>${x.q?money2(x.unit):'—'}</b></div><div><span>Unit price</span><b>${x.q?money2(x.unitPrice):'—'}</b>${x.ov?`<small>calc. ${money2(x.calcUnit)}</small>`:''}</div><div><span>Total price</span><b>${money(x.price)}</b></div><div><span>Margin</span><b class="${x.margin<0?'bad-t':''}">${money(x.margin)}</b></div><div><span>Man-hours</span><b>${fmtN(x.mh,1)}</b></div></div>
+    ${COST_KEYS.some(k=>x.c[k])||x.c.tax?`<div class="est-mix">${[...COST_KEYS,'tax'].filter(k=>x.c[k]).map(k=>`<span class="k-${k}" style="flex:${x.c[k]}" title="${COST_LABEL[k]} ${money(x.c[k])}"></span>`).join('')}</div><div class="est-mixl small">${[...COST_KEYS,'tax'].filter(k=>x.c[k]).map(k=>`<span><i class="k-${k}"></i>${COST_LABEL[k]} ${money(x.c[k])}</span>`).join('')}</div>`:''}
+    <label class="f" style="margin-top:10px">Notes${epIn(p+'.notes',it.notes,{ph:'Assumptions, inclusions, exclusions for this item'})}</label></div>
+  <h3 class="est-h3">Activities <span class="dim small">${it.acts.length}</span></h3>
+  ${it.acts.map((a,j)=>actCardHtml(a,`${p}.acts.${j}`,x.acts[j],it.qty,{unit:it.unit})).join('')||'<div class="panel pad dim small">No activities yet. Add one to price this item.</div>'}
+  ${ro?'':`<div class="est-addact"><button class="btn primary sm" data-act="ep-add-act" data-p="${p}">+ Activity</button>${tpls.length?`<select class="field sm" data-epact="${p}"><option value="">+ From activity codebook…</option>${tpls.map(t=>`<option value="${t.id}">${esc((t.code?t.code+' · ':'')+t.description)}</option>`).join('')}</select>`:''}</div>`}`}
+function estResView(d,R){const map=new Map();const crews=new Map();
+  d.items.forEach((it,i)=>{if(it.alt)return;it.acts.forEach((a,j)=>{const ar=R.items[i].acts[j];if(a.crew){const k=a.crew.id;const c=crews.get(k)||{name:a.crew.name,hrs:0,cost:0};c.hrs+=ar.hrs;c.cost+=((+a.crew.labor||0)+(+a.crew.equip||0))*ar.hrs;crews.set(k,c)}
+    a.res.forEach((r,n)=>{const rr=ar.res[n];const k=r.cb||r.kind+'|'+normH(r.desc)+'|'+r.unit;const o=map.get(k)||{kind:r.kind,code:r.code,desc:r.desc||'(no description)',unit:r.unit||(r.basis==='hour'?'HR':''),qty:0,cost:0,tax:0};o.qty+=rr.qty;o.cost+=rr.cost;o.tax+=rr.tax;map.set(k,o)})})});
+  const rows=[...map.values()].sort((a,b)=>RES_KINDS.findIndex(k=>k[0]===a.kind)-RES_KINDS.findIndex(k=>k[0]===b.kind)||b.cost-a.cost);
+  return `<div class="grid2 est-resgrid"><div class="sec"><div class="sec-h"><h2>Materials, subs, trucking & extra labor/equipment</h2><span>Base bid totals — what to get quotes on</span></div>
+    <div class="panel scroll"><table><thead><tr><th></th><th>Code</th><th>Description</th><th class="r">Quantity</th><th class="r">Avg $/unit</th><th class="r">Cost</th></tr></thead><tbody>
+    ${rows.map(o=>`<tr><td><span class="est-tag k-${o.kind}">${(RES_KINDS.find(k=>k[0]===o.kind)||RES_KINDS[5])[2]}</span></td><td class="num small">${esc(o.code||'')}</td><td>${esc(o.desc)}</td><td class="r num">${qtyFmt(o.qty)} ${esc(o.unit)}</td><td class="r num small">${o.qty?money2(o.cost/o.qty):'—'}</td><td class="r num"><b>${money(o.cost+o.tax)}</b></td></tr>`).join('')||'<tr><td colspan="6"><div class="empty">No resources yet.</div></td></tr>'}</tbody></table></div></div>
+    <div class="sec"><div class="sec-h"><h2>Crews</h2><span>Hours across the base bid</span></div><div class="panel scroll"><table><thead><tr><th>Crew</th><th class="r">Crew hours</th><th class="r">Days</th><th class="r">Cost</th></tr></thead><tbody>
+    ${[...crews.values()].sort((a,b)=>b.cost-a.cost).map(c=>`<tr><td>${esc(c.name)}</td><td class="r num">${fmtN(c.hrs,1)}</td><td class="r num">${fmtN(c.hrs/(num(d.settings.hpd)||10),1)}</td><td class="r num"><b>${money(c.cost)}</b></td></tr>`).join('')||'<tr><td colspan="4"><div class="empty">No crews used yet.</div></td></tr>'}</tbody></table></div>
+    <div class="panel pad" style="margin-top:14px"><div class="est-isum"><div><span>Man-hours</span><b>${fmtN(R.mh,0)}</b></div><div><span>Labor</span><b>${money(R.c.labor)}</b></div><div><span>Equipment</span><b>${money(R.c.equipment)}</b></div></div></div></div></div>`}
+function estSumView(d,R,b,ro){const m=d.markup;const p='markup';const line=(l,v,cls,s)=>`<div class="li${cls?' '+cls:''}"><span>${l}${s?` <span class="dim small">${s}</span>`:''}</span><b class="num">${v}</b></div>`;
+  return `<div class="grid2"><div class="sec"><div class="sec-h"><h2>Markup</h2><span>Applied to the base bid, then spread into unit prices</span></div><div class="panel pad"><div class="fg est-mk">
+    <label class="f">Sales tax on materials %${epIn(p+'.tax',m.tax,{n:1,ph:'0'})}</label><label class="f">Overhead %${epIn(p+'.oh',m.oh,{n:1,ph:'0'})}</label>
+    <label class="f">Profit %${epIn(p+'.profit',m.profit,{n:1,ph:'0'})}</label><label class="f">Bond %${epIn(p+'.bond',m.bond,{n:1,ph:'0'})}</label>
+    <label class="f">Retainage %${epIn(p+'.ret',m.ret,{n:1,ph:'0'})}</label><label class="f">Hours per crew day${epIn('settings.hpd',d.settings.hpd,{n:1,ph:'10'})}</label></div>
+    <p class="hint">Sales tax goes on materials marked taxable and is part of cost. Overhead is on cost, profit on cost + overhead, bond on everything above. Retainage doesn’t change the price — it’s what the GC holds back until the end.</p></div>
+    ${ro?'':`<div class="panel pad" style="margin-top:14px"><b>Send to the bid</b><p class="small dim" style="margin:4px 0 10px">Puts the base bid total into the bid’s proposal amount.</p><div class="adders" style="margin:0"><button class="btn primary sm" data-act="est-push" data-v="amount_with">Base — with site improvements</button><button class="btn sm" data-act="est-push" data-v="amount_without">Base — without</button></div>
+      <p class="hint">Now on the bid: with ${money(num(b.amount_with))} · without ${money(num(b.amount_without))}</p></div>`}</div>
+  <div class="sec"><div class="sec-h"><h2>Totals</h2><span>Base bid</span></div><div class="panel pad est-sum"><div class="list">
+    ${COST_KEYS.filter(k=>R.c[k]).map(k=>line(COST_LABEL[k],money2(R.c[k]))).join('')}${R.c.tax?line('Sales tax',money2(R.c.tax),'',`${fmtN(m.tax,2)}% on taxable materials`):''}
+    ${line('Direct cost',money2(R.cost),'est-sub')}${line('Overhead',money2(R.oh),'',`${fmtN(num(m.oh)||0,2)}%`)}${line('Profit',money2(R.profit),'',`${fmtN(num(m.profit)||0,2)}%`)}${R.bond?line('Bond',money2(R.bond),'',`${fmtN(num(m.bond)||0,2)}%`):''}
+    ${line('Calculated total',money2(R.calcTotal),'est-sub')}${Math.abs(R.adj)>=.01?line('Unit price rounding & overrides',(R.adj>0?'+':'−')+money2(Math.abs(R.adj)),'',''):''}
+    ${line('Bid total',money2(R.total),'est-grand')}${line('Margin',`${money2(R.margin)} · ${fmtN(R.marginPct,1)}%`)}${line('Retainage held',money2(R.ret),'',`${fmtN(num(m.ret)||0,2)}% until closeout`)}
+    ${R.alts?line('Alternates (not in base bid)',money2(R.alts)):''}</div></div>
+    ${d.items.filter(i=>i.alt).length?`<div class="panel scroll" style="margin-top:14px"><table><thead><tr><th>Alternate</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Total</th></tr></thead><tbody>${d.items.map((it,i)=>it.alt?`<tr><td>${esc(it.code)} · ${esc(it.desc)}</td><td class="r num">${qtyFmt(it.qty)} ${esc(it.unit)}</td><td class="r num">${money2(R.items[i].unitPrice)}</td><td class="r num"><b>${money(R.items[i].price)}</b></td></tr>`:'').join('')}</tbody></table></div>`:''}</div></div>`}
+
+/* ---------- actions ---------- */
+function epAddRes(p,res){const ec=EC();const a=epGet(ec.root,p);a.res.push(res);ec.redraw();setTimeout(()=>{const i=a.res.length-1;const el=document.getElementById(epId(`${p}.res.${i}.${res.cb?'factor':'desc'}`));if(el){el.focus();el.select?.()}},0)}
+async function epToCodebook(p,k){const ec=EC();const src=epGet(ec.root,p);if(!src)return;const ctx=ec.ctx;
+  try{let row;if(k==='activity'){const a=clone(src);a.id=newId();a.qty=null;a.res.forEach(r=>r.id=newId());const pi=p.split('.acts.')[0];const it=epGet(ec.root,pi);const q=actCalc(src,it?.qty,ctx).q||1;
+      row=cbRow({...cbNew('activity'),code:src.code||'',description:src.desc||'Activity',data:{act:a,qty:q,unit:src.unit||it?.unit||''}})}
+    else{const it=clone(src);it.id=newId();it.acts.forEach(a=>{a.id=newId();a.res.forEach(r=>r.id=newId())});it.override=null;it.alt=false;row=cbRow({...cbNew('biditem'),code:'',description:src.desc||'Bid item',category:src.group||'',data:{item:it,qty:num(src.qty)||1,unit:src.unit||''}})}
+    await run(sb.from('codebook').insert(row));await loadTable('codebook');toast(`Saved to the ${k==='activity'?'Activities':'Bid items'} codebook`)}catch(e){toast(cbErr(e))}}
+async function estPush(field){const E=S.est;const R=estCalc(E.data);try{await run(sb.from('bids').update({[field]:r2(R.total)}).eq('id',E.bidId));await loadTable('bids');toast(`Bid total ${money(R.total)} sent to the bid`)}catch(e){toast(errMsg(e))}}
+async function estExport(){let X;try{X=await loadXLSX()}catch(e){toast(errMsg(e));return}const E=S.est,d=E.data,R=estCalc(d);const b=byId(S.bids,E.bidId);
+  const wb=X.utils.book_new();const put=(name,rows,w)=>{const ws=X.utils.aoa_to_sheet(rows);ws['!cols']=w.map(x=>({wch:x}));X.utils.book_append_sheet(wb,ws,name)};
+  put('Bid items',[['Item','Description','Quantity','Unit','Unit price','Total price','Cost','Unit cost','Labor','Equipment','Material','Subcontract','Trucking','Other','Sales tax','Man-hours','Alternate'],
+    ...d.items.map((it,i)=>{const x=R.items[i];return [it.code,it.desc,num(it.qty)??'',it.unit,r2(x.unitPrice),r2(x.price),r2(x.total),r2(x.unit),r2(x.c.labor),r2(x.c.equipment),r2(x.c.material),r2(x.c.sub),r2(x.c.trucking),r2(x.c.other),r2(x.c.tax),+x.mh.toFixed(1),it.alt?'Yes':'']})],[8,40,10,6,11,13,13,11,11,11,11,11,11,11,10,10,9]);
+  const det=[['Item','Activity','Type','Code','Description','Quantity','Unit','Unit cost','Cost','Crew hours','Man-hours']];
+  d.items.forEach((it,i)=>{det.push([it.code,'','Bid item','',it.desc,num(it.qty)??'',it.unit,'',r2(R.items[i].total),'',+R.items[i].mh.toFixed(1)]);
+    it.acts.forEach((a,j)=>{const ar=R.items[i].acts[j];det.push([it.code,a.code||String(j+1),'Activity','',a.desc,+ar.q.toFixed(3),a.unit||it.unit,'',r2(ar.total),+ar.hrs.toFixed(2),+ar.mh.toFixed(1)]);
+      if(a.crew)det.push([it.code,a.code||String(j+1),'Crew',a.crew.code||'',a.crew.name,+ar.hrs.toFixed(2),'HR',r2((+a.crew.labor||0)+(+a.crew.equip||0)),r2(((+a.crew.labor||0)+(+a.crew.equip||0))*ar.hrs),'','']);
+      a.res.forEach((r,n)=>{const rr=ar.res[n];det.push([it.code,a.code||String(j+1),COST_LABEL[r.kind]||'Other',r.code||'',r.desc,+rr.qty.toFixed(3),r.unit||(r.basis==='hour'?'HR':''),num(r.price)??'',r2(rr.cost+rr.tax),'',''])})})});
+  put('Detail',det,[8,9,11,10,40,11,6,10,12,10,10]);
+  const m=d.markup;put('Summary',[['Project',b?.name||''],['Exported',todayStr()],[],...COST_KEYS.filter(k=>R.c[k]).map(k=>[COST_LABEL[k],r2(R.c[k])]),...(R.c.tax?[['Sales tax ('+(num(m.tax)||0)+'%)',r2(R.c.tax)]]:[]),['Direct cost',r2(R.cost)],
+    ['Overhead ('+(num(m.oh)||0)+'%)',r2(R.oh)],['Profit ('+(num(m.profit)||0)+'%)',r2(R.profit)],['Bond ('+(num(m.bond)||0)+'%)',r2(R.bond)],['Calculated total',r2(R.calcTotal)],['Rounding & overrides',r2(R.adj)],['Bid total',r2(R.total)],['Margin',r2(R.margin)],['Retainage ('+(num(m.ret)||0)+'%)',r2(R.ret)],['Alternates',r2(R.alts)],['Man-hours',Math.round(R.mh)]],[30,16]);
+  X.writeFile(wb,`estimate-${String(b?.name||'bid').replace(/[^\w-]+/g,'-').slice(0,40)}-${todayStr()}.xlsx`)}
+
+/* ---------- activity & bid item templates in the codebook ---------- */
+function tplCalc(x){const D=cbD(x);const ctx={hpd:10,tax:0};
+  if(x.book==='activity'){if(!D.act)return null;const a=clone(D.act);estApplyStale(estStale({act:a}));const r=actCalc(a,num(D.qty)||1,ctx);return {unit:r.unit,q:r.q,hrs:r.hrs,mh:r.mh}}
+  if(!D.item)return null;const it=clone(D.item);it.qty=num(D.qty)||num(it.qty)||1;it.acts.forEach(a=>estApplyStale(estStale({act:a})));const r=itemCalc(it,ctx);return {unit:r.unit,q:r.q,mh:r.mh,acts:it.acts.length}}
+function cbTplModal(){const d=M.draft;const bk=d.book;const D=d.data;const admin=cbEditable();const dis=admin?'':' disabled';const F=CB_FIELDS[bk];estPick();
+  const head=`<fieldset><legend>${bk==='activity'?'Activity':'Bid item'}</legend><div class="fg">${F.filter(f=>f.k!=='notes').map(f=>cbFieldHtml(f,d,dis)).join('')}
+    <label class="f">Typical quantity${epIn('qty',D.qty,{n:1,ph:'1',title:'Used to show the unit cost here; it’s replaced by the real quantity in an estimate'})}</label>
+    <label class="f">Unit${epIn('unit',D.unit,{list:'cb-units',ph:'CY, LF, EA…'})}</label>${cbFieldHtml(F.find(f=>f.k==='notes'),d,dis)}</div>
+    <label class="check small" style="margin-top:6px"><input type="checkbox" data-cbe="active"${d.active!==false?' checked':''}${dis}> Active</label></fieldset>`;
+  const ctx={hpd:10,tax:0};let body='';
+  if(bk==='activity'){const a=D.act;const r=actCalc(a,num(D.qty)||1,ctx);body=`<fieldset><legend>Crew, production & costs</legend>${actCardHtml(a,'act',r,num(D.qty)||1,{noHead:true,unit:D.unit})}</fieldset>`}
+  else{const it=D.item;it.qty=num(D.qty)||1;it.unit=D.unit||it.unit;const R=itemCalc(it,ctx);const tpls=cbList('activity').filter(t=>t.active!==false);
+    body=`<fieldset><legend>Activities</legend>${it.acts.map((a,j)=>actCardHtml(a,`item.acts.${j}`,R.acts[j],it.qty,{unit:it.unit})).join('')||'<p class="dim small">No activities yet.</p>'}
+      ${admin?`<div class="est-addact"><button class="btn primary sm" data-act="ep-add-act" data-p="item">+ Activity</button>${tpls.length?`<select class="field sm" data-epact="item"><option value="">+ From activity codebook…</option>${tpls.map(t=>`<option value="${t.id}">${esc((t.code?t.code+' · ':'')+t.description)}</option>`).join('')}</select>`:''}</div>`:''}
+      <div class="est-isum" style="margin-top:12px"><div><span>Cost for ${qtyFmt(it.qty)} ${esc(it.unit||'')}</span><b>${money(R.total)}</b></div><div><span>Unit cost</span><b>${money2(R.unit)}</b></div><div><span>Man-hours</span><b>${fmtN(R.mh,1)}</b></div></div></fieldset>`}
+  return mhead(M.isNew?(bk==='activity'?'New activity':'New bid item'):d.description||'Template',`${bk==='activity'?'Activities':'Bid items'} codebook · priced at today’s codebook rates`)+`<div class="mbody">${!admin?'<div class="notice">View only.</div>':''}${head}${body}</div>${EST_PICK.html}<datalist id="cb-units">${CB_UNITS.map(u=>`<option value="${u}">`).join('')}</datalist>
+  <div class="mfoot"><div>${admin&&!M.isNew?`<button class="btn danger${M.cbArm?' arm':''}" data-act="cb-del">${M.cbArm?'Click again to delete':'Delete'}</button> <button class="btn" data-act="cb-dup">Duplicate</button>`:''}</div><div class="r"><button class="btn" data-act="close">${admin?'Cancel':'Close'}</button>${admin?'<button class="btn primary" data-act="cb-save">Save</button>':''}</div></div>`}
+
+/* ---------- events ---------- */
+FOCUS_ATTRS.push('data-ep');
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;
+  if(!a.startsWith('est-')&&!a.startsWith('ep-'))return;const ec=EC();const p=t.dataset.p;
+  if(S.epArm&&!(a==='ep-del'&&p===S.epArm)){S.epArm=null}
+  switch(a){
+    case 'est-open':if(M&&M.kind==='bid'&&!M.draft._new)estOpen(t.dataset.id||M.draft.id);else estOpen(t.dataset.id);break;
+    case 'est-back':{const id=S.estBid;estSave();S.view='pipeline';render();if(id&&byId(S.bids,id))openBid(id);break}
+    case 'est-create':if(t.dataset.v==='copy')estCreate('copy',$('#est-copysrc')?.value);else estCreate(t.dataset.v);break;
+    case 'est-tab':S.est.tab=t.dataset.v;render();break;
+    case 'est-sel':S.est.sel=t.dataset.id;render();if(window.innerWidth<1100)$('.est-detail')?.scrollIntoView({block:'start',behavior:'smooth'});break;
+    case 'est-retry':S.est.saveErr=null;S.est.dirty=true;estSave();break;
+    case 'est-reload':S.est.conflict=false;S.est.dirty=false;estOpen(S.est.bidId);break;
+    case 'est-keep':(async()=>{const E=S.est;try{const r=await run(sb.from('estimates').select('version').eq('id',E.row.id).maybeSingle());E.row.version=r?r.version:E.row.version;E.conflict=false;E.dirty=true;await estSave();render();toast('Your version saved')}catch(err){toast(errMsg(err))}})();break;
+    case 'est-stale':{const st=estStale(S.est.data);estApplyStale(st);ec.redraw();toast(`Updated ${st.length} price${st.length===1?'':'s'} from the codebook`);break}
+    case 'est-push':estPush(t.dataset.v);break;
+    case 'est-export':estExport();break;
+    case 'ep-add-item':{const d=ec.root;const it=estNewItem(d);d.items.push(it);S.est.sel=it.id;ec.redraw();setTimeout(()=>{const el=document.getElementById(epId(`items.${d.items.length-1}.desc`));el?.focus()},0);break}
+    case 'ep-add-act':{const it=epGet(ec.root,p);it.acts.push(estNewAct({unit:it.unit||''}));ec.redraw();setTimeout(()=>document.getElementById(epId(`${p}.acts.${it.acts.length-1}.desc`))?.focus(),0);break}
+    case 'ep-mv':{const {arr,i}=epParent(ec.root,p);const j=i+(+t.dataset.d);if(j<0||j>=arr.length)break;[arr[i],arr[j]]=[arr[j],arr[i]];ec.redraw();break}
+    case 'ep-dup':{const {arr,i}=epParent(ec.root,p);const c=clone(arr[i]);c.id=newId();(c.acts||[]).forEach(x=>{x.id=newId();x.res.forEach(r=>r.id=newId())});(c.res||[]).forEach(r=>r.id=newId());if(c.acts&&!ec.tpl)c.code=estNextCode(ec.root);arr.splice(i+1,0,c);if(c.acts&&!ec.tpl)S.est.sel=c.id;ec.redraw();break}
+    case 'ep-del':{const {arr,i}=epParent(ec.root,p);const x=arr[i];const big=(x.acts&&x.acts.length)||(x.res&&x.res.length);if(big&&S.epArm!==p){S.epArm=p;ec.tpl?renderModal():render();break}S.epArm=null;arr.splice(i,1);
+      if(!ec.tpl&&x.acts&&S.est.sel===x.id)S.est.sel=arr[Math.min(i,arr.length-1)]?.id||null;ec.redraw();break}
+    case 'ep-tocb':epToCodebook(p,t.dataset.k);break;
+  }});
+document.addEventListener('input',e=>{const t=e.target;if(!t.dataset.ep||t.type==='checkbox')return;const ec=EC();if(!ec.root||ec.ro)return;
+  const v=t.dataset.ept==='n'?(t.value===''?null:num(t.value)):t.value;epSet(ec.root,t.dataset.ep,v);ec.redraw()});
+document.addEventListener('change',e=>{const t=e.target;const ec=EC();if(!ec.root||ec.ro)return;
+  if(t.dataset.ep&&t.type==='checkbox'){epSet(ec.root,t.dataset.ep,t.checked);ec.redraw();return}
+  if(t.dataset.epcrew){const a=epGet(ec.root,t.dataset.epcrew);const x=cbById(t.value);a.crew=x?crewSnap(x):null;ec.redraw();return}
+  if(t.dataset.epadd){const id=EST_PICK.map.get(t.value);if(!id){if(t.value.trim())toast('Pick an item from the list, or use “+ Custom…” for something not in the codebook.');return}const x=cbById(id);if(x)epAddRes(t.dataset.epadd,resFromCb(x));return}
+  if(t.dataset.epcustom){if(!t.value)return;epAddRes(t.dataset.epcustom,resCustom(t.value));return}
+  if(t.dataset.epact){const it=epGet(ec.root,t.dataset.epact);const tp=cbById(t.value);if(tp&&cbD(tp).act){const a=actFromTpl(cbD(tp).act);a.code=tp.code||a.code||'';a.desc=tp.description||a.desc;if(!a.unit)a.unit=cbD(tp).unit||it.unit||'';it.acts.push(a);ec.redraw()}return}
+  if(t.dataset.epitem!=null){const tp=cbById(t.value);if(!tp||!cbD(tp).item)return;const d=ec.root;const src=cbD(tp).item;const it=clone(src);it.id=newId();it.code=estNextCode(d);it.desc=it.desc||tp.description;it.unit=cbD(tp).unit||it.unit||'LS';it.qty=null;it.alt=false;it.override=null;
+    it.acts=it.acts.map(a=>actFromTpl(a));d.items.push(it);S.est.sel=it.id;ec.redraw();setTimeout(()=>document.getElementById(epId(`items.${d.items.length-1}.qty`))?.focus(),0);return}});
+// keyboard: Enter moves on from a field instead of doing nothing
+document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset?.ep&&e.target.tagName==='INPUT'&&S.view==='estimate'&&!M){e.preventDefault();e.target.blur()}});
+
+function estBidBlock(b,work){if(b._new||!['admin','estimator','board'].includes(role()))return '';const x=estOf(b.id);
+  if(S.estMissing)return `<fieldset><legend>Estimate</legend><p class="hint" style="margin:0">Estimates need a one-time database update (update-14-estimates.sql).</p></fieldset>`;
+  return `<fieldset><legend>Estimate</legend>${x?`<div class="est-bidblock"><div class="est-isum"><div><span>Cost</span><b>${money(x.total_cost)}</b></div><div><span>Bid total</span><b>${money(x.total_price)}</b></div><div><span>Margin</span><b>${num(x.total_price)?fmtN((x.total_price-x.total_cost)/x.total_price*100,1)+'%':'—'}</b></div></div>
+    <div><button class="btn primary" data-act="est-open" data-id="${b.id}">Open estimate</button><div class="dim small" style="margin-top:4px">Updated ${x.updated_at?new Date(x.updated_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):''}${x.updated_by_name?' by '+esc(x.updated_by_name):''}</div></div></div>`
+    :`<div class="est-bidblock"><p class="dim small" style="margin:0">No estimate yet. Build it from bid items, activities, crews and your codebook prices.</p>${work?`<button class="btn primary" data-act="est-open" data-id="${b.id}">Start estimate</button>`:''}</div>`}
+    <p class="hint">Opening the estimate closes this window — save your changes here first.</p></fieldset>`}
 
 /* ---------- start ---------- */
 // Checks that config.js points at a real Supabase project with a valid key

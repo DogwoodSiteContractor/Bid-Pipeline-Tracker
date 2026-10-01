@@ -36,6 +36,7 @@ supabase/update-10-job-rates.sql   one-time update for job overhead/markup defau
 supabase/update-11-estimator-log.sql   one-time update for the estimator log
 supabase/update-12-supersede.sql   one-time update for superseding projects
 supabase/update-13-codebooks.sql   one-time update for estimating codebooks
+supabase/update-14-estimates.sql   one-time update for estimates and activity / bid item templates
 ```
 
 > **Already set up before these updates?** Run each `supabase/update-*.sql` file you haven't run yet, once, in number order, in the SQL Editor. New installs only need `schema.sql`.
@@ -146,6 +147,20 @@ Every bid has an **Estimator log** under Scope takeoff. Estimators on the bid (a
   - You can apply one vendor to a whole supplier price list.
 - **Export to Excel:** writes all four codebooks in the same layout the import reads. You can export, edit prices in Excel, and import the file back.
 
+## Estimates
+Open a bid and click **Start estimate** (or **Open estimate**). You can start blank, start with one bid item per scope on the bid, or copy another bid's estimate. Estimators on the bid and admins edit it; everyone else who can see the bid views it. Needs `supabase/update-14-estimates.sql`.
+- **Bid items** have a quantity and unit and are built from **activities**. Use **Alternate** to price an item but keep it out of the base bid. Enter a **unit price override** to set an item's price yourself.
+- **Activities** have a quantity (blank means the bid item's quantity), a **crew** and a **production rate**: units/hr, units/day, crew hours or crew days. These give crew hours, days and man-hours, and crew $/hr × hours gives the labor and equipment cost.
+- **Costs on an activity:** add labor, equipment or materials from the codebook (type to search), or a custom labor, equipment, material, sub, trucking or other cost.
+  - Each cost is figured per unit of the activity, per crew hour, or as a total.
+  - Materials can carry a waste % and sales tax.
+- **Prices are copied in when you add them,** so later codebook changes don't move a bid you've already sent. When codebook prices change, **↻ Update prices** pulls in the current ones.
+- **Markup & totals:** sales tax on taxable materials, overhead (on cost), profit (on cost + overhead), bond (on everything above) and retainage (shown for cash flow; it doesn't change the price). Markup is spread into unit prices, rounded to the cent. The rounding and any overrides are shown as their own line. **Send to the bid** puts the base bid total into the bid's proposal amount.
+- **Resources** totals every material, sub, trucking and extra cost, plus crew hours, across the base bid. Use it as your list for quotes.
+- **Autosave:** the estimate saves itself a second after you stop typing. If someone else saved in the meantime, you get a warning and can load their version or keep yours.
+- **Export to Excel:** bid items, full detail and the markup summary.
+- **Templates:** the **Activities** and **Bid items** tabs in Codebooks hold reusable templates, always priced at today's codebook rates. Build them there, or click **→ Codebook** / **Save to codebook** in an estimate (admins). Add them to an estimate from the **From … codebook** lists.
+
 ## Calculators
 **Cut / fill from plans:** upload the grading sheet (PDF or image), set the scale by clicking two points a known distance apart, draw the perimeter, then trace the existing and proposed contours (right-click, double-click or Enter ends a line; plus flat pads and spot elevations) and give each an elevation — the next contour's elevation fills in automatically. Calculate gives rough cut, fill, import/export (fill × (1 + shrink), the same as AGTEK’s Comp/Ratio), topsoil strip and truck loads, with a cut/fill map on the plan. Lines are remembered in that browser; re-upload the same plan to see them.
 **3D view:** after you calculate, **🧊 3D view** shows the proposed surface coloured by cut (red) and fill (blue) with the existing ground as a wire grid over it. Drag to turn, right-drag or Shift-drag to move, scroll to zoom; switch between Both / Proposed / Existing and change the vertical exaggeration.
@@ -171,10 +186,7 @@ Edit a file on GitHub (click it, then the pencil icon) and commit. The live site
 
 ## On the list for the future
 - **Estimating, next phases:**
-  - An estimate on each bid: bid items → activities → crews, materials, subs and trucking, with production rates, cost roll-ups, and a unit price override.
-  - Activity and bid item codebooks.
   - A quotes folder that compares vendor quotes line by line and pushes the low price into the estimate.
-  - Markup, overhead, bond and retainage.
   - A proposal built from the estimate.
 - **AI takeoff — the whole site** — upload the plan set and have the app do the full takeoff for the estimator to review: **dirtwork** (cut/fill, import/export, strip, pads), **underground** (storm, sanitary and water pipe LF by size and material, structures with inverts and depths, fittings, bedding, trench), **erosion control** (silt fence, inlet protection, construction entrance, check dams, matting, seeding), **demo** (pavement, concrete, curb, structures, clearing, utilities), plus paving, curb and concrete. Every quantity links back to where it was found on the sheet.
 - Pull contour lines straight out of vector PDFs (label elevations only).
