@@ -1121,3 +1121,19 @@ table.mk-t .field,table.mk-adj .field{padding:5px 7px;font-size:13.5px}
 @media (max-width:900px){.set-grid{grid-template-columns:1fr}.sched-list{grid-template-columns:1fr}.sched-rules{grid-template-columns:1fr 1fr}}
 
 .ind-t td:first-child .field{min-width:200px}
+
+/* ---------- search codebook picker ---------- */
+.pick-tabs{flex-wrap:wrap;margin-bottom:10px}
+.pick-tabs button{padding:7px 12px;font-size:13.5px}
+.pick-tabs small{display:inline;margin-left:6px;font-size:11px}
+.pick-bar{display:flex;gap:8px;margin-bottom:8px}
+.pick-bar input{flex:1}.pick-bar select{width:auto}
+.pick-where{margin:0 0 8px;color:var(--ink-2)}
+.pick-list{max-height:52vh;overflow:auto}
+.pick-list th{position:sticky;top:0;z-index:1}
+.pick-list tr.on td{background:var(--accent-soft)}
+.pick-list td:first-child{width:28px}
+.pick-list input{accent-color:var(--accent);pointer-events:none}
+.pick-list table{width:100%;min-width:640px}.pick-list td.proj{min-width:220px}
+.ef-h .ef-cb{padding:4px 10px;font-size:12.5px}
+.pick-list tr.pick-cat td{background:var(--surface-2);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-2);padding:6px 10px}

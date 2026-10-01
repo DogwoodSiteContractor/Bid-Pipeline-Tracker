@@ -211,6 +211,22 @@ The defaults every new estimate starts with. Each estimate keeps its own copy, s
   - only the items you pick carry it,
   - or you adjust items by hand for an unbalanced bid. An "out of balance" check shows whether the adjustments still add up to $0.
 
+**🔍 Search codebook**
+- **Where:** a button on the outline toolbar, in a section ("Search bid item codebook"), in a bid item ("Search activity codebook"), and in an activity's cost sheet.
+- **What it searches:** opens the codebook with tabs for Bid items, Activities, Section templates, Materials, Labor, Equipment and Crews. Search by code, description, category or vendor, and filter by category.
+- **Where picks land:** the window tells you before you add.
+  - Bid items go into the selected section.
+  - Activities go into the selected bid item.
+  - Labor, equipment and materials go into the open activity.
+  - A crew becomes the activity's crew.
+  - Section templates come in as new sections.
+- **Adding:** pick several rows and click Add, double-click one row to add it right away, or press Enter when the search narrows to a single result. Everything comes in at today's codebook prices.
+
+**📖 From codebook** (in the Bid item and Activity panel headers)
+- **On a bid item:** pick a codebook bid item to fill this one. You get its description and unit if they're blank, plus its activities, added after any already there.
+- **On an activity:** pick a codebook activity to fill this one with its crew, production and costs, replacing what's there now.
+- **The list:** grouped by category, with search.
+
 **Templates**
 - **Save as master template** (admins) saves the whole estimate, including its settings: work schedule, crews at once, markup mode and rates, bond, tax, retainage, the indirect list, both spread choices and which items carry the markup. Every estimate started from it begins with exactly those settings. Only the job duration is recalculated for each job.
 - **Make these the company defaults** (admins), on the Markup and Schedule & indirects tabs, copies an estimate's setup to Bid settings so every new estimate starts that way, with or without a template. **Save as section template** on any section saves one scope.
