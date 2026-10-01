@@ -1137,3 +1137,23 @@ table.mk-t .field,table.mk-adj .field{padding:5px 7px;font-size:13.5px}
 .pick-list table{width:100%;min-width:640px}.pick-list td.proj{min-width:220px}
 .ef-h .ef-cb{padding:4px 10px;font-size:12.5px}
 .pick-list tr.pick-cat td{background:var(--surface-2);font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-2);padding:6px 10px}
+
+/* outline fits its panel — no sideways scrolling, no empty block under the rows */
+.eo-scroll{min-height:0;overflow-x:hidden;overflow-y:auto}
+table.eo{table-layout:fixed;width:100%}
+table.eo col.c-code{width:104px}table.eo col.c-qty{width:76px}table.eo col.c-unit{width:52px}table.eo col.c-cost{width:84px}table.eo col.c-up{width:86px}table.eo col.c-tot{width:88px}table.eo col.c-more{width:28px}
+table.eo td{overflow:hidden;text-overflow:ellipsis}
+.eo-code{width:auto}
+.eo-c{width:100%;min-width:0}
+.eo-dc{min-width:0}
+.eo-d{width:100%;min-width:0}
+.eo-dc .pill,.eo-dc .eo-cnt{flex:none}
+td.eo-dc{display:table-cell}
+td.eo-dc>.eo-d+.pill,td.eo-dc>.eo-d+.eo-cnt{margin-left:4px}
+.eo-q{width:100%}.eo-u{width:100%}
+tr.eo-item td:first-child{padding-left:14px}tr.eo-act td:first-child{padding-left:30px}
+.eb.act{grid-template-columns:minmax(0,1fr) minmax(560px,1.1fr)}
+@media (max-width:1400px){table.eo col.c-up{width:0}table.eo td:nth-child(6),table.eo th:nth-child(6){padding:0;font-size:0}}
+td.eo-dc .eo-d:not(:last-child){width:calc(100% - 46px)}
+table.eo col.c-unit{width:60px}table.eo col.c-up{width:96px}
+table.eo .eo-u{padding:4px 4px}
