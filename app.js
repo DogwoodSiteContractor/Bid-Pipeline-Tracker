@@ -4051,7 +4051,14 @@ const CB_CATS={material:['Stone & aggregate','Pipe','Precast structures','Fittin
   crew:['Earthwork','Underground','Erosion control','Paving','Concrete','Demo','Other'],
   activity:['Earthwork','Underground','Erosion control','Paving','Concrete','Demo','General conditions','Other'],
   biditem:['Earthwork','Underground','Erosion control','Paving','Concrete','Demo','General conditions','Other']};
-const CB_UNITS=['EA','LF','SF','SY','CY','TON','GAL','LB','LS','HR','DAY','LOAD','AC','BAG','ROLL'];
+const CB_UNITS=['EA','LF','SF','SY','CY','TON','GAL','LB','LS','HR','DAY','WK','MO','LOAD','AC','BAG','ROLL'];
+// units of measure: typed in any case or common spelling → the standard abbreviation
+const UNIT_ALIAS={each:'EA',ea:'EA',ls:'LS',lump:'LS',lumpsum:'LS',lf:'LF',ft:'LF',lft:'LF',feet:'LF',foot:'LF',linft:'LF',sf:'SF',sqft:'SF',sy:'SY',sqyd:'SY',cy:'CY',yd:'CY',yds:'CY',cuyd:'CY',ton:'TON',tons:'TON',tn:'TON',gal:'GAL',gals:'GAL',gallon:'GAL',gallons:'GAL',lb:'LB',lbs:'LB',hr:'HR',hrs:'HR',hour:'HR',hours:'HR',day:'DAY',days:'DAY',wk:'WK',week:'WK',weeks:'WK',mo:'MO',month:'MO',months:'MO',load:'LOAD',loads:'LOAD',ac:'AC',acre:'AC',acres:'AC',bag:'BAG',bags:'BAG',roll:'ROLL',rolls:'ROLL'};
+const normUnit=v=>{const t=String(v||'').trim();if(!t)return '';return UNIT_ALIAS[t.toLowerCase().replace(/[^a-z]/g,'')]||t.toUpperCase()};
+const isUnitField=t=>t&&t.tagName==='INPUT'&&((t.dataset.ep&&/(^|\.)unit$/.test(t.dataset.ep))||t.dataset.cbe==='unit'||t.dataset.col==='unit'||t.dataset.col==='u');
+// capital letters as you type, then the standard spelling when you leave the box (each → EA, tons → TON)
+document.addEventListener('input',e=>{const t=e.target;if(!isUnitField(t))return;const up=t.value.toUpperCase();if(up!==t.value){const a=t.selectionStart,b=t.selectionEnd;t.value=up;try{t.setSelectionRange(a,b)}catch(x){}}},true);
+document.addEventListener('change',e=>{const t=e.target;if(!isUnitField(t))return;const n=normUnit(t.value);if(n!==t.value){t.value=n;t.dispatchEvent(new Event('input',{bubbles:true}))}},true);
 // k = where it lives (column, or data.x); t = type; m = can be mass-updated / is a price field
 const CB_FIELDS={
   material:[
@@ -5525,8 +5532,8 @@ document.addEventListener('paste',e=>{const t=e.target;if(t.dataset?.grid!=='su'
   lines.forEach((line,li)=>{if(li>0){const same=d.items.filter(i=>i.sec===sec);const k=same.indexOf(cur);cur=same[k+1]||(made++,estAddItem(d,sec,{desc:''}))}
     line.split('\t').forEach((v,ci)=>{const col=SU_COLS[c0+ci];if(!col)return;v=v.trim();if(col==='qty'){const n=num(v.replace(/[,$\s]/g,''));if(cur.acts.some(a=>a.qty!=null&&a.qty!=='')&&!(cur.id in E.qtyChanged)&&num(cur.qty)!==n)E.qtyChanged[cur.id]=cur.qty??null;cur.qty=v===''?null:n}else cur[col]=v})});
   estTouch();render();toast(`Pasted ${lines.length} row${lines.length===1?'':'s'}${made?` · ${made} new bid item${made===1?'':'s'}`:''}`)});
-document.addEventListener('input',e=>{const t=e.target;if(t.dataset.suadd==null||!S.est||EC().ro)return;const d=S.est.data;const it=estAddItem(d,t.dataset.suadd,{desc:t.value});estTouch();render();
-  setTimeout(()=>{const el=document.getElementById(epId(`items.${d.items.indexOf(it)}.desc`));if(el){el.focus();const n=el.value.length;el.setSelectionRange(n,n)}},0)});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset.suadd==null||!S.est||EC().ro)return;const d=S.est.data;const it=estAddItem(d,t.dataset.suadd,{desc:t.value});t.value='';t.blur();estTouch();render();
+  const el=document.getElementById(epId(`items.${d.items.indexOf(it)}.desc`));if(el){el.focus();const n=el.value.length;el.setSelectionRange(n,n)}});
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
   if(a==='qa-open'){qaOpen();return}
   if(a==='qa-dismiss'){S.est.qtyChanged={};render();return}

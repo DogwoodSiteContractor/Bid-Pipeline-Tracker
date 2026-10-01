@@ -213,6 +213,7 @@ The defaults every new estimate starts with. Each estimate keeps its own copy, s
 
 **Bid item setup tab:** every bid item in one spreadsheet, grouped by section.
 - **Editing:** type the item #, description, quantity, unit, alternate and price override in place. Enter moves down a column.
+- **Units of measure:** type them any way, for example ls → LS, ea or each → EA, ft → LF, tons → TON, cy → CY, acres → AC. This works everywhere a unit is entered.
 - **Fast entry:** **Tab** goes Description → Qty → Unit, then drops to the next row, or to the empty "new bid item" line at the end of the section, so you can keep typing items without touching the mouse. Shift+Tab goes back.
 - **Adding:** start typing in "+ New bid item…" to add one. Delete with ×; items that have activities take two clicks.
 - **Paste from Excel:** copy rows with Item #, Description, Qty and Unit columns and paste them into a cell. The rows fill down, and new bid items are created as needed.
