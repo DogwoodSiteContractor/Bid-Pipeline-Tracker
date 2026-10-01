@@ -53,8 +53,8 @@ const live=b=>!b.archived_at;
 const unitsText=b=>num(b.units)?`${Number(b.units).toLocaleString('en-US')} unit${+b.units===1?'':'s'}`:'';
 const BID_TYPES=['Hard bid','Negotiated','Budget / pricing','Design-assist'];
 const LOST_REASONS=['','Price','Schedule','Relationship / incumbent','Project cancelled','Scope','Unknown'];
-const ROLES=[['admin','Admin (precon manager)'],['estimator','Estimator'],['pm','Project manager'],['accounting','Bookkeeper / accounting'],['board','Board member'],['pending','No access yet']];
-const ROLE_LABEL={admin:'Admin',estimator:'Estimator',pm:'Project manager',accounting:'Accounting',board:'Board',pending:'Pending'};
+const ROLES=[['admin','Admin'],['executive','Executive / owner'],['estimator','Estimator'],['pm','Project manager'],['accounting','Accounting / bookkeeper'],['board','Board member'],['pending','No access yet']];
+const ROLE_LABEL={admin:'Admin',executive:'Executive',estimator:'Estimator',pm:'Project manager',accounting:'Accounting',board:'Board',pending:'Waiting for access'};
 const WIDGETS=[['kpis','Headline numbers'],['monthly','Bid and award volume by month'],['funnel','Pipeline by stage'],['clients','Top clients & GCs'],['estimators','Estimator performance'],['types','Project type mix'],['upcoming','Bids due in the next 30 days'],['lost','Why we lose']];
 const AV_COLORS=['#2C5E99','#2C7A4C','#8B5E34','#7A3E8E','#B24A2A','#2F7C83','#5A6B1E','#9C3D5C'];
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -216,12 +216,12 @@ const role=()=>S.profile?.role||'pending';
 const isAdmin=()=>role()==='admin';
 const myEst=()=>S.estimators.find(e=>e.user_id&&e.user_id===S.session?.user?.id)||null;
 const assigned=b=>{const me=myEst();return !!me&&(b.lead_estimator_id===me.id||(b.support_estimator_ids||[]).includes(me.id))};
-const canWork=b=>isAdmin()||(role()==='estimator'&&assigned(b));
+const canWork=b=>can('bids','edit')&&(bidsAll()||assigned(b));
 const myName=()=>S.profile?.full_name||myEst()?.name||S.session?.user?.email||'';
 
 /* ---------- data ---------- */
 async function loadTable(t){
-  if(t==='pay_apps'&&!['admin','pm','accounting'].includes(role())){S.pay_apps=[];return}
+  if(t==='pay_apps'&&!can('acct')){S.pay_apps=[];return}
   // page through big tables (Supabase returns at most 1,000 rows per request)
   const page=(from,ord)=>{let q=sb.from(t).select('*');if(ord)q=q.order('id');return q.range(from,from+999)};
   let r=await page(0,false);let data=r.data||[],error=r.error;
@@ -281,7 +281,7 @@ function renderNow(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
-  const views={acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const views={teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
@@ -291,16 +291,8 @@ function renderNow(){
   loadThumbs();if(S.view==='calc'&&$('#tk-canvas'))tkMount();
 }
 // top-bar tabs; related pages share a tab and get small sub-tabs inside it
-function navGroups(){
-  if(role()==='pm')return [['jobs','Jobs',['jobs','job']],['acct','Accounting',['acct']],['calc','Calculators',['calc']]];
-  if(role()==='accounting')return [['acct','Accounting',['acct']]];
-  if(isAdmin())return [['dashboard','Dashboard',['dashboard']],['pipeline','Pipeline',['pipeline']],['estimates','Estimates',['estimates','estimate','settings','cb','scopes']],['jobs','Jobs',['jobs','job']],['acct','Accounting',['acct']],
-    ['clients','Contacts',['clients','vendors']],['calc','Calculators',['calc']],['team','Team',['team','estimators']]];
-  if(role()==='estimator')return [['dashboard','My dashboard',['dashboard']],['pipeline','My bids',['pipeline']],['estimates','Estimates',['estimates','estimate','cb']],['clients','Contacts',['clients','vendors']],['calc','Calculators',['calc']]];
-  return [['dashboard','Board dashboard',['dashboard']],['pipeline','Pipeline',['pipeline']],['estimates','Estimates',['estimates','estimate']]];
-}
 function navItems(){return navGroups().map(g=>[g[0],g[1]])}
-const SUBNAV_LABEL={clients:'Clients & GCs',vendors:'Vendors & subs',team:'Logins & roles',estimators:'Estimators'};
+const SUBNAV_LABEL={clients:'Clients & GCs',vendors:'Vendors & subs',team:'People & access',estimators:'Estimators',teampm:'Project managers',teamoffice:'Accounting & executives',access:'Access chart'};
 function subNav(){const g=navGroups().find(x=>x[2].includes(S.view));if(!g)return '';const subs=g[2].filter(v=>SUBNAV_LABEL[v]);if(subs.length<2)return '';
   return `<div class="subnav">${subs.map(v=>`<button class="${S.view===v?'on':''}" data-act="nav" data-v="${v}">${SUBNAV_LABEL[v]}</button>`).join('')}</div>`}
 function renderTop(){
@@ -310,7 +302,7 @@ function renderTop(){
   <div class="nav-more" hidden><button class="nav-morebtn" data-act="nav-more" aria-haspopup="true" aria-expanded="false">More ▾</button><div class="nav-menu" role="menu" hidden></div></div>
   <button class="topsearch" data-act="pal-open" aria-label="Search (Ctrl+K)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><span>Search</span><kbd>Ctrl K</kbd></button>
   <div class="userbox"><span>${esc(myName())}<br><span class="rolepill">${ROLE_LABEL[role()]}</span></span>
-  ${isAdmin()?'<button class="btn primary" data-act="new-bid">+ New bid</button>':''}<button class="btn sm" data-act="signout">Sign out</button></div>`;
+  ${can('bids','edit')&&bidsAll()?'<button class="btn primary" data-act="new-bid">+ New bid</button>':''}<button class="btn sm" data-act="signout">Sign out</button></div>`;
   navFit();
 }
 
@@ -376,7 +368,7 @@ document.addEventListener('submit',async e=>{
 /* ---------- dashboard ---------- */
 function vDashboard(){
   const d=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  if(role()==='estimator')return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div></div>`+mine();
+  if(!bidsAll())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div></div>`+mine();
   if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}</div></div>`+board();
   return `<div class="head"><div><h1>${S.dash==='precon'?'Bid pipeline dashboard':'Board dashboard'}</h1><p>${d}${S.lastLoaded?` · <span class="dim">Last updated ${S.lastLoaded.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>`:''}</p></div>
   <div class="tools">${S.dash==='board'?yearSelect()+'<button class="btn" data-act="board-custom">Customize view</button>':'<button class="btn" data-act="refresh">↻ Refresh</button>'}
@@ -665,7 +657,7 @@ function dueMatch(b,f){
 }
 function pvFilterCount(){const f=S.pv.f;return f.types.length+f.btypes.length+(f.est?1:0)+(f.client?1:0)+(f.due?1:0)+(f.min!==''?1:0)+(f.max!==''?1:0)+f.flags.length}
 function pvData(){
-  const q=(S.q.pipe||'').trim().toLowerCase();const est=role()==='estimator';const f=S.pv.f;
+  const q=(S.q.pipe||'').trim().toLowerCase();const est=!bidsAll();const f=S.pv.f;
   const pool=est?S.bids.filter(assigned):S.bids;
   const min=num(f.min),max=num(f.max);
   const base=pool.filter(b=>(!f.est||b.lead_estimator_id===f.est||(b.support_estimator_ids||[]).includes(f.est))
@@ -811,14 +803,14 @@ function palItems(){
     ['Pipeline: Cards view',()=>{S.view='pipeline';S.pv.mode='cards';savePv();render()}],['Pipeline: List view',()=>{S.view='pipeline';S.pv.mode='list';savePv();render()}],['Pipeline: Calendar view',()=>{S.view='pipeline';S.pv.mode='calendar';savePv();render()}],
     ...(isAdmin()?[['Go to Jobs',()=>{S.view='jobs';render()}],['New job',()=>{M={kind:'job',isNew:true,draft:newJob()};showModal()}],['New bid',()=>{M={kind:'bid',draft:newBid(),origQuoteIds:[]};showModal()}],['Go to Clients & GCs',()=>{S.view='clients';render()}],['Go to Vendors',()=>{S.view='vendors';render()}],['Go to Estimators',()=>{S.view='estimators';render()}],['Go to Scopes',()=>{S.view='scopes';render()}],['Go to Team',()=>{S.view='team';render()}]]:[]),
     ...(role()==='estimator'?[['Go to Vendors',()=>{S.view='vendors';render()}],['Go to Clients & GCs',()=>{S.view='clients';render()}]]:[])];
-  if(role()!=='board')acts.push(['Go to Calculators',()=>{S.view='calc';render()}]);
+  if(can('calc'))acts.push(['Go to Calculators',()=>{S.view='calc';render()}]);
   acts.filter(([l])=>!q||matchesQuery(l.toLowerCase(),q)).slice(0,q?4:6).forEach(([l,fn])=>add('Actions',l,'',fn));
-  if(q&&role()!=='board')CALCS.filter(c=>matchesQuery(('calculator calc '+c.name+' '+c.group+' '+c.desc).toLowerCase(),q)).slice(0,6)
+  if(q&&can('calc'))CALCS.filter(c=>matchesQuery(('calculator calc '+c.name+' '+c.group+' '+c.desc).toLowerCase(),q)).slice(0,6)
     .forEach(c=>add('Calculators',c.name,c.group,()=>{S.calcState.id=c.id;saveCalc();S.view='calc';render()}))
   if(q&&canJob()){S.jobs.filter(j=>matchesQuery([j.job_number,j.name,j.location,clientName(j.client_id),pmName(j.pm_user_id)].join(' ').toLowerCase(),q)).slice(0,6)
     .forEach(j=>add('Jobs',(j.job_number?j.job_number+' · ':'')+j.name,[j.status,j.client_id?clientName(j.client_id):''].filter(Boolean).join(' · '),()=>{S.view='job';S.jobId=j.id;S.jt=null;render()}))}
   if(q&&!isPM()){
-    const bids=(role()==='estimator'?S.bids.filter(assigned):S.bids).filter(b=>matchesQuery(bidHaystack(b),q))
+    const bids=(!bidsAll()?S.bids.filter(assigned):S.bids).filter(b=>matchesQuery(bidHaystack(b),q))
       .sort((a,b)=>((b.name||'').toLowerCase().includes(q)-(a.name||'').toLowerCase().includes(q))||(live(b)-live(a))||(a.due_date||'9').localeCompare(b.due_date||'9'));
     bids.slice(0,8).forEach(b=>add('Bids',b.name,[b.status,b.due_date?fmtDate(b.due_date):'',clientsLine(b,1).replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")].filter(Boolean).join(' · '),()=>openBid(b.id),pill(b.status,BID_CLS[b.status])));
     S.clients.filter(c=>matchesQuery([c.company,c.type,...(c.contacts||[]).map(x=>x.name+' '+x.email)].join(' ').toLowerCase(),q)).slice(0,5)
@@ -863,7 +855,7 @@ function card(b){
 }
 
 /* ----- directories ----- */
-function dbHead(title,sub,act,label,importType){return `<div class="head"><div><h1>${title}</h1><p>${sub}</p></div><div class="tools">${isAdmin()&&importType?`<button class="btn" data-act="import" data-type="${importType}">Import from Excel</button>`:''}${isAdmin()?`<button class="btn primary" data-act="${act}">${label}</button>`:''}</div></div>`}
+function dbHead(title,sub,act,label,importType){const ok=act==='new-est'?isAdmin():can('contacts','edit');return `<div class="head"><div><h1>${title}</h1><p>${sub}</p></div><div class="tools">${ok&&importType?`<button class="btn" data-act="import" data-type="${importType}">Import from Excel</button>`:''}${ok?`<button class="btn primary" data-act="${act}">${label}</button>`:''}</div></div>`}
 function vEstimators(){
   const q=(S.q.est||'').toLowerCase();const list=S.estimators.filter(e=>!q||(e.name+' '+e.title+' '+e.email).toLowerCase().includes(q)).sort((a,b)=>a.name.localeCompare(b.name));
   return dbHead('Estimators',S.estimators.length+' people','new-est','+ Add estimator')+`<div class="bar"><input id="q-est" class="field search" data-q="est" placeholder="Search estimators" value="${esc(S.q.est||'')}"></div>
@@ -874,7 +866,7 @@ function vEstimators(){
 }
 function vClients(){
   const q=(S.q.cl||'').toLowerCase();const list=S.clients.filter(c=>!q||[c.company,c.type,...(c.contacts||[]).map(x=>x.name)].join(' ').toLowerCase().includes(q)).sort((a,b)=>a.company.localeCompare(b.company));
-  const showStats=role()!=='estimator';
+  const showStats=bidsAll()&&can('bids');
   return dbHead('Clients & GCs',S.clients.length+' companies','new-client','+ Add client or GC','clients')+`<div class="bar"><input id="q-cl" class="field search" data-q="cl" placeholder="Search companies or contacts" value="${esc(S.q.cl||'')}"></div>
   <div class="panel scroll"><table><thead><tr><th>Company</th><th>Type</th><th>Contacts</th>${showStats?'<th class="r">Bids</th><th class="r">$ bid</th><th class="r">Won</th><th class="r">Win rate</th>':'<th>Phone</th>'}</tr></thead><tbody>
   ${list.map(c=>{const bs=S.bids.filter(b=>(b.client_ids||[]).includes(c.id));const w=bs.filter(b=>clientWon(b,c.id)).length,l=bs.filter(b=>clientLost(b,c.id)).length;
@@ -911,19 +903,6 @@ function tplModal(){const d=M.draft;const L=lib();const names=[...new Set([...L.
   <div class="mfoot"><div>${M.isNew?'':`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete template'}</button>`}</div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="save">Save template</button></div></div>`}
 
 /* ----- team & logins (admin) ----- */
-function vTeam(){
-  const me=S.session.user.id;
-  return `<div class="head"><div><h1>Logins & roles</h1><p>${S.profiles.length} account${S.profiles.length===1?'':'s'}</p></div><div class="tools"><button class="btn" data-act="reload-team">Refresh</button></div></div>
-  <div class="notice"><b>To add someone:</b> in Supabase go to Authentication → Users → Add user → Send invitation (or Create new user with a password). They show up here as “No access yet”. Set their role, and for estimators pick which estimator record is theirs. Tip: if their email matches an estimator record, they’re linked automatically.</div>
-  <div class="panel scroll"><table><thead><tr><th>Person</th><th>Name</th><th>Role</th><th>Linked estimator</th><th>Joined</th></tr></thead><tbody>
-  ${S.profiles.map(p=>{const linked=S.estimators.find(e=>e.user_id===p.id);const self=p.id===me;
-    return `<tr><td><b style="font-weight:600">${esc(p.email)}</b>${self?' '+pill('You','hot'):''}</td>
-    <td><input class="field" style="min-width:160px" data-pname="${p.id}" value="${esc(p.full_name)}" placeholder="Display name"></td>
-    <td><select class="field" data-prole="${p.id}" ${self?'disabled title="You can’t change your own role"':''}>${ROLES.map(([k,l])=>`<option value="${k}"${p.role===k?' selected':''}>${l}</option>`).join('')}</select></td>
-    <td>${p.role==='estimator'?`<div style="display:flex;gap:6px;align-items:center"><select class="field" data-plink="${p.id}"><option value="">Not linked</option>${S.estimators.filter(e=>!e.user_id||e.user_id===p.id).map(e=>`<option value="${e.id}"${linked?.id===e.id?' selected':''}>${esc(e.name)}</option>`).join('')}</select>${linked?'':`<button class="btn sm" data-act="make-est" data-id="${p.id}">Create record</button>`}</div>`:'<span class="dim">—</span>'}</td>
-    <td class="small dim">${fmtShort(String(p.created_at).slice(0,10))}</td></tr>`}).join('')}</tbody></table></div>
-  <p class="hint">Project managers see only the Jobs side (budgets and job costs) and can create jobs and log costs. Estimators see only bids they’re assigned to (lead or supporting). On those bids they can change anything except who’s assigned, sign off scopes, manage vendor quotes, and upload and download files. Board members see the board dashboard and pipeline, read-only. Only admins can create, change or delete bids and directory records.</p>`;
-}
 async function setRole(id,r){try{await run(sb.from('profiles').update({role:r}).eq('id',id));toast('Role updated');await loadProfiles();await loadPms()}catch(e){toast(errMsg(e))}}
 async function setProfileName(id,n){try{await run(sb.from('profiles').update({full_name:n}).eq('id',id));await loadProfiles()}catch(e){toast(errMsg(e))}}
 async function linkEstimator(uid,estId){
@@ -944,14 +923,14 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  const html={access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck'].includes(M.kind)||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();
 }
 function mhead(t,s){return `<div class="mhead"><div><h2>${esc(t)}</h2>${s?`<p>${esc(s)}</p>`:''}</div><button class="x" data-act="close" aria-label="Close">×</button></div>`}
-const DIS=()=>M&&M.kind==='bid'?(canWork(M.draft)?'':' disabled'):(isAdmin()?'':' disabled');
+const DIS=()=>M&&M.kind==='bid'?(canWork(M.draft)?'':' disabled'):M&&(M.kind==='client'||M.kind==='vendor')?(can('contacts','edit')?'':' disabled'):M&&(M.kind==='lib'||M.kind==='tpl')?(can('codebook','edit')?'':' disabled'):(isAdmin()?'':' disabled');
 
 /* ----- bid editor ----- */
 function newBid(){return{id:newId(),name:'',location:'',project_type:'Commercial',bid_type:'Hard bid',size:'',status:'Not Started',probability:50,
@@ -1260,7 +1239,7 @@ function addQuote(vid,scope){const v=vendorOf(vid);if(!v)return false;
 /* ----- directory modals ----- */
 function ef(path,ph,type){return `<input class="field" ${type?`type="${type}"`:''} data-ef="${path}" value="${esc(M.draft[path]??'')}" placeholder="${esc(ph||'')}"${DIS()}>`}
 function efSel(path,list){return `<select class="field" data-ef="${path}"${DIS()}>${list.map(o=>`<option${M.draft[path]===o?' selected':''}>${esc(o)}</option>`).join('')}</select>`}
-function entFoot(label,isNew){return `<div class="mfoot"><div>${isAdmin()&&!isNew?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete'}</button>`:''}</div><div class="r"><button class="btn" data-act="close">${isAdmin()?'Cancel':'Close'}</button>${isAdmin()?`<button class="btn primary" data-act="save">${isNew?label:'Save changes'}</button>`:''}</div></div>`}
+function entFoot(label,isNew){const ok=M&&(M.kind==='client'||M.kind==='vendor')?can('contacts','edit'):isAdmin();return `<div class="mfoot"><div>${ok&&!isNew?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete'}</button>`:''}</div><div class="r"><button class="btn" data-act="close">${ok?'Cancel':'Close'}</button>${ok?`<button class="btn primary" data-act="save">${isNew?label:'Save changes'}</button>`:''}</div></div>`}
 function bidMiniList(bs,extra){return bs.length?`<div class="list">${bs.sort((a,b)=>(b.due_date||'').localeCompare(a.due_date||'')).map(b=>`<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button><div class="dim small">${fmtDate(b.due_date)}${extra?' · '+extra(b):''}</div></div><div style="text-align:right">${pill(b.status,BID_CLS[b.status])}<div class="num small">${bidValue(b)?money(bidValue(b)):''}</div></div></div>`).join('')}</div>`:'<div class="empty">No bids yet.</div>'}
 function estModal(){const e=M.draft,isNew=M.isNew;
   const bs=S.bids.filter(b=>b.lead_estimator_id===e.id||(b.support_estimator_ids||[]).includes(e.id));
@@ -1270,10 +1249,10 @@ function estModal(){const e=M.draft,isNew=M.isNew;
    <label class="check s4"><input type="checkbox" data-ef="active" ${e.active!==false?'checked':''}${DIS()}> Active — can be assigned to new bids</label></div>
    <p class="hint">Use the same email as their login, and their account links to this record automatically when they’re added.</p></fieldset>
    ${isNew?'':`<fieldset><legend>Assigned bids</legend>${bidMiniList(bs,b=>b.lead_estimator_id===e.id?'Lead':'Support')}</fieldset>`}</div>`+entFoot('Add estimator',isNew)}
-function clientModal(){const c=M.draft,isNew=M.isNew;const admin=isAdmin();
+function clientModal(){const c=M.draft,isNew=M.isNew;const admin=can('contacts','edit');
   const bs=S.bids.filter(b=>(b.client_ids||[]).includes(c.id));const w=bs.filter(b=>clientWon(b,c.id)),l=bs.filter(b=>clientLost(b,c.id));
   return mhead(isNew?'New client or GC':c.company||'Client','')+`<div class="mbody">
-   ${isNew||role()==='estimator'?'':`<div class="statline"><div><b>${bs.length}</b>Bids</div><div><b>${moneyK(bs.reduce((s,b)=>s+clientAmount(b,c.id),0))}</b>Total bid</div><div><b>${w.length}</b>Won</div><div><b>${w.length+l.length?Math.round(w.length/(w.length+l.length)*100)+'%':'—'}</b>Win rate</div><div><b>${moneyK(w.reduce((s,b)=>s+wonValue(b),0))}</b>Awarded</div></div>`}
+   ${isNew||!bidsAll()?'':`<div class="statline"><div><b>${bs.length}</b>Bids</div><div><b>${moneyK(bs.reduce((s,b)=>s+clientAmount(b,c.id),0))}</b>Total bid</div><div><b>${w.length}</b>Won</div><div><b>${w.length+l.length?Math.round(w.length/(w.length+l.length)*100)+'%':'—'}</b>Win rate</div><div><b>${moneyK(w.reduce((s,b)=>s+wonValue(b),0))}</b>Awarded</div></div>`}
    <fieldset><legend>Company</legend><div class="fg">
    <label class="f s2">Company name ${admin?'<span class="req">required</span>':''}${ef('company','e.g. Summit Builders')}</label><label class="f s2">Type${efSel('type',CLIENT_TYPES)}</label>
    <label class="f s2">Main phone${ef('phone','(000) 000-0000','tel')}</label><label class="f s2">Website or email${ef('email','')}</label>
@@ -1843,7 +1822,7 @@ const TYPE_FIELD={Labor:'labor',Equipment:'equipment',Material:'materials',Subco
 const JOB_COLS=['id','job_number','name','bid_id','client_id','location','pm_user_id','status','structure','contract_amount','overhead_pct','markup_pct','start_date','end_date','notes'];
 const ITEM_COLS=['id','job_id','code','description','unit','quantity','labor','equipment','materials','subcontract','other','overhead_pct','markup_pct','pct_override','sort','notes'];
 const isPM=()=>role()==='pm';
-const canJob=()=>isAdmin()||isPM();
+const canJob=()=>can('jobs','edit');
 const jobOf=id=>byId(S.jobs,id);
 const jobItems=id=>S.job_items.filter(i=>i.job_id===id).sort((a,b)=>(a.sort||0)-(b.sort||0)||String(a.code).localeCompare(String(b.code),undefined,{numeric:true}));
 const jobCosts=id=>S.job_costs.filter(c=>c.job_id===id);
@@ -1945,7 +1924,7 @@ function vJobs(){
       <td class="r num" style="font-weight:700;color:var(--${s.projProfit<0?'bad':'ink'})">${s.BC?`${money(s.projProfit)}<div class="small dim" style="font-weight:400">${pctFmt(s.projMargin)} margin</div>`:'<span class="dim" style="font-weight:400">No budget</span>'}</td>
       <td>${pill(h,hc)}</td></tr>`}).join('');
   return `<div class="head"><div><h1>${isPM()?'Jobs':'Jobs'}</h1><p>${open.length} open job${open.length===1?'':'s'}${S.lastLoaded?` · updated ${S.lastLoaded.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}`:''}</p></div>
-    <div class="tools"><button class="btn" data-act="import" data-type="jobbudget">Import budget</button><button class="btn primary" data-act="new-job">+ New job</button></div></div>
+    <div class="tools">${canJob()?'<button class="btn" data-act="import" data-type="jobbudget">Import budget</button><button class="btn primary" data-act="new-job">+ New job</button>':''}</div></div>
   <div class="kpis">
     ${kpi('Open jobs',open.length,open.filter(j=>j.status==='Active').length+' active')}
     ${kpi('Contract value',moneyK(contract),money(contract))}
@@ -1988,7 +1967,7 @@ function vJob(){
   return `<button class="linkbtn" data-act="nav" data-v="jobs" style="margin-bottom:8px">← All jobs</button>
   <div class="head"><div><h1>${job.job_number?`<span class="dim" style="font-weight:600">${esc(job.job_number)}</span> `:''}${esc(job.name)}</h1>
     <p>${[job.client_id?clientName(job.client_id):'',job.location,pmName(job.pm_user_id)?'PM: '+pmName(job.pm_user_id):'',job.start_date?fmtShort(job.start_date)+(job.end_date?' – '+fmtDate(job.end_date):''):'',(+job.overhead_pct||+job.markup_pct)?`OH ${+job.overhead_pct||0}% · markup ${+job.markup_pct||0}%`:''].filter(Boolean).map(esc).join(' · ')} ${pill(job.status,JOB_CLS[job.status])} ${pill(h,hc)}</p></div>
-    <div class="tools"><button class="btn" data-act="edit-job">Job details</button><button class="btn" data-act="export-job">Export</button><button class="btn" data-act="import" data-type="jobcosts"${js.items.length?'':' disabled title="Add budget lines first"'}>Import costs</button><button class="btn primary" data-act="log-costs"${js.items.length?'':' disabled title="Add budget lines first"'}>+ Log costs</button></div></div>
+    <div class="tools">${canJob()?'<button class="btn" data-act="edit-job">Job details</button>':''}<button class="btn" data-act="export-job">Export</button>${canJob()?`<button class="btn" data-act="import" data-type="jobcosts"${js.items.length?'':' disabled title="Add budget lines first"'}>Import costs</button><button class="btn primary" data-act="log-costs"${js.items.length?'':' disabled title="Add budget lines first"'}>+ Log costs</button>`:''}</div></div>
   ${tiles}
   <div class="grid2" style="margin-bottom:22px"><div class="panel pad">${costChart(job,js)}</div>${burn}</div>
   ${tabs}${jt.tab==='log'?costLog(job,js):jt.tab==='notes'?jobNotes(job):linesTable(job,js)}`;
@@ -2021,7 +2000,7 @@ function linesTable(job,js){
   const T=k=>rows.reduce((x,r)=>x+r.s[k],0);
   return `<div class="pv-bar"><div class="pv-search"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><input id="q-jlines" class="field" data-jtq placeholder="Search ${W}s…" value="${esc(jt.q)}" aria-label="Search lines"></div>
     <div class="fchips">${[['all','All'],['Over budget','Over budget'],['Watch','Watch'],['On budget','On budget'],['Not started','Not started']].map(([k,l])=>`<button class="chip ${jt.f===k?'on':''}" data-act="jt-f" data-v="${k}">${l}${k!=='all'?`<b>${cnt(k)}</b>`:''}</button>`).join('')}</div>
-    <button class="btn" data-act="import" data-type="jobbudget" data-job="${job.id}" style="margin-left:auto">Import ${W}s</button><button class="btn" data-act="add-jitem">+ Add ${W}</button></div>
+    ${canJob()?`<button class="btn" data-act="import" data-type="jobbudget" data-job="${job.id}" style="margin-left:auto">Import ${W}s</button><button class="btn" data-act="add-jitem">+ Add ${W}</button>`:''}</div>
   ${js.items.length?`<div class="panel scroll"><table class="lv jl"><thead><tr><th>${job.structure==='cost_codes'?'Code':'Item'}</th><th>Description</th><th>Installed</th><th>Complete</th><th class="r" title="What the line was bid at">Bid price</th><th class="r" title="Bid price with overhead and markup taken out — what the work has to be built for">Budget cost</th><th class="r">Actual</th><th class="r" title="Budget cost × % complete">Earned</th><th class="r" title="Earned − actual. Negative means the work done so far cost more than budgeted.">Cost variance</th><th class="r" title="Projected final cost. Under 10% complete, remaining work uses the budget rate; after that, the actual cost per unit so far.">Projected</th><th class="r" title="Budget − projected. Negative is over budget.">Over / under</th><th class="r" title="Budget unit cost, and actual unit cost below">Unit cost</th><th>Status</th></tr></thead>
     <tbody>${body||`<tr><td colspan="13"><div class="empty">No ${W}s match.</div></td></tr>`}</tbody>
     <tfoot><tr><td></td><td><b>Total${rows.length<js.rows.length?' (shown)':''}</b></td><td></td><td></td><td class="r num dim"><b>${money(rows.reduce((x,r)=>x+r.s.bud.price,0))}</b></td><td class="r num"><b>${money(T('BC'))}</b></td><td class="r num"><b>${money(T('AC'))}</b></td><td class="r num"><b>${money(T('EV'))}</b></td><td class="r num"><b>${signMoney(T('CV'))}</b></td><td class="r num"><b>${money(T('EAC'))}</b></td><td class="r num"><b>${signMoney(T('VAR'))}</b></td><td colspan="2"></td></tr></tfoot></table></div>
@@ -2036,7 +2015,7 @@ function costLog(job,js){
     &&(!q||matchesQuery([c.description,c.reference,c.type,c.created_by_name,items.get(c.item_id)?itemLabel(items.get(c.item_id)):''].join(' ').toLowerCase(),q)))
     .sort((a,b)=>String(b.date).localeCompare(String(a.date))||String(b.created_at).localeCompare(String(a.created_at)));
   const tot=list.filter(c=>c.type!=='Production').reduce((x,c)=>x+(+c.amount||0),0);
-  const canDel=c=>isAdmin()||c.created_by===S.session.user.id;
+  const canDel=c=>isAdmin()||(canJob()&&c.created_by===S.session.user.id);
   return `<div class="pv-bar"><div class="pv-search"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><input id="q-jlog" class="field" data-jtq placeholder="Search description, reference, line…" value="${esc(jt.q)}" aria-label="Search cost log"></div>
     <select class="field" data-jtf="type" style="width:auto"><option value="">All types</option>${ENTRY_TYPES.map(t=>`<option${jt.type===t?' selected':''}>${t}</option>`).join('')}</select>
     <label class="pv-sort"><span class="dim small">From</span><input type="date" class="field" id="jt-from" data-jtf="from" value="${esc(jt.from)}" style="width:auto"></label>
@@ -2141,7 +2120,7 @@ function jitemModal(){
   return mhead(itemLabel(it)||W,job.name)+`<div class="mbody">
     <div class="statline"><div><b>${s.pc==null?'—':pctFmt(s.pc)}</b>Complete${s.BQ>0?` · ${qtyFmt(s.QI)}/${qtyFmt(s.BQ)} ${esc(it.unit||'')}`:''}</div><div><b>${money(s.AC)}</b>Cost to date</div><div><b>${money(s.EAC)}</b><span title="${s.projBasis==='actual rate'?'Remaining work priced at the actual cost per unit so far':s.projBasis==='budget rate'?'Under 10% complete: remaining work is priced at the budget rate until there is enough history':s.projBasis==='complete'?'Line is complete':'No quantity or % complete yet: projected at budget (or cost to date if higher)'}">Projected cost · ${s.projBasis}</span></div>
       <div><b style="color:var(--${s.VAR<0?'bad':'good'})">${signMoney(s.VAR)}</b>${s.VAR<0?'Over':'Under'} budget</div>${s.ucBud!=null?`<div><b>${s.ucAct!=null?money2(s.ucAct):'—'}</b>Cost / ${esc(it.unit||'unit')} (budget ${money2(s.ucBud)})</div>`:''}${s.hours?`<div><b>${qtyFmt(s.hours)}</b>Labor hours${s.QI?` · ${qtyFmt(s.QI/s.hours)} ${esc(it.unit||'')}/hr`:''}</div>`:''}</div>
-    <fieldset><legend>Log a cost or quantity</legend><div class="fg">
+    ${!canJob()?'':`<fieldset><legend>Log a cost or quantity</legend><div class="fg">
       <label class="f">Date<input type="date" class="field" data-entf="date" value="${esc(e.date)}"></label>
       <label class="f">Type<select class="field" data-entf="type">${ENTRY_TYPES.map(t=>`<option${e.type===t?' selected':''}>${t}</option>`).join('')}</select></label>
       <label class="f s2">Description<input class="field" data-entf="description" value="${esc(e.description)}" placeholder="${e.type==='Labor'?'Crew / foreman':e.type==='Equipment'?'Machine':e.type==='Production'?'What was installed':'Vendor / invoice'}"></label>
@@ -2150,11 +2129,11 @@ function jitemModal(){
       <label class="f">Qty installed${it.unit?' ('+esc(it.unit)+')':''}<input type="number" step="any" class="field" id="ent-q" data-entf="qty" data-t="n" value="${esc(e.qty??'')}"></label>
       <label class="f s2">Reference<input class="field" data-entf="reference" value="${esc(e.reference)}" placeholder="Timesheet, invoice #…"></label>
       <div class="f" style="justify-content:flex-end"><button class="btn primary" data-act="add-entry"${M.saving?' disabled':''}>${M.saving?'Saving…':'Add entry'}</button></div></div>
-      <p class="hint">Amount is Hours × Rate if left blank. Log quantity installed as often as you can — it drives % complete and the projection.</p></fieldset>
+      <p class="hint">Amount is Hours × Rate if left blank. Log quantity installed as often as you can — it drives % complete and the projection.</p></fieldset>`}
     <fieldset><legend>Budget vs actual</legend>${rowsT?`<table><thead><tr><th>Type</th><th class="r">Budget</th><th class="r">Actual</th><th class="r">Remaining</th><th class="r">Used</th></tr></thead><tbody>${rowsT}</tbody></table>`:'<div class="dim small">No budget or costs yet.</div>'}</fieldset>
     <fieldset><legend>Entries (${es.length})</legend>${es.length?`<div class="list">${es.slice(0,100).map(c=>`<div class="li"><div><b style="font-weight:600">${c.type==='Production'?qtyFmt(c.qty)+' '+esc(it.unit||'')+' installed':money2(c.amount)}</b> ${pill(c.type,c.type==='Production'?'info':'')}<div class="dim small">${fmtDate(String(c.date).slice(0,10))}${c.description?' · '+esc(c.description):''}${c.hours?` · ${qtyFmt(c.hours)} hrs${c.rate?' @ '+money2(c.rate):''}`:''}${c.qty&&c.type!=='Production'?` · ${qtyFmt(c.qty)} ${esc(it.unit||'')}`:''}${c.reference?' · '+esc(c.reference):''}${c.created_by_name?' · '+esc(c.created_by_name):''}</div></div>${isAdmin()||c.created_by===S.session.user.id?`<button class="rm" data-act="del-cost" data-id="${c.id}" aria-label="Delete entry">×</button>`:''}</div>`).join('')}</div>`:'<div class="dim small">Nothing logged yet.</div>'}</fieldset>
     ${M.editing?budgetForm:''}
-  </div><div class="mfoot"><div>${M.editing&&canJob()?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again — deletes its entries too':'Delete '+W}</button>`:''}</div><div class="r">${M.editing?'<button class="btn" data-act="jitem-cancel">Cancel</button><button class="btn primary" data-act="save">Save budget</button>':`<button class="btn" data-act="jitem-edit">Edit budget</button><button class="btn primary" data-act="close">Done</button>`}</div></div>`;
+  </div><div class="mfoot"><div>${M.editing&&canJob()?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again — deletes its entries too':'Delete '+W}</button>`:''}</div><div class="r">${M.editing?'<button class="btn" data-act="jitem-cancel">Cancel</button><button class="btn primary" data-act="save">Save budget</button>':`${canJob()?'<button class="btn" data-act="jitem-edit">Edit budget</button>':''}<button class="btn primary" data-act="close">Done</button>`}</div></div>`;
 }
 function syncItemCosts(){if(!M||!M.price)return;const d=M.draft;CATS.forEach(k=>d[k]=toCost(M.price[k],d.overhead_pct,d.markup_pct))}
 function blankEntry(){return {date:todayStr(),type:'Labor',description:'',hours:null,rate:null,amount:null,qty:null,reference:''}}
@@ -4114,7 +4093,7 @@ const cbGet=(x,k)=>k.startsWith('data.')?cbD(x)[k.slice(5)]:x[k];
 function cbSet(x,k,v){if(k.startsWith('data.')){x.data={...cbD(x),[k.slice(5)]:v}}else x[k]=v}
 const cbUnit=x=>x.book==='labor'||x.book==='equipment'||x.book==='crew'?'HR':CB_TPL.has(x.book)?(cbD(x).unit||''):(x.unit||'');
 const cbName=x=>x?[x.code,x.description].filter(Boolean).join(' · '):'Removed item';
-const cbEditable=()=>isAdmin();
+const cbEditable=()=>can('codebook','edit');
 // ---- pricing
 function cbLabor(d){const b=num(d.base);if(b==null)return null;const bu=(num(d.burden)||0)/100,f=num(d.fringe)||0;return {st:b*(1+bu)+f,ot:b*(num(d.ot)||1.5)*(1+bu)+f}}
 function cbCrew(x){let labor=0,equip=0,men=0,missing=0;const lines=[];
@@ -4626,7 +4605,7 @@ function estApplyStale(list){list.forEach(s=>{if(s.crew){s.a.crew={...s.a.crew,.
 function actFromTpl(src){const a=clone(src);a.id=newId();a.qty=null;a.res=(a.res||[]).map(r=>({...r,id:newId()}));estApplyStale(estStale({act:a}));return a}
 
 /* ---------- loading / saving ---------- */
-const estCanEdit=()=>{if(S.est&&S.est.tpl)return cbEditable();const b=byId(S.bids,S.est?.bidId);return !!b&&canWork(b)};
+const estCanEdit=()=>{if(S.est&&S.est.tpl)return cbEditable();const b=byId(S.bids,S.est?.bidId);return !!b&&canWork(b)&&can('estimates','edit')};
 async function loadEstIndex(){if(!sb||!['admin','estimator','board'].includes(role()))return;
   const {data,error}=await sb.from('estimates').select('id,bid_id,version,total_cost,total_price,updated_at,updated_by_name');
   if(error){S.estMissing=/estimates|does not exist|schema cache/i.test(error.message||'');return}S.estMissing=false;S.estIndex=data||[];schedule()}
@@ -4935,7 +4914,7 @@ function estPropView(d,R,b,ro){const P=propData();const L=propLib();const dis=ro
   const ptx=(k,ph,rows=2)=>`<textarea class="field" id="pr-${k}" data-pr="${k}" rows="${rows}" placeholder="${esc(ph)}"${dis}>${esc(P[k]||'')}</textarea>`;
   const sentTo=(b.client_ids||[]).filter(id=>propOf(b,id).status==='Sent');
   return `<div class="pr-grid"><div class="pr-form">
-    <div class="panel pad"><div class="pr-actions"><button class="btn primary" data-act="pr-print">Print / save as PDF</button>${ro?'':`<button class="btn" data-act="pr-sent"${P.to.length?'':' disabled title="Pick who it goes to first"'}>Mark sent${P.to.length?` to ${P.to.length} GC${P.to.length===1?'':'s'}`:''}</button>`}${isAdmin()?'<button class="btn" data-act="pr-lib">Edit library</button>':''}</div>
+    <div class="panel pad"><div class="pr-actions"><button class="btn primary" data-act="pr-print">Print / save as PDF</button>${ro?'':`<button class="btn" data-act="pr-sent"${P.to.length?'':' disabled title="Pick who it goes to first"'}>Mark sent${P.to.length?` to ${P.to.length} GC${P.to.length===1?'':'s'}`:''}</button>`}${can('codebook','edit')?'<button class="btn" data-act="pr-lib">Edit library</button>':''}</div>
       ${sentTo.length?`<p class="hint">Sent to ${sentTo.map(id=>esc(clientName(id))+(propOf(b,id).sent_date?' ('+fmtShort(propOf(b,id).sent_date)+')':'')).join(', ')}.</p>`:''}</div>
     <div class="panel pad"><h3 class="pr-h">To</h3>${(b.client_ids||[]).length?`<div class="pr-chks">${b.client_ids.map(id=>`<label class="check small"><input type="checkbox" data-prto value="${id}"${P.to.includes(id)?' checked':''}${dis}> ${esc(clientName(id))}${(b.client_contacts||{})[id]?` <span class="dim">· ${esc(b.client_contacts[id])}</span>`:''}</label>`).join('')}</div>`:'<p class="dim small">Add GCs to the bid first.</p>'}
       <div class="fg pr-fg"><label class="f">Date${pin('date',{date:1})}</label><label class="f">Valid for (days)${pin('valid',{n:1})}</label></div></div>
@@ -5215,11 +5194,11 @@ async function estTplSave(){const x=M;const E=S.est,d=E.data;if(!String(x.name||
 
 /* ---------- Estimates page ---------- */
 // Estimates page tabs: the list, master templates, and (admins) the bid-building settings
-function estsTabs(on){return `<div class="subnav">${[['list','Estimates'],['tpl','Master templates'],['cb','Codebooks'],...(isAdmin()?[['scopes','Scopes & templates'],['set','Bid settings']]:[])].map(([k,l])=>`<button class="${on===k?'on':''}" data-act="ests-tab" data-v="${k}">${l}</button>`).join('')}</div>`}
+function estsTabs(on){return `<div class="subnav">${[...(can('estimates')?[['list','Estimates']]:[]),...(can('estimates')||can('codebook')?[['tpl','Master templates']]:[]),...(can('codebook')?[['cb','Codebooks']]:[]),...(can('codebook','edit')?[['scopes','Scopes & templates'],['set','Bid settings']]:[])].map(([k,l])=>`<button class="${on===k?'on':''}" data-act="ests-tab" data-v="${k}">${l}</button>`).join('')}</div>`}
 const estsTabFor=()=>({estimates:S.estsTab==='tpl'?'tpl':'list',settings:'set',cb:'cb',scopes:'scopes'})[S.view];
-function vEstimates(){const tab=S.estsTab||'list';const can=['admin','estimator'].includes(role());
+function vEstimates(){const tab=S.estsTab||'list';const canNew=can('bids','edit')&&can('estimates','edit');
   const tabs='';
-  const head=`<div class="head"><div><h1>Estimates</h1><p>${S.estIndex.length} estimate${S.estIndex.length===1?'':'s'} · ${cbList('estimate').length} master template${cbList('estimate').length===1?'':'s'}</p></div><div class="tools">${can?'<button class="btn primary" data-act="ests-new">+ New estimate</button>':''}</div></div>`;
+  const head=`<div class="head"><div><h1>Estimates</h1><p>${S.estIndex.length} estimate${S.estIndex.length===1?'':'s'} · ${cbList('estimate').length} master template${cbList('estimate').length===1?'':'s'}</p></div><div class="tools">${canNew?'<button class="btn primary" data-act="ests-new">+ New estimate</button>':''}</div></div>`;
   if(S.estMissing)return head+`<div class="notice"><b>One setup step:</b> run <b>update-14-estimates.sql</b> in Supabase, then refresh.</div>`;
   if(tab==='tpl'){const ts=['estimate','section'].flatMap(bk=>cbList(bk)).sort((a,b)=>a.book.localeCompare(b.book)||String(a.description).localeCompare(b.description));const admin=cbEditable();
     return head+tabs+`<div class="adders" style="margin:0 0 12px">${admin?'<button class="btn sm" data-act="ests-newtpl" data-v="estimate">+ Blank master template</button><button class="btn sm" data-act="ests-newtpl" data-v="section">+ Blank section template</button>':''}</div>
@@ -5235,7 +5214,7 @@ function vEstimates(){const tab=S.estsTab||'list';const can=['admin','estimator'
   <div class="panel scroll"><table><thead><tr><th>Project</th><th>GC / client</th><th>Due</th><th>Status</th><th>Lead</th><th class="r">Cost</th><th class="r">Bid total</th><th class="r">Margin</th><th>Updated</th></tr></thead><tbody>
   ${list.map(({x,b})=>`<tr class="click" data-act="ests-open" data-id="${b.id}"><td class="proj">${esc(b.name)}${b.location?`<div class="dim small">${esc(b.location)}</div>`:''}</td><td class="small">${clientsLine(b,2)}</td><td class="small">${dueCell(b)}</td><td>${pill(b.status,BID_CLS[b.status])}</td><td>${b.lead_estimator_id?avatar(b.lead_estimator_id):'<span class="dim">—</span>'}</td>
     <td class="r num">${money(x.total_cost)}</td><td class="r num"><b>${money(x.total_price)}</b></td><td class="r num">${num(x.total_price)?fmtN((x.total_price-x.total_cost)/x.total_price*100,1)+'%':'—'}</td><td class="small dim">${x.updated_at?fmtShort(String(x.updated_at).slice(0,10)):''}${x.updated_by_name?`<br>${esc(x.updated_by_name)}`:''}</td></tr>`).join('')
-    ||`<tr><td colspan="9"><div class="empty"><b>No estimates ${q||f!=='all'?'match':'yet'}</b>${can?'Click <b>+ New estimate</b> to start one.':''}</div></td></tr>`}</tbody></table></div>`}
+    ||`<tr><td colspan="9"><div class="empty"><b>No estimates ${q||f!=='all'?'match':'yet'}</b>${canNew?'Click <b>+ New estimate</b> to start one.':''}</div></td></tr>`}</tbody></table></div>`}
 function tplSettingsText(e){const m=e.markup||{};const s=e.settings||{};const bits=[];if(s.sched)bits.push(s.sched.name);
   bits.push(m.mode==='type'?'markup by cost type':`${fmtN(num(m.oh)||0,1)}% OH / ${fmtN(num(m.profit)||0,1)}% MU`);if(num(m.bond))bits.push(`${fmtN(m.bond,2)}% bond`);
   if((e.ind||[]).length)bits.push(`${e.ind.length} indirect${e.ind.length===1?'':'s'}`);if(m.spreadInd==='lump')bits.push('GC line');else if(m.spreadInd==='sub')bits.push('indirects on sub items');else if(m.spreadInd==='split')bits.push('indirects split self/sub');else if(m.spreadInd==='select'||m.spreadMu==='select')bits.push('picked items carry');else if(m.spreadMu==='manual')bits.push('unbalanced');return esc(bits.join(' · '))}
@@ -5340,7 +5319,7 @@ function estIndView(d,R,ro){const st=d.settings;const D=estDefaultsRaw();const s
     <div class="sec"><div class="sec-h"><h2>Indirects</h2><span>${money(R.ind)} · ${R.cost?fmtN(R.ind/R.cost*100,1)+'% of direct':''}</span></div><div class="panel pad">
       <div class="panel scroll ind-t"><table><thead><tr><th>Indirect cost</th><th>Basis</th><th>Rate</th><th class="r">Calc. qty</th><th>Qty override</th><th class="r">Total</th><th></th></tr></thead><tbody>${lines||'<tr><td colspan="7" class="dim small">No indirect costs yet.</td></tr>'}</tbody>
         <tfoot><tr><td colspan="5"><b>Total indirects</b></td><td class="r num"><b>${money(R.ind)}</b></td><td></td></tr></tfoot></table></div>
-      ${ro?'':`<div class="adders"><button class="btn sm primary" data-act="ind-add">+ Indirect cost</button><button class="btn sm" data-act="ind-defaults">Load company list</button>${isAdmin()?'<button class="btn sm ghost" data-act="mk-tocompany" data-v="ind" title="Use this list, schedule and crew count on every new estimate">Make these the company defaults</button>':''}</div>`}
+      ${ro?'':`<div class="adders"><button class="btn sm primary" data-act="ind-add">+ Indirect cost</button><button class="btn sm" data-act="ind-defaults">Load company list</button>${can('codebook','edit')?'<button class="btn sm ghost" data-act="mk-tocompany" data-v="ind" title="Use this list, schedule and crew count on every new estimate">Make these the company defaults</button>':''}</div>`}
       <div class="fg" style="margin-top:12px"><label class="f s2">How indirects get into the price<select class="field" data-ep="markup.spreadInd"${dis}>${IND_SPREAD.map(([k,l])=>`<option value="${k}"${(m.spreadInd||'cost')===k?' selected':''}>${l}</option>`).join('')}</select></label>
         ${m.spreadInd==='lump'?`<label class="f s2">Lump-sum line name${epIn('markup.gcName',m.gcName,{ph:'General conditions'})}</label>`:''}</div>
       ${m.spreadInd==='select'?estCarryList(d,R,ro):''}${R.split?estSplitView(R,ro):''}</div></div></div>`}
@@ -5369,7 +5348,7 @@ function estSumView(d,R,b,ro){const m=d.markup;const p='markup';const dis=ro?' d
   const manual=sm==='manual'?`<div class="panel scroll" style="margin-top:12px"><table class="mk-adj"><thead><tr><th>Item</th><th class="r">Calculated</th><th>Adjust ($)</th><th class="r">Price</th></tr></thead><tbody>
       ${d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>!o.it.alt).map(o=>`<tr><td>${esc(o.it.code)} ${esc(o.it.desc)}</td><td class="r num small">${money(o.x.total+o.x.ind+o.x.mk+o.x.bond)}</td><td>${(()=>{const pp=`${p}.adj.${o.it.id}`;m.adj=m.adj||{};return `<input class="field mk-n" id="${epId(pp)}" data-ep="${pp}" data-ept="n" inputmode="decimal" value="${esc(m.adj[o.it.id]??'')}" placeholder="0"${dis}>`})()}</td><td class="r num"><b>${money(o.x.price)}</b></td></tr>`).join('')}</tbody>
       <tfoot><tr><td><b>Out of balance</b></td><td></td><td class="r num ${Math.abs(R.adjSum)>=1?'bad-t':''}"><b>${R.adjSum>0?'+':''}${money(R.adjSum)}</b></td><td class="small dim">${Math.abs(R.adjSum)>=1?'Adjustments should add to $0 to keep the bid total':'Balanced'}</td></tr></tfoot></table></div>`:'';
-  return `<div class="grid2"><div class="sec"><div class="sec-h"><h2>Markup</h2>${ro?'':`<span class="adders" style="margin:0"><button class="btn sm" data-act="mk-defaults">Load company defaults</button>${isAdmin()?'<button class="btn sm ghost" data-act="mk-tocompany" data-v="markup" title="Use this markup and spread setup on every new estimate">Make these the company defaults</button>':''}</span>`}</div><div class="panel pad">
+  return `<div class="grid2"><div class="sec"><div class="sec-h"><h2>Markup</h2>${ro?'':`<span class="adders" style="margin:0"><button class="btn sm" data-act="mk-defaults">Load company defaults</button>${can('codebook','edit')?'<button class="btn sm ghost" data-act="mk-tocompany" data-v="markup" title="Use this markup and spread setup on every new estimate">Make these the company defaults</button>':''}</span>`}</div><div class="panel pad">
     <div class="seg mk-mode" style="margin-bottom:12px"><button class="${m.mode!=='type'?'on':''}" data-act="mk-mode" data-v="simple"${dis}>Simple — on bid cost</button><button class="${m.mode==='type'?'on':''}" data-act="mk-mode" data-v="type"${dis}>By cost type</button></div>
     ${m.mode==='type'?typeT:`<div class="fg est-mk"><label class="f">Overhead %${epIn(p+'.oh',m.oh,{n:1,ph:'0'})}</label><label class="f">Markup / profit %${epIn(p+'.profit',m.profit,{n:1,ph:'0'})}</label></div><p class="hint" style="margin-top:4px">Applied to every bid item’s cost${R.ind?' and the indirects':''}.</p>`}
     <label class="check small" style="margin-top:10px"><input type="checkbox" data-ep="${p}.compound" data-ept="b"${m.compound!==false?' checked':''}${dis}> Markup is figured on cost + overhead (unchecked: both on cost)</label>
@@ -5836,7 +5815,7 @@ function rbDerived(x,k){return rbOn(x)&&(x.book==='labor'?['data.burden','data.f
    Accounting tab: WIP overview · billing (pay apps) · job budgets ·
    cost import · lists & codes. File-based so it works with any software.
    ===================================================================== */
-const canAcct=()=>['admin','pm','accounting'].includes(role());
+const canAcct=()=>can('acct');const acctEdit=()=>can('acct','edit');
 const isBook=()=>role()==='accounting';
 S.acct=S.acct||{tab:'overview',jobId:null,payId:null,draft:null};
 const ACCT_TABS=[['overview','Overview (WIP)'],['billing','Billing'],['budgets','Job budgets'],['costs','Import costs'],['lists','Lists & codes']];
@@ -5927,7 +5906,7 @@ function budgetRows(job){const F=acctFmt('budget');const T=acctSet().typeCodes;c
     if(F.layout==='long'){ACCT_TYPES.forEach(t=>{const a=r2a(it[map[t]]);if(a)rows.push({...base,cost_type:t,type_code:T[t]||t,amount:a})})}else rows.push({...base,amount:r2a(b.cost)})});return rows}
 
 /* ---------- the page ---------- */
-function vAcct(){if(!canAcct())return '<div class="empty">The Accounting tab is for admins, project managers and the bookkeeper.</div>';const A=S.acct;
+function vAcct(){if(!canAcct())return '<div class="empty">You don\'t have access to Accounting. An admin can change that on Team → People & access.</div>';const A=S.acct;
   if(!S.tableErr?.pay_apps&&S.pay_apps===undefined)S.pay_apps=[];
   const missing=S.tableErr&&S.tableErr.pay_apps;
   const body={overview:acctOverview,billing:acctBilling,budgets:acctBudgets,costs:acctCosts,lists:acctLists}[A.tab]||acctOverview;
@@ -5939,7 +5918,7 @@ function acctOverview(){const W=acctJobs().map(jobWip);const tot=k=>W.reduce((s,
   const over=tot(w=>Math.max(0,w.over)),under=tot(w=>Math.max(0,-w.over));
   return `<div class="statline acct-stats"><div><b>${money(tot(w=>w.C.contract))}</b>Contract value</div><div><b>${money(tot(w=>w.B.billed))}</b>Billed to date</div><div><b>${money(tot(w=>w.earned))}</b>Earned (by cost)</div>
     <div><b class="${under>0?'cb-down':''}">${money(under)}</b>Under billed</div><div><b class="${over>0?'cb-up':''}">${money(over)}</b>Over billed</div><div><b>${money(tot(w=>w.B.ret))}</b>Retainage held</div></div>
-  <div class="sec"><div class="sec-h"><h2>Work in progress</h2><span class="adders" style="margin:0"><button class="btn sm" data-act="acct-fmt" data-v="wip">Columns…</button><button class="btn sm primary" data-act="acct-wipx">Export WIP schedule</button></span></div>
+  <div class="sec"><div class="sec-h"><h2>Work in progress</h2><span class="adders" style="margin:0">${acctEdit()?'<button class="btn sm" data-act="acct-fmt" data-v="wip">Columns…</button>':''}<button class="btn sm primary" data-act="acct-wipx">Export WIP schedule</button></span></div>
   <div class="panel scroll"><table class="acct-t"><thead><tr><th>Job</th><th>Customer</th><th class="r">Contract</th><th class="r">Cost to date</th><th class="r">Projected cost</th><th class="r">% complete</th><th class="r">Earned</th><th class="r">Billed</th><th class="r">Over (under)</th><th class="r">Retainage</th><th class="r">Proj. GP</th></tr></thead><tbody>
   ${W.map(w=>`<tr class="click" data-act="acct-job" data-id="${w.job.id}"><td><b>${esc(w.job.job_number||'')}</b> ${esc(w.job.name)}<div class="small dim">${esc(w.job.status)}${w.B.drafts?` · ${w.B.drafts} draft pay app${w.B.drafts===1?'':'s'}`:''}</div></td><td class="small">${esc(acctClient(w.job.client_id))}</td>
     <td class="r num">${money(w.C.contract)}${w.C.co?`<div class="small dim">incl. ${money(w.C.co)} COs</div>`:''}</td><td class="r num">${money(w.js.AC)}</td><td class="r num">${money(w.eac)}</td><td class="r num">${fmtN(w.pct*100,1)}%</td><td class="r num">${money(w.earned)}</td><td class="r num">${money(w.B.billed)}</td>
@@ -5954,7 +5933,7 @@ function acctBilling(){const A=S.acct;const job=A.jobId&&jobOf(A.jobId);
   return `<div class="acct-bill"><div class="panel acct-joblist">${jobs.map(j=>{const B=jobBilled(j);const C=jobContract(j);return `<button class="${j.id===A.jobId?'on':''}" data-act="acct-pick" data-id="${j.id}"><b>${esc(j.job_number||'—')}</b><span>${esc(j.name)}</span><small>${money(B.billed)} of ${money(C.contract)} billed</small></button>`}).join('')||'<div class="empty small">No jobs yet.</div>'}</div>
     <div>${job?billJob(job):'<div class="empty">Pick a job to see and create its pay applications.</div>'}</div></div>`}
 function billJob(job){const apps=payApps(job.id);const C=jobContract(job);const items=jobItems(job.id);const cache={};const B=jobBilled(job);
-  return `<div class="sec-h"><h2>${esc(jobLabel(job))}</h2><span class="adders" style="margin:0"><button class="btn sm" data-act="acct-co">+ Change order</button><button class="btn sm primary" data-act="pay-new"${items.length?'':' disabled'}>+ New pay app</button></span></div>
+  return `<div class="sec-h"><h2>${esc(jobLabel(job))}</h2><span class="adders" style="margin:0">${acctEdit()?`<button class="btn sm" data-act="acct-co">+ Change order</button><button class="btn sm primary" data-act="pay-new"${items.length?'':' disabled'}>+ New pay app</button>`:''}</span></div>
   ${!items.length?`<div class="notice">This job has no budget lines yet, so there's no schedule of values to bill from. Load them from the estimate on <a href="#" data-act="acct-tab" data-v="budgets">Job budgets</a>.</div>`:''}
   <div class="statline"><div><b>${money(C.orig)}</b>Original contract</div><div><b>${money(C.co)}</b>Change orders</div><div><b>${money(C.orig+C.co)}</b>Contract to date</div><div><b>${money(B.billed)}</b>Billed (gross)</div><div><b>${money(B.ret)}</b>Retainage held</div><div><b>${money(B.paid)}</b>Paid</div></div>
   ${C.set!=null&&Math.abs(C.set-C.orig)>=1?`<p class="notice small">The job's contract amount (${money(C.set)}) doesn't match its schedule of values (${money(C.orig)}). Pay apps bill from the schedule of values.</p>`:''}
@@ -5967,7 +5946,7 @@ async function payNew(job){const apps=payApps(job.id);const last=apps[apps.lengt
   const row={id:newId(),job_id:job.id,number:(last?last.number:0)+1,period_to:ldOf(todayStr()),app_date:todayStr(),status:'Draft',retainage_pct:last?num(last.retainage_pct)??acctSet().ret:acctSet().ret,lines,meta:{retStored:last?last.meta?.retStored!==false:true}};
   try{await run(sb.from('pay_apps').insert(row));await loadTable('pay_apps');S.acct.payId=row.id;S.acct.draft=null;render()}catch(e){toast(errMsg(e))}}
 function payDraft(app){const A=S.acct;if(!A.draft||A.draft.id!==app.id)A.draft=clone(app);return A.draft}
-function payEditor(job,app0){const app=payDraft(app0);const R=payCalc(job,app);const ro=app.status!=='Draft';const dis=ro?' disabled':'';const cl=jobClient(job);
+function payEditor(job,app0){const app=payDraft(app0);const R=payCalc(job,app);const ro=app.status!=='Draft'||!acctEdit();const dis=ro?' disabled':'';const cl=jobClient(job);
   const inp=(p,v,o={})=>`<input class="field num${o.cls?' '+o.cls:''}" id="pa-${p.replace(/\./g,'_')}" data-pa="${p}" inputmode="decimal" autocomplete="off" value="${esc(v??'')}"${o.ph!=null?` placeholder="${esc(o.ph)}"`:''}${dis}>`;
   const row=r=>`<tr class="${r.co?'pay-co':''}"><td class="num">${esc(r.it.code)}${r.co?`<div class="small dim">CO ${esc(r.it.change_order)}</div>`:''}</td><td>${esc(r.it.description)}</td><td class="r num">${money2(r.sv)}${r.q>0?`<div class="small dim">${qtyFmt(r.q)} ${esc(r.it.unit)} @ ${money2(r.up)}</div>`:''}</td>
     <td class="r num">${money2(r.prev)}${r.q>0&&r.prevQ?`<div class="small dim">${qtyFmt(r.prevQ)} ${esc(r.it.unit)}</div>`:''}</td>
@@ -5978,7 +5957,7 @@ function payEditor(job,app0){const app=payDraft(app0);const R=payCalc(job,app);c
   const over=R.rows.filter(r=>r.pct>1.0001);const dirty=JSON.stringify(app)!==JSON.stringify(app0);
   return `<div class="pay-top"><button class="btn sm ghost" data-act="pay-back">← ${esc(jobLabel(job))}</button>
     <div class="adders" style="margin:0">${dirty?'<span class="small dim">Unsaved changes</span>':''}${ro?'':`<button class="btn sm" data-act="pay-fill">Fill from field quantities</button><button class="btn sm primary" data-act="pay-save"${dirty?'':' disabled'}>Save</button>`}
-      <button class="btn sm" data-act="pay-print">Print / PDF</button><button class="btn sm" data-act="pay-inv">Export invoice</button><button class="btn sm ghost" data-act="acct-fmt" data-v="invoice">Columns…</button></div></div>
+      <button class="btn sm" data-act="pay-print">Print / PDF</button><button class="btn sm" data-act="pay-inv">Export invoice</button>${acctEdit()?'<button class="btn sm ghost" data-act="acct-fmt" data-v="invoice">Columns…</button>':''}</div></div>
   <div class="grid2 pay-head"><div class="panel pad"><h2 style="margin:0 0 8px">Pay application #${app.number}</h2>
     <div class="fg"><label class="f">Period to<input class="field" type="date" data-pad="period_to" value="${esc(app.period_to)}"${dis}></label><label class="f">Application date<input class="field" type="date" data-pad="app_date" value="${esc(app.app_date)}"${dis}></label>
       <label class="f">Retainage %${inp('retainage_pct',app.retainage_pct)}</label><label class="f">Invoice #<input class="field" id="pa-meta_inv" data-pa="meta.inv" data-pat="t" value="${esc(app.meta?.inv||'')}"${dis}></label></div>
@@ -5986,7 +5965,7 @@ function payEditor(job,app0){const app=payDraft(app0);const R=payCalc(job,app);c
     <p class="small dim" style="margin:8px 0 0">To: ${esc(cl?.company||'—')}${cl?.acct_id?` (acct ${esc(cl.acct_id)})`:''} · Job ${esc(job.job_number||'—')}</p></div>
   <div class="panel pad pay-sum est-sum">${paySummaryHtml(R,app)}
     <div class="pay-status"><span class="pill pay-${app.status.toLowerCase()}">${app.status}</span>
-      ${app.status==='Draft'?`<button class="btn sm primary" data-act="pay-status" data-v="Submitted"${over.length||dirty?' disabled':''}>Mark submitted</button><button class="btn sm ghost danger-t" data-act="pay-del">Delete draft</button>`
+      ${!acctEdit()?'':app.status==='Draft'?`<button class="btn sm primary" data-act="pay-status" data-v="Submitted"${over.length||dirty?' disabled':''}>Mark submitted</button><button class="btn sm ghost danger-t" data-act="pay-del">Delete draft</button>`
       :app.status==='Submitted'?`<button class="btn sm primary" data-act="pay-status" data-v="Approved">Mark approved</button><button class="btn sm ghost" data-act="pay-status" data-v="Draft">Back to draft</button>`
       :app.status==='Approved'?`<button class="btn sm primary" data-act="pay-paid">Record payment</button><button class="btn sm ghost" data-act="pay-status" data-v="Submitted">Back to submitted</button>`
       :`<span class="small">Paid ${money2(num(app.meta?.paidAmt)??R.due)} on ${fmtShort(app.meta?.paidDate)}${app.meta?.paidRef?' · '+esc(app.meta.paidRef):''}</span><button class="btn sm ghost" data-act="pay-status" data-v="Approved">Undo payment</button>`}</div>
@@ -6036,13 +6015,13 @@ async function coSave(){const d=M.draft;const job=jobOf(d.job_id);const price=nu
 
 /* ----- job budgets ----- */
 function acctBudgets(){const jobs=acctJobs();const codes=acctSet().codes;const known=new Set(codes.map(c=>codeKey(c.code)));const F=acctFmt('budget');
-  return `<div class="sec"><div class="sec-h"><h2>Job budgets</h2><span class="adders" style="margin:0"><span class="small dim">Export format: ${esc(F.name||'Custom')} · ${F.file==='csv'?'CSV':'Excel'}</span><button class="btn sm" data-act="acct-fmt" data-v="budget">Columns…</button></span></div>
+  return `<div class="sec"><div class="sec-h"><h2>Job budgets</h2><span class="adders" style="margin:0"><span class="small dim">Export format: ${esc(F.name||'Custom')} · ${F.file==='csv'?'CSV':'Excel'}</span>${acctEdit()?'<button class="btn sm" data-act="acct-fmt" data-v="budget">Columns…</button>':''}</span></div>
   <div class="panel scroll"><table class="acct-t"><thead><tr><th>Job</th><th class="r">Lines</th><th class="r">Budget cost</th><th class="r">Contract value</th><th>Source</th><th></th></tr></thead><tbody>
   ${jobs.map(j=>{const L=jobItems(j.id);const cost=L.reduce((s,i)=>s+itemBudget(i).cost,0);const C=jobContract(j);const est=j.bid_id&&(S.estIndex||[]).some(e=>e.bid_id===j.bid_id);const fromEst=L.some(i=>i.notes==='From the estimate');
     const unk=codes.length?L.filter(i=>i.code&&!known.has(codeKey(i.code))&&!i.change_order).length:0;
     return `<tr><td><b>${esc(j.job_number||'—')}</b> ${esc(j.name)}${!j.job_number?'<div class="small warn-t">No job number. Your accounting software will need one (set it on the Jobs tab).</div>':''}${unk?`<div class="small warn-t">${unk} line${unk===1?'':'s'} use codes that aren't on your cost code list</div>`:''}</td><td class="r num">${L.length}</td><td class="r num">${money(cost)}</td><td class="r num">${money(C.lines)}</td>
       <td class="small">${fromEst?'Estimate':L.length?'Entered / imported':'<span class="dim">Empty</span>'}</td>
-      <td class="r nowrap">${est&&!isBook()?`<button class="btn sm${L.length?' ghost':' primary'}" data-act="acct-loadest" data-id="${j.id}">${L.length?'Reload from estimate':'Load from estimate'}</button>`:''}<button class="btn sm" data-act="acct-budx" data-id="${j.id}"${L.length?'':' disabled'}>Export</button></td></tr>`}).join('')||'<tr><td colspan="6"><div class="empty">No jobs yet.</div></td></tr>'}</tbody></table></div>
+      <td class="r nowrap">${est&&can('jobs','edit')?`<button class="btn sm${L.length?' ghost':' primary'}" data-act="acct-loadest" data-id="${j.id}">${L.length?'Reload from estimate':'Load from estimate'}</button>`:''}<button class="btn sm" data-act="acct-budx" data-id="${j.id}"${L.length?'':' disabled'}>Export</button></td></tr>`}).join('')||'<tr><td colspan="6"><div class="empty">No jobs yet.</div></td></tr>'}</tbody></table></div>
   <p class="hint">“Load from estimate” turns each bid item into a budget line with its labor, equipment, materials (incl. tax), subcontract and other cost (trucking and its share of indirects), and the contract value from the bid. Awarded bids that become jobs do this automatically. Export the budget and import it into your accounting software's job setup.</p></div>`}
 
 /* ----- cost import (one file, every job) ----- */
@@ -6050,7 +6029,7 @@ const ACI_COLS=[['job','Job number',['job','jobnumber','jobno','job#','jobid','p
   ['type','Cost type',['costtype','type','category','costcategory','class']],['date','Date',['date','transactiondate','postdate','postingdate','invoicedate','workdate','txndate']],['amount','Amount',['amount','cost','total','extended','net','debit','amt','actualcost']],
   ['hours','Hours',['hours','hrs','unitshours']],['qty','Quantity',['quantity','qty','units','unitsinstalled']],['vendor','Vendor / employee',['vendor','vendorname','employee','name','payee','source']],['reference','Reference',['reference','ref','invoice','invoiceno','document','docno','check','checkno','num']],['description','Description',['description','desc','memo','notes','detail']]];
 function aciKey(s){let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return 'acc-'+(h>>>0).toString(36)+'-'+s.length.toString(36)}
-function acctCosts(){const I=S.acct.imp;
+function acctCosts(){const I=S.acct.imp;if(!acctEdit())return '<div class="empty">Importing costs needs Edit access to Accounting.</div>';
   if(!I)return `<div class="sec"><div class="sec-h"><h2>Import actual costs</h2><span>One file from your accounting software, covering any number of jobs</span></div><div class="panel pad">
     <p style="margin-top:0">Run a <b>job cost detail</b> report in your accounting software (most programs have one) and save it as Excel or CSV. It needs a job number, a cost code, a date and an amount on each row. Cost type, hours, quantity, vendor and reference help when they're there.</p>
     <label class="btn primary">Choose file…<input type="file" accept=".xlsx,.xls,.csv" data-acimp hidden></label>
@@ -6106,17 +6085,17 @@ async function aciRun(){const I=S.acct.imp;const P=aciPlan();if(!P.ok.length)ret
 function acctLists(){const A=acctSet();const L=S.acct.list||'customers';
   const tabs=`<div class="seg" style="margin-bottom:12px">${[['customers','Customers'],['vendors','Vendors & subs'],['codes','Cost codes'],['types','Cost types']].map(([k,l])=>`<button class="${L===k?'on':''}" data-act="acct-list" data-v="${k}">${l}</button>`).join('')}</div>`;
   if(L==='customers'||L==='vendors'){const tbl=L==='customers'?'clients':'vendors';const list=S[tbl].slice().sort((a,b)=>String(a.company).localeCompare(b.company));const missing=list.filter(x=>!x.acct_id).length;
-    return tabs+`<div class="sec"><div class="sec-h"><h2>${L==='customers'?'Customers (clients & GCs)':'Vendors & subs'}</h2><span class="adders" style="margin:0"><label class="btn sm">Import IDs…<input type="file" accept=".xlsx,.xls,.csv" data-acids="${tbl}" hidden></label><button class="btn sm" data-act="acct-listx" data-v="${tbl}">Export list</button></span></div>
+    return tabs+`<div class="sec"><div class="sec-h"><h2>${L==='customers'?'Customers (clients & GCs)':'Vendors & subs'}</h2><span class="adders" style="margin:0">${acctEdit()?`<label class="btn sm">Import IDs…<input type="file" accept=".xlsx,.xls,.csv" data-acids="${tbl}" hidden></label>`:''}<button class="btn sm" data-act="acct-listx" data-v="${tbl}">Export list</button></span></div>
     <p class="small dim" style="margin-top:0">The <b>account ID</b> is what your accounting software calls this ${L==='customers'?'customer':'vendor'} (customer number, vendor ID or exact display name). It goes on exported invoices so they land on the right account. ${missing?`<b>${missing}</b> don't have one yet.`:''}</p>
-    <div class="panel scroll"><table class="acct-t"><thead><tr><th>${L==='customers'?'Customer':'Vendor'}</th><th>Account ID</th>${L==='customers'?'<th class="r">Jobs</th>':'<th>Trade</th>'}</tr></thead><tbody>${list.map(x=>`<tr><td>${esc(x.company)}</td><td><input class="field acid" id="acid-${x.id}" data-acid="${tbl}:${x.id}" value="${esc(x.acct_id||'')}" placeholder="—"></td>${L==='customers'?`<td class="r num">${S.jobs.filter(j=>j.client_id===x.id).length||''}</td>`:`<td class="small">${esc(x.trade||'')}</td>`}</tr>`).join('')||'<tr><td colspan="3"><div class="empty small">None yet.</div></td></tr>'}</tbody></table></div>
+    <div class="panel scroll"><table class="acct-t"><thead><tr><th>${L==='customers'?'Customer':'Vendor'}</th><th>Account ID</th>${L==='customers'?'<th class="r">Jobs</th>':'<th>Trade</th>'}</tr></thead><tbody>${list.map(x=>`<tr><td>${esc(x.company)}</td><td><input class="field acid" id="acid-${x.id}" data-acid="${tbl}:${x.id}" value="${esc(x.acct_id||'')}" placeholder="—"${acctEdit()?'':' disabled'}></td>${L==='customers'?`<td class="r num">${S.jobs.filter(j=>j.client_id===x.id).length||''}</td>`:`<td class="small">${esc(x.trade||'')}</td>`}</tr>`).join('')||'<tr><td colspan="3"><div class="empty small">None yet.</div></td></tr>'}</tbody></table></div>
     <p class="hint">“Import IDs” reads a customer or vendor list exported from your accounting software and fills in the IDs by matching names. “Export list” gives your bookkeeper a file to set up any that are missing there.</p></div>`}
   if(L==='codes'){const D=S.acct.codes||(S.acct.codes=clone(A.codes));const dirty=JSON.stringify(D)!==JSON.stringify(A.codes);
-    return tabs+`<div class="sec"><div class="sec-h"><h2>Cost codes</h2><span class="adders" style="margin:0"><label class="btn sm">Import…<input type="file" accept=".xlsx,.xls,.csv" data-accodes hidden></label><button class="btn sm" data-act="acct-codesx"${D.length?'':' disabled'}>Export</button><button class="btn sm primary" data-act="acct-codesave"${dirty?'':' disabled'}>Save</button></span></div>
+    return tabs+`<div class="sec"><div class="sec-h"><h2>Cost codes</h2><span class="adders" style="margin:0">${acctEdit()?'<label class="btn sm">Import…<input type="file" accept=".xlsx,.xls,.csv" data-accodes hidden></label>':''}<button class="btn sm" data-act="acct-codesx"${D.length?'':' disabled'}>Export</button>${acctEdit()?`<button class="btn sm primary" data-act="acct-codesave"${dirty?'':' disabled'}>Save</button>`:''}</span></div>
     <p class="small dim" style="margin-top:0">Your company's standard cost code list, the same one your accounting software uses. Job budgets flag lines whose codes aren't on it.</p>
     <div class="panel scroll"><table class="acct-t"><thead><tr><th>Code</th><th>Description</th><th>Default type</th><th></th></tr></thead><tbody>${D.map((c,i)=>`<tr><td><input class="field" id="acc-${i}-code" data-acc="${i}.code" value="${esc(c.code||'')}"></td><td><input class="field" id="acc-${i}-desc" data-acc="${i}.desc" value="${esc(c.desc||'')}"></td><td><select class="field" data-acc="${i}.type"><option value="">—</option>${ACCT_TYPES.map(t=>`<option${c.type===t?' selected':''}>${t}</option>`).join('')}</select></td><td><button class="rm" data-act="acct-coderm" data-i="${i}" aria-label="Remove">×</button></td></tr>`).join('')||'<tr><td colspan="4"><div class="empty small">No cost codes yet. Import your list or add them.</div></td></tr>'}</tbody></table></div>
     <div class="adders"><button class="btn sm" data-act="acct-codeadd">+ Cost code</button></div></div>`}
   const T=S.acct.types||(S.acct.types=clone(A.typeCodes));const dirty=JSON.stringify(T)!==JSON.stringify(A.typeCodes);
-  return tabs+`<div class="sec"><div class="sec-h"><h2>Cost types</h2><span class="adders" style="margin:0"><button class="btn sm primary" data-act="acct-typesave"${dirty?'':' disabled'}>Save</button></span></div><div class="panel pad">
+  return tabs+`<div class="sec"><div class="sec-h"><h2>Cost types</h2><span class="adders" style="margin:0">${acctEdit()?`<button class="btn sm primary" data-act="acct-typesave"${dirty?'':' disabled'}>Save</button>`:''}</span></div><div class="panel pad">
     <p class="small dim" style="margin-top:0">The letter or code your accounting software uses for each cost type. Used on “one row per cost type” budget exports, and to read the cost type column on cost imports.</p>
     <table class="rs-t" style="max-width:420px">${ACCT_TYPES.map(t=>`<tr><td>${t}</td><td><input class="field" id="act-${t}" data-actc="${t}" value="${esc(T[t]||'')}"></td></tr>`).join('')}</table>
     <div class="fg" style="margin-top:12px"><label class="f">Default retainage % on new pay apps<input class="field num" id="act-ret" data-actret inputmode="decimal" value="${esc(S.acct.ret??A.ret)}"></label></div></div></div>`}
@@ -6194,3 +6173,124 @@ document.addEventListener('change',e=>{const t=e.target;const A=S.acct;
   if(t.dataset.accodes!=null&&t.files[0]){acctCodesRead(t.files[0]).catch(err=>toast(errMsg(err)));t.value='';return}
   if(t.dataset.acc!=null&&t.tagName==='SELECT'){const [i,k]=t.dataset.acc.split('.');A.codes[+i][k]=t.value;render();return}
   if(M&&M.kind==='acctfmt'&&t.dataset.fmt){const k=t.dataset.fmt;if(k==='preset'){if(t.value){M.fmt=fmtFromPreset(M.type,t.value)}}else if(k==='add'){if(t.value)M.fmt.cols.push({k:t.value,h:ACCT_FIELDS[M.type].find(f=>f[0]===t.value)[1]})}else M.fmt[k]=t.value;renderModal()}});
+
+/* =====================================================================
+   Access: role defaults + per-person overrides (database enforces the same
+   rules — see supabase/update-18-team-access.sql, keep ROLE_ACCESS in step)
+   ===================================================================== */
+const AREAS=[['dash','Dashboard','Bid pipeline dashboard and board results'],['bids','Bids & pipeline','Bids, quotes, scopes, files and the estimator log'],['estimates','Estimates','Estimate builder, quotes folder and proposals'],
+  ['codebook','Codebooks & bid settings','Codebooks, master templates, scope list, bid settings and the rate sheet'],['jobs','Jobs','Job budgets, cost logs and production'],['acct','Accounting','WIP, billing, budgets out and costs in'],
+  ['contacts','Contacts','Clients, GCs, vendors and subs'],['calc','Calculators','Takeoff and field calculators']];
+const ROLE_ACCESS={admin:{dash:'edit',bids:'edit',estimates:'edit',codebook:'edit',jobs:'edit',acct:'edit',contacts:'edit',calc:'edit',bids_scope:'all'},
+  executive:{dash:'view',bids:'view',estimates:'view',codebook:'view',jobs:'view',acct:'view',contacts:'view',calc:'view',bids_scope:'all'},
+  board:{dash:'view',bids:'view',estimates:'view',bids_scope:'all'},
+  estimator:{dash:'view',bids:'edit',estimates:'edit',codebook:'view',contacts:'view',calc:'edit',bids_scope:'mine'},
+  pm:{jobs:'edit',acct:'edit',calc:'edit',bids_scope:'all'},
+  accounting:{acct:'edit',bids_scope:'all'},pending:{bids_scope:'mine'}};
+const ROLE_ORDER=['admin','executive','estimator','pm','accounting','board','pending'];
+const ROLE_ABOUT={admin:'Runs the app: everything, plus logins, roles and company settings.',executive:'Owners and leadership: sees everything, changes nothing.',estimator:'Prices work: their assigned bids and estimates, with the codebooks to build them.',
+  pm:'Runs jobs: budgets, cost logs, production and billing.',accounting:'Bookkeeper: WIP, billing, cost imports and the lists accounting needs.',board:'Board members: the board dashboard and pipeline, read-only.',pending:'Signed up but not given access yet.'};
+const LVL_LABEL={none:'No access',view:'View',edit:'Edit'};
+function rolePerm(r,a){const o=ROLE_ACCESS[r]||ROLE_ACCESS.pending;return o[a]||(a==='bids_scope'?'all':'none')}
+function permOf(p,a){if(!p)return rolePerm('pending',a);if(p.role==='admin'||p.role==='pending')return rolePerm(p.role,a);const o=p.perms&&p.perms[a];return o||rolePerm(p.role,a)}
+const perm=a=>permOf(S.profile,a);
+const can=(a,l)=>{const v=perm(a);return l==='edit'?v==='edit':v==='view'||v==='edit'};
+const bidsAll=()=>perm('bids_scope')==='all';
+const customCount=p=>p&&p.role!=='admin'&&p.perms?Object.entries(p.perms).filter(([a,v])=>v&&v!==rolePerm(p.role,a)).length:0;
+const lvlPill=v=>v==='edit'?pill('Edit','good'):v==='view'?pill('View'):'<span class="dim">—</span>';
+function accessChips(p){return AREAS.filter(([a])=>permOf(p,a)!=='none').map(([a,l])=>`<span class="pill acc-${permOf(p,a)}" title="${esc(LVL_LABEL[permOf(p,a)])}">${esc(l)}${permOf(p,a)==='view'?' 👁':''}</span>`).join(' ')||'<span class="dim small">Nothing yet</span>'}
+const personName=p=>p.full_name||String(p.email||'').split('@')[0];
+const pAv=p=>`<span class="av" style="background:${avColor(p.id)}" title="${esc(personName(p))}">${esc(initials(personName(p)))}</span>`;
+
+/* ----- top bar: tabs come from what each person can open ----- */
+function navGroups(){const g=[];
+  if(can('dash'))g.push(['dashboard',!bidsAll()?'My dashboard':role()==='board'?'Board dashboard':'Dashboard',['dashboard']]);
+  if(can('bids'))g.push(['pipeline',bidsAll()?'Pipeline':'My bids',['pipeline']]);
+  const est=[...(can('estimates')?['estimates','estimate']:[]),...(can('codebook')?['cb']:[]),...(can('codebook','edit')?['settings','scopes']:[])];
+  if(est.length)g.push([est[0],'Estimates',est.includes('cb')&&!est.includes('estimates')?[...est]:est]);
+  if(can('jobs'))g.push(['jobs','Jobs',['jobs','job']]);
+  if(can('acct'))g.push(['acct','Accounting',['acct']]);
+  if(can('contacts'))g.push(['clients','Contacts',['clients','vendors']]);
+  if(can('calc'))g.push(['calc','Calculators',['calc']]);
+  if(isAdmin())g.push(['team','Team',['team','estimators','teampm','teamoffice','access']]);
+  return g}
+
+/* ----- Team: People & access ----- */
+function teamHead(title,sub,tools){return `<div class="head"><div><h1>${title}</h1><p>${sub}</p></div><div class="tools">${tools||''}<button class="btn" data-act="reload-team">Refresh</button></div></div>`}
+function vTeam(){const me=S.session.user.id;const f=S.teamRole||'';const all=S.profiles.slice().sort((a,b)=>ROLE_ORDER.indexOf(a.role)-ROLE_ORDER.indexOf(b.role)||personName(a).localeCompare(personName(b)));
+  const list=all.filter(p=>!f||p.role===f);const waiting=all.filter(p=>p.role==='pending').length;
+  return teamHead('People & access',`${S.profiles.length} login${S.profiles.length===1?'':'s'} · everyone who uses the app, whatever their job`)+`
+  ${waiting?`<div class="notice"><b>${waiting} ${waiting===1?'person is':'people are'} waiting for access.</b> Pick a role for them below. They can't see anything until you do.</div>`:''}
+  <div class="seg team-f">${[['','Everyone'],...ROLE_ORDER.map(r=>[r,ROLES.find(x=>x[0]===r)?.[1]||r])].filter(([k])=>!k||all.some(p=>p.role===k)).map(([k,l])=>`<button class="${f===k?'on':''}" data-act="team-f" data-v="${k}">${esc(l)}${k?` <small>${all.filter(p=>p.role===k).length}</small>`:''}</button>`).join('')}</div>
+  <div class="panel scroll"><table class="team-t"><thead><tr><th>Person</th><th>Role</th><th>Can open</th><th>Estimator record</th><th></th></tr></thead><tbody>
+  ${list.map(p=>{const linked=S.estimators.find(e=>e.user_id===p.id);const self=p.id===me;const cc=customCount(p);const needsEst=permOf(p,'bids_scope')==='mine'&&permOf(p,'bids')!=='none';
+    return `<tr><td><span class="who">${pAv(p)}<span><b>${esc(personName(p))}</b>${self?' '+pill('You','hot'):''}<div class="small dim">${[p.title,p.email,p.phone].filter(Boolean).map(esc).join(' · ')}</div></span></span></td>
+    <td><select class="field" data-prole="${p.id}" ${self?'disabled title="You can’t change your own role"':''}>${ROLES.map(([k,l])=>`<option value="${k}"${p.role===k?' selected':''}>${l}</option>`).join('')}</select></td>
+    <td class="team-acc">${accessChips(p)}${cc?`<div class="small warn-t">Custom: ${cc} change${cc===1?'':'s'} from the ${esc(ROLE_LABEL[p.role]||p.role)} default</div>`:''}</td>
+    <td>${needsEst||linked||p.role==='estimator'?`<div class="nowrap" style="display:flex;gap:6px;align-items:center"><select class="field" data-plink="${p.id}"><option value="">Not linked</option>${S.estimators.filter(e=>!e.user_id||e.user_id===p.id).map(e=>`<option value="${e.id}"${linked?.id===e.id?' selected':''}>${esc(e.name)}</option>`).join('')}</select>${linked?'':`<button class="btn sm" data-act="make-est" data-id="${p.id}">Create</button>`}</div>${needsEst&&!linked?'<div class="small warn-t">Needed to see their assigned bids</div>':''}`:'<span class="dim">—</span>'}</td>
+    <td class="r"><button class="btn sm" data-act="team-edit" data-id="${p.id}">Edit access…</button></td></tr>`}).join('')||'<tr><td colspan="5"><div class="empty">Nobody here.</div></td></tr>'}</tbody></table></div>
+  <details class="panel pad team-how"><summary><b>How to add someone</b> <span class="small dim">(any position: estimator, PM, bookkeeper, executive, board)</span></summary>
+    <ol class="small"><li>In Supabase go to <b>Authentication → Users → Add user</b>, then <b>Send invitation</b> (or create them with a password).</li><li>They show up here as <b>No access yet</b>.</li><li>Pick their role. That gives them the standard access for that job. Use <b>Edit access…</b> to fine-tune any area.</li><li>Estimators also need an <b>estimator record</b> so bids can be assigned to them. If their email matches one, it links automatically.</li></ol></details>`}
+
+/* ----- Team: Estimators (directory records used on bids) ----- */
+// (vEstimators stays — the records bids are assigned to)
+
+/* ----- Team: Project managers ----- */
+function vTeamPm(){const pms=S.profiles.filter(p=>p.role==='pm'||(p.role!=='admin'&&permOf(p,'jobs')==='edit')||S.jobs.some(j=>j.pm_user_id===p.id));
+  const rows=pms.map(p=>{const js=S.jobs.filter(j=>j.pm_user_id===p.id&&!j.archived_at);return {p,js}});const un=S.jobs.filter(j=>!j.pm_user_id&&!j.archived_at);
+  const stat=js=>{let contract=0,billed=0,cost=0,profit=0,over=0,active=0;js.forEach(j=>{const s=jobStats(j);const C=typeof jobContract==='function'?jobContract(j):{contract:s.contract};const B=typeof jobBilled==='function'?jobBilled(j):{billed:0};
+      contract+=C.contract;billed+=B.billed;cost+=s.AC;profit+=C.contract-s.EAC;over+=s.over;if(j.status==='Active')active++});return {contract,billed,cost,profit,over,active,n:js.length}};
+  const tr=(lab,sub,js,id)=>{const s=stat(js);return `<tr><td>${lab}${sub?`<div class="small dim">${sub}</div>`:''}</td><td class="r num">${s.n}</td><td class="r num">${s.active}</td><td class="r num">${money(s.contract)}</td><td class="r num">${money(s.billed)}</td><td class="r num">${money(s.cost)}</td><td class="r num ${s.profit<0?'bad-t':''}">${money(s.profit)}</td><td class="r num">${s.over?`<span class="bad-t">${s.over}</span>`:'—'}</td><td class="small">${js.slice(0,4).map(j=>`<button class="linkish" data-act="team-job" data-id="${j.id}">${esc(j.job_number||j.name)}</button>`).join(', ')}${js.length>4?'…':''}</td></tr>`};
+  return teamHead('Project managers',`${pms.length} PM${pms.length===1?'':'s'} · ${S.jobs.filter(j=>!j.archived_at).length} jobs`)+`
+  <div class="panel scroll"><table class="team-t"><thead><tr><th>PM</th><th class="r">Jobs</th><th class="r">Active</th><th class="r">Contract</th><th class="r">Billed</th><th class="r">Cost to date</th><th class="r">Projected profit</th><th class="r">Lines over budget</th><th>Jobs</th></tr></thead><tbody>
+  ${rows.map(r=>tr(`<span class="who">${pAv(r.p)}<b>${esc(personName(r.p))}</b></span>`,[r.p.title,r.p.phone].filter(Boolean).map(esc).join(' · '),r.js)).join('')}${un.length?tr('<b>No PM assigned</b>','',un):''}
+  ${!rows.length&&!un.length?'<tr><td colspan="9"><div class="empty">No project managers yet. Give someone the Project manager role on People & access.</div></td></tr>':''}</tbody></table></div>
+  <p class="hint">A job's PM is set on the job (Jobs tab → edit job). Projected profit = contract − projected cost. Billed comes from submitted pay apps.</p>`}
+
+/* ----- Team: Accounting & executives ----- */
+function vTeamOffice(){const roles=['executive','accounting','board','admin'];const ps=S.profiles.filter(p=>roles.includes(p.role)).sort((a,b)=>roles.indexOf(a.role)-roles.indexOf(b.role)||personName(a).localeCompare(personName(b)));
+  return teamHead('Accounting, executives & board',`${ps.length} ${ps.length===1?'person':'people'}`)+`
+  ${roles.map(r=>{const L=ps.filter(p=>p.role===r);return `<div class="sec"><div class="sec-h"><h2>${esc(ROLES.find(x=>x[0]===r)[1])}</h2><span>${esc(ROLE_ABOUT[r])}</span></div>
+    <div class="panel scroll"><table class="team-t"><thead><tr><th>Person</th><th>Title</th><th>Contact</th><th>Can open</th><th></th></tr></thead><tbody>${L.map(p=>`<tr><td><span class="who">${pAv(p)}<b>${esc(personName(p))}</b></span></td><td>${esc(p.title||'')}</td><td class="small">${esc(p.email)}${p.phone?'<br>'+esc(p.phone):''}</td><td class="team-acc">${accessChips(p)}</td><td class="r"><button class="btn sm" data-act="team-edit" data-id="${p.id}">Edit access…</button></td></tr>`).join('')||`<tr><td colspan="5" class="dim small">Nobody with this role yet.</td></tr>`}</tbody></table></div></div>`}).join('')}`}
+
+/* ----- Team: access chart ----- */
+function vAccess(){const rs=ROLE_ORDER.filter(r=>r!=='pending');const custom=S.profiles.filter(p=>customCount(p));
+  return teamHead('Access chart','What each role can open by default. Anyone can be adjusted on People & access.')+`
+  <div class="panel scroll"><table class="team-t acc-t"><thead><tr><th>Area</th>${rs.map(r=>`<th class="c">${esc(ROLE_LABEL[r])}</th>`).join('')}</tr></thead><tbody>
+  ${AREAS.map(([a,l,d])=>`<tr><td><b>${esc(l)}</b><div class="small dim">${esc(d)}</div></td>${rs.map(r=>`<td class="c">${lvlPill(rolePerm(r,a))}</td>`).join('')}</tr>`).join('')}
+  <tr><td><b>Which bids</b><div class="small dim">For bids, estimates and the dashboard</div></td>${rs.map(r=>`<td class="c small">${rolePerm(r,'bids')==='none'?'<span class="dim">—</span>':rolePerm(r,'bids_scope')==='all'?'All bids':'Assigned only'}</td>`).join('')}</tr>
+  <tr><td><b>Team</b><div class="small dim">Logins, roles, access and company settings</div></td>${rs.map(r=>`<td class="c">${r==='admin'?pill('Edit','good'):'<span class="dim">—</span>'}</td>`).join('')}</tr></tbody></table></div>
+  <div class="grid2" style="margin-top:14px"><div class="panel pad"><b>What the roles are for</b><div class="list" style="margin-top:6px">${rs.map(r=>`<div class="li small"><span><b>${esc(ROLE_LABEL[r])}</b> — ${esc(ROLE_ABOUT[r])}</span></div>`).join('')}</div></div>
+  <div class="panel pad"><b>People with custom access</b>${custom.length?`<div class="list" style="margin-top:6px">${custom.map(p=>`<div class="li small"><span><b>${esc(personName(p))}</b> (${esc(ROLE_LABEL[p.role])}): ${AREAS.filter(([a])=>p.perms&&p.perms[a]&&p.perms[a]!==rolePerm(p.role,a)).map(([a,l])=>`${esc(l)} → ${LVL_LABEL[p.perms[a]]}`).join(', ')}${p.perms&&p.perms.bids_scope&&p.perms.bids_scope!==rolePerm(p.role,'bids_scope')?`, ${p.perms.bids_scope==='all'?'all bids':'assigned bids only'}`:''}</span><button class="btn sm ghost" data-act="team-edit" data-id="${p.id}">Edit</button></div>`).join('')}</div>`:'<p class="small dim">Everyone has their role\'s standard access.</p>'}
+  <p class="hint">View lets someone see an area without changing anything. Edit lets them add, change and import there. The database enforces the same rules, so hiding a tab isn't the only protection.</p></div></div>`}
+
+/* ----- edit one person's access ----- */
+function accessModal(){const d=M.draft;const admin=d.role==='admin';const self=d.id===S.session.user.id;
+  const opt=(a,v,l,def)=>`<button class="${(d.perms[a]||'')===v?'on':''}" data-act="acc-set" data-a="${a}" data-v="${v}"${admin?' disabled':''}>${l}${def?`<small>${esc(def)}</small>`:''}</button>`;
+  return mhead(personName(d),d.email)+`<div class="mbody">
+  <fieldset><legend>Person</legend><div class="fg"><label class="f">Display name<input class="field" id="acc-name" data-accf="full_name" value="${esc(d.full_name||'')}"></label><label class="f">Title / position<input class="field" id="acc-title" data-accf="title" value="${esc(d.title||'')}" placeholder="e.g. Senior estimator"></label>
+    <label class="f">Phone<input class="field" id="acc-phone" data-accf="phone" value="${esc(d.phone||'')}"></label>
+    <label class="f">Role<select class="field" data-accrole${self?' disabled title="You can’t change your own role"':''}>${ROLES.map(([k,l])=>`<option value="${k}"${d.role===k?' selected':''}>${l}</option>`).join('')}</select></label></div>
+    <p class="small dim" style="margin:6px 0 0">${esc(ROLE_ABOUT[d.role]||'')}</p></fieldset>
+  <fieldset><legend>Access</legend>${admin?'<div class="notice small">Admins can open and change everything. Pick another role to limit access.</div>':d.role==='pending'?'<div class="notice small">Pick a role first. People waiting for access can\'t open anything.</div>':''}
+    <table class="acc-ed"><tbody>${AREAS.map(([a,l,desc])=>{const def=rolePerm(d.role,a);const eff=permOf(d,a);return `<tr class="${d.perms[a]?'custom':''}"><td><b>${esc(l)}</b><div class="small dim">${esc(desc)}</div></td>
+      <td><div class="seg acc-seg">${opt(a,'','Role default',LVL_LABEL[def])}${opt(a,'none','No access')}${opt(a,'view','View')}${opt(a,'edit','Edit')}</div></td><td class="c">${lvlPill(eff)}</td></tr>`}).join('')}
+      <tr class="${d.perms.bids_scope?'custom':''}"><td><b>Which bids</b><div class="small dim">Assigned only = bids where they're the lead or a supporting estimator</div></td>
+      <td><div class="seg acc-seg">${opt('bids_scope','','Role default',rolePerm(d.role,'bids_scope')==='all'?'All':'Assigned')}${opt('bids_scope','mine','Assigned only')}${opt('bids_scope','all','All bids')}</div></td><td class="c small">${permOf(d,'bids_scope')==='all'?'All bids':'Assigned'}</td></tr></tbody></table>
+    ${Object.values(d.perms).some(Boolean)&&!admin?'<button class="btn sm ghost" data-act="acc-reset">Reset to role defaults</button>':''}</fieldset></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="acc-save">Save</button></div></div>`}
+async function accessSave(){const d=M.draft;const perms={};Object.entries(d.perms).forEach(([a,v])=>{if(v)perms[a]=v});
+  const row={full_name:String(d.full_name||'').trim(),title:String(d.title||'').trim(),phone:String(d.phone||'').trim(),perms};if(d.id!==S.session.user.id)row.role=d.role;
+  try{await run(sb.from('profiles').update(row).eq('id',d.id));await loadProfiles();await loadPms();closeModal();toast('Saved');render()}
+  catch(e){toast(/title|phone|perms|executive|check constraint/i.test(errMsg(e))?'Run supabase/update-18-team-access.sql in Supabase first.':errMsg(e))}}
+FOCUS_ATTRS.push('data-accf');
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
+  if(a==='team-f'){S.teamRole=t.dataset.v;render();return}
+  if(a==='team-edit'){const p=byId(S.profiles,t.dataset.id);if(!p)return;M={kind:'access',draft:{...clone(p),perms:{...(p.perms||{})}}};showModal();return}
+  if(a==='team-job'){S.view='job';S.jobId=t.dataset.id;render();return}
+  if(!M||M.kind!=='access')return;
+  if(a==='acc-set'){const k=t.dataset.a,v=t.dataset.v;if(v)M.draft.perms[k]=v;else delete M.draft.perms[k];renderModal()}
+  else if(a==='acc-reset'){M.draft.perms={};renderModal()}
+  else if(a==='acc-save')accessSave()});
+document.addEventListener('input',e=>{const t=e.target;if(M&&M.kind==='access'&&t.dataset.accf)M.draft[t.dataset.accf]=t.value});
+document.addEventListener('change',e=>{const t=e.target;if(M&&M.kind==='access'&&t.dataset.accrole!=null){M.draft.role=t.value;Object.keys(M.draft.perms).forEach(k=>{if(M.draft.perms[k]===rolePerm(t.value,k))delete M.draft.perms[k]});renderModal()}});

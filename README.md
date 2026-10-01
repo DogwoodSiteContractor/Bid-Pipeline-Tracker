@@ -4,13 +4,17 @@ A web app for tracking site work bids, with logins for your whole team. It is ho
 
 ## Who can do what
 
-| Role | What they can do |
+| Role | What they can do by default |
 |---|---|
-| **Admin** (precon manager) | Everything. Create, edit and delete bids. Assign lead and supporting estimators. Manage the estimator, client, vendor and scope lists, scope templates and team roles, and customize the board view. |
-| **Estimator** | Sees their own dashboard and only the bids assigned to them, as lead or support. On those bids they can change anything except who's assigned, sign off scopes with their initials, manage vendor quotes, and upload and download files. |
-| **Project manager** | The Jobs side only: job budgets, logging costs and installed quantities, cost imports, and job reports. Can create jobs. Can't see bids. |
-| **Board member** | Read-only board dashboard (win rate, awards, pipeline trends) and pipeline. |
-| **No access yet** | New logins start here until an admin sets their role. |
+| **Admin** | Everything, plus logins, roles, access and company settings. |
+| **Executive / owner** | Sees everything (dashboard, all bids, estimates, codebooks, jobs, accounting, contacts) and changes nothing. |
+| **Estimator** | Their own dashboard and only the bids assigned to them (lead or support), with estimates on those bids. Codebooks and contacts are read-only. On their bids they can change anything except who's assigned, sign off scopes, manage vendor quotes, and upload and download files. |
+| **Project manager** | Jobs (budgets, cost logs, production) and Accounting (billing). Can't see bids. |
+| **Accounting / bookkeeper** | The Accounting tab only: WIP, billing, cost imports and account IDs. |
+| **Board member** | Read-only board dashboard, pipeline and estimates. |
+| **No access yet** | New logins start here until an admin picks their role. |
+
+Anyone's access can be adjusted area by area on **Team → People & access → Edit access…**. For example, you can give an estimator view-only Jobs, or show them all bids instead of only their assigned ones. **Team → Access chart** shows every role's defaults and who has custom access. Needs `supabase/update-18-team-access.sql`.
 
 These rules are enforced by the database (row-level security), not just hidden in the page. An estimator can't reach other people's bids even with technical know-how.
 
@@ -40,6 +44,7 @@ supabase/update-14-estimates.sql   one-time update for estimates and activity / 
 supabase/update-15-quote-lines.sql   one-time update for line-item vendor quotes
 supabase/update-16-estimate-sections.sql   one-time update for master/section templates and starting estimates from the Estimates page
 supabase/update-17-accounting.sql          one-time update for the Accounting tab: bookkeeper role, pay apps, account IDs, change orders, cost import keys
+supabase/update-18-team-access.sql         one-time update for Team: executive role, title/phone, per-person access (run after update-17)
 ```
 
 > **Already set up before these updates?** Run each `supabase/update-*.sql` file you haven't run yet, once, in number order, in the SQL Editor. New installs only need `schema.sql`.
@@ -92,7 +97,7 @@ Open the address, sign in, and you're in as Admin.
 2. In Supabase, go to **Authentication → Users → Add user**, then either:
    - **Send invitation**: they get an email and set their own password.
    - **Create new user**: you set a password and give it to them.
-3. In the app, open **Team** (Logins & roles) and set each person's role.
+3. In the app, open **Team → People & access** and set each person's role (and fine-tune their access if needed).
    - Estimators whose email matches an estimator record are linked automatically.
    - Otherwise, pick their record in the "Linked estimator" column, or click **Create record**.
 
@@ -138,7 +143,7 @@ Every bid has an **Estimator log** under Scope takeoff. Estimators on the bid (a
 
 ## Accounting (admins, PMs and the bookkeeper)
 Connects the app to any accounting software with Excel or CSV files: budgets go out, actual costs come in, and pay apps become invoices. Needs `supabase/update-17-accounting.sql`.
-- **Bookkeeper login:** give someone the **Bookkeeper / accounting** role on Team. They see only the Accounting tab. They can read jobs, import costs, bill, and keep account IDs, but can't change bids, estimates or budgets.
+- **Bookkeeper login:** give someone the **Accounting / bookkeeper** role on Team. They see only the Accounting tab. They can read jobs, import costs, bill, and keep account IDs, but can't change bids, estimates or budgets.
 - **Overview (WIP):** for every job, shows contract (including change orders), cost to date, projected cost, % complete (cost ÷ projected cost), earned revenue, billed to date, **over or under billing**, retainage held and projected gross profit. **Export WIP schedule** gives the report bonding companies and accountants ask for.
 - **Billing:** progress billing in the standard application-for-payment layout.
   - Each pay app bills from the job's schedule of values: this period's quantity (or % for lump sums), stored materials, and retainage % (it can hold retainage on stored materials, or release it all on the final app).
@@ -181,7 +186,7 @@ Connects the app to any accounting software with Excel or CSV files: budgets go 
 **Dashboard · Pipeline · Estimates · Jobs · Accounting · Contacts · Calculators · Team.** Related pages share one tab, with sub-tabs inside it:
 - **Contacts:** Clients & GCs, and Vendors & subs.
 - **Estimates:** Estimates, Master templates, Codebooks, Scopes & templates (admins) and Bid settings (admins).
-- **Team:** Logins & roles, and Estimators.
+- **Team:** People & access, Estimators, Project managers, Accounting & executives, and the Access chart.
 
 When the bar is too narrow, the last tabs fold into a **More** menu.
 
