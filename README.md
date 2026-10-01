@@ -39,6 +39,7 @@ supabase/update-13-codebooks.sql   one-time update for estimating codebooks
 supabase/update-14-estimates.sql   one-time update for estimates and activity / bid item templates
 supabase/update-15-quote-lines.sql   one-time update for line-item vendor quotes
 supabase/update-16-estimate-sections.sql   one-time update for master/section templates and starting estimates from the Estimates page
+supabase/update-17-accounting.sql          one-time update for the Accounting tab: bookkeeper role, pay apps, account IDs, change orders, cost import keys
 ```
 
 > **Already set up before these updates?** Run each `supabase/update-*.sql` file you haven't run yet, once, in number order, in the SQL Editor. New installs only need `schema.sql`.
@@ -135,6 +136,33 @@ When the same project comes back under a new name or with new details, open the 
 ## Estimator log
 Every bid has an **Estimator log** under Scope takeoff. Estimators on the bid (and admins) add dated notes — site visits, takeoff notes, assumptions, clarifications, questions/RFIs, risks, pricing, calls — for the whole project or one scope, with photos or files attached. Notes save right away. You can edit, pin or delete your own notes; admins can manage any. Each scope row shows how many notes it has. When an awarded bid becomes a job, the notes show up read-only on the job's **Estimator notes** tab for the PM. Needs `supabase/update-11-estimator-log.sql`.
 
+## Accounting (admins, PMs and the bookkeeper)
+Connects the app to any accounting software with Excel or CSV files: budgets go out, actual costs come in, and pay apps become invoices. Needs `supabase/update-17-accounting.sql`.
+- **Bookkeeper login:** give someone the **Bookkeeper / accounting** role on Team. They see only the Accounting tab. They can read jobs, import costs, bill, and keep account IDs, but can't change bids, estimates or budgets.
+- **Overview (WIP):** for every job, shows contract (including change orders), cost to date, projected cost, % complete (cost ÷ projected cost), earned revenue, billed to date, **over or under billing**, retainage held and projected gross profit. **Export WIP schedule** gives the report bonding companies and accountants ask for.
+- **Billing:** progress billing in the standard application-for-payment layout.
+  - Each pay app bills from the job's schedule of values: this period's quantity (or % for lump sums), stored materials, and retainage % (it can hold retainage on stored materials, or release it all on the final app).
+  - It shows contract to date, completed & stored, retainage, less previous certificates and the current payment due.
+  - **Fill from field quantities** pulls the quantities logged on the job during the period.
+  - Status goes Draft → Submitted → Approved → Paid; drafts are the only ones you can edit.
+  - **Print / PDF** gives the application with its continuation sheet.
+  - **Export invoice** gives one row per billed line, plus a retainage line, in the column layout you set, so the total matches the payment due.
+  - **+ Change order** adds a CO line to the budget and the schedule of values.
+- **Job budgets:** **Load from estimate** turns each bid item into a budget line:
+  - labor, equipment, materials (with tax), subcontract, and other (trucking plus its share of indirects);
+  - contract value = the bid price, so billing ties to the bid to the penny.
+
+  Awarded bids that become jobs do this automatically. **Export** the budget one row per line, or one row per cost type for programs that want cost-type codes.
+- **Import costs:** one job cost detail report from your accounting software covers every job.
+  - Pick the columns (the app guesses them and remembers your choices) and map each cost-type value (L, E, M…) to a type.
+  - Rows are matched to jobs by job number and to lines by cost code. Codes that aren't on the job can be posted to the job without a line.
+  - Every row gets an import key, so re-importing the same or an overlapping report never doubles costs.
+- **Lists & codes:**
+  - **Account IDs** for customers and vendors (typed, or imported from your accounting software's list by matching names), plus list exports.
+  - The company **cost code** list (import, export; budgets flag codes not on it).
+  - **Cost type codes**, and the default retainage %.
+- **Export columns:** budget, invoice and WIP exports each have a **Columns…** editor. Rename headings to exactly what your accounting software's import expects, reorder or drop columns, and choose Excel or CSV. The QuickBooks Online preset is a starting point, so check it against the sample import file in your QuickBooks.
+
 ## Codebooks (estimating)
 **Codebooks** holds the price book estimates are built from. Admins edit; estimators can view and export. Needs `supabase/update-13-codebooks.sql`.
 - **Materials:** code, description, category, cost type (material, subcontract, trucking, other), unit, unit cost, vendor, waste %, taxable and price date. Prices older than 6 months show in amber.
@@ -150,12 +178,31 @@ Every bid has an **Estimator log** under Scope takeoff. Estimators on the bid (a
 - **Export to Excel:** writes all four codebooks in the same layout the import reads. You can export, edit prices in Excel, and import the file back.
 
 ## Top bar
-**Dashboard · Pipeline · Estimates · Jobs · Contacts · Calculators · Team.** Related pages share one tab, with sub-tabs inside it:
+**Dashboard · Pipeline · Estimates · Jobs · Accounting · Contacts · Calculators · Team.** Related pages share one tab, with sub-tabs inside it:
 - **Contacts:** Clients & GCs, and Vendors & subs.
 - **Estimates:** Estimates, Master templates, Codebooks, Scopes & templates (admins) and Bid settings (admins).
 - **Team:** Logins & roles, and Estimators.
 
 When the bar is too narrow, the last tabs fold into a **More** menu.
+
+## Rate builder (labor & equipment)
+Labor and equipment in the codebook can be **built from their costs** instead of typed. New items start with the builder on. Untick it to type a rate yourself.
+- **Labor:** enter the base wage, pick a workers comp class and an optional union fringe package, and add craft fringes and add-ons (truck, phone, tools, PPE) in $/hr.
+  - Paid time off, payroll taxes (with yearly wage caps), workers comp and company benefits are annual costs. They are divided by hours actually worked (paid hours minus time off).
+  - The result is written into burden % and fringe $/hr, so loaded rates, crews and the overtime premium work as before.
+- **Owned equipment:**
+  - Ownership: depreciation (price − salvage − tires) ÷ life hours, plus interest, insurance, property tax and storage as a % a year of the average value.
+  - Operating: lifetime repairs %, tires or undercarriage ÷ their life, fuel burn × fuel price, lube % of fuel, and wear parts.
+- **Rented equipment:** monthly, weekly or daily rate ÷ the hours in that period, plus damage waiver and fees %, delivery and pickup spread over the rental length, and fuel and repairs. It shows which rate is cheapest per hour.
+- **Rate sheet** (Estimates → Bid settings) holds:
+  - fuel prices, paid hours and time off;
+  - payroll taxes and insurance with wage caps;
+  - workers comp classes ($ per $100 of payroll);
+  - company benefits ($/yr), union fringe packages, and equipment % defaults.
+
+  Saving it reprices every built rate and logs the change in price history. The starting numbers are placeholders, so check them against your payroll provider and insurance policy.
+- **Fuel on an estimate:** Markup & totals → Fuel price. Set diesel or gas $/gal for that bid. Every machine's fuel and lube (in crews or on their own) is repriced, and it shows the gallons and the $ change. Leave it blank to use the price each rate was built with.
+- Mass update skips the calculated fields on built items. To change those, change the item's costs or the rate sheet.
 
 ## Bid settings (Estimates → Bid settings, admins)
 The defaults every new estimate starts with. Each estimate keeps its own copy, so changing a setting never moves a bid that's already priced.

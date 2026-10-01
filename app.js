@@ -53,8 +53,8 @@ const live=b=>!b.archived_at;
 const unitsText=b=>num(b.units)?`${Number(b.units).toLocaleString('en-US')} unit${+b.units===1?'':'s'}`:'';
 const BID_TYPES=['Hard bid','Negotiated','Budget / pricing','Design-assist'];
 const LOST_REASONS=['','Price','Schedule','Relationship / incumbent','Project cancelled','Scope','Unknown'];
-const ROLES=[['admin','Admin (precon manager)'],['estimator','Estimator'],['pm','Project manager'],['board','Board member'],['pending','No access yet']];
-const ROLE_LABEL={admin:'Admin',estimator:'Estimator',pm:'Project manager',board:'Board',pending:'Pending'};
+const ROLES=[['admin','Admin (precon manager)'],['estimator','Estimator'],['pm','Project manager'],['accounting','Bookkeeper / accounting'],['board','Board member'],['pending','No access yet']];
+const ROLE_LABEL={admin:'Admin',estimator:'Estimator',pm:'Project manager',accounting:'Accounting',board:'Board',pending:'Pending'};
 const WIDGETS=[['kpis','Headline numbers'],['monthly','Bid and award volume by month'],['funnel','Pipeline by stage'],['clients','Top clients & GCs'],['estimators','Estimator performance'],['types','Project type mix'],['upcoming','Bids due in the next 30 days'],['lost','Why we lose']];
 const AV_COLORS=['#2C5E99','#2C7A4C','#8B5E34','#7A3E8E','#B24A2A','#2F7C83','#5A6B1E','#9C3D5C'];
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -98,7 +98,7 @@ const BRAND=CFG.brand||{};
 })();
 
 /* ---------- state ---------- */
-const TABLES=['bids','quotes','bid_files','bid_log','estimators','clients','vendors','settings','jobs','job_items','job_costs','codebook'];
+const TABLES=['bids','quotes','bid_files','bid_log','estimators','clients','vendors','settings','jobs','job_items','job_costs','codebook','pay_apps'];
 const S={loading:true,session:null,profile:null,profileFor:null,needPassword:/type=(invite|recovery)/.test(INITIAL_HASH),authView:'login',authMsg:null,
   bids:[],quotes:[],bid_files:[],bid_log:[],tableErr:{},estimators:[],clients:[],vendors:[],profiles:[],settings:{},jobs:[],job_items:[],job_costs:[],codebook:[],pms:[],
   view:'dashboard',dash:'precon',filter:'active',q:{},estF:'',clientF:'',year:new Date().getFullYear()};
@@ -221,6 +221,7 @@ const myName=()=>S.profile?.full_name||myEst()?.name||S.session?.user?.email||''
 
 /* ---------- data ---------- */
 async function loadTable(t){
+  if(t==='pay_apps'&&!['admin','pm','accounting'].includes(role())){S.pay_apps=[];return}
   // page through big tables (Supabase returns at most 1,000 rows per request)
   const page=(from,ord)=>{let q=sb.from(t).select('*');if(ord)q=q.order('id');return q.range(from,from+999)};
   let r=await page(0,false);let data=r.data||[],error=r.error;
@@ -229,6 +230,7 @@ async function loadTable(t){
   if(S.tableErr)delete S.tableErr[t];S.lastLoaded=new Date();
   if(t==='settings')S.settings=Object.fromEntries((data||[]).map(r=>[r.key,r.value||{}]));
   else S[t]=t==='bids'?(data||[]).map(normBid):(data||[]);
+  if(t==='codebook'||t==='settings')rbRefreshAll();
   schedule();
 }
 async function loadPms(){if(!['admin','pm'].includes(role()))return;try{const {data,error}=await sb.rpc('pm_directory');if(!error){S.pms=data||[];schedule()}}catch(e){}}
@@ -246,6 +248,7 @@ async function afterLogin(){
   else S.profile=data;
   if(role()==='board')S.dash='board';
   if(role()==='pm')S.view='jobs';
+  if(role()==='accounting')S.view='acct';
   if(role()!=='pending'){
     await Promise.all(TABLES.map(loadTable));
     await loadProfiles();
@@ -278,7 +281,7 @@ function renderNow(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
-  const views={dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const views={acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
@@ -289,8 +292,9 @@ function renderNow(){
 }
 // top-bar tabs; related pages share a tab and get small sub-tabs inside it
 function navGroups(){
-  if(role()==='pm')return [['jobs','Jobs',['jobs','job']],['calc','Calculators',['calc']]];
-  if(isAdmin())return [['dashboard','Dashboard',['dashboard']],['pipeline','Pipeline',['pipeline']],['estimates','Estimates',['estimates','estimate','settings','cb','scopes']],['jobs','Jobs',['jobs','job']],
+  if(role()==='pm')return [['jobs','Jobs',['jobs','job']],['acct','Accounting',['acct']],['calc','Calculators',['calc']]];
+  if(role()==='accounting')return [['acct','Accounting',['acct']]];
+  if(isAdmin())return [['dashboard','Dashboard',['dashboard']],['pipeline','Pipeline',['pipeline']],['estimates','Estimates',['estimates','estimate','settings','cb','scopes']],['jobs','Jobs',['jobs','job']],['acct','Accounting',['acct']],
     ['clients','Contacts',['clients','vendors']],['calc','Calculators',['calc']],['team','Team',['team','estimators']]];
   if(role()==='estimator')return [['dashboard','My dashboard',['dashboard']],['pipeline','My bids',['pipeline']],['estimates','Estimates',['estimates','estimate','cb']],['clients','Contacts',['clients','vendors']],['calc','Calculators',['calc']]];
   return [['dashboard','Board dashboard',['dashboard']],['pipeline','Pipeline',['pipeline']],['estimates','Estimates',['estimates','estimate']]];
@@ -940,8 +944,8 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
-  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck'].includes(M.kind)?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
+  const html={acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck'].includes(M.kind)||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();
@@ -2207,6 +2211,7 @@ async function saveJobModal(){
     const row={};ITEM_COLS.forEach(k=>row[k]=d[k]);['quantity','pct_override'].forEach(k=>row[k]=num(row[k]));
     ['labor','equipment','materials','subcontract','other','overhead_pct','markup_pct'].forEach(k=>row[k]=num(row[k])||0);
     if(row.pct_override!=null)row.pct_override=Math.max(0,Math.min(100,row.pct_override));
+    {const o=byId(S.job_items,d.id);if(o&&o.bid_price!=null&&['labor','equipment','materials','subcontract','other','overhead_pct','markup_pct'].some(k=>Math.abs((num(o[k])||0)-(row[k]||0))>0.004))row.bid_price=null}
     if(M.isNew)await run(sb.from('job_items').insert(row));else{const {id,...rest}=row;await run(sb.from('job_items').update(rest).eq('id',id))}
     await loadTable('job_items');toast('Saved');
     if(M.isNew){closeModal();render()}else{M.editing=false;M.draft=clone(byId(S.job_items,d.id));renderModal();render()}
@@ -2233,7 +2238,8 @@ async function deleteJobModal(){
 async function createJobFromBid(b){
   const ex=S.jobs.find(j=>j.bid_id===b.id);if(ex){closeModal();S.view='job';S.jobId=ex.id;render();return}
   const row={id:newId(),name:b.name,bid_id:b.id,client_id:b.awarded_client_id||(b.client_ids||[])[0]||null,location:b.location||'',status:'Not Started',structure:'bid_items',contract_amount:b.status==='Awarded'?(wonValue(b)||null):null,notes:'',job_number:'',updated_by:S.session.user.id};
-  try{await run(sb.from('jobs').insert(row));await loadTable('jobs');closeModal();S.view='job';S.jobId=row.id;render();toast('Job created — import or add the budget next')}catch(e){toast(errMsg(e))}
+  try{await run(sb.from('jobs').insert(row));await loadTable('jobs');let n=0;try{if((S.estIndex||[]).some(e=>e.bid_id===b.id))n=await loadBudgetFromEstimate(jobOf(row.id),false)}catch(e){console.warn(e)}
+    closeModal();S.view='job';S.jobId=row.id;render();toast(n?`Job created with ${n} budget line${n===1?'':'s'} from the estimate`:'Job created — import or add the budget next')}catch(e){toast(errMsg(e))}
 }
 
 /* ---------- budget & cost imports ---------- */
@@ -4193,7 +4199,7 @@ function vCb(){
 /* ---------- item editor ---------- */
 function cbNew(book){const c=S.cb;const d={id:newId(),book,code:'',description:'',category:c.cat||'',unit:book==='material'?'':'HR',cost:null,data:{},vendor_id:book==='material'&&c.vendor&&c.vendor!=='none'?c.vendor:null,price_date:todayStr(),price_history:[],active:true,notes:''};
   if(book==='activity')d.data={act:estNewAct(),qty:1,unit:''};if(book==='biditem')d.data={item:estNewItem({items:[]},{code:''}),qty:1,unit:'LS'};
-  if(book==='material')d.data={type:'Material',tax:true};if(book==='labor')d.data={ot:1.5};if(book==='equipment')d.data={own:'Owned'};if(book==='crew')d.data={members:[]};return d}
+  if(book==='material')d.data={type:'Material',tax:true};if(book==='labor')d.data={ot:1.5,rb:{on:true,ben:true}};if(book==='equipment')d.data={own:'Owned',rb:{on:true,mode:'own',ft:'diesel'}};if(book==='crew')d.data={members:[]};return d}
 function cbOpen(id){const x=cbById(id);if(!x)return;const d=clone(x);d.data=cbD(d);
   if(CB_TPL.has(d.book)){if(d.book==='activity'){d.data.act=d.data.act||estNewAct();d.data.act.res=d.data.act.res||[]}else{d.data.item=d.data.item||estNewItem({items:[]},{code:''});d.data.item.acts=(d.data.item.acts||[]).map(a=>({...a,res:a.res||[]}))}estApplyStale(estStale(d.data));M={kind:'cbtpl',draft:d,orig:clone(x)};showModal();return}if(d.book==='crew')d.data.members=(d.data.members||[]).map(m=>({...m}));M={kind:'cbitem',draft:d,orig:clone(x)};showModal()}
 function cbFieldHtml(f,d,dis){const v=cbGet(d,f.k);const id='cbe-'+f.k.replace('.','-');const a=`id="${id}" data-cbe="${f.k}"${dis}`;
@@ -4223,7 +4229,7 @@ function cbCrewHtml(d,dis){const C=cbCrew(d);const mem=cbD(d).members||[];
     <div class="cb-calc" id="cb-crewtot"><div><span>Crew size</span><b>${fmtN(C.men,2)} ${C.men===1?'person':'people'}</b></div><div><span>Labor</span><b>${money2(C.labor)}/hr</b></div><div><span>Equipment</span><b>${money2(C.equip)}/hr</b></div><div><span>Crew cost</span><b>${money2(C.total)}/hr</b></div></div>
     <p class="hint">Crew cost updates automatically when a wage or equipment rate changes in the codebook.</p></fieldset>`}
 function cbHistHtml(x){const h=(Array.isArray(x.price_history)?x.price_history:[]).slice().reverse();if(!h.length)return '';const F=Object.fromEntries(CB_FIELDS[x.book].map(f=>[f.k,f]));
-  const src={edit:'Edited',mass:'Mass update',import:'Import',quote:'Quote'};
+  const src={edit:'Edited',mass:'Mass update',import:'Import',quote:'Quote',rates:'Rate sheet'};
   return `<fieldset><legend>Price history</legend><div class="list cb-hist">${h.map(e=>{const f=F[e.f]||{l:e.f,t:'money'};const ch=num(e.o)&&num(e.n)!=null?(e.n-e.o)/e.o*100:null;
     return `<div class="li small"><div><b>${esc(f.l)}</b> ${e.o==null?'set to':`${cbFmt(f,e.o)} →`} <b>${cbFmt(f,e.n)}</b>${ch!=null&&f.t!=='pct'?` <span class="${ch>0?'cb-up':'cb-down'}">${ch>0?'+':''}${fmtN(ch,1)}%</span>`:''}${e.note?`<div class="dim">${esc(e.note)}</div>`:''}</div><div class="r dim">${fmtShort(e.d)} · ${esc(src[e.src]||e.src||'')}${e.by?`<br>${esc(e.by)}`:''}</div></div>`}).join('')}</div></fieldset>`}
 function cbUsedIn(x){return x.book==='labor'||x.book==='equipment'?cbList('crew').filter(c=>(cbD(c).members||[]).some(m=>m.id===x.id)):[]}
@@ -4232,13 +4238,13 @@ function cbItemModal(){const d=M.draft;const [bk,Label,one]=cbBook(d.book);const
   const main=F.filter(f=>!['notes','data.tax','price_date'].includes(f.k));
   return mhead(M.isNew?`New ${one}`:d.description||Label,`${Label} codebook${M.isNew?'':d.code?' · '+d.code:''}`)+`<div class="mbody">
     ${!admin?'<div class="notice">View only — an admin changes codebook prices.</div>':''}
-    <fieldset><legend>${esc(Label.replace(/s$/,''))}</legend><div class="fg">${main.map(f=>cbFieldHtml(f,d,dis)).join('')}
+    <fieldset><legend>${esc(Label.replace(/s$/,''))}</legend><div class="fg">${main.map(f=>cbFieldHtml(f,d,rbDerived(d,f.k)?' disabled':dis)).join('')}
       ${bk==='material'?cbFieldHtml(F.find(f=>f.k==='data.tax'),d,dis):''}
       ${bk!=='crew'?cbFieldHtml({k:'price_date',l:bk==='material'?'Price date':'Rates updated',t:'date'},d,dis):''}
       ${cbFieldHtml(F.find(f=>f.k==='notes'),d,dis)}</div>
       <div id="cb-calcbox">${cbCalcHtml(d)}</div>
       <label class="check small" style="margin-top:6px"><input type="checkbox" data-cbe="active"${d.active!==false?' checked':''}${dis}> Active — inactive items stay on old estimates but aren’t offered for new ones</label></fieldset>
-    ${bk==='crew'?cbCrewHtml(d,dis):''}
+    ${bk==='labor'||bk==='equipment'?rbHtml(d,dis):''}${bk==='crew'?cbCrewHtml(d,dis):''}
     ${used.length?`<p class="hint">Used in ${used.length} crew${used.length===1?'':'s'}: ${used.slice(0,6).map(c=>esc(c.description)).join(', ')}${used.length>6?'…':''}</p>`:''}
     ${M.isNew?'':cbHistHtml(M.orig)}</div>
   <div class="mfoot"><div>${admin&&!M.isNew?`<button class="btn danger${M.cbArm?' arm':''}" data-act="cb-del">${M.cbArm?(used.length?`Delete — removes it from ${used.length} crew${used.length===1?'':'s'}`:'Click again to delete'):'Delete'}</button> <button class="btn" data-act="cb-dup">Duplicate</button>`:''}</div>
@@ -4249,6 +4255,7 @@ async function cbSaveItem(){const d=M.draft;const btn=$('#modal [data-act=cb-sav
     if(d.book==='crew')d.data.members=(d.data.members||[]).filter(m=>m.id&&num(m.qty)>0);
     if(d.book==='activity'){d.data.act.code=String(d.code||'').trim();d.data.act.desc=String(d.description||'').trim();d.data.act.unit=d.data.unit||d.data.act.unit||''}
     if(d.book==='biditem'){d.data.item.code='';d.data.item.desc=String(d.description||'').trim();d.data.item.unit=d.data.unit||d.data.item.unit||'LS';d.data.item.qty=num(d.data.qty)||1}
+    if(rbOn(d))rbApply(d,ratesRaw());
     const o=M.orig;if(o){let priced=false;CB_FIELDS[d.book].filter(f=>f.m).forEach(f=>{const a=num(cbGet(o,f.k)),b=num(cbGet(d,f.k));if(a!==b){cbHist(d,f.k,a,b,'edit');priced=true}});
       if(priced&&d.price_date===o.price_date)d.price_date=todayStr()}
     else CB_FIELDS[d.book].filter(f=>f.m).forEach(f=>{const b=num(cbGet(d,f.k));if(b!=null)cbHist(d,f.k,null,b,'edit')});
@@ -4275,7 +4282,7 @@ function cbMassNew(old,P){const v=num(P.val);if(v==null)return undefined;let n;
   const f=CB_FIELDS[P.book].find(x=>x.k===P.field);if(f.t==='money'){const step={cent:.01,dime:.1,quarter:.25,dollar:1}[P.round];if(step)n=Math.round(n/step)*step;n=Math.round(n*1e4)/1e4}else n=Math.round(n*1e4)/1e4;
   return Math.max(0,n)}
 function cbMassModal(){const P=M;const F=CB_FIELDS[P.book].filter(f=>f.m);const f=F.find(x=>x.k===P.field)||F[0];const items=P.ids.map(cbById).filter(Boolean);
-  const res=items.map(x=>{const o=num(cbGet(x,f.k));return {x,o,n:cbMassNew(o,P)}});const ch=res.filter(r=>r.n!==undefined&&r.n!==r.o);const skip=res.filter(r=>r.n===undefined&&num(P.val)!=null);
+  const res=items.map(x=>{const o=num(cbGet(x,f.k));return {x,o,n:rbDerived(x,f.k)?undefined:cbMassNew(o,P),built:rbDerived(x,f.k)}});const ch=res.filter(r=>r.n!==undefined&&r.n!==r.o);const skip=res.filter(r=>r.n===undefined&&!r.built&&num(P.val)!=null);const built=res.filter(r=>r.built);
   const before=ch.reduce((s,r)=>s+(r.o||0),0),after=ch.reduce((s,r)=>s+(r.n||0),0);
   const unit=f.t==='pct'?'points':'$';
   return mhead('Mass update prices',`${items.length} ${{material:'material',labor:'labor rate',equipment:'equipment',crew:'crew'}[P.book]}${items.length===1||P.book==='equipment'?'':'s'}`)+`<div class="mbody">
@@ -4286,14 +4293,14 @@ function cbMassModal(){const P=M;const F=CB_FIELDS[P.book].filter(f=>f.m);const 
       ${f.t==='money'?`<label class="f">Round to<select class="field" data-cbmass="round">${[['cent','Nearest cent'],['dime','Nearest $0.10'],['quarter','Nearest $0.25'],['dollar','Nearest $1'],['none','No rounding']].map(([k,l])=>`<option value="${k}"${P.round===k?' selected':''}>${l}</option>`).join('')}</select></label>`:''}
       <label class="f">${P.book==='material'?'New price date':'Rates updated'}<input class="field" type="date" data-cbmass="date" value="${esc(P.date)}"></label>
       <label class="f s2">Note for price history<input class="field" data-cbmass="note" value="${esc(P.note)}" placeholder="e.g. Martin Marietta 2027 price increase"></label></div></fieldset>
-    <div class="statline"><div><b>${ch.length}</b>Will change</div>${skip.length?`<div><b>${skip.length}</b>Skipped (no current ${esc(f.l.toLowerCase())})</div>`:''}${ch.length&&f.t==='money'?`<div><b>${money2(before)} → ${money2(after)}</b>Sum of ${esc(f.l.toLowerCase())}</div>`:''}</div>
+    <div class="statline"><div><b>${ch.length}</b>Will change</div>${skip.length?`<div><b>${skip.length}</b>Skipped (no current ${esc(f.l.toLowerCase())})</div>`:''}${built.length?`<div><b>${built.length}</b>Skipped — built by the rate builder (change its costs instead)</div>`:''}${ch.length&&f.t==='money'?`<div><b>${money2(before)} → ${money2(after)}</b>Sum of ${esc(f.l.toLowerCase())}</div>`:''}</div>
     <div class="panel scroll cb-prev"><table><thead><tr><th>Code</th><th>Description</th><th class="r">Now</th><th class="r">New</th><th class="r">Change</th></tr></thead><tbody>
     ${res.slice(0,200).map(r=>`<tr${r.n===undefined||r.n===r.o?' class="dim"':''}><td class="num">${esc(r.x.code)}</td><td>${esc(r.x.description)}</td><td class="r num">${cbFmt(f,r.o)||'—'}</td><td class="r num"><b>${r.n===undefined?'—':cbFmt(f,r.n)}</b></td><td class="r num small">${r.n!==undefined&&r.o?`<span class="${r.n>r.o?'cb-up':r.n<r.o?'cb-down':''}">${r.n>=r.o?'+':''}${f.t==='pct'?fmtN(r.n-r.o,2)+' pts':money2(r.n-r.o).replace('$-','−$')}</span>`:''}</td></tr>`).join('')}
     ${res.length>200?`<tr><td colspan="5" class="dim small">…and ${res.length-200} more</td></tr>`:''}</tbody></table></div>
     <p class="hint">Every change is kept in each item’s price history${P.book!=='material'?', and crews using these rates update automatically':''}.</p></div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="cb-mass-go"${ch.length&&!P.busy?'':' disabled'}>${P.busy?'Updating…':`Update ${ch.length} price${ch.length===1?'':'s'}`}</button></div></div>`}
 async function cbMassRun(){const P=M;const f=CB_FIELDS[P.book].find(x=>x.k===P.field);P.busy=true;renderModal();
-  try{const rows=[];P.ids.map(cbById).filter(Boolean).forEach(x=>{const o=num(cbGet(x,f.k));const n=cbMassNew(o,P);if(n===undefined||n===o)return;const y=clone(x);y.data=cbD(y);cbSet(y,f.k,n);cbHist(y,f.k,o,n,'mass',P.note.trim());if(P.date)y.price_date=P.date;rows.push(cbRow(y))});
+  try{const rows=[];P.ids.map(cbById).filter(Boolean).forEach(x=>{if(rbDerived(x,f.k))return;const o=num(cbGet(x,f.k));const n=cbMassNew(o,P);if(n===undefined||n===o)return;const y=clone(x);y.data=cbD(y);cbSet(y,f.k,n);if(rbOn(y))rbApply(y);cbHist(y,f.k,o,n,'mass',P.note.trim());if(P.date)y.price_date=P.date;rows.push(cbRow(y))});
     await cbUpsert(rows);await loadTable('codebook');toast(`Updated ${rows.length} price${rows.length===1?'':'s'}`);S.cb.sel.clear();closeModal();render()}
   catch(e){P.busy=false;toast(cbErr(e));renderModal()}}
 
@@ -4539,19 +4546,24 @@ const resOtp=r=>r.otp!=null?num(r.otp)||0:r.cb&&cbById(r.cb)?cbOtp(cbById(r.cb))
 
 /* ---------- math ---------- */
 function resFromCb(x){const k=resKindOf(x);const timed=k==='labor'||k==='equipment';
-  return {id:newId(),kind:k,cb:x.id,code:x.code||'',desc:x.description,unit:timed?'HR':x.unit||'',basis:timed?'hour':'unit',factor:1,waste:k==='material'?num(cbD(x).waste)||0:0,price:+(cbCost(x)||0).toFixed(4),tax:k==='material'&&cbD(x).tax!==false,...(k==='labor'?{otp:+cbOtp(x).toFixed(4)}:{})}}
-function crewSnap(x){const C=cbCrew(x);return {id:x.id,code:x.code||'',name:x.description,labor:+C.labor.toFixed(4),equip:+C.equip.toFixed(4),men:C.men,otp:+cbOtp(x).toFixed(4)}}
-function estCtx(d){const s=d.settings||{};if(s.sched){const c=schedCalc(s.sched);return {hpd:c.hpd,days:c.days||5,ot:c.mult,sc:c,tax:num(d.markup?.tax)||0}}return {hpd:num(s.hpd)||10,days:5,ot:0,sc:null,tax:num(d.markup?.tax)||0}}
+  return {id:newId(),kind:k,cb:x.id,code:x.code||'',desc:x.description,unit:timed?'HR':x.unit||'',basis:timed?'hour':'unit',factor:1,waste:k==='material'?num(cbD(x).waste)||0:0,price:+(cbCost(x)||0).toFixed(4),tax:k==='material'&&cbD(x).tax!==false,...(k==='labor'?{otp:+cbOtp(x).toFixed(4)}:{}),...cbFuel(x)}}
+function crewSnap(x){const C=cbCrew(x);const fu={};C.lines.forEach(l=>{const f=cbFuel(l.it);if(!f.ft)return;const k=f.ft+'|'+f.fp;const o=fu[k]=fu[k]||{ft:f.ft,fp:f.fp,g:0,fg:0};o.g+=f.g*l.q;o.fg+=f.fg*l.q});
+  const fuel=Object.values(fu).map(o=>({...o,g:r4(o.g),fg:r4(o.fg)}));return {id:x.id,code:x.code||'',name:x.description,labor:+C.labor.toFixed(4),equip:+C.equip.toFixed(4),men:C.men,otp:+cbOtp(x).toFixed(4),...(fuel.length?{fuel}:{})}}
+// fuel a codebook machine burns (gal/hr), its fuel+lube factor, and the $/gal its rate was built with
+function cbFuel(x){const d=cbD(x);if(!x||x.book!=='equipment'||!num(d.fgal)||!d.ft)return {};return {ft:d.ft,fp:num(d.fp)||0,fg:num(d.fgal),g:num(d.rb?.gal)||num(d.fgal)}}
+function estCtx(d){const s=d.settings||{};const fuel=d.markup?.fuel||null;if(s.sched){const c=schedCalc(s.sched);return {hpd:c.hpd,days:c.days||5,ot:c.mult,sc:c,tax:num(d.markup?.tax)||0,fuel}}return {hpd:num(s.hpd)||10,days:5,ot:0,sc:null,tax:num(d.markup?.tax)||0,fuel}}
 function actCalc(a,itemQty,ctx){const hpd=num(ctx.hpd)||10;const q=a.qty==null||a.qty===''?(num(itemQty)||0):(num(a.qty)||0);const pv=num(a.prod);let hrs=0;
   const sh=num(a.shift)||hpd,wk=ctx.sc&&ctx.sc.H?ctx.sc.H:hpd*(ctx.days||5);
   switch(a.mode){case 'hpu':hrs=(pv||0)*q;break;case 'ups':hrs=pv>0?q/pv*sh:0;break;case 'upd':hrs=pv>0?q/pv*hpd:0;break;case 'upw':hrs=pv>0?q/pv*wk:0;break;
     case 'hrs':hrs=pv||0;break;case 'shifts':hrs=(pv||0)*sh;break;case 'days':hrs=(pv||0)*hpd;break;case 'weeks':hrs=(pv||0)*wk;break;default:hrs=pv>0?q/pv:0}
   const c={labor:0,equipment:0,material:0,sub:0,trucking:0,other:0,tax:0};let mh=0,otBase=0;const cr=a.crew;
-  if(cr){c.labor+=(num(cr.labor)||0)*hrs;c.equipment+=(num(cr.equip)||0)*hrs;mh+=(num(cr.men)||0)*hrs;otBase+=crewOtp(cr)*hrs}
-  const res=(a.res||[]).map(r=>{const f=num(r.factor)||0;const base=r.basis==='unit'?f*q:r.basis==='hour'?f*hrs:f;const qty=base*(1+(num(r.waste)||0)/100);const cost=qty*(num(r.price)||0);
+  // fuel: gallons used, and the change when the estimate's $/gal differs from the price the rate was built with
+  const fuel={};const fuelUse=(ft,fp,g,fg,h)=>{if(!ft||!h)return 0;const p=ctx.fuel?num(ctx.fuel[ft]):null;const pr=p!=null?p:num(fp)||0;const o=fuel[ft]=fuel[ft]||{gal:0,cost:0,adj:0};const dlt=(num(fg)||0)*(pr-(num(fp)||0));o.gal+=(num(g)||0)*h;o.cost+=(num(fg)||0)*pr*h;o.adj+=dlt*h;return dlt};
+  if(cr){c.labor+=(num(cr.labor)||0)*hrs;c.equipment+=(num(cr.equip)||0)*hrs;mh+=(num(cr.men)||0)*hrs;otBase+=crewOtp(cr)*hrs;(cr.fuel||[]).forEach(f=>{c.equipment+=fuelUse(f.ft,f.fp,f.g,f.fg,hrs)*hrs})}
+  const res=(a.res||[]).map(r=>{const f=num(r.factor)||0;const base=r.basis==='unit'?f*q:r.basis==='hour'?f*hrs:f;const qty=base*(1+(num(r.waste)||0)/100);const fa=r.fg?fuelUse(r.ft,r.fp,r.g,r.fg,qty):0;const cost=qty*((num(r.price)||0)+fa);
     const k=COST_KEYS.includes(r.kind)?r.kind:'other';c[k]+=cost;const tax=r.kind==='material'&&r.tax&&ctx.tax?cost*ctx.tax/100:0;c.tax+=tax;if(k==='labor'){mh+=qty;otBase+=resOtp(r)*qty}return {qty,cost,tax}});
   const ot=otBase*(ctx.ot||0);c.labor+=ot;
-  const total=COST_KEYS.reduce((s,k)=>s+c[k],0)+c.tax;return {q,hrs,days:hrs/hpd,shifts:hrs/sh,sh,mh,c,res,total,ot,unit:q?total/q:0,uph:hrs?q/hrs:0}}
+  const total=COST_KEYS.reduce((s,k)=>s+c[k],0)+c.tax;return {q,hrs,days:hrs/hpd,shifts:hrs/sh,sh,mh,c,res,total,ot,fuel,unit:q?total/q:0,uph:hrs?q/hrs:0}}
 function itemCalc(it,ctx){const acts=(it.acts||[]).map(a=>actCalc(a,it.qty,ctx));const total=acts.reduce((s,a)=>s+a.total,0);const q=num(it.qty)||0;
   return {acts,c:sumC(acts),total,mh:acts.reduce((s,a)=>s+a.mh,0),ot:acts.reduce((s,a)=>s+a.ot,0),q,unit:q?total/q:0}}
 /* The whole estimate:
@@ -4602,13 +4614,14 @@ function estCalc(d){const ctx=estCtx(d);const items=d.items.map(it=>itemCalc(it,
   const gc=lump&&ind>0?r2((ind+gcMk)*(1+bondR)):0;
   const total=bi.reduce((s,i)=>s+items[i].price,0)+gc,alts=items.reduce((s,x,i)=>s+(isBase(i)?0:x.price),0);
   const F=cost>0?calcTotal/cost:1;
-  return {ctx,items,c,cost,mh,ot,ind,indLines,dur:{crewDays,conc,autoDays,days,weeks,months},oh,profit,bond,calcTotal,F,gc,adjSum,total,alts,adj:total-calcTotal,ret:total*(num(m.ret)||0)/100,split,margin:total-cost-ind,marginPct:total?(total-cost-ind)/total*100:0,rates:R}}
+  const fuel={diesel:{gal:0,cost:0,adj:0},gas:{gal:0,cost:0,adj:0}};bi.forEach(i=>items[i].acts.forEach(a=>Object.entries(a.fuel||{}).forEach(([k,v])=>{const o=fuel[k];if(!o)return;o.gal+=v.gal;o.cost+=v.cost;o.adj+=v.adj})));
+  return {ctx,items,c,cost,mh,ot,ind,indLines,dur:{crewDays,conc,autoDays,days,weeks,months},oh,profit,bond,calcTotal,F,gc,adjSum,total,alts,adj:total-calcTotal,ret:total*(num(m.ret)||0)/100,split,fuel,margin:total-cost-ind,marginPct:total?(total-cost-ind)/total*100:0,rates:R}}
 
 // codebook prices that moved since they were copied in
 function estStale(d){const out=[];const acts=[];(d.items||[]).forEach(it=>(it.acts||[]).forEach(a=>acts.push(a)));if(d.act)acts.push(d.act);if(d.item)(d.item.acts||[]).forEach(a=>acts.push(a));
-  acts.forEach(a=>{if(a.crew){const x=cbById(a.crew.id);if(x){const s=crewSnap(x);if(Math.abs(s.labor-(+a.crew.labor||0))>.004||Math.abs(s.equip-(+a.crew.equip||0))>.004||s.men!==(+a.crew.men||0))out.push({a,crew:s})}}
-    (a.res||[]).forEach(r=>{if(!r.cb||r.src)return;const x=cbById(r.cb);if(!x)return;const c=cbCost(x);if(c!=null&&Math.abs(c-(+r.price||0))>.004)out.push({r,price:+c.toFixed(4)})})});return out}
-function estApplyStale(list){list.forEach(s=>{if(s.crew)s.a.crew={...s.a.crew,...s.crew};else s.r.price=s.price})}
+  acts.forEach(a=>{if(a.crew){const x=cbById(a.crew.id);if(x){const s=crewSnap(x);if(Math.abs(s.labor-(+a.crew.labor||0))>.004||Math.abs(s.equip-(+a.crew.equip||0))>.004||s.men!==(+a.crew.men||0)||JSON.stringify(s.fuel||[])!==JSON.stringify(a.crew.fuel||[]))out.push({a,crew:s})}}
+    (a.res||[]).forEach(r=>{if(!r.cb||r.src)return;const x=cbById(r.cb);if(!x)return;const c=cbCost(x);const f=cbFuel(x);if(c!=null&&(Math.abs(c-(+r.price||0))>.004||num(f.fp)!==num(r.fp)||num(f.fg)!==num(r.fg)))out.push({r,price:+c.toFixed(4),fuel:f})})});return out}
+function estApplyStale(list){list.forEach(s=>{if(s.crew){s.a.crew={...s.a.crew,...s.crew};if(!s.crew.fuel)delete s.a.crew.fuel}else{s.r.price=s.price;['ft','fp','fg','g'].forEach(k=>{if(s.fuel&&s.fuel[k]!=null)s.r[k]=s.fuel[k];else delete s.r[k]})}})}
 // a fresh copy of a template, with new ids and today's codebook prices
 function actFromTpl(src){const a=clone(src);a.id=newId();a.qty=null;a.res=(a.res||[]).map(r=>({...r,id:newId()}));estApplyStale(estStale({act:a}));return a}
 
@@ -4631,7 +4644,7 @@ window.addEventListener('beforeunload',e=>{if(S.est&&(S.est.dirty||S.est.saving)
 function EC(){if(M&&M.kind==='cbtpl')return {root:M.draft.data,ro:!cbEditable(),ctx:{hpd:10,tax:0},tpl:true,redraw:()=>renderModal()};
   const E=S.est;return {root:E&&E.data,ro:!estCanEdit()||!!(E&&E.conflict),ctx:E&&E.data?estCtx(E.data):{hpd:10,tax:0},tpl:false,redraw:()=>{estTouch();render()}}}
 function epGet(o,p){return String(p).split('.').reduce((x,k)=>x==null?x:x[k],o)}
-function epSet(o,p,v){const ks=String(p).split('.');const last=ks.pop();const t=ks.reduce((x,k)=>x[k],o);t[last]=v}
+function epSet(o,p,v){const ks=String(p).split('.');const last=ks.pop();const t=ks.reduce((x,k,i)=>x[k]=x[k]??(isNaN(+(ks[i+1]??last))?{}:[]),o);t[last]=v}
 function epParent(o,p){const ks=String(p).split('.');const i=+ks.pop();return {arr:epGet(o,ks.join('.')),i}}
 const epId=p=>'ep-'+String(p).replace(/\./g,'_');
 function epIn(p,v,o={}){const ro=EC().ro?' disabled':'';return `<input class="field${o.n?' num':''}${o.cls?' '+o.cls:''}" id="${epId(p)}" data-ep="${p}"${o.n?' data-ept="n" inputmode="decimal" autocomplete="off"':''}${o.list?` list="${o.list}"`:''} value="${esc(v??'')}"${o.ph!=null?` placeholder="${esc(o.ph)}"`:''}${o.title?` title="${esc(o.title)}"`:''}${o.aria?` aria-label="${esc(o.aria)}"`:''}${o.attrs||''}${ro}>`}
@@ -5365,7 +5378,7 @@ function estSumView(d,R,b,ro){const m=d.markup;const p='markup';const dis=ro?' d
     ${sm==='select'?estCarryList(d,R,ro):''}${manual}
     <p class="hint">Sales tax is part of material cost. Bond is on everything above it. Retainage doesn’t change the price — it’s what the GC holds until closeout. Indirects and how they spread are on the Schedule & indirects tab.</p></div>
     ${ro||tpl?'':`<div class="panel pad" style="margin-top:14px"><b>Send to the bid</b><p class="small dim" style="margin:4px 0 10px">Puts the base bid total into the bid’s proposal amount.</p><div class="adders" style="margin:0"><button class="btn primary sm" data-act="est-push" data-v="amount_with">Base — with site improvements</button><button class="btn sm" data-act="est-push" data-v="amount_without">Base — without</button></div>
-      <p class="hint">Now on the bid: with ${money(num(b.amount_with))} · without ${money(num(b.amount_without))}</p></div>`}</div>
+      <p class="hint">Now on the bid: with ${money(num(b.amount_with))} · without ${money(num(b.amount_without))}</p></div>`}${estFuelPanel(d,R,ro)}</div>
   <div class="sec"><div class="sec-h"><h2>Totals</h2><span>Base bid</span></div><div class="panel pad est-sum"><div class="list">
     ${COST_KEYS.filter(k=>R.c[k]).map(k=>line(COST_LABEL[k],money2(R.c[k]),'',k==='labor'&&R.ot?`incl. ${money(R.ot)} overtime`:'')).join('')}${R.c.tax?line('Sales tax',money2(R.c.tax),'',`${fmtN(m.tax,2)}% on taxable materials`):''}
     ${line('Direct cost',money2(R.cost),'est-sub')}${R.ind?line('Indirects',money2(R.ind),'',`${fmtN(R.dur.weeks,1)} weeks`):''}
@@ -5375,7 +5388,7 @@ function estSumView(d,R,b,ro){const m=d.markup;const p='markup';const dis=ro?' d
     ${R.alts?line('Alternates (not in base bid)',money2(R.alts)):''}</div></div></div></div>`}
 
 /* ---------- Settings page (admin) ---------- */
-function setDraft(){if(!S.setDraft){const D=estDefaultsRaw();S.setDraft=clone({markup:D.markup,ind:D.ind.map(l=>({...l})),schedules:D.schedules,defSched:D.defSched,crews:D.crews})}return S.setDraft}
+function setDraft(){if(!S.setDraft){const D=estDefaultsRaw();S.setDraft=clone({markup:D.markup,ind:D.ind.map(l=>({...l})),schedules:D.schedules,defSched:D.defSched,crews:D.crews,rates:ratesRaw()})}return S.setDraft}
 function vSettings(){const x=setDraft();const m=x.markup;const sf=(path,v,o={})=>`<input class="field${o.n?' num':''}${o.cls?' '+o.cls:''}" id="sf-${path.replace(/\./g,'_')}" data-sf2="${path}"${o.n?' data-sfn inputmode="decimal"':''} value="${esc(v??'')}"${o.ph?` placeholder="${esc(o.ph)}"`:''}>`;
   const sel=(path,v,opts)=>`<select class="field" data-sf2="${path}">${opts.map(([k,l])=>`<option value="${k}"${String(v)===String(k)?' selected':''}>${l}</option>`).join('')}</select>`;
   const sched=(s,i)=>`<div class="panel pad sched${x.defSched===s.id?' def':''}"><div class="sched-h">${sf(`schedules.${i}.name`,s.name,{cls:'sched-name',ph:'Schedule name'})}
@@ -5405,9 +5418,11 @@ function vSettings(){const x=setDraft();const m=x.markup;const sf=(path,v,o={})=
     <p class="hint">Weekly, monthly and daily costs are multiplied by the job duration; % lines are figured on labor or direct cost; lump sums are fixed. Every estimate can change its own list.</p></div></div>
   <div class="sec set-wide"><div class="sec-h"><h2>Work schedules & overtime</h2><span>Hours per day drive production; overtime adds the premium to labor</span></div>
     <div class="sched-list">${x.schedules.map(sched).join('')}</div><div class="adders"><button class="btn sm" data-act="sf-schadd">+ Schedule</button>${SCHED_PRESETS.filter(p=>!x.schedules.some(s=>s.name===p.name)).map(p=>`<button class="btn sm ghost" data-act="sf-preset" data-v="${esc(p.name)}">+ ${esc(p.name)}</button>`).join('')}</div>
-    <p class="hint">Overtime premium = base wage × burden × (OT rate − 1) for the overtime share of hours; fringe isn’t marked up. Estimates keep a copy of their schedule, so changing one here doesn’t move bids already priced — pick it again on the estimate to update.</p></div></div>`}
+    <p class="hint">Overtime premium = base wage × burden × (OT rate − 1) for the overtime share of hours; fringe isn’t marked up. Estimates keep a copy of their schedule, so changing one here doesn’t move bids already priced — pick it again on the estimate to update.</p></div>
+  ${rateSheetHtml(x,sf,sel)}</div>`}
 async function setSave(){const x=S.setDraft;if(!x)return;const clean={...x,ind:x.ind.filter(l=>String(l.desc||'').trim()).map(({id,qty,...l})=>l),schedules:x.schedules.map(s=>({...s,days:DAYS.map((_,j)=>num(s.days[j])||0)}))};
-  try{await run(sb.from('settings').upsert({key:'est_settings',value:clean}));await loadTable('settings');S.setDraft=null;S.setDirty=false;toast('Bid settings saved — new estimates will use them');render()}catch(e){toast(errMsg(e))}}
+  try{await run(sb.from('settings').upsert({key:'est_settings',value:clean}));let n=0;try{n=await rbSync(clean.rates)}catch(e){toast(cbErr(e))}
+    await loadTable('settings');if(n)await loadTable('codebook');S.setDraft=null;S.setDirty=false;toast(`Bid settings saved${n?` · repriced ${n} built labor & equipment rate${n===1?'':'s'}`:' — new estimates will use them'}`);render()}catch(e){toast(errMsg(e))}}
 
 /* ---------- events ---------- */
 FOCUS_ATTRS.push('data-sf2');
@@ -5426,7 +5441,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'ind-defaults':{const D=estDefaultsRaw();const have=new Set((d.ind||[]).map(l=>normH(l.desc)));D.ind.forEach(l=>{if(!have.has(normH(l.desc)))(d.ind=d.ind||[]).push({...l,id:newId(),qty:null})});estTouch();render();break}
     case 'mk-mode':d.markup.mode=t.dataset.v;if(t.dataset.v==='type'&&!d.markup.byType)d.markup.byType=clone(estDefaultsRaw().markup.byType);estTouch();render();break;
     case 'mk-tocompany':{const cur=S.settings.est_settings||{};const D=estDefaultsRaw();const v={...cur};
-      if(t.dataset.v==='markup'){const {carry,adj,...mk}=clone(d.markup);v.markup=mk}
+      if(t.dataset.v==='markup'){const {carry,adj,fuel,...mk}=clone(d.markup);v.markup=mk}
       else{v.ind=(d.ind||[]).filter(l=>String(l.desc||'').trim()).map(({id,qty,...l})=>l);v.crews=num(d.settings.crews)||D.crews;const sc=d.settings.sched;if(sc){const sch=(cur.schedules||D.schedules).slice();const i=sch.findIndex(z=>z.name===sc.name);const keep={...clone(sc),id:i>=0?sch[i].id:newId()};if(i>=0)sch[i]=keep;else sch.push(keep);v.schedules=sch;v.defSched=keep.id}}
       run(sb.from('settings').upsert({key:'est_settings',value:v})).then(()=>loadTable('settings')).then(()=>{S.setDraft=null;toast(t.dataset.v==='markup'?'Markup is now the company default for new estimates':'Schedule, crews and indirects are now the company defaults');render()}).catch(err=>toast(errMsg(err)));break}
     case 'mk-defaults':{const D=estDefaultsRaw().markup;const keep={carry:d.markup.carry,adj:d.markup.adj};d.markup={...clone(D),...keep};estTouch();render();toast('Company markup defaults loaded');break}}});
@@ -5654,3 +5669,528 @@ async function start(){
   S.loading=false;render();
 }
 start();
+
+/* ---------- Rate builder: company rate sheet + labor & equipment build-ups ---------- */
+const RATES_DEFAULT={fuel:{diesel:3.85,gas:3.25},paidHrs:2080,ptoHpd:8,pto:{hol:6,vac:5,sick:3},
+  taxes:[{desc:'Social Security',pct:6.2,cap:184500},{desc:'Medicare',pct:1.45,cap:null},{desc:'Federal unemployment (FUTA)',pct:0.6,cap:7000},{desc:'State unemployment (SUTA)',pct:2.7,cap:9500},{desc:'General liability (on payroll)',pct:1.5,cap:null}],
+  wc:[{id:'wc-5507',code:'5507',desc:'Street or road construction',rate:6.5},{id:'wc-6217',code:'6217',desc:'Excavation & grading',rate:5.8},{id:'wc-7219',code:'7219',desc:'Trucking',rate:7.5},{id:'wc-5606',code:'5606',desc:'Superintendent / PM',rate:1.2}],
+  ben:[{desc:'Health insurance',amt:9600},{desc:'401(k) match',amt:1200}],
+  pk:[],eq:{int:6,ins:2,ptax:1,stor:1,lube:15}};
+function ratesOf(R){R=R||{};const D=clone(RATES_DEFAULT);return {...D,...R,fuel:{...D.fuel,...(R.fuel||{})},pto:{...D.pto,...(R.pto||{})},eq:{...D.eq,...(R.eq||{})},
+  taxes:Array.isArray(R.taxes)?R.taxes:D.taxes,wc:Array.isArray(R.wc)?R.wc:D.wc,ben:Array.isArray(R.ben)?R.ben:D.ben,pk:Array.isArray(R.pk)?R.pk:D.pk}}
+const ratesRaw=()=>ratesOf((S.settings.est_settings||{}).rates);
+const rbOn=x=>!!(x&&(x.book==='labor'||x.book==='equipment')&&cbD(x).rb&&cbD(x).rb.on);
+const r4=v=>Math.round((v||0)*1e4)/1e4;
+
+// labor: base wage + payroll taxes, workers comp, PTO → burden %; benefits, union fringes, add-ons → fringe $/hr
+function rbLabor(d,Rt){const rb=d.rb||{};const B=num(d.base)||0;const P=num(Rt.paidHrs)||2080;const hpd=num(Rt.ptoHpd)||8;
+  const pd=k=>num(rb[k])!=null?num(rb[k]):num(Rt.pto[k])||0;const ptoDays=pd('hol')+pd('vac')+pd('sick');const ptoH=Math.min(P/2,ptoDays*hpd);const W=Math.max(1,P-ptoH);
+  const wages=B*P;const L=[];const add=(grp,desc,yr,hr,note)=>L.push({grp,desc,yr,hr:hr!=null?hr:yr/W,note});
+  add('wage','Base wage',B*W,B,`${fmtN(W,0)} hrs worked a year`);
+  if(ptoH)add('burden','Paid time off',B*ptoH,null,`${fmtN(ptoDays,1)} days × ${fmtN(hpd,1)} hrs — paid, not worked`);
+  (Rt.taxes||[]).forEach(t=>{const pct=num(t.pct)||0;if(!pct)return;const cap=num(t.cap);add('burden',t.desc||'Payroll tax',(cap?Math.min(wages,cap):wages)*pct/100,null,`${fmtN(pct,2)}%${cap?` on the first ${money(cap)}`:' of wages'}${cap&&wages>cap?' (capped)':''}`)});
+  const wc=(Rt.wc||[]).find(c=>c.id===rb.wc);if(wc&&num(wc.rate))add('burden',`Workers comp${wc.code?' '+wc.code:''}`,wages*num(wc.rate)/100,null,`${money2(num(wc.rate))} per $100 of payroll`);
+  if(rb.ben!==false)(Rt.ben||[]).forEach(b=>{if(num(b.amt))add('fringe',b.desc||'Benefit',num(b.amt),null,`${money(num(b.amt))} a year`)});
+  const pk=(Rt.pk||[]).find(p=>p.id===rb.pk);if(pk)(pk.lines||[]).forEach(l=>{if(num(l.amt))add('fringe',l.desc||'Fringe',num(l.amt)*W,num(l.amt),pk.name||'Fringe package')});
+  (rb.un||[]).forEach(l=>{if(num(l.amt))add('fringe',l.desc||'Fringe',num(l.amt)*W,num(l.amt),'per hour')});
+  (rb.add||[]).forEach(l=>{if(num(l.amt))add('add',l.desc||'Add-on',num(l.amt)*W,num(l.amt),'per hour')});
+  const sum=g=>L.filter(x=>x.grp===g).reduce((s,x)=>s+x.hr,0);const bur=sum('burden'),fr=sum('fringe')+sum('add');
+  return {L,B,W,P,ptoH,wages,burdenHr:bur,burden:B?bur/B*100:0,fringe:fr,total:B+bur+fr,missing:!B?'Enter a base wage to build the rate.':''}}
+
+// equipment: ownership (or rental) + operating; fuel kept separate so an estimate can reprice it
+function rbEquip(d,Rt){const rb=d.rb||{};const E=Rt.eq||{};const L=[];const add=(grp,desc,hr,note)=>L.push({grp,desc,hr,note});let cmp=null,use=null,missing='';
+  const ft=rb.ft||'diesel';const gal=ft==='none'?0:num(rb.gal)||0;const fp=ft==='none'?0:num(Rt.fuel[ft])||0;
+  if(rb.mode==='rent'){const per={mo:[num(rb.rmo),num(rb.hmo)||176,'month'],wk:[num(rb.rwk),num(rb.hwk)||40,'week'],day:[num(rb.rday),num(rb.hday)||8,'day']};
+    cmp=Object.entries(per).filter(([,v])=>v[0]!=null).map(([k,v])=>({k,nm:v[2],hr:v[0]/v[1]}));
+    use=rb.use&&per[rb.use]&&per[rb.use][0]!=null?rb.use:(cmp.length?cmp.slice().sort((a,b)=>a.hr-b.hr)[0].k:'mo');
+    const [rate,hrs,nm]=per[use];if(rate==null)missing='Enter a monthly, weekly or daily rental rate.';const base=(rate||0)/hrs;
+    if(rate!=null)add('own',`Rent (${nm}ly rate)`,base,`${money2(rate)} a ${nm} ÷ ${fmtN(hrs,0)} hrs`);
+    if(num(rb.cdw))add('own','Damage waiver',base*num(rb.cdw)/100,`${fmtN(num(rb.cdw),2)}% of rent`);
+    if(num(rb.env))add('own','Environmental & other fees',base*num(rb.env)/100,`${fmtN(num(rb.env),2)}% of rent`);
+    const fr=(num(rb.deliv)||0)+(num(rb.pick)||0);const len=Math.max(0.01,num(rb.len)||1);if(fr)add('own','Delivery & pickup',fr/(hrs*len),`${money(fr)} over ${fmtN(len,1)} ${nm}${len===1?'':'s'} of use`);
+    if(num(rb.rep))add('op','Repairs & maintenance',num(rb.rep),'per hour')}
+  else{const P=num(rb.price)||0,sv=P*(num(rb.salv)||0)/100,life=num(rb.life)||0,hpy=num(rb.hpy)||0,lifeH=life*hpy,tires=num(rb.tires)||0;
+    if(!P||!lifeH)missing='Enter the purchase price, life in years and hours a year.';
+    if(P&&lifeH){add('own','Depreciation',Math.max(0,P-sv-tires)/lifeH,`(${money(P)} − ${money(sv)} salvage${tires?' − tires':''}) ÷ ${fmtN(lifeH,0)} life hrs`);
+      const avg=(P+sv)/2;const pc=k=>num(rb[k])!=null?num(rb[k]):num(E[k])||0;
+      [['int','Interest / cost of money'],['ins','Insurance'],['ptax','Property tax'],['stor','Storage & yard']].forEach(([k,l])=>{const v=pc(k);if(v)add('own',l,avg*v/100/hpy,`${fmtN(v,2)}% a year of avg. value ${money(avg)}`)});
+      if(num(rb.rep))add('op','Repairs & maintenance',P*num(rb.rep)/100/lifeH,`${fmtN(num(rb.rep),1)}% of price over its life`)}
+    if(tires&&num(rb.tireLife))add('op','Tires / undercarriage',tires/num(rb.tireLife),`${money(tires)} ÷ ${fmtN(num(rb.tireLife),0)} hrs`)}
+  let fgal=0;if(gal){const fuel=gal*fp;add('op',`Fuel (${ft})`,fuel,`${fmtN(gal,2)} gal/hr × ${money2(fp)}`);const lu=num(rb.lube)!=null?num(rb.lube):num(E.lube)||0;if(lu)add('op','Lube, oil & filters',fuel*lu/100,`${fmtN(lu,1)}% of fuel`);fgal=gal*(1+lu/100)}
+  if(num(rb.wear))add('op','Wear parts (edges, teeth, etc.)',num(rb.wear),'per hour');
+  const sum=g=>L.filter(x=>x.grp===g).reduce((s,x)=>s+x.hr,0);
+  return {L,own:sum('own'),op:sum('op'),total:sum('own')+sum('op'),gal,fgal,ft,fp,cmp,use,missing}}
+
+// write a built rate into the codebook fields everything else already reads
+function rbApply(x,Rt){if(!rbOn(x))return false;const d=cbD(x);x.data=d;Rt=Rt||ratesRaw();
+  if(x.book==='labor'){const r=rbLabor(d,Rt);d.burden=r4(r.burden);d.fringe=r4(r.fringe);if(d.ot==null)d.ot=1.5}
+  else{const r=rbEquip(d,Rt);d.rate=r4(r.own);d.op=r4(r.op);d.own=d.rb.mode==='rent'?'Rented':'Owned';if(r.fgal){d.fgal=r4(r.fgal);d.ft=r.ft;d.fp=r.fp}else{delete d.fgal;delete d.ft;delete d.fp}}
+  return true}
+function rbRefreshAll(){if(!Array.isArray(S.codebook))return;const Rt=ratesRaw();S.codebook.forEach(x=>{if(rbOn(x))rbApply(x,Rt)})}
+// after the company rate sheet changes: reprice and save every built rate
+async function rbSync(rates){const Rt=ratesOf(rates);const rows=[];
+  (S.codebook||[]).filter(rbOn).forEach(x=>{const y=clone(x);y.data=cbD(y);const ks=x.book==='labor'?['data.burden','data.fringe']:['data.rate','data.op'];const o=ks.map(k=>num(cbGet(x,k)));rbApply(y,Rt);let ch=false;
+    ks.forEach((k,i)=>{const n=num(cbGet(y,k));if(Math.abs((n||0)-(o[i]||0))>0.00005){cbHist(y,k,o[i],n,'rates','Company rate sheet');ch=true}});if(ch||num(cbD(y).fp)!==num(cbD(x).fp)){y.price_date=todayStr();rows.push(cbRow(y))}});
+  if(rows.length)await cbUpsert(rows);return rows.length}
+
+/* ----- builder inside the labor / equipment codebook item ----- */
+const rbP=p=>'rb-'+String(p).replace(/\./g,'_');
+function rbIn(rb,p,o={}){const v=epGet(rb,p);return `<input class="field${o.n!==false?' num':''}${o.cls?' '+o.cls:''}" id="${rbP(p)}" data-rb="${p}"${o.n!==false?' data-rbn inputmode="decimal" autocomplete="off"':''}${o.list?` list="${o.list}"`:''} value="${esc(v??'')}"${o.ph!=null?` placeholder="${esc(o.ph)}"`:''}${o.dis||''}>`}
+function rbF(l,inner,o={}){return `<label class="f${o.cls?' '+o.cls:''}">${l}${o.pre||o.post?`<span class="cb-inp${o.pre?' has-pre':''}${o.post?' has-post':''}">${o.pre?'<span class="cb-pre">$</span>':''}${inner}${o.post?`<span class="cb-post">${o.post}</span>`:''}</span>`:inner}</label>`}
+function rbSel(rb,p,v,opts,dis){return `<select class="field" id="${rbP(p)}" data-rb="${p}"${dis}>${opts.map(([k,l])=>`<option value="${esc(k)}"${String(v??'')===String(k)?' selected':''}>${esc(l)}</option>`).join('')}</select>`}
+function rbLines(rb,key,title,ph,dis,list){const L=rb[key]||[];return `<div class="rb-lines"><div class="small" style="font-weight:600;margin:10px 0 4px">${title}</div>
+  ${L.map((l,i)=>`<div class="rb-line">${rbIn(rb,`${key}.${i}.desc`,{n:false,ph,list,dis})}<span class="cb-inp has-pre"><span class="cb-pre">$</span>${rbIn(rb,`${key}.${i}.amt`,{ph:'0.00',dis})}</span><span class="dim small">/hr</span>${dis?'':`<button class="rm" data-act="rb-rm" data-v="${key}.${i}" aria-label="Remove">×</button>`}</div>`).join('')}
+  ${dis?'':`<button class="btn sm ghost" data-act="rb-add" data-v="${key}">+ ${key==='add'?'Add-on':'Fringe'}</button>`}</div>`}
+function rbTable(r,groups){const g=(k,l)=>{const L=r.L.filter(x=>groups[k]&&x.grp===k);if(!L.length)return '';const s=L.reduce((a,x)=>a+x.hr,0);
+    return `<tr class="rb-g"><td colspan="${r.W?3:2}">${l}</td><td class="r num">${money2(s)}</td></tr>${L.map(x=>`<tr><td>${esc(x.desc)}</td><td class="small dim">${esc(x.note||'')}</td>${r.W?`<td class="r num small">${x.yr!=null?money(x.yr):''}</td>`:''}<td class="r num">${money2(x.hr)}</td></tr>`).join('')}`};
+  return `<table class="rb-t"><thead><tr><th>Cost</th><th>How it’s figured</th>${r.W?'<th class="r">Per year</th>':''}<th class="r">Per hour</th></tr></thead><tbody>${Object.entries(groups).map(([k,l])=>g(k,l)).join('')}</tbody></table>`}
+function rbHtml(d,dis){const bk=d.book;const rb=cbD(d).rb||{};const on=!!rb.on;const Rt=ratesRaw();
+  const head=`<label class="check"><input type="checkbox" data-rb="on"${on?' checked':''}${dis}> Build this rate from its costs${bk==='labor'?' (taxes, workers comp, benefits, fringes)':' (ownership or rental, fuel, repairs)'}</label>`;
+  if(!on)return `<fieldset class="rb"><legend>Rate builder</legend>${head}<p class="hint">Off: the rate is whatever you type above.</p></fieldset>`;
+  if(bk==='labor'){const r=rbLabor(cbD(d),Rt);const P=Rt.pto;
+    return `<fieldset class="rb"><legend>Rate builder</legend>${head}
+    <div class="fg" style="margin-top:8px">
+      ${rbF('Workers comp class',rbSel(rb,'wc',rb.wc||'',[['','None'],...Rt.wc.map(c=>[c.id,`${c.code?c.code+' · ':''}${c.desc} — ${money2(num(c.rate)||0)}/$100`])],dis),{cls:'s2'})}
+      ${rbF('Union fringe package',rbSel(rb,'pk',rb.pk||'',[['','None'],...Rt.pk.map(p=>[p.id,`${p.name||'Package'} — ${money2((p.lines||[]).reduce((s,l)=>s+(num(l.amt)||0),0))}/hr`])],dis),{cls:'s2'})}
+      ${rbF('Holidays (days)',rbIn(rb,'hol',{ph:fmtN(num(P.hol)||0,1),dis}))}${rbF('Vacation (days)',rbIn(rb,'vac',{ph:fmtN(num(P.vac)||0,1),dis}))}${rbF('Sick (days)',rbIn(rb,'sick',{ph:fmtN(num(P.sick)||0,1),dis}))}
+      <label class="check small rb-ben"><input type="checkbox" data-rb="ben"${rb.ben!==false?' checked':''}${dis}> Gets company benefits (${money((Rt.ben||[]).reduce((s,b)=>s+(num(b.amt)||0),0))} a year)</label></div>
+    <div class="rb-two">${rbLines(rb,'un','Other fringes for this craft','e.g. Annuity, training fund',dis)}${rbLines(rb,'add','Add-ons (truck, phone, tools, PPE)','e.g. Foreman pickup',dis,'rb-addons')}</div>
+    <datalist id="rb-addons">${['Pickup truck','Cell phone','Small tools','PPE & safety gear','Per diem','Travel / subsistence'].map(o=>`<option value="${o}">`).join('')}</datalist>
+    ${r.missing?`<p class="notice small">${r.missing}</p>`:`${rbTable(r,{wage:'Wage',burden:'Burden — taxes, insurance, time off',fringe:'Fringes & benefits',add:'Add-ons'})}
+    <div class="cb-calc rb-sum"><div><span>Burden</span><b>${fmtN(r.burden,2)}%</b></div><div><span>Fringes & add-ons</span><b>${money2(r.fringe)}/hr</b></div><div><span>Loaded rate</span><b>${money2(r.total)}/hr</b></div><div><span>Cost a year</span><b>${money(r.total*r.W)}</b></div></div>`}
+    <p class="hint">Annual costs (time off, taxes, workers comp, benefits) are divided by hours actually worked — ${fmtN(r.P,0)} paid hours minus ${fmtN(r.ptoH,0)} hrs of time off. Taxes, workers comp classes, benefits and fringe packages come from the company rate sheet under Estimates → Bid settings.</p></fieldset>`}
+  const r=rbEquip(cbD(d),Rt);const E=Rt.eq;const rent=rb.mode==='rent';
+  return `<fieldset class="rb"><legend>Rate builder</legend>${head}
+    <div class="seg" style="margin:10px 0"><button class="${rent?'':'on'}" data-act="rb-mode" data-v="own"${dis}>Owned</button><button class="${rent?'on':''}" data-act="rb-mode" data-v="rent"${dis}>Rented</button></div>
+    ${rent?`<div class="fg">
+      ${rbF('Monthly rate',rbIn(rb,'rmo',{ph:'0',dis}),{pre:1})}${rbF('Weekly rate',rbIn(rb,'rwk',{ph:'0',dis}),{pre:1})}${rbF('Daily rate',rbIn(rb,'rday',{ph:'0',dis}),{pre:1})}
+      ${rbF('Hrs in a month',rbIn(rb,'hmo',{ph:'176',dis}))}${rbF('Hrs in a week',rbIn(rb,'hwk',{ph:'40',dis}))}${rbF('Hrs in a day',rbIn(rb,'hday',{ph:'8',dis}))}
+      ${rbF('Price it on',rbSel(rb,'use',r.use,(r.cmp||[]).map(c=>[c.k,`${c.nm}ly rate — ${money2(c.hr)}/hr`]),dis),{cls:'s2'})}
+      ${rbF('Rental length (# of those)',rbIn(rb,'len',{ph:'1',dis}))}${rbF('Delivery',rbIn(rb,'deliv',{ph:'0',dis}),{pre:1})}${rbF('Pickup',rbIn(rb,'pick',{ph:'0',dis}),{pre:1})}
+      ${rbF('Damage waiver',rbIn(rb,'cdw',{ph:'0',dis}),{post:'%'})}${rbF('Env. & other fees',rbIn(rb,'env',{ph:'0',dis}),{post:'%'})}${rbF('Repairs (you pay)',rbIn(rb,'rep',{ph:'0',dis}),{pre:1,post:'/hr'})}</div>
+      ${r.cmp&&r.cmp.length>1?`<p class="small rb-cmp">${r.cmp.map(c=>`<span class="${c.k===r.use?'on':''}">${c.nm}ly ${money2(c.hr)}/hr</span>`).join('')}${(()=>{const lo=r.cmp.slice().sort((a,b)=>a.hr-b.hr)[0];return lo.k!==r.use?` <b>The ${lo.nm}ly rate is cheaper per hour.</b>`:''})()}</p>`:''}`
+    :`<div class="fg">
+      ${rbF('Purchase price (delivered)',rbIn(rb,'price',{ph:'0',dis}),{pre:1,cls:'s2'})}${rbF('Salvage value',rbIn(rb,'salv',{ph:'0',dis}),{post:'%'})}${rbF('Life (years)',rbIn(rb,'life',{ph:'0',dis}))}${rbF('Hours a year',rbIn(rb,'hpy',{ph:'1400',dis}))}
+      ${rbF('Tires / tracks (set)',rbIn(rb,'tires',{ph:'0',dis}),{pre:1})}${rbF('Tire / track life (hrs)',rbIn(rb,'tireLife',{ph:'0',dis}))}${rbF('Lifetime repairs (% of price)',rbIn(rb,'rep',{ph:'0',dis}),{post:'%',cls:'s2'})}
+      ${rbF('Interest',rbIn(rb,'int',{ph:fmtN(num(E.int)||0,2),dis}),{post:'%'})}${rbF('Insurance',rbIn(rb,'ins',{ph:fmtN(num(E.ins)||0,2),dis}),{post:'%'})}${rbF('Property tax',rbIn(rb,'ptax',{ph:fmtN(num(E.ptax)||0,2),dis}),{post:'%'})}${rbF('Storage & yard',rbIn(rb,'stor',{ph:fmtN(num(E.stor)||0,2),dis}),{post:'%'})}</div>`}
+    <div class="fg" style="margin-top:8px">
+      ${rbF('Fuel',rbSel(rb,'ft',rb.ft||'diesel',[['diesel',`Diesel — ${money2(num(Rt.fuel.diesel)||0)}/gal`],['gas',`Gas — ${money2(num(Rt.fuel.gas)||0)}/gal`],['none','No fuel (electric, attachment)']],dis),{cls:'s2'})}
+      ${(rb.ft||'diesel')==='none'?'':rbF('Fuel burn (gal/hr)',rbIn(rb,'gal',{ph:'0',dis}))+rbF('Lube & filters (% of fuel)',rbIn(rb,'lube',{ph:fmtN(num(E.lube)||0,1),dis}),{post:'%'})}
+      ${rbF('Wear parts',rbIn(rb,'wear',{ph:'0',dis}),{pre:1,post:'/hr'})}</div>
+    ${r.missing?`<p class="notice small">${r.missing}</p>`:''}${r.L.length?rbTable(r,{own:rent?'Rental':'Ownership',op:'Operating'}):''}
+    <div class="cb-calc rb-sum"><div><span>${rent?'Rental':'Ownership'}</span><b>${money2(r.own)}/hr</b></div><div><span>Operating</span><b>${money2(r.op)}/hr</b></div><div><span>Total</span><b>${money2(r.total)}/hr</b></div>${r.gal?`<div><span>Fuel</span><b>${fmtN(r.gal,2)} gal/hr</b><small>repriced by each estimate’s fuel price</small></div>`:''}</div>
+    <p class="hint">${rent?'Rent is divided by the hours you’ll run it in that period. Delivery and pickup are spread over the rental length.':'Interest, insurance, property tax and storage are a % a year of the average value ((price + salvage) ÷ 2), divided by hours a year.'} Operators are priced from labor in crews. Fuel prices and the company % defaults are on the rate sheet under Estimates → Bid settings.</p></fieldset>`}
+FOCUS_ATTRS.push('data-rb');
+function rbDraft(){const d=M.draft;d.data=cbD(d);d.data.rb=d.data.rb||{};return d.data.rb}
+function rbChanged(){rbApply(M.draft,ratesRaw());renderModal()}
+document.addEventListener('input',e=>{const t=e.target;if(!M||M.kind!=='cbitem'||t.dataset.rb==null||t.type==='checkbox'||t.tagName==='SELECT')return;
+  epSet(rbDraft(),t.dataset.rb,t.dataset.rbn!=null?(t.value.trim()===''?null:num(t.value.replace(/[,$\s]/g,''))):t.value);rbChanged()});
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='cbitem'||t.dataset.rb==null)return;const rb=rbDraft();
+  if(t.type==='checkbox'){rb[t.dataset.rb]=t.checked;if(t.dataset.rb==='on'&&t.checked&&M.draft.book==='equipment'&&!rb.mode)rb.mode=cbD(M.draft).own==='Rented'?'rent':'own'}
+  else if(t.tagName==='SELECT')epSet(rb,t.dataset.rb,t.value);else return;rbChanged()});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='cbitem')return;const a=t.dataset.act;if(!a.startsWith('rb-'))return;const rb=rbDraft();
+  if(a==='rb-mode')rb.mode=t.dataset.v;
+  else if(a==='rb-add'){(rb[t.dataset.v]=rb[t.dataset.v]||[]).push({desc:'',amt:null});setTimeout(()=>$('#'+rbP(`${t.dataset.v}.${rb[t.dataset.v].length-1}.desc`))?.focus(),0)}
+  else if(a==='rb-rm'){const [k,i]=t.dataset.v.split('.');rb[k].splice(+i,1)}rbChanged()});
+
+/* ----- company rate sheet (Bid settings) ----- */
+function rateSheetHtml(x,sf,sel){const R=x.rates;const rm=(k,i)=>`<button class="rm" data-act="sf-rrm" data-v="${k}.${i}" aria-label="Remove">×</button>`;
+  return `<div class="sec set-wide"><div class="sec-h"><h2>Rate sheet — labor burden & equipment</h2><span>Built labor and equipment rates in the codebook are figured from these. Saving reprices them.</span></div>
+  <div class="rs-grid">
+    <div class="panel pad"><b>Fuel</b><div class="fg" style="margin-top:8px"><label class="f">Diesel $/gal${sf('rates.fuel.diesel',R.fuel.diesel,{n:1})}</label><label class="f">Gas $/gal${sf('rates.fuel.gas',R.fuel.gas,{n:1})}</label></div>
+      <p class="hint">Every estimate can use its own fuel price on its Markup & totals tab.</p>
+      <b style="display:block;margin-top:12px">Hours & time off</b><div class="fg" style="margin-top:8px"><label class="f">Paid hours a year${sf('rates.paidHrs',R.paidHrs,{n:1,ph:'2080'})}</label><label class="f">Hours in a PTO day${sf('rates.ptoHpd',R.ptoHpd,{n:1,ph:'8'})}</label>
+        <label class="f">Holidays (days)${sf('rates.pto.hol',R.pto.hol,{n:1,ph:'0'})}</label><label class="f">Vacation (days)${sf('rates.pto.vac',R.pto.vac,{n:1,ph:'0'})}</label><label class="f">Sick (days)${sf('rates.pto.sick',R.pto.sick,{n:1,ph:'0'})}</label></div></div>
+    <div class="panel pad"><b>Payroll taxes & insurance</b><p class="small dim" style="margin:2px 0 8px">% of wages, up to the yearly wage cap (blank = no cap)</p>
+      <table class="rs-t"><thead><tr><th>Item</th><th>%</th><th>Wage cap $</th><th></th></tr></thead><tbody>${R.taxes.map((t,i)=>`<tr><td>${sf(`rates.taxes.${i}.desc`,t.desc,{ph:'Description'})}</td><td>${sf(`rates.taxes.${i}.pct`,t.pct,{n:1,cls:'rs-n'})}</td><td>${sf(`rates.taxes.${i}.cap`,t.cap,{n:1,cls:'rs-c',ph:'no cap'})}</td><td>${rm('taxes',i)}</td></tr>`).join('')}</tbody></table>
+      <button class="btn sm ghost" data-act="sf-radd" data-v="taxes">+ Tax or insurance</button></div>
+    <div class="panel pad"><b>Workers comp classes</b><p class="small dim" style="margin:2px 0 8px">Rate per $100 of payroll, from your policy</p>
+      <table class="rs-t"><thead><tr><th>Class</th><th>Description</th><th>$/100</th><th></th></tr></thead><tbody>${R.wc.map((c,i)=>`<tr><td>${sf(`rates.wc.${i}.code`,c.code,{cls:'rs-c',ph:'Code'})}</td><td>${sf(`rates.wc.${i}.desc`,c.desc,{ph:'Description'})}</td><td>${sf(`rates.wc.${i}.rate`,c.rate,{n:1,cls:'rs-n'})}</td><td>${rm('wc',i)}</td></tr>`).join('')}</tbody></table>
+      <button class="btn sm ghost" data-act="sf-radd" data-v="wc">+ Class</button></div>
+    <div class="panel pad"><b>Company benefits</b><p class="small dim" style="margin:2px 0 8px">$ a year per employee — spread over hours worked</p>
+      <table class="rs-t"><thead><tr><th>Benefit</th><th>$/year</th><th></th></tr></thead><tbody>${R.ben.map((b,i)=>`<tr><td>${sf(`rates.ben.${i}.desc`,b.desc,{ph:'Description'})}</td><td>${sf(`rates.ben.${i}.amt`,b.amt,{n:1,cls:'rs-c'})}</td><td>${rm('ben',i)}</td></tr>`).join('')}</tbody></table>
+      <button class="btn sm ghost" data-act="sf-radd" data-v="ben">+ Benefit</button></div>
+    <div class="panel pad"><b>Union fringe packages</b><p class="small dim" style="margin:2px 0 8px">$/hr lines, picked on each craft (e.g. Operators Local 150)</p>
+      ${R.pk.map((p,i)=>`<div class="rs-pk"><div class="rs-pkh">${sf(`rates.pk.${i}.name`,p.name,{ph:'Package name'})}<span class="small dim">${money2((p.lines||[]).reduce((s,l)=>s+(num(l.amt)||0),0))}/hr</span>${rm('pk',i)}</div>
+        ${(p.lines||[]).map((l,j)=>`<div class="rs-pkl">${sf(`rates.pk.${i}.lines.${j}.desc`,l.desc,{ph:'Health & welfare, pension…'})}${sf(`rates.pk.${i}.lines.${j}.amt`,l.amt,{n:1,cls:'rs-n',ph:'$/hr'})}${rm(`pk.${i}.lines`,j)}</div>`).join('')}
+        <button class="btn sm ghost" data-act="sf-radd" data-v="pk.${i}.lines">+ Line</button></div>`).join('')||'<p class="small dim">None yet.</p>'}
+      <button class="btn sm ghost" data-act="sf-radd" data-v="pk">+ Fringe package</button></div>
+    <div class="panel pad"><b>Equipment defaults</b><p class="small dim" style="margin:2px 0 8px">% a year of a machine’s average value; each machine can override</p>
+      <div class="fg"><label class="f">Interest %${sf('rates.eq.int',R.eq.int,{n:1})}</label><label class="f">Insurance %${sf('rates.eq.ins',R.eq.ins,{n:1})}</label><label class="f">Property tax %${sf('rates.eq.ptax',R.eq.ptax,{n:1})}</label><label class="f">Storage & yard %${sf('rates.eq.stor',R.eq.stor,{n:1})}</label><label class="f">Lube & filters (% of fuel)${sf('rates.eq.lube',R.eq.lube,{n:1})}</label></div></div>
+  </div><p class="hint">The starting tax rates, wage caps and workers comp rates are placeholders. Check them against your payroll provider and insurance policy, since SUTA and workers comp vary by state and by company.</p></div>`}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(a!=='sf-radd'&&a!=='sf-rrm')return;const x=setDraft();const R=x.rates;
+  if(a==='sf-radd'){const k=t.dataset.v;const arr=epGet(R,k);const blank=k==='taxes'?{desc:'',pct:null,cap:null}:k==='wc'?{id:newId(),code:'',desc:'',rate:null}:k==='ben'?{desc:'',amt:null}:k==='pk'?{id:newId(),name:'',lines:[{desc:'Health & welfare',amt:null},{desc:'Pension',amt:null}]}:{desc:'',amt:null};arr.push(blank)}
+  else{const v=t.dataset.v;const i=+v.slice(v.lastIndexOf('.')+1);epGet(R,v.slice(0,v.lastIndexOf('.'))).splice(i,1)}
+  S.setDirty=true;render()});
+
+/* ----- estimate fuel price (Markup & totals) ----- */
+function estFuelPanel(d,R,ro){const F=R.fuel;const any=F&&(F.diesel.gal||F.gas.gal);const Rt=ratesRaw();const m=d.markup;
+  if(!any&&!(m.fuel&&(num(m.fuel.diesel)!=null||num(m.fuel.gas)!=null)))return `<div class="panel pad" style="margin-top:14px"><b>Fuel price</b><p class="small dim" style="margin:4px 0 0">No equipment on this estimate has a fuel burn yet. Build equipment rates in the codebook (Rate builder) to price fuel by the gallon.</p></div>`;
+  const row=(k,l)=>{const f=F[k];const cur=num(m.fuel?.[k]);return `<tr><td>${l}</td><td>${epIn(`markup.fuel.${k}`,m.fuel?.[k],{n:1,cls:'mk-n',ph:fmtN(num(Rt.fuel[k])||0,2)})}</td><td class="r num">${fmtN(f.gal,0)}</td><td class="r num">${money(f.cost)}</td><td class="r num ${f.adj>0.5?'cb-up':f.adj<-0.5?'cb-down':''}">${Math.abs(f.adj)>=0.5?(f.adj>0?'+':'−')+money(Math.abs(f.adj)):'—'}</td></tr>`};
+  return `<div class="panel pad" style="margin-top:14px"><b>Fuel price</b><p class="small dim" style="margin:4px 0 8px">Reprices every machine’s fuel and lube on this estimate. Blank uses the price each rate was built with (company ${money2(num(Rt.fuel.diesel)||0)} diesel · ${money2(num(Rt.fuel.gas)||0)} gas).</p>
+    <table class="mk-t fuel-t"><thead><tr><th></th><th>$/gal</th><th class="r">Gallons</th><th class="r">Fuel & lube</th><th class="r">Change</th></tr></thead><tbody>${row('diesel','Diesel')}${row('gas','Gas')}</tbody></table></div>`}
+// built rates: these codebook fields are figured, not typed
+function rbDerived(x,k){return rbOn(x)&&(x.book==='labor'?['data.burden','data.fringe']:['data.rate','data.op','data.own']).includes(k)}
+
+/* =====================================================================
+   Accounting tab: WIP overview · billing (pay apps) · job budgets ·
+   cost import · lists & codes. File-based so it works with any software.
+   ===================================================================== */
+const canAcct=()=>['admin','pm','accounting'].includes(role());
+const isBook=()=>role()==='accounting';
+S.acct=S.acct||{tab:'overview',jobId:null,payId:null,draft:null};
+const ACCT_TABS=[['overview','Overview (WIP)'],['billing','Billing'],['budgets','Job budgets'],['costs','Import costs'],['lists','Lists & codes']];
+const ACCT_TYPES=['Labor','Equipment','Material','Subcontract','Other'];
+const ACCT_DEFAULT={ret:10,typeCodes:{Labor:'L',Equipment:'E',Material:'M',Subcontract:'S',Other:'O'},codes:[],formats:{}};
+function acctSet(){const A=S.settings.acct||{};return {...clone(ACCT_DEFAULT),...A,typeCodes:{...ACCT_DEFAULT.typeCodes,...(A.typeCodes||{})},codes:Array.isArray(A.codes)?A.codes:[],formats:A.formats||{}}}
+async function acctSave(patch){const v={...(S.settings.acct||{}),...patch};await run(sb.from('settings').upsert({key:'acct',value:v}));await loadTable('settings')}
+const acctJobs=()=>S.jobs.filter(j=>!j.archived_at).sort((a,b)=>String(a.job_number||'~').localeCompare(String(b.job_number||'~'),undefined,{numeric:true})||String(a.name).localeCompare(b.name));
+const jobLabel=j=>j?[j.job_number,j.name].filter(Boolean).join(' · '):'Removed job';
+const acctClient=id=>id?byId(S.clients,id)?.company||'':'';
+const payApps=jobId=>(S.pay_apps||[]).filter(p=>p.job_id===jobId).sort((a,b)=>a.number-b.number);
+const r2a=v=>Math.round((+v||0)*100)/100;
+// a job line's contract value (schedule of values)
+const svOf=it=>num(it.bid_price)!=null?num(it.bid_price):r2a(itemBudget(it).price);
+function jobContract(job){const items=jobItems(job.id);const orig=items.filter(i=>!i.change_order).reduce((s,i)=>s+svOf(i),0),co=items.filter(i=>i.change_order).reduce((s,i)=>s+svOf(i),0);
+  const set=num(job.contract_amount);return {orig,co,lines:orig+co,contract:(set!=null?set:orig)+co,set}}
+
+/* ---------- pay app math (continuation sheet + application summary) ---------- */
+function payLineAmt(it,app,sv){const l=(app.lines||{})[it.id]||{};const q=num(it.quantity);
+  if(q>0&&num(l.qty)!=null)return r2a(num(l.qty)*sv/q);if(num(l.pct)!=null)return r2a(sv*num(l.pct)/100);if(num(l.amt)!=null)return r2a(num(l.amt));return 0}
+function payCalc(job,app,cache){cache=cache||{};if(cache[app.id])return cache[app.id];
+  const items=jobItems(job.id);const prevApps=payApps(job.id).filter(a=>a.number<app.number);const last=prevApps[prevApps.length-1];
+  const ret=app.meta?.release?0:(num(app.retainage_pct)||0)/100;const retStored=app.meta?.retStored!==false;
+  const rows=items.map(it=>{const sv=svOf(it);const q=num(it.quantity);
+    const prev=prevApps.reduce((s,a)=>s+payLineAmt(it,a,sv),0);const prevQ=prevApps.reduce((s,a)=>s+(num(((a.lines||{})[it.id]||{}).qty)||0),0);
+    const now=payLineAmt(it,app,sv);const l=(app.lines||{})[it.id]||{};const stored=num(l.stored)||0;const prevStored=last?num(((last.lines||{})[it.id]||{}).stored)||0:0;
+    const done=prev+now+stored;const retAmt=r2a((prev+now)*ret+(retStored?stored*ret:0));
+    return {it,sv,q,up:q>0?sv/q:null,prev,prevQ,now,nowQ:num(l.qty),pctIn:num(l.pct),stored,prevStored,done,pct:sv?done/sv:0,bal:sv-done,ret:retAmt,co:!!it.change_order}});
+  const sum=(k,f)=>rows.filter(f||(()=>true)).reduce((s,r)=>s+r[k],0);
+  const C=jobContract(job);const completed=r2a(sum('done')),retainage=r2a(sum('ret'));const earned=r2a(completed-retainage);
+  const prevCalc=last?payCalc(job,last,cache):null;const prevCert=prevCalc?prevCalc.earned:0;
+  const R={rows,orig:r2a(sum('sv',r=>!r.co)),co:r2a(sum('sv',r=>r.co)),contract:r2a(sum('sv')),completed,retainage,earned,prevCert,due:r2a(earned-prevCert),
+    balance:r2a(sum('sv')-earned),thisWork:r2a(sum('now')),storedNow:r2a(sum('stored')),storedChange:r2a(sum('stored')-sum('prevStored')),prevRet:prevCalc?prevCalc.retainage:0,
+    pct:sum('sv')?completed/sum('sv'):0,setContract:C.set,prev:last||null};
+  R.retChange=r2a(R.retainage-R.prevRet);cache[app.id]=R;return R}
+// latest billed position of a job (drafts don't count)
+function jobBilled(job){const apps=payApps(job.id);const sent=apps.filter(a=>a.status!=='Draft');const last=sent[sent.length-1];const cache={};const L=last?payCalc(job,last,cache):null;
+  return {apps,last,billed:L?L.completed:0,ret:L?L.retainage:0,earnedNet:L?L.earned:0,paid:apps.filter(a=>a.status==='Paid').reduce((s,a)=>s+(num(a.meta?.paidAmt)??payCalc(job,a,cache).due),0),drafts:apps.filter(a=>a.status==='Draft').length}}
+// work-in-progress: % complete by cost (cost to date ÷ projected cost), earned revenue, over/under billing
+function jobWip(job){const js=jobStats(job);const C=jobContract(job);const B=jobBilled(job);const eac=Math.max(js.EAC,js.AC);const pct=eac>0?Math.min(1,js.AC/eac):0;const earned=C.contract*pct;
+  return {job,js,C,B,eac,pct,earned,over:B.billed-earned,gp:C.contract-eac,gpPct:C.contract?(C.contract-eac)/C.contract:0}}
+
+/* ---------- export formats (columns you can rename / drop / reorder) ---------- */
+const ACCT_FIELDS={
+  budget:[['job_number','Job number'],['job_name','Job name'],['code','Cost code'],['description','Description'],['cost_type','Cost type'],['type_code','Cost type code'],['unit','Unit'],['quantity','Quantity'],['amount','Budget amount'],
+    ['labor','Labor'],['equipment','Equipment'],['materials','Materials'],['subcontract','Subcontract'],['other','Other'],['cost','Budget cost'],['price','Contract value'],['change_order','Change order']],
+  invoice:[['invoice_no','Invoice number'],['customer','Customer'],['customer_id','Customer account ID'],['invoice_date','Invoice date'],['due_date','Due date'],['job_number','Job number'],['job_name','Job name'],['app_no','Pay app #'],['period_to','Period to'],
+    ['item','Item (code)'],['description','Description'],['qty','Quantity'],['rate','Rate'],['amount','Amount'],['memo','Memo']],
+  wip:[['job_number','Job number'],['job_name','Job'],['customer','Customer'],['contract','Contract'],['cost','Cost to date'],['eac','Projected cost'],['pct','% complete'],['earned','Earned revenue'],['billed','Billed to date'],['over','Over (under) billed'],['ret','Retainage held'],['gp','Projected gross profit']]};
+const ACCT_PRESETS={
+  budget:{'Generic — one row per line':{layout:'wide',cols:['job_number','code','description','unit','quantity','labor','equipment','materials','subcontract','other','cost','price']},
+    'Generic — one row per cost type':{layout:'long',cols:['job_number','code','description','type_code','cost_type','unit','quantity','amount']}},
+  invoice:{'Generic — one row per line':{cols:['invoice_no','customer','invoice_date','due_date','job_number','item','description','amount','memo']},
+    'QuickBooks Online style':{cols:['invoice_no','customer','invoice_date','due_date','item','description','qty','rate','amount','memo'],heads:{invoice_no:'InvoiceNo',customer:'Customer',invoice_date:'InvoiceDate',due_date:'DueDate',item:'Item(Product/Service)',description:'ItemDescription',qty:'ItemQuantity',rate:'ItemRate',amount:'ItemAmount',memo:'Memo'}}},
+  wip:{'Standard WIP schedule':{cols:['job_number','job_name','customer','contract','cost','eac','pct','earned','billed','over','ret','gp']}}};
+function acctFmt(type){const F=acctSet().formats[type];if(F&&Array.isArray(F.cols)&&F.cols.length)return F;const [name,p]=Object.entries(ACCT_PRESETS[type])[0];return {name,layout:p.layout,file:'xlsx',cols:p.cols.map(k=>({k,h:(p.heads||{})[k]||ACCT_FIELDS[type].find(f=>f[0]===k)[1]}))}}
+function fmtFromPreset(type,name){const p=ACCT_PRESETS[type][name];return {name,layout:p.layout,file:acctFmt(type).file||'xlsx',cols:p.cols.map(k=>({k,h:(p.heads||{})[k]||ACCT_FIELDS[type].find(f=>f[0]===k)[1]}))}}
+async function acctWrite(type,rows,fname){const F=acctFmt(type);const aoa=[F.cols.map(c=>c.h),...rows.map(r=>F.cols.map(c=>r[c.k]??''))];fname=fname.replace(/[\\/:*?"<>|]/g,'-');
+  if(F.file==='csv'){const q=v=>{const s=String(v??'');return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s};const blob=new Blob([aoa.map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=fname+'.csv';document.body.appendChild(a);a.click();a.remove();window.__written={name:fname+'.csv',sheets:{csv:aoa}};return}
+  const X=await loadXLSX();const wb=X.utils.book_new();X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet(aoa),type==='wip'?'WIP':type==='invoice'?'Invoice':'Budget');X.writeFile(wb,fname+'.xlsx')}
+function fmtModal(){const type=M.type;const F=M.fmt;const fields=ACCT_FIELDS[type];const used=new Set(F.cols.map(c=>c.k));
+  return mhead('Export columns',{budget:'Job budget export',invoice:'Invoice export',wip:'WIP schedule export'}[type])+`<div class="mbody">
+    <div class="fg"><label class="f s2">Start from<select class="field" data-fmt="preset"><option value="">Pick a layout…</option>${Object.keys(ACCT_PRESETS[type]).map(n=>`<option${F.name===n?' selected':''}>${esc(n)}</option>`).join('')}</select></label>
+      ${type==='budget'?`<label class="f">Rows<select class="field" data-fmt="layout"><option value="wide"${F.layout!=='long'?' selected':''}>One row per line</option><option value="long"${F.layout==='long'?' selected':''}>One row per cost type</option></select></label>`:''}
+      <label class="f">File<select class="field" data-fmt="file"><option value="xlsx"${F.file!=='csv'?' selected':''}>Excel (.xlsx)</option><option value="csv"${F.file==='csv'?' selected':''}>CSV</option></select></label></div>
+    <p class="small dim">Rename headings to exactly what your accounting software's import expects. Use the arrows to change the order.</p>
+    <table class="fmt-t"><thead><tr><th>Column heading in the file</th><th>Filled with</th><th></th></tr></thead><tbody>${F.cols.map((c,i)=>`<tr><td><input class="field" id="fmt-h-${i}" data-fmth="${i}" value="${esc(c.h)}"></td><td class="small">${esc((fields.find(f=>f[0]===c.k)||[,c.k])[1])}</td>
+      <td class="nowrap"><button class="btn sm ghost" data-act="fmt-mv" data-i="${i}" data-v="-1"${i?'':' disabled'} aria-label="Move up">↑</button><button class="btn sm ghost" data-act="fmt-mv" data-i="${i}" data-v="1"${i<F.cols.length-1?'':' disabled'} aria-label="Move down">↓</button><button class="rm" data-act="fmt-rm" data-i="${i}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>
+    ${fields.some(f=>!used.has(f[0]))?`<select class="field" data-fmt="add" style="max-width:280px;margin-top:8px"><option value="">+ Add a column…</option>${fields.filter(f=>!used.has(f[0])).map(f=>`<option value="${f[0]}">${esc(f[1])}</option>`).join('')}</select>`:''}</div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="fmt-save">Save format</button></div></div>`}
+
+/* ---------- won bid → job budget straight from the estimate ---------- */
+async function estBudgetLines(bidId){const {data,error}=await sb.from('estimates').select('data').eq('bid_id',bidId).maybeSingle();if(error)throw error;if(!data)return null;
+  const d=estNorm(data.data);const R=estCalc(d);const out=[];let sort=0;
+  d.items.forEach((it,i)=>{if(it.alt)return;const x=R.items[i];const c=x.c;
+    const v={labor:r2a(c.labor),equipment:r2a(c.equipment),materials:r2a(c.material+c.tax),subcontract:r2a(c.sub),other:r2a(c.trucking+c.other+x.ind)};
+    const cost=Object.values(v).reduce((s,n)=>s+n,0);const price=r2a(x.price);
+    out.push({code:String(it.code||''),description:String(it.desc||''),unit:it.unit||'',quantity:num(it.qty),...v,overhead_pct:0,markup_pct:cost>0?Math.round((price/cost-1)*1e5)/1e3:0,bid_price:price,sort:sort++,notes:'From the estimate'})});
+  if(R.gc>0)out.push({code:'GC',description:d.markup.gcName||'General conditions',unit:'LS',quantity:1,labor:0,equipment:0,materials:0,subcontract:0,other:r2a(R.ind),overhead_pct:0,markup_pct:R.ind>0?Math.round((R.gc/R.ind-1)*1e5)/1e3:0,bid_price:r2a(R.gc),sort:sort++,notes:'From the estimate'});
+  return {lines:out,total:R.total}}
+async function loadBudgetFromEstimate(job,replace){const B=await estBudgetLines(job.bid_id);if(!B||!B.lines.length)throw new Error('That bid has no estimate with bid items yet.');
+  if(replace){const ids=jobItems(job.id).map(i=>i.id);if(jobCosts(job.id).some(c=>c.item_id&&ids.includes(c.item_id)))throw new Error('This job already has costs logged against its lines, so its budget can’t be replaced.');if(ids.length)await run(sb.from('job_items').delete().in('id',ids))}
+  const rows=B.lines.map(l=>({id:newId(),job_id:job.id,...l}));await run(sb.from('job_items').insert(rows));
+  await run(sb.from('jobs').update({overhead_pct:0,markup_pct:0,...(num(job.contract_amount)==null?{contract_amount:r2a(B.total)}:{})}).eq('id',job.id));
+  await Promise.all(['jobs','job_items'].map(loadTable));return rows.length}
+function budgetRows(job){const F=acctFmt('budget');const T=acctSet().typeCodes;const rows=[];const map={Labor:'labor',Equipment:'equipment',Material:'materials',Subcontract:'subcontract',Other:'other'};
+  jobItems(job.id).forEach(it=>{const b=itemBudget(it);const base={job_number:job.job_number||'',job_name:job.name,code:it.code,description:it.description,unit:it.unit,quantity:num(it.quantity)??'',labor:r2a(it.labor),equipment:r2a(it.equipment),materials:r2a(it.materials),subcontract:r2a(it.subcontract),other:r2a(it.other),cost:r2a(b.cost),price:svOf(it),change_order:it.change_order||''};
+    if(F.layout==='long'){ACCT_TYPES.forEach(t=>{const a=r2a(it[map[t]]);if(a)rows.push({...base,cost_type:t,type_code:T[t]||t,amount:a})})}else rows.push({...base,amount:r2a(b.cost)})});return rows}
+
+/* ---------- the page ---------- */
+function vAcct(){if(!canAcct())return '<div class="empty">The Accounting tab is for admins, project managers and the bookkeeper.</div>';const A=S.acct;
+  if(!S.tableErr?.pay_apps&&S.pay_apps===undefined)S.pay_apps=[];
+  const missing=S.tableErr&&S.tableErr.pay_apps;
+  const body={overview:acctOverview,billing:acctBilling,budgets:acctBudgets,costs:acctCosts,lists:acctLists}[A.tab]||acctOverview;
+  return `<div class="head"><div><h1>Accounting</h1><p>Budgets out, actual costs in, progress billing, and the lists your accounting software needs. Everything moves as Excel or CSV files, so it works with any program.</p></div></div>
+  ${missing?'<div class="notice">Billing needs the database update: run <b>supabase/update-17-accounting.sql</b> in Supabase.</div>':''}
+  <div class="seg acct-tabs">${ACCT_TABS.map(([k,l])=>`<button class="${A.tab===k?'on':''}" data-act="acct-tab" data-v="${k}">${l}</button>`).join('')}</div>${body()}`}
+
+function acctOverview(){const W=acctJobs().map(jobWip);const tot=k=>W.reduce((s,w)=>s+(typeof k==='function'?k(w):w[k]),0);
+  const over=tot(w=>Math.max(0,w.over)),under=tot(w=>Math.max(0,-w.over));
+  return `<div class="statline acct-stats"><div><b>${money(tot(w=>w.C.contract))}</b>Contract value</div><div><b>${money(tot(w=>w.B.billed))}</b>Billed to date</div><div><b>${money(tot(w=>w.earned))}</b>Earned (by cost)</div>
+    <div><b class="${under>0?'cb-down':''}">${money(under)}</b>Under billed</div><div><b class="${over>0?'cb-up':''}">${money(over)}</b>Over billed</div><div><b>${money(tot(w=>w.B.ret))}</b>Retainage held</div></div>
+  <div class="sec"><div class="sec-h"><h2>Work in progress</h2><span class="adders" style="margin:0"><button class="btn sm" data-act="acct-fmt" data-v="wip">Columns…</button><button class="btn sm primary" data-act="acct-wipx">Export WIP schedule</button></span></div>
+  <div class="panel scroll"><table class="acct-t"><thead><tr><th>Job</th><th>Customer</th><th class="r">Contract</th><th class="r">Cost to date</th><th class="r">Projected cost</th><th class="r">% complete</th><th class="r">Earned</th><th class="r">Billed</th><th class="r">Over (under)</th><th class="r">Retainage</th><th class="r">Proj. GP</th></tr></thead><tbody>
+  ${W.map(w=>`<tr class="click" data-act="acct-job" data-id="${w.job.id}"><td><b>${esc(w.job.job_number||'')}</b> ${esc(w.job.name)}<div class="small dim">${esc(w.job.status)}${w.B.drafts?` · ${w.B.drafts} draft pay app${w.B.drafts===1?'':'s'}`:''}</div></td><td class="small">${esc(acctClient(w.job.client_id))}</td>
+    <td class="r num">${money(w.C.contract)}${w.C.co?`<div class="small dim">incl. ${money(w.C.co)} COs</div>`:''}</td><td class="r num">${money(w.js.AC)}</td><td class="r num">${money(w.eac)}</td><td class="r num">${fmtN(w.pct*100,1)}%</td><td class="r num">${money(w.earned)}</td><td class="r num">${money(w.B.billed)}</td>
+    <td class="r num ${w.over>0.5?'cb-up':w.over<-0.5?'cb-down':''}">${Math.abs(w.over)<0.5?'—':w.over>0?money(w.over):'('+money(-w.over)+')'}</td><td class="r num">${w.B.ret?money(w.B.ret):'—'}</td><td class="r num ${w.gp<0?'bad-t':''}">${money(w.gp)}<div class="small dim">${fmtN(w.gpPct*100,1)}%</div></td></tr>`).join('')||'<tr><td colspan="11"><div class="empty">No jobs yet. Jobs are created from awarded bids on the Jobs tab.</div></td></tr>'}</tbody>
+  ${W.length?`<tfoot><tr><td colspan="2"><b>Total</b></td><td class="r num"><b>${money(tot(w=>w.C.contract))}</b></td><td class="r num"><b>${money(tot(w=>w.js.AC))}</b></td><td class="r num"><b>${money(tot('eac'))}</b></td><td></td><td class="r num"><b>${money(tot('earned'))}</b></td><td class="r num"><b>${money(tot(w=>w.B.billed))}</b></td><td class="r num"><b>${money(tot('over'))}</b></td><td class="r num"><b>${money(tot(w=>w.B.ret))}</b></td><td class="r num"><b>${money(tot('gp'))}</b></td></tr></tfoot>`:''}</table></div>
+  <p class="hint"><b>How to read this:</b> % complete is cost to date ÷ projected cost (the “cost-to-cost” method most accountants and bonding companies use). Earned = contract × % complete. If you’ve billed more than you’ve earned you’re <b>over billed</b>. That's money collected ahead of the work, and it shows as a liability. <b>Under billed</b> means work is done that hasn’t been invoiced yet. Billed amounts come from pay apps that have been submitted (drafts don’t count).</p></div>`}
+
+/* ----- billing ----- */
+function acctBilling(){const A=S.acct;const job=A.jobId&&jobOf(A.jobId);
+  if(job&&A.payId){const app=(S.pay_apps||[]).find(p=>p.id===A.payId);if(app)return payEditor(job,app)}
+  const jobs=acctJobs();
+  return `<div class="acct-bill"><div class="panel acct-joblist">${jobs.map(j=>{const B=jobBilled(j);const C=jobContract(j);return `<button class="${j.id===A.jobId?'on':''}" data-act="acct-pick" data-id="${j.id}"><b>${esc(j.job_number||'—')}</b><span>${esc(j.name)}</span><small>${money(B.billed)} of ${money(C.contract)} billed</small></button>`}).join('')||'<div class="empty small">No jobs yet.</div>'}</div>
+    <div>${job?billJob(job):'<div class="empty">Pick a job to see and create its pay applications.</div>'}</div></div>`}
+function billJob(job){const apps=payApps(job.id);const C=jobContract(job);const items=jobItems(job.id);const cache={};const B=jobBilled(job);
+  return `<div class="sec-h"><h2>${esc(jobLabel(job))}</h2><span class="adders" style="margin:0"><button class="btn sm" data-act="acct-co">+ Change order</button><button class="btn sm primary" data-act="pay-new"${items.length?'':' disabled'}>+ New pay app</button></span></div>
+  ${!items.length?`<div class="notice">This job has no budget lines yet, so there's no schedule of values to bill from. Load them from the estimate on <a href="#" data-act="acct-tab" data-v="budgets">Job budgets</a>.</div>`:''}
+  <div class="statline"><div><b>${money(C.orig)}</b>Original contract</div><div><b>${money(C.co)}</b>Change orders</div><div><b>${money(C.orig+C.co)}</b>Contract to date</div><div><b>${money(B.billed)}</b>Billed (gross)</div><div><b>${money(B.ret)}</b>Retainage held</div><div><b>${money(B.paid)}</b>Paid</div></div>
+  ${C.set!=null&&Math.abs(C.set-C.orig)>=1?`<p class="notice small">The job's contract amount (${money(C.set)}) doesn't match its schedule of values (${money(C.orig)}). Pay apps bill from the schedule of values.</p>`:''}
+  <div class="panel scroll"><table class="acct-t"><thead><tr><th>#</th><th>Period to</th><th>Status</th><th class="r">Completed & stored</th><th class="r">Retainage</th><th class="r">This invoice</th><th>Invoice #</th></tr></thead><tbody>
+  ${apps.map(a=>{const R=payCalc(job,a,cache);return `<tr class="click" data-act="pay-open" data-id="${a.id}"><td><b>${a.number}</b></td><td>${fmtShort(a.period_to)}</td><td><span class="pill pay-${a.status.toLowerCase()}">${a.status}</span>${a.status==='Paid'&&a.meta?.paidDate?` <span class="small dim">${fmtShort(a.meta.paidDate)}</span>`:''}</td><td class="r num">${money(R.completed)}</td><td class="r num">${money(R.retainage)}</td><td class="r num"><b>${money(R.due)}</b></td><td class="small">${esc(a.meta?.inv||'')}</td></tr>`}).join('')||'<tr><td colspan="7"><div class="empty small">No pay apps yet.</div></td></tr>'}</tbody></table></div>
+  ${items.some(i=>i.change_order)?`<p class="small" style="margin-top:12px"><b>Change orders:</b> ${items.filter(i=>i.change_order).map(i=>`CO ${esc(i.change_order)} ${esc(i.description)} ${money(svOf(i))}`).join(' · ')}</p>`:''}`}
+const ldOf=d=>{const t=parseD(d||todayStr());return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(new Date(t.getFullYear(),t.getMonth()+1,0).getDate())}`};
+async function payNew(job){const apps=payApps(job.id);const last=apps[apps.length-1];if(last&&last.status==='Draft'){S.acct.payId=last.id;S.acct.draft=null;render();toast('Finish or delete the draft pay app first');return}
+  const lines={};if(last)Object.entries(last.lines||{}).forEach(([k,l])=>{if(num(l.stored))lines[k]={stored:num(l.stored)}});
+  const row={id:newId(),job_id:job.id,number:(last?last.number:0)+1,period_to:ldOf(todayStr()),app_date:todayStr(),status:'Draft',retainage_pct:last?num(last.retainage_pct)??acctSet().ret:acctSet().ret,lines,meta:{retStored:last?last.meta?.retStored!==false:true}};
+  try{await run(sb.from('pay_apps').insert(row));await loadTable('pay_apps');S.acct.payId=row.id;S.acct.draft=null;render()}catch(e){toast(errMsg(e))}}
+function payDraft(app){const A=S.acct;if(!A.draft||A.draft.id!==app.id)A.draft=clone(app);return A.draft}
+function payEditor(job,app0){const app=payDraft(app0);const R=payCalc(job,app);const ro=app.status!=='Draft';const dis=ro?' disabled':'';const cl=jobClient(job);
+  const inp=(p,v,o={})=>`<input class="field num${o.cls?' '+o.cls:''}" id="pa-${p.replace(/\./g,'_')}" data-pa="${p}" inputmode="decimal" autocomplete="off" value="${esc(v??'')}"${o.ph!=null?` placeholder="${esc(o.ph)}"`:''}${dis}>`;
+  const row=r=>`<tr class="${r.co?'pay-co':''}"><td class="num">${esc(r.it.code)}${r.co?`<div class="small dim">CO ${esc(r.it.change_order)}</div>`:''}</td><td>${esc(r.it.description)}</td><td class="r num">${money2(r.sv)}${r.q>0?`<div class="small dim">${qtyFmt(r.q)} ${esc(r.it.unit)} @ ${money2(r.up)}</div>`:''}</td>
+    <td class="r num">${money2(r.prev)}${r.q>0&&r.prevQ?`<div class="small dim">${qtyFmt(r.prevQ)} ${esc(r.it.unit)}</div>`:''}</td>
+    <td class="pay-in">${r.q>0?`${inp(`lines.${r.it.id}.qty`,r.nowQ,{ph:'0'})}<span class="small dim">${esc(r.it.unit||'qty')}</span>`:`${inp(`lines.${r.it.id}.pct`,r.pctIn,{ph:'0'})}<span class="small dim">%</span>`}</td>
+    <td class="r num">${money2(r.now)}</td><td>${inp(`lines.${r.it.id}.stored`,r.stored||'',{ph:'0',cls:'pay-st'})}</td><td class="r num"><b>${money2(r.done)}</b></td><td class="r num ${r.pct>1.0001?'bad-t':''}">${fmtN(r.pct*100,1)}%</td><td class="r num">${money2(r.bal)}</td><td class="r num">${money2(r.ret)}</td></tr>`;
+  const base=R.rows.filter(r=>!r.co),cos=R.rows.filter(r=>r.co);const sum=(L,k)=>L.reduce((s,r)=>s+r[k],0);
+  const sub=(L,l)=>`<tr class="pay-sub"><td></td><td><b>${l}</b></td><td class="r num"><b>${money2(sum(L,'sv'))}</b></td><td class="r num">${money2(sum(L,'prev'))}</td><td></td><td class="r num">${money2(sum(L,'now'))}</td><td class="r num">${money2(sum(L,'stored'))}</td><td class="r num"><b>${money2(sum(L,'done'))}</b></td><td class="r num">${fmtN(sum(L,'sv')?sum(L,'done')/sum(L,'sv')*100:0,1)}%</td><td class="r num">${money2(sum(L,'bal'))}</td><td class="r num">${money2(sum(L,'ret'))}</td></tr>`;
+  const over=R.rows.filter(r=>r.pct>1.0001);const dirty=JSON.stringify(app)!==JSON.stringify(app0);
+  return `<div class="pay-top"><button class="btn sm ghost" data-act="pay-back">← ${esc(jobLabel(job))}</button>
+    <div class="adders" style="margin:0">${dirty?'<span class="small dim">Unsaved changes</span>':''}${ro?'':`<button class="btn sm" data-act="pay-fill">Fill from field quantities</button><button class="btn sm primary" data-act="pay-save"${dirty?'':' disabled'}>Save</button>`}
+      <button class="btn sm" data-act="pay-print">Print / PDF</button><button class="btn sm" data-act="pay-inv">Export invoice</button><button class="btn sm ghost" data-act="acct-fmt" data-v="invoice">Columns…</button></div></div>
+  <div class="grid2 pay-head"><div class="panel pad"><h2 style="margin:0 0 8px">Pay application #${app.number}</h2>
+    <div class="fg"><label class="f">Period to<input class="field" type="date" data-pad="period_to" value="${esc(app.period_to)}"${dis}></label><label class="f">Application date<input class="field" type="date" data-pad="app_date" value="${esc(app.app_date)}"${dis}></label>
+      <label class="f">Retainage %${inp('retainage_pct',app.retainage_pct)}</label><label class="f">Invoice #<input class="field" id="pa-meta_inv" data-pa="meta.inv" data-pat="t" value="${esc(app.meta?.inv||'')}"${dis}></label></div>
+    <div class="adders" style="margin-top:6px"><label class="check small"><input type="checkbox" data-pab="meta.retStored"${app.meta?.retStored!==false?' checked':''}${dis}> Hold retainage on stored materials</label><label class="check small"><input type="checkbox" data-pab="meta.release"${app.meta?.release?' checked':''}${dis}> Release all retainage (final)</label></div>
+    <p class="small dim" style="margin:8px 0 0">To: ${esc(cl?.company||'—')}${cl?.acct_id?` (acct ${esc(cl.acct_id)})`:''} · Job ${esc(job.job_number||'—')}</p></div>
+  <div class="panel pad pay-sum est-sum">${paySummaryHtml(R,app)}
+    <div class="pay-status"><span class="pill pay-${app.status.toLowerCase()}">${app.status}</span>
+      ${app.status==='Draft'?`<button class="btn sm primary" data-act="pay-status" data-v="Submitted"${over.length||dirty?' disabled':''}>Mark submitted</button><button class="btn sm ghost danger-t" data-act="pay-del">Delete draft</button>`
+      :app.status==='Submitted'?`<button class="btn sm primary" data-act="pay-status" data-v="Approved">Mark approved</button><button class="btn sm ghost" data-act="pay-status" data-v="Draft">Back to draft</button>`
+      :app.status==='Approved'?`<button class="btn sm primary" data-act="pay-paid">Record payment</button><button class="btn sm ghost" data-act="pay-status" data-v="Submitted">Back to submitted</button>`
+      :`<span class="small">Paid ${money2(num(app.meta?.paidAmt)??R.due)} on ${fmtShort(app.meta?.paidDate)}${app.meta?.paidRef?' · '+esc(app.meta.paidRef):''}</span><button class="btn sm ghost" data-act="pay-status" data-v="Approved">Undo payment</button>`}</div>
+    ${over.length?`<p class="notice small">${over.length} line${over.length===1?' is':'s are'} billed over 100%. Fix ${over.length===1?'it':'them'} before submitting.</p>`:dirty&&app.status==='Draft'?'<p class="small dim">Save before submitting.</p>':''}</div></div>
+  <div class="panel scroll"><table class="acct-t pay-t"><thead><tr><th>Item</th><th>Description</th><th class="r">Scheduled value</th><th class="r">Previous</th><th>This period</th><th class="r">This period $</th><th>Stored to date</th><th class="r">Completed & stored</th><th class="r">%</th><th class="r">Balance to finish</th><th class="r">Retainage</th></tr></thead>
+    <tbody>${base.map(row).join('')}${cos.length?sub(base,'Original contract')+cos.map(row).join('')+sub(cos,'Change orders'):''}</tbody><tfoot>${sub(R.rows,'Total')}</tfoot></table></div>
+  <p class="hint">Enter this period's quantity for unit-price lines, or this period's % for lump sums. “Stored to date” is material on site but not installed yet. “Fill from field quantities” uses the quantities logged on the job between the last pay app and this period-to date.</p>`}
+function jobClient(job){return byId(S.clients,job.client_id)}
+function paySummaryHtml(R,app){const L=(n,l,v,cls)=>`<div class="li${cls?' '+cls:''}"><span><span class="dim small">${n}</span> ${l}</span><b class="num">${v}</b></div>`;
+  return `<div class="list">${L(1,'Original contract sum',money2(R.orig))}${L(2,'Net change by change orders',money2(R.co))}${L(3,'Contract sum to date',money2(R.contract),'est-sub')}${L(4,'Total completed & stored to date',money2(R.completed))}
+    ${L(5,`Retainage${app.meta?.release?' (released)':` ${fmtN(num(app.retainage_pct)||0,2)}%`}`,money2(R.retainage))}${L(6,'Total earned less retainage',money2(R.earned))}${L(7,'Less previous certificates for payment',money2(R.prevCert))}
+    ${L(8,'Current payment due',money2(R.due),'est-grand')}${L(9,'Balance to finish, including retainage',money2(R.balance))}</div>`}
+async function paySave(){const A=S.acct;const d=A.draft;if(!d)return;const clean={};Object.entries(d.lines||{}).forEach(([k,l])=>{const o={};['qty','pct','amt','stored'].forEach(f=>{if(num(l[f])!=null)o[f]=num(l[f])});if(Object.keys(o).length)clean[k]=o});
+  try{await run(sb.from('pay_apps').update({period_to:d.period_to,app_date:d.app_date,retainage_pct:num(d.retainage_pct)??0,lines:clean,meta:d.meta||{}}).eq('id',d.id));await loadTable('pay_apps');A.draft=null;toast('Pay app saved');render()}catch(e){toast(errMsg(e))}}
+async function payStatus(app,st,meta){try{await run(sb.from('pay_apps').update({status:st,...(meta?{meta}:{})}).eq('id',app.id));await loadTable('pay_apps');S.acct.draft=null;render()}catch(e){toast(errMsg(e))}}
+function payFill(job,app){const apps=payApps(job.id).filter(a=>a.number<app.number);const from=apps.length?apps[apps.length-1].period_to:'0000-00-00';let n=0;
+  jobItems(job.id).forEach(it=>{if(!(num(it.quantity)>0))return;const q=jobCosts(job.id).filter(c=>c.item_id===it.id&&String(c.date)>from&&String(c.date)<=app.period_to).reduce((s,c)=>s+(+c.qty||0),0);
+    app.lines=app.lines||{};const l=app.lines[it.id]=app.lines[it.id]||{};if(q){l.qty=+q.toFixed(3);n++}else delete l.qty});
+  toast(n?`Filled ${n} line${n===1?'':'s'} from field quantities logged ${apps.length?'after '+fmtShort(from)+' ':''}through ${fmtShort(app.period_to)}`:'No field quantities logged in this period');render()}
+function payInvoiceRows(job,app){const R=payCalc(job,app);const cl=jobClient(job);const due=(()=>{const t=parseD(app.app_date||todayStr());t.setDate(t.getDate()+30);return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`})();
+  const inv=app.meta?.inv||`${job.job_number||'JOB'}-${String(app.number).padStart(2,'0')}`;
+  const head={invoice_no:inv,customer:cl?.company||'',customer_id:cl?.acct_id||'',invoice_date:app.app_date,due_date:due,job_number:job.job_number||'',job_name:job.name,app_no:app.number,period_to:app.period_to,memo:`${job.name} — Pay app #${app.number}, period to ${app.period_to}`};
+  const rows=[];R.rows.forEach(r=>{const amt=r2a(r.now+(r.stored-r.prevStored));if(!amt)return;rows.push({...head,item:r.it.code||'',description:(r.co?`CO ${r.it.change_order} — `:'')+r.it.description,qty:r.q>0&&r.nowQ?r.nowQ:1,rate:r.q>0&&r.nowQ?r2a(r.up):amt,amount:amt})});
+  if(R.retChange)rows.push({...head,item:'RETAINAGE',description:R.retChange>0?`Retainage held ${fmtN(num(app.retainage_pct)||0,2)}%`:'Retainage released',qty:1,rate:-R.retChange,amount:-R.retChange});
+  return rows}
+function payPrint(job,app){const R=payCalc(job,app);const cl=jobClient(job);const co=S.settings.general?.companyName||CFG.companyName||'';
+  const rows=R.rows.map(r=>`<tr><td>${esc(r.it.code)}${r.co?' (CO '+esc(r.it.change_order)+')':''}</td><td>${esc(r.it.description)}</td><td class="r">${money2(r.sv)}</td><td class="r">${money2(r.prev)}</td><td class="r">${money2(r.now)}</td><td class="r">${money2(r.stored)}</td><td class="r">${money2(r.done)}</td><td class="r">${fmtN(r.pct*100,1)}%</td><td class="r">${money2(r.bal)}</td><td class="r">${money2(r.ret)}</td></tr>`).join('');
+  const html=`<div class="pa-print"><div class="pa-h"><div><h1>Application for Payment</h1><p>${esc(co)}</p></div><div class="r"><b>Application #${app.number}</b><br>Period to ${fmtShort(app.period_to)}<br>Date ${fmtShort(app.app_date)}${app.meta?.inv?'<br>Invoice '+esc(app.meta.inv):''}</div></div>
+    <div class="pa-to"><div><span>To</span><b>${esc(cl?.company||'')}</b></div><div><span>Project</span><b>${esc(job.name)}</b>${job.location?`<br>${esc(job.location)}`:''}</div><div><span>Job #</span><b>${esc(job.job_number||'—')}</b></div></div>
+    <div class="pa-sum est-sum">${paySummaryHtml(R,app)}</div>
+    <h2>Continuation sheet</h2><table class="pa-t"><thead><tr><th>Item</th><th>Description</th><th class="r">Scheduled value</th><th class="r">Previous</th><th class="r">This period</th><th class="r">Stored</th><th class="r">Completed & stored</th><th class="r">%</th><th class="r">Balance</th><th class="r">Retainage</th></tr></thead><tbody>${rows}</tbody>
+    <tfoot><tr><td></td><td><b>Total</b></td><td class="r"><b>${money2(R.contract)}</b></td><td class="r">${money2(R.rows.reduce((s,r)=>s+r.prev,0))}</td><td class="r">${money2(R.thisWork)}</td><td class="r">${money2(R.storedNow)}</td><td class="r"><b>${money2(R.completed)}</b></td><td class="r">${fmtN(R.pct*100,1)}%</td><td class="r">${money2(R.contract-R.completed)}</td><td class="r">${money2(R.retainage)}</td></tr></tfoot></table>
+    <div class="pa-sign"><div>Contractor signature / date</div><div>Approved by / date</div></div></div>`;
+  const old=document.title;document.title=`Pay app ${app.number} - ${job.name}`;const pr=document.createElement('div');pr.id='print-root';pr.innerHTML=html;document.body.appendChild(pr);document.body.classList.add('printing-prop');window.print();setTimeout(()=>{document.body.classList.remove('printing-prop');pr.remove();document.title=old},500)}
+function coModal(){const d=M.draft;const job=jobOf(d.job_id);const mk=num(job?.markup_pct)||0,oh=num(job?.overhead_pct)||0;
+  return mhead('Add a change order',jobLabel(job))+`<div class="mbody"><div class="fg">
+    <label class="f">CO number<input class="field" id="co-no" data-co="change_order" value="${esc(d.change_order)}"></label><label class="f s2">Description<input class="field" id="co-desc" data-co="description" value="${esc(d.description)}"></label>
+    <label class="f">Item / cost code<input class="field" id="co-code" data-co="code" value="${esc(d.code)}"></label><label class="f">Contract amount<input class="field num" id="co-price" data-co="bid_price" inputmode="decimal" value="${esc(d.bid_price??'')}"></label>
+    <label class="f">Estimated cost<input class="field num" id="co-cost" data-co="cost" inputmode="decimal" value="${esc(d.cost??'')}" placeholder="${num(d.bid_price)!=null?fmtN(num(d.bid_price)/((1+oh/100)*(1+mk/100)),2):''}"></label>
+    <label class="f">Quantity<input class="field num" id="co-qty" data-co="quantity" inputmode="decimal" value="${esc(d.quantity??'')}" placeholder="blank = lump sum"></label><label class="f">Unit<input class="field" id="co-unit" data-co="unit" value="${esc(d.unit||'')}" placeholder="LS"></label></div>
+    <p class="hint">Adds a line to the job's budget and schedule of values, marked as a change order. The estimated cost goes into the budget as “Other” (edit the split on the Jobs tab).</p></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="co-save">Add change order</button></div></div>`}
+async function coSave(){const d=M.draft;const job=jobOf(d.job_id);const price=num(d.bid_price);if(!String(d.description||'').trim()||price==null){toast('Add a description and the contract amount.');return}
+  const mk=num(job?.markup_pct)||0,oh=num(job?.overhead_pct)||0;const cost=num(d.cost)!=null?num(d.cost):r2a(price/((1+oh/100)*(1+mk/100)));
+  const n=jobItems(d.job_id);const row={id:newId(),job_id:d.job_id,code:String(d.code||'').trim()||`CO${String(d.change_order||'').trim()}`,description:String(d.description).trim(),unit:d.unit||(num(d.quantity)?'':'LS'),quantity:num(d.quantity),labor:0,equipment:0,materials:0,subcontract:0,other:cost,overhead_pct:0,markup_pct:cost>0?Math.round((price/cost-1)*1e5)/1e3:0,bid_price:price,change_order:String(d.change_order||'').trim()||String(n.filter(i=>i.change_order).length+1),sort:(n.reduce((m,i)=>Math.max(m,i.sort||0),0))+1,notes:'Change order'};
+  try{await run(sb.from('job_items').insert(row));await loadTable('job_items');closeModal();toast(`Change order ${row.change_order} added`);render()}catch(e){toast(errMsg(e))}}
+
+/* ----- job budgets ----- */
+function acctBudgets(){const jobs=acctJobs();const codes=acctSet().codes;const known=new Set(codes.map(c=>codeKey(c.code)));const F=acctFmt('budget');
+  return `<div class="sec"><div class="sec-h"><h2>Job budgets</h2><span class="adders" style="margin:0"><span class="small dim">Export format: ${esc(F.name||'Custom')} · ${F.file==='csv'?'CSV':'Excel'}</span><button class="btn sm" data-act="acct-fmt" data-v="budget">Columns…</button></span></div>
+  <div class="panel scroll"><table class="acct-t"><thead><tr><th>Job</th><th class="r">Lines</th><th class="r">Budget cost</th><th class="r">Contract value</th><th>Source</th><th></th></tr></thead><tbody>
+  ${jobs.map(j=>{const L=jobItems(j.id);const cost=L.reduce((s,i)=>s+itemBudget(i).cost,0);const C=jobContract(j);const est=j.bid_id&&(S.estIndex||[]).some(e=>e.bid_id===j.bid_id);const fromEst=L.some(i=>i.notes==='From the estimate');
+    const unk=codes.length?L.filter(i=>i.code&&!known.has(codeKey(i.code))&&!i.change_order).length:0;
+    return `<tr><td><b>${esc(j.job_number||'—')}</b> ${esc(j.name)}${!j.job_number?'<div class="small warn-t">No job number. Your accounting software will need one (set it on the Jobs tab).</div>':''}${unk?`<div class="small warn-t">${unk} line${unk===1?'':'s'} use codes that aren't on your cost code list</div>`:''}</td><td class="r num">${L.length}</td><td class="r num">${money(cost)}</td><td class="r num">${money(C.lines)}</td>
+      <td class="small">${fromEst?'Estimate':L.length?'Entered / imported':'<span class="dim">Empty</span>'}</td>
+      <td class="r nowrap">${est&&!isBook()?`<button class="btn sm${L.length?' ghost':' primary'}" data-act="acct-loadest" data-id="${j.id}">${L.length?'Reload from estimate':'Load from estimate'}</button>`:''}<button class="btn sm" data-act="acct-budx" data-id="${j.id}"${L.length?'':' disabled'}>Export</button></td></tr>`}).join('')||'<tr><td colspan="6"><div class="empty">No jobs yet.</div></td></tr>'}</tbody></table></div>
+  <p class="hint">“Load from estimate” turns each bid item into a budget line with its labor, equipment, materials (incl. tax), subcontract and other cost (trucking and its share of indirects), and the contract value from the bid. Awarded bids that become jobs do this automatically. Export the budget and import it into your accounting software's job setup.</p></div>`}
+
+/* ----- cost import (one file, every job) ----- */
+const ACI_COLS=[['job','Job number',['job','jobnumber','jobno','job#','jobid','project','projectnumber','projectno','jobcode']],['code','Cost code / item',['costcode','code','phase','phasecode','item','itemno','costitem','activity','line']],
+  ['type','Cost type',['costtype','type','category','costcategory','class']],['date','Date',['date','transactiondate','postdate','postingdate','invoicedate','workdate','txndate']],['amount','Amount',['amount','cost','total','extended','net','debit','amt','actualcost']],
+  ['hours','Hours',['hours','hrs','unitshours']],['qty','Quantity',['quantity','qty','units','unitsinstalled']],['vendor','Vendor / employee',['vendor','vendorname','employee','name','payee','source']],['reference','Reference',['reference','ref','invoice','invoiceno','document','docno','check','checkno','num']],['description','Description',['description','desc','memo','notes','detail']]];
+function aciKey(s){let h=5381;for(let i=0;i<s.length;i++)h=((h<<5)+h+s.charCodeAt(i))|0;return 'acc-'+(h>>>0).toString(36)+'-'+s.length.toString(36)}
+function acctCosts(){const I=S.acct.imp;
+  if(!I)return `<div class="sec"><div class="sec-h"><h2>Import actual costs</h2><span>One file from your accounting software, covering any number of jobs</span></div><div class="panel pad">
+    <p style="margin-top:0">Run a <b>job cost detail</b> report in your accounting software (most programs have one) and save it as Excel or CSV. It needs a job number, a cost code, a date and an amount on each row. Cost type, hours, quantity, vendor and reference help when they're there.</p>
+    <label class="btn primary">Choose file…<input type="file" accept=".xlsx,.xls,.csv" data-acimp hidden></label>
+    <p class="hint">Rows that were imported before are skipped automatically, so you can import the same report every week, or a report that overlaps the last one, and nothing doubles. Jobs are matched by job number and lines by cost code or item number.</p></div></div>`;
+  const P=aciPlan();const hdr=I.rows[I.hdr]||[];const opt=hdr.map((h,i)=>[i,String(h||'').trim()||`Column ${i+1}`]);
+  const sel=k=>`<select class="field" data-acmap="${k}"><option value="">—</option>${opt.map(([i,l])=>`<option value="${i}"${I.map[k]===i?' selected':''}>${esc(l)}</option>`).join('')}</select>`;
+  const types=[...P.typeVals.entries()];
+  return `<div class="sec"><div class="sec-h"><h2>Import actual costs</h2><span class="adders" style="margin:0"><span class="small dim">${esc(I.fileName)}</span><button class="btn sm ghost" data-act="aci-cancel">Start over</button></span></div>
+  <div class="grid2"><div class="panel pad"><b>1. Columns</b><div class="fg" style="margin-top:8px">
+    ${I.sheets.length>1?`<label class="f s2">Sheet<select class="field" data-acsheet>${I.sheets.map((n,i)=>`<option value="${i}"${I.sheet===i?' selected':''}>${esc(n)}</option>`).join('')}</select></label>`:''}
+    <label class="f">Headings on row<input class="field num" id="aci-hdr" data-achdr inputmode="numeric" value="${I.hdr+1}"></label></div>
+    <div class="fg aci-map">${ACI_COLS.map(([k,l])=>`<label class="f">${l}${['job','date','amount'].includes(k)?' *':''}${sel(k)}</label>`).join('')}</div></div>
+  <div class="panel pad"><b>2. Cost types</b><p class="small dim" style="margin:2px 0 8px">How each value in the cost type column maps to this app</p>
+    ${types.length?`<table class="rs-t">${types.map(([v,t])=>`<tr><td><b>${esc(v||'(blank)')}</b></td><td><select class="field" data-actype="${esc(v)}">${ACCT_TYPES.map(x=>`<option${t===x?' selected':''}>${x}</option>`).join('')}</select></td></tr>`).join('')}</table>`:'<p class="small dim">No cost type column, so everything comes in as Other.</p>'}
+    <label class="check small" style="margin-top:10px"><input type="checkbox" data-acopt="unassigned"${I.opt.unassigned?' checked':''}> Cost codes that aren't on the job: post them to the job without a line</label></div></div>
+  <div class="statline" style="margin-top:14px"><div><b>${P.ok.length}</b>New rows to import</div><div><b>${money(P.ok.reduce((s,r)=>s+(r.f.amount||0),0))}</b>New cost</div><div><b>${P.dup}</b>Already imported</div><div><b class="${P.bad.length?'bad-t':''}">${P.bad.length}</b>Can't import</div></div>
+  ${P.byJob.length?`<div class="panel scroll" style="margin-top:10px"><table class="acct-t"><thead><tr><th>Job</th><th class="r">Rows</th><th class="r">Amount</th><th class="r">Hours</th><th class="r">Without a line</th></tr></thead><tbody>${P.byJob.map(g=>`<tr><td>${esc(jobLabel(g.job))}</td><td class="r num">${g.n}</td><td class="r num">${money(g.amt)}</td><td class="r num">${fmtN(g.hrs,1)}</td><td class="r num">${g.un||'—'}</td></tr>`).join('')}</tbody></table></div>`:''}
+  ${P.bad.length?`<details class="panel pad" style="margin-top:10px"${P.ok.length?'':' open'}><summary><b>${P.bad.length} row${P.bad.length===1?'':'s'} can't be imported</b> <span class="small dim">(click to see why)</span></summary><table class="acct-t small">${P.bad.slice(0,200).map(r=>`<tr><td class="num">Row ${r.rowNo}</td><td>${esc(r.err)}</td></tr>`).join('')}</table></details>`:''}
+  <div class="adders" style="margin-top:12px"><button class="btn primary" data-act="aci-run"${P.ok.length&&!I.busy?'':' disabled'}>${I.busy?'Importing…':`Import ${P.ok.length} row${P.ok.length===1?'':'s'}`}</button></div></div>`}
+async function aciRead(file){const X=await loadXLSX();const wb=X.read(await file.arrayBuffer(),{type:'array'});const I={fileName:file.name,X,wb,sheets:wb.SheetNames,sheet:0,opt:{unassigned:true},typeMap:{}};aciSheet(I,0);S.acct.imp=I;render()}
+function aciSheet(I,i){I.sheet=i;I.rows=I.X.utils.sheet_to_json(I.wb.Sheets[I.sheets[i]],{header:1,raw:true,defval:''});let best=0,score=-1;
+  for(let r=0;r<Math.min(I.rows.length,20);r++){const {map}=mapHeader(I.rows[r],ACI_COLS);const s=Object.keys(map).length;if(s>score){score=s;best=r}}I.hdr=best;aciGuess(I)}
+function aciGuess(I){const saved=(()=>{try{return JSON.parse(localStorage.getItem('bp-acimap')||'{}')}catch(e){return {}}})();const hdr=I.rows[I.hdr]||[];const {map}=mapHeader(hdr,ACI_COLS);
+  Object.entries(saved).forEach(([k,h])=>{const i=hdr.findIndex(x=>normH(x)===h);if(i>=0)map[k]=i});I.map=map}
+function aciSaveMap(I){const hdr=I.rows[I.hdr]||[];const o={};Object.entries(I.map).forEach(([k,i])=>{if(i!=null&&hdr[i]!=null)o[k]=normH(hdr[i])});try{localStorage.setItem('bp-acimap',JSON.stringify(o))}catch(e){}}
+function aciType(I,v){if(I.typeMap[v])return I.typeMap[v];const T=acctSet().typeCodes;const hit=Object.entries(T).find(([t,c])=>c&&normH(c)===normH(v));if(hit)return hit[0];const x=xType(v);return x==='Production'?'Other':x||'Other'}
+function aciPlan(){const I=S.acct.imp;const X=I.X;const g=(row,k)=>I.map[k]==null?'':row[I.map[k]];
+  const jobs=S.jobs;const jBy=new Map();jobs.forEach(j=>{if(j.job_number)jBy.set(codeKey(j.job_number),j)});jobs.forEach(j=>{const k=codeKey(j.name);if(!jBy.has(k))jBy.set(k,j)});
+  const have=new Set(S.job_costs.map(c=>c.import_key).filter(Boolean));const seen={};const ok=[],bad=[];let dup=0;const typeVals=new Map();
+  I.rows.slice(I.hdr+1).forEach((row,ri)=>{if(row.every(c=>String(c).trim()===''))return;const rowNo=I.hdr+ri+2;
+    const jv=String(g(row,'job')).trim();const job=jv?jBy.get(codeKey(jv)):null;
+    if(!jv){if(row.filter(c=>String(c).trim()!=='').length<2)return;bad.push({rowNo,err:'No job number (probably a subtotal or heading row)'});return}
+    if(!job){bad.push({rowNo,err:`Job “${jv}” isn't in the app (check the job number on the Jobs tab)`});return}
+    const amt=xMoney(g(row,'amount'));if(amt===undefined||amt==null){bad.push({rowNo,err:`Couldn't read the amount “${g(row,'amount')}”`});return}
+    const d=xDate(g(row,'date'),X);if(!d){bad.push({rowNo,err:d===null?`Couldn't read the date “${g(row,'date')}”`:'No date'});return}
+    const code=String(g(row,'code')).trim();const items=jobItems(job.id);const it=code?items.find(i=>codeKey(i.code)===codeKey(code))||items.find(i=>codeKey(i.description)===codeKey(code)):null;
+    if(!it&&!I.opt.unassigned){bad.push({rowNo,err:code?`Cost code “${code}” isn't a line on ${jobLabel(job)}`:'No cost code'});return}
+    if(I.map.type!=null){const tv=String(g(row,'type')).trim();if(!typeVals.has(tv))typeVals.set(tv,aciType(I,tv))}
+    const type=I.map.type!=null?(typeVals.get(String(g(row,'type')).trim())||'Other'):'Other';
+    const hours=xMoney(g(row,'hours'));const qty=xMoney(g(row,'qty'));const vendor=String(g(row,'vendor')).trim(),ref=String(g(row,'reference')).trim(),desc=String(g(row,'description')).trim();
+    const base=[codeKey(jv),codeKey(code),d,type,(+amt).toFixed(2),hours||'',qty||'',normH(vendor),normH(ref),normH(desc)].join('|');seen[base]=(seen[base]||0)+1;const key=aciKey(base+'#'+seen[base]);
+    if(have.has(key)){dup++;return}
+    ok.push({rowNo,job,it,f:{job_id:job.id,item_id:it?it.id:null,date:d,type,description:[desc,!it&&code?`(${code})`:''].filter(Boolean).join(' ')||vendor,hours:hours??null,amount:+amt,qty:qty??null,reference:[vendor,ref].filter(Boolean).join(' · '),import_key:key}})});
+  const by=new Map();ok.forEach(r=>{const o=by.get(r.job.id)||{job:r.job,n:0,amt:0,hrs:0,un:0};o.n++;o.amt+=r.f.amount;o.hrs+=r.f.hours||0;if(!r.it)o.un++;by.set(r.job.id,o)});
+  return {ok,bad,dup,typeVals,byJob:[...by.values()]}}
+async function aciRun(){const I=S.acct.imp;const P=aciPlan();if(!P.ok.length)return;I.busy=true;render();aciSaveMap(I);
+  const rows=P.ok.map(r=>({id:newId(),...r.f,source:'import',created_by:S.session.user.id,created_by_name:myName()}));let n=0;
+  try{for(let i=0;i<rows.length;i+=200){await run(sb.from('job_costs').insert(rows.slice(i,i+200)));n+=Math.min(200,rows.length-i)}await loadTable('job_costs');
+    S.acct.imp=null;toast(`Imported ${n} cost row${n===1?'':'s'} across ${P.byJob.length} job${P.byJob.length===1?'':'s'}`)}
+  catch(e){I.busy=false;toast(/import_key/.test(errMsg(e))?'Run supabase/update-17-accounting.sql first.':errMsg(e))}render()}
+
+/* ----- lists & codes ----- */
+function acctLists(){const A=acctSet();const L=S.acct.list||'customers';
+  const tabs=`<div class="seg" style="margin-bottom:12px">${[['customers','Customers'],['vendors','Vendors & subs'],['codes','Cost codes'],['types','Cost types']].map(([k,l])=>`<button class="${L===k?'on':''}" data-act="acct-list" data-v="${k}">${l}</button>`).join('')}</div>`;
+  if(L==='customers'||L==='vendors'){const tbl=L==='customers'?'clients':'vendors';const list=S[tbl].slice().sort((a,b)=>String(a.company).localeCompare(b.company));const missing=list.filter(x=>!x.acct_id).length;
+    return tabs+`<div class="sec"><div class="sec-h"><h2>${L==='customers'?'Customers (clients & GCs)':'Vendors & subs'}</h2><span class="adders" style="margin:0"><label class="btn sm">Import IDs…<input type="file" accept=".xlsx,.xls,.csv" data-acids="${tbl}" hidden></label><button class="btn sm" data-act="acct-listx" data-v="${tbl}">Export list</button></span></div>
+    <p class="small dim" style="margin-top:0">The <b>account ID</b> is what your accounting software calls this ${L==='customers'?'customer':'vendor'} (customer number, vendor ID or exact display name). It goes on exported invoices so they land on the right account. ${missing?`<b>${missing}</b> don't have one yet.`:''}</p>
+    <div class="panel scroll"><table class="acct-t"><thead><tr><th>${L==='customers'?'Customer':'Vendor'}</th><th>Account ID</th>${L==='customers'?'<th class="r">Jobs</th>':'<th>Trade</th>'}</tr></thead><tbody>${list.map(x=>`<tr><td>${esc(x.company)}</td><td><input class="field acid" id="acid-${x.id}" data-acid="${tbl}:${x.id}" value="${esc(x.acct_id||'')}" placeholder="—"></td>${L==='customers'?`<td class="r num">${S.jobs.filter(j=>j.client_id===x.id).length||''}</td>`:`<td class="small">${esc(x.trade||'')}</td>`}</tr>`).join('')||'<tr><td colspan="3"><div class="empty small">None yet.</div></td></tr>'}</tbody></table></div>
+    <p class="hint">“Import IDs” reads a customer or vendor list exported from your accounting software and fills in the IDs by matching names. “Export list” gives your bookkeeper a file to set up any that are missing there.</p></div>`}
+  if(L==='codes'){const D=S.acct.codes||(S.acct.codes=clone(A.codes));const dirty=JSON.stringify(D)!==JSON.stringify(A.codes);
+    return tabs+`<div class="sec"><div class="sec-h"><h2>Cost codes</h2><span class="adders" style="margin:0"><label class="btn sm">Import…<input type="file" accept=".xlsx,.xls,.csv" data-accodes hidden></label><button class="btn sm" data-act="acct-codesx"${D.length?'':' disabled'}>Export</button><button class="btn sm primary" data-act="acct-codesave"${dirty?'':' disabled'}>Save</button></span></div>
+    <p class="small dim" style="margin-top:0">Your company's standard cost code list, the same one your accounting software uses. Job budgets flag lines whose codes aren't on it.</p>
+    <div class="panel scroll"><table class="acct-t"><thead><tr><th>Code</th><th>Description</th><th>Default type</th><th></th></tr></thead><tbody>${D.map((c,i)=>`<tr><td><input class="field" id="acc-${i}-code" data-acc="${i}.code" value="${esc(c.code||'')}"></td><td><input class="field" id="acc-${i}-desc" data-acc="${i}.desc" value="${esc(c.desc||'')}"></td><td><select class="field" data-acc="${i}.type"><option value="">—</option>${ACCT_TYPES.map(t=>`<option${c.type===t?' selected':''}>${t}</option>`).join('')}</select></td><td><button class="rm" data-act="acct-coderm" data-i="${i}" aria-label="Remove">×</button></td></tr>`).join('')||'<tr><td colspan="4"><div class="empty small">No cost codes yet. Import your list or add them.</div></td></tr>'}</tbody></table></div>
+    <div class="adders"><button class="btn sm" data-act="acct-codeadd">+ Cost code</button></div></div>`}
+  const T=S.acct.types||(S.acct.types=clone(A.typeCodes));const dirty=JSON.stringify(T)!==JSON.stringify(A.typeCodes);
+  return tabs+`<div class="sec"><div class="sec-h"><h2>Cost types</h2><span class="adders" style="margin:0"><button class="btn sm primary" data-act="acct-typesave"${dirty?'':' disabled'}>Save</button></span></div><div class="panel pad">
+    <p class="small dim" style="margin-top:0">The letter or code your accounting software uses for each cost type. Used on “one row per cost type” budget exports, and to read the cost type column on cost imports.</p>
+    <table class="rs-t" style="max-width:420px">${ACCT_TYPES.map(t=>`<tr><td>${t}</td><td><input class="field" id="act-${t}" data-actc="${t}" value="${esc(T[t]||'')}"></td></tr>`).join('')}</table>
+    <div class="fg" style="margin-top:12px"><label class="f">Default retainage % on new pay apps<input class="field num" id="act-ret" data-actret inputmode="decimal" value="${esc(S.acct.ret??A.ret)}"></label></div></div></div>`}
+async function acctIdsRead(file,tbl){const X=await loadXLSX();const wb=X.read(await file.arrayBuffer(),{type:'array'});const rows=X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:''});
+  const nameCols=['name','company','customer','customername','vendor','vendorname','displayname','companyname','fullname'],idCols=['id','customerid','vendorid','account','accountid','accountno','number','customernumber','vendornumber','customerno','vendorno','code','acctid'];
+  let h=-1,ni=-1,ii=-1;for(let r=0;r<Math.min(rows.length,15);r++){const n=rows[r].map(normH);const a=n.findIndex(x=>nameCols.includes(x)),b=n.findIndex(x=>idCols.includes(x));if(a>=0){h=r;ni=a;ii=b;break}}
+  if(h<0)throw new Error('Couldn’t find a name column. The file needs headings like “Name” or “Customer”, and “ID” or “Account”.');
+  const by=new Map(S[tbl].map(x=>[normH(x.company),x]));const upd=[];let nf=0;
+  rows.slice(h+1).forEach(r=>{const nm=String(r[ni]||'').trim();if(!nm)return;const x=by.get(normH(nm));if(!x){nf++;return}const id=ii>=0?String(r[ii]||'').trim():nm;if(id&&id!==x.acct_id)upd.push({id:x.id,acct_id:id})});
+  for(const u of upd)await run(sb.from(tbl).update({acct_id:u.acct_id}).eq('id',u.id));await loadTable(tbl);toast(`Set ${upd.length} account ID${upd.length===1?'':'s'}${nf?` · ${nf} name${nf===1?'':'s'} in the file didn't match anyone here`:''}${ii<0?' (no ID column, so the names were used as IDs)':''}`)}
+async function acctCodesRead(file){const X=await loadXLSX();const wb=X.read(await file.arrayBuffer(),{type:'array'});const rows=X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:false,defval:''});
+  const t=findTable(X,wb.Sheets[wb.SheetNames[0]],[['code','Code',['code','costcode','phase','phasecode','item']],['desc','Description',['description','desc','name','title']],['type','Type',['type','costtype','category']]]);if(!t)throw new Error('Couldn’t find a “Cost code” column.');
+  const cur=S.acct.codes||(S.acct.codes=clone(acctSet().codes));const by=new Map(cur.map(c=>[codeKey(c.code),c]));let n=0;
+  t.rows.forEach(r=>{const code=String(r[t.map.code]??'').trim();if(!code)return;const o=by.get(codeKey(code))||(cur.push({code}),by.set(codeKey(code),cur[cur.length-1]),cur[cur.length-1]);if(t.map.desc!=null)o.desc=String(r[t.map.desc]??'').trim();if(t.map.type!=null){const x=xType(r[t.map.type]);if(x&&x!=='Production')o.type=x}n++});
+  cur.sort((a,b)=>String(a.code).localeCompare(String(b.code),undefined,{numeric:true}));render();toast(`Read ${n} cost code${n===1?'':'s'}. Click Save to keep them.`)}
+
+/* ---------- events ---------- */
+FOCUS_ATTRS.push('data-pa','data-acc','data-actc','data-acid','data-fmth','data-co');
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;const A=S.acct;
+  if(!/^(acct-|pay-|aci-|fmt-|co-)/.test(a))return;e.preventDefault();
+  const job=A.jobId&&jobOf(A.jobId);const app=A.payId&&(S.pay_apps||[]).find(p=>p.id===A.payId);
+  switch(a){
+    case 'acct-tab':A.tab=t.dataset.v;if(A.tab!=='billing'){A.payId=null;A.draft=null}render();break;
+    case 'acct-job':A.tab='billing';A.jobId=t.dataset.id;A.payId=null;A.draft=null;render();break;
+    case 'acct-pick':A.jobId=t.dataset.id;A.payId=null;A.draft=null;render();break;
+    case 'acct-list':A.list=t.dataset.v;render();break;
+    case 'acct-wipx':acctWrite('wip',acctJobs().map(jobWip).map(w=>({job_number:w.job.job_number||'',job_name:w.job.name,customer:acctClient(w.job.client_id),contract:r2a(w.C.contract),cost:r2a(w.js.AC),eac:r2a(w.eac),pct:+(w.pct*100).toFixed(1),earned:r2a(w.earned),billed:r2a(w.B.billed),over:r2a(w.over),ret:r2a(w.B.ret),gp:r2a(w.gp)})),`WIP-schedule-${todayStr()}`).catch(err=>toast(errMsg(err)));break;
+    case 'acct-fmt':M={kind:'acctfmt',type:t.dataset.v,fmt:clone(acctFmt(t.dataset.v))};showModal();break;
+    case 'fmt-mv':{const i=+t.dataset.i,j=i+ +t.dataset.v;const c=M.fmt.cols;[c[i],c[j]]=[c[j],c[i]];renderModal();break}
+    case 'fmt-rm':M.fmt.cols.splice(+t.dataset.i,1);renderModal();break;
+    case 'fmt-save':{const F=acctSet().formats;acctSave({formats:{...F,[M.type]:M.fmt}}).then(()=>{closeModal();toast('Export format saved');render()}).catch(err=>toast(errMsg(err)));break}
+    case 'acct-loadest':{const j=jobOf(t.dataset.id);if(!j)break;const has=jobItems(j.id).length;if(has&&!confirm(`Replace ${jobLabel(j)}'s ${has} budget line${has===1?'':'s'} with the estimate?`))break;
+      t.disabled=true;loadBudgetFromEstimate(j,!!has).then(n=>{toast(`Loaded ${n} budget line${n===1?'':'s'} from the estimate`);render()}).catch(err=>{toast(errMsg(err));render()});break}
+    case 'acct-budx':{const j=jobOf(t.dataset.id);if(j)acctWrite('budget',budgetRows(j),`${j.job_number||j.name}-budget-${todayStr()}`).catch(err=>toast(errMsg(err)));break}
+    case 'acct-co':if(job){M={kind:'acctco',draft:{job_id:job.id,change_order:String(jobItems(job.id).filter(i=>i.change_order).length+1),description:'',code:'',bid_price:null,cost:null,quantity:null,unit:''}};showModal();setTimeout(()=>$('#co-desc')?.focus(),0)}break;
+    case 'co-save':coSave();break;
+    case 'pay-new':if(job)payNew(job);break;
+    case 'pay-open':A.payId=t.dataset.id;A.draft=null;render();window.scrollTo(0,0);break;
+    case 'pay-back':if(A.draft&&app&&JSON.stringify(A.draft)!==JSON.stringify(app)&&!confirm('Leave without saving this pay app?'))break;A.payId=null;A.draft=null;render();break;
+    case 'pay-save':paySave();break;
+    case 'pay-fill':if(job&&app)payFill(job,payDraft(app));break;
+    case 'pay-status':if(app)payStatus(app,t.dataset.v,t.dataset.v==='Approved'&&app.status==='Paid'?{...app.meta,paidAmt:null,paidDate:null,paidRef:null}:null);break;
+    case 'pay-paid':if(job&&app){const R=payCalc(job,app);const amt=prompt('Amount received',R.due.toFixed(2));if(amt==null)break;const ref=prompt('Check # or reference (optional)','')||'';
+      payStatus(app,'Paid',{...app.meta,paidAmt:num(String(amt).replace(/[$,\s]/g,''))??R.due,paidDate:todayStr(),paidRef:ref.trim()})}break;
+    case 'pay-del':if(app&&confirm(`Delete draft pay app #${app.number}?`)){run(sb.from('pay_apps').delete().eq('id',app.id)).then(()=>loadTable('pay_apps')).then(()=>{A.payId=null;A.draft=null;render()}).catch(err=>toast(errMsg(err)))}break;
+    case 'pay-print':if(job&&app)payPrint(job,payDraft(app));break;
+    case 'pay-inv':if(job&&app){const rows=payInvoiceRows(job,payDraft(app));if(!rows.length){toast('Nothing billed on this pay app yet');break}acctWrite('invoice',rows,`${job.job_number||job.name}-pay-app-${app.number}`).catch(err=>toast(errMsg(err)))}break;
+    case 'aci-cancel':A.imp=null;render();break;
+    case 'aci-run':aciRun();break;
+    case 'acct-listx':{const tbl=t.dataset.v;const X=S[tbl].slice().sort((a,b)=>String(a.company).localeCompare(b.company));
+      loadXLSX().then(XL=>{const wb=XL.utils.book_new();XL.utils.book_append_sheet(wb,XL.utils.aoa_to_sheet([['Name','Account ID','Contact','Email','Phone',tbl==='vendors'?'Trade':'Type'],...X.map(x=>[x.company,x.acct_id||'',x.contact||x.contact_name||'',x.email||'',x.phone||'',tbl==='vendors'?(x.trade||''):(x.type||'')])]),tbl==='vendors'?'Vendors':'Customers');XL.writeFile(wb,`${tbl==='vendors'?'vendors':'customers'}-${todayStr()}.xlsx`)}).catch(err=>toast(errMsg(err)));break}
+    case 'acct-codeadd':(A.codes=A.codes||clone(acctSet().codes)).push({code:'',desc:'',type:''});render();setTimeout(()=>$(`#acc-${A.codes.length-1}-code`)?.focus(),0);break;
+    case 'acct-coderm':A.codes.splice(+t.dataset.i,1);render();break;
+    case 'acct-codesave':acctSave({codes:(A.codes||[]).filter(c=>String(c.code||'').trim())}).then(()=>{A.codes=null;toast('Cost codes saved');render()}).catch(err=>toast(errMsg(err)));break;
+    case 'acct-codesx':loadXLSX().then(XL=>{const wb=XL.utils.book_new();XL.utils.book_append_sheet(wb,XL.utils.aoa_to_sheet([['Cost code','Description','Type'],...(A.codes||acctSet().codes).map(c=>[c.code,c.desc||'',c.type||''])]),'Cost codes');XL.writeFile(wb,`cost-codes-${todayStr()}.xlsx`)}).catch(err=>toast(errMsg(err)));break;
+    case 'acct-typesave':acctSave({typeCodes:A.types,...(num(A.ret)!=null?{ret:num(A.ret)}:{})}).then(()=>{A.types=null;A.ret=null;toast('Saved');render()}).catch(err=>toast(errMsg(err)));break;
+  }});
+document.addEventListener('input',e=>{const t=e.target;const A=S.acct;
+  if(t.dataset.pa!=null&&S.view==='acct'){const app=(S.pay_apps||[]).find(p=>p.id===A.payId);if(!app)return;const d=payDraft(app);const v=t.dataset.pat==='t'?t.value:(t.value.trim()===''?null:num(t.value.replace(/[,$%\s]/g,'')));epSet(d,t.dataset.pa,v);render();return}
+  if(t.dataset.acc!=null){const [i,k]=t.dataset.acc.split('.');A.codes[+i][k]=t.value;render();return}
+  if(t.dataset.actc!=null){A.types[t.dataset.actc]=t.value;render();return}
+  if(t.dataset.actret!=null){A.ret=t.value;render();return}
+  if(t.dataset.fmth!=null&&M&&M.kind==='acctfmt'){M.fmt.cols[+t.dataset.fmth].h=t.value;return}
+  if(t.dataset.co!=null&&M&&M.kind==='acctco'){M.draft[t.dataset.co]=['bid_price','cost','quantity'].includes(t.dataset.co)?(t.value.trim()===''?null:num(t.value.replace(/[,$\s]/g,''))):t.value;if(t.dataset.co==='bid_price')renderModal();return}
+  if(t.dataset.achdr!=null&&A.imp){const v=Math.round(+t.value);if(v>=1&&v<=A.imp.rows.length){A.imp.hdr=v-1;aciGuess(A.imp);render()}return}});
+document.addEventListener('change',e=>{const t=e.target;const A=S.acct;
+  if(t.dataset.pad!=null||t.dataset.pab!=null){const app=(S.pay_apps||[]).find(p=>p.id===A.payId);if(!app)return;const d=payDraft(app);if(t.dataset.pab)epSet(d,t.dataset.pab,t.checked);else d[t.dataset.pad]=t.value;render();return}
+  if(t.dataset.acimp!=null&&t.files[0]){aciRead(t.files[0]).catch(err=>toast(errMsg(err)));t.value='';return}
+  if(t.dataset.acsheet!=null&&A.imp){aciSheet(A.imp,+t.value);render();return}
+  if(t.dataset.acmap&&A.imp){A.imp.map[t.dataset.acmap]=t.value===''?null:+t.value;render();return}
+  if(t.dataset.actype!=null&&A.imp){A.imp.typeMap[t.dataset.actype]=t.value;render();return}
+  if(t.dataset.acopt&&A.imp){A.imp.opt[t.dataset.acopt]=t.checked;render();return}
+  if(t.dataset.acid){const [tbl,id]=t.dataset.acid.split(':');run(sb.from(tbl).update({acct_id:t.value.trim()}).eq('id',id)).then(()=>loadTable(tbl)).then(()=>toast('Account ID saved')).catch(err=>toast(/acct_id/.test(errMsg(err))?'Run supabase/update-17-accounting.sql first.':errMsg(err)));return}
+  if(t.dataset.acids&&t.files[0]){acctIdsRead(t.files[0],t.dataset.acids).catch(err=>toast(errMsg(err)));t.value='';return}
+  if(t.dataset.accodes!=null&&t.files[0]){acctCodesRead(t.files[0]).catch(err=>toast(errMsg(err)));t.value='';return}
+  if(t.dataset.acc!=null&&t.tagName==='SELECT'){const [i,k]=t.dataset.acc.split('.');A.codes[+i][k]=t.value;render();return}
+  if(M&&M.kind==='acctfmt'&&t.dataset.fmt){const k=t.dataset.fmt;if(k==='preset'){if(t.value){M.fmt=fmtFromPreset(M.type,t.value)}}else if(k==='add'){if(t.value)M.fmt.cols.push({k:t.value,h:ACCT_FIELDS[M.type].find(f=>f[0]===t.value)[1]})}else M.fmt[k]=t.value;renderModal()}});
