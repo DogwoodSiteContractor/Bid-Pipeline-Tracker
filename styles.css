@@ -1157,3 +1157,30 @@ tr.eo-item td:first-child{padding-left:14px}tr.eo-act td:first-child{padding-lef
 td.eo-dc .eo-d:not(:last-child){width:calc(100% - 46px)}
 table.eo col.c-unit{width:60px}table.eo col.c-up{width:96px}
 table.eo .eo-u{padding:4px 4px}
+
+/* ---------- bid item setup grid ---------- */
+.su-wrap{overflow:hidden}
+.su-tip{margin-left:auto}
+.su-scroll{overflow-x:auto}
+table.su{table-layout:fixed;width:100%;min-width:900px;font-size:13.5px;border-collapse:separate;border-spacing:0}
+table.su th{position:sticky;top:0;z-index:1;padding:7px 6px}
+table.su td{padding:2px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.su td.r{padding-right:8px;white-space:nowrap}
+table.su .c{text-align:center}
+table.su .field{border-color:transparent;background:transparent;padding:5px 6px;font-size:13.5px;border-radius:5px;width:100%}
+table.su .field:hover{border-color:var(--line)}
+table.su .field:focus{border-color:var(--accent);background:var(--surface);outline:none}
+table.su .field.est-need{border-color:var(--warn);background:var(--surface)}
+.su-q{text-align:right}
+tr.su-sec td{background:var(--surface-2);font-weight:700}
+tr.su-sec .field{font-weight:700;font-family:"Montserrat",system-ui,sans-serif}
+tr.su-row.alt td{color:var(--ink-3)}
+tr.su-add td{border-bottom:2px solid var(--line)}
+tr.su-add .field{color:var(--ink-3);font-style:italic}
+tr.su-add .field:focus{font-style:normal}
+.su-fixed{display:inline-block;font-size:10.5px;background:var(--warn-soft);color:var(--warn);border-radius:8px;padding:0 6px;margin-left:4px;font-weight:600}
+table.su tfoot td{background:var(--surface-2);border-top:2px solid var(--line);padding:8px}
+table.su .rm.arm{background:var(--bad);color:#fff;font-size:12px}
+.su-pend{background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+table.qa-t td{padding:6px 8px}
+tr.qa-item td{background:var(--surface-2)}

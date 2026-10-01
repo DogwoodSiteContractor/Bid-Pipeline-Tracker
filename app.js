@@ -277,14 +277,14 @@ function renderNow(){
   if(!S.profile){top.hidden=true;main.innerHTML=`<div class="auth"><div class="spin" aria-label="Loading"></div></div>`;return}
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
-  const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
+  const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
   const views={dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
   main.innerHTML=(estsTabFor()?estsTabs(estsTabFor()):subNav())+views[S.view]();
   keep.forEach(([id,top])=>{const e=id&&document.getElementById(id);if(e)e.scrollTop=top});
-  if(fid){const n=document.getElementById(fid);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});try{n.setSelectionRange(pos,pos)}catch(e){}if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
+  if(fid){const n=document.getElementById(fid);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});try{n.setSelectionRange(pos,pe??pos)}catch(e){}if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();if(S.view==='calc'&&$('#tk-canvas'))tkMount();
 }
 // top-bar tabs; related pages share a tab and get small sub-tabs inside it
@@ -940,7 +940,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estnew:estNewModal,cbpick:cbPickModal}[M.kind]();
+  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick'].includes(M.kind)?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -4679,7 +4679,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'est-open':S.estFrom='pipeline';estOpen(t.dataset.id||(M&&M.draft&&M.draft.id),'pipeline');break;
     case 'est-back':{const id=S.estBid;const E0=S.est;estSave();if(E0&&E0.tpl){S.view='estimates';S.estsTab='tpl';render();break}if(S.estFrom==='estimates'){S.view='estimates';render();break}S.view='pipeline';render();if(id&&byId(S.bids,id))openBid(id);break}
     case 'est-create':if(t.dataset.v==='copy')estCreate('copy',$('#est-copysrc')?.value);else if(t.dataset.v==='tpl')estCreate('tpl',$('#est-tplsrc')?.value);else estCreate(t.dataset.v);break;
-    case 'est-tab':S.est.tab=t.dataset.v;render();break;
+    case 'est-tab':{const was=S.est.tab;S.est.tab=t.dataset.v;render();if(was==='setup'&&t.dataset.v!=='setup'&&qaNeeded()&&!EC().ro)qaOpen();break}
     case 'est-sel':S.est.sel=t.dataset.id;render();if(window.innerWidth<1100)$('.est-detail')?.scrollIntoView({block:'start',behavior:'smooth'});break;
     case 'est-retry':S.est.saveErr=null;S.est.dirty=true;estSave();break;
     case 'est-reload':S.est.conflict=false;S.est.dirty=false;estOpen(S.est.bidId);break;
@@ -5007,10 +5007,10 @@ function vEstimate(){const E=S.est;const tpl=!!(E&&E.tpl);const b=tpl?null:byId(
   if(E.err)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="err">${esc(E.err)}</div>`;
   if(!E.row)return estStartView(b,back);
   const d=E.data;const R=estCalc(d);const ro=EC().ro;estPick();const stale=estStale(d);
-  const tabs=tpl?[['build','Build'],['ind','Schedule & indirects'],['res','Resources'],['sum','Default markup']]:[['build','Build'],['ind','Schedule & indirects'],['res','Resources'],['quotes','Quotes'],['sum','Markup & totals'],['prop','Proposal']];
+  const tabs=tpl?[['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['sum','Default markup']]:[['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['quotes','Quotes'],['sum','Markup & totals'],['prop','Proposal']];
   if(!tabs.some(t=>t[0]===E.tab))E.tab='build';
   const kpi=(l,v,s,c)=>`<div class="est-kpi${c?' '+c:''}"><span>${l}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
-  const body=E.tab==='ind'?estIndView(d,R,ro):E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='sum'?estSumView(d,R,b||{},ro):estBuildView(d,R,ro);
+  const body=E.tab==='setup'?estSetupView(d,R,ro):E.tab==='ind'?estIndView(d,R,ro):E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='sum'?estSumView(d,R,b||{},ro):estBuildView(d,R,ro);
   const title=tpl?`<input class="field est-tplname" id="est-tplname" data-tplname value="${esc(E.tplName||'')}" placeholder="Template name"${ro?' disabled':''}>`:`<h1>${esc(b.name)}</h1>`;
   return `<div class="head est-headrow"><div>${back}${title}<p class="small"><b>${tpl?(E.tplBook==='section'?'Section template':'Master template'):'Estimate'}</b> · <span id="est-status">${estStatusText()}</span></p></div>
     <div class="tools">${stale.length&&!ro?`<button class="btn" data-act="est-stale" title="Codebook prices changed since they were added">↻ Update ${stale.length} price${stale.length===1?'':'s'}</button>`:''}${tpl?'':'<button class="btn" data-act="est-export">Export to Excel</button>'}${!tpl&&cbEditable()?'<button class="btn" data-act="est-savetpl" data-v="estimate">Save as master template</button>':''}</div></div>
@@ -5458,6 +5458,73 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
 document.addEventListener('input',e=>{const t=e.target;if(M&&M.kind==='cbpick'&&t.dataset.pickq2!=null){M.q=t.value;renderModal()}});
 document.addEventListener('change',e=>{const t=e.target;if(M&&M.kind==='cbpick'&&t.dataset.pickcat!=null){M.cat=t.value;renderModal()}});
 document.addEventListener('keydown',e=>{if(!M||M.kind!=='cbpick')return;if(e.key==='Enter'&&e.target.id==='pick-q'){e.preventDefault();const r=pickRows(M.book);if(M.sel.size)pickAdd();else if(r.length===1)pickAdd([r[0].id])}});
+
+/* ---------- Bid item setup: a spreadsheet of every bid item ---------- */
+function estSetupView(d,R,ro){const E=S.est;const g=(p,v,col,o={})=>epIn(p,v,{...o,attrs:` data-grid="su" data-col="${col}"`});const pend=Object.keys(E.qtyChanged||{}).filter(id=>d.items.some(i=>i.id===id));
+  const secTot=new Map();d.items.forEach((it,i)=>{const t=secTot.get(it.sec)||{cost:0,price:0};if(!it.alt){t.cost+=R.items[i].total;t.price+=R.items[i].price}secTot.set(it.sec,t)});
+  let rows='';
+  d.sections.forEach((s,k)=>{const its=d.items.map((it,i)=>({it,i})).filter(o=>o.it.sec===s.id);const t=secTot.get(s.id)||{cost:0,price:0};
+    rows+=`<tr class="su-sec"><td>${g(`sections.${k}.code`,s.code,'scode',{cls:'su-c'})}</td><td colspan="4">${g(`sections.${k}.name`,s.name,'sname',{cls:'su-sn',ph:'Section name'})}</td><td></td><td class="r num">${money(t.cost)}</td><td></td><td class="r num"><b>${money(t.price)}</b></td><td></td><td></td></tr>`;
+    its.forEach(({it,i})=>{const x=R.items[i];const p=`items.${i}`;const blank=it.qty==null||it.qty==='';const fixed=it.acts.filter(a=>a.qty!=null&&a.qty!=='').length;
+      rows+=`<tr class="su-row${it.alt?' alt':''}"><td>${g(p+'.code',it.code,'code',{cls:'su-c'})}</td><td>${g(p+'.desc',it.desc,'desc',{ph:'Bid item'})}</td><td>${g(p+'.qty',it.qty,'qty',{n:1,cls:'su-q'+(blank?' est-need':''),ph:blank?'Qty':''})}</td><td>${g(p+'.unit',it.unit,'unit',{cls:'su-u',list:'cb-units'})}</td>
+        <td class="c"><input type="checkbox" data-ep="${p}.alt" data-ept="b"${it.alt?' checked':''}${ro?' disabled':''} aria-label="Alternate" title="Alternate — priced, not in the base bid"></td>
+        <td>${g(p+'.override',it.override,'ov',{n:1,cls:'su-q',ph:x.calcUnit?money2(x.calcUnit).replace('$',''):'',title:'Unit price override — leave blank to use the calculated price'})}</td>
+        <td class="r num small">${money(x.total)}</td><td class="r num small">${x.q?money2(x.unitPrice):''}</td><td class="r num"><b>${money(x.price)}</b></td>
+        <td class="small dim" title="${fixed?`${fixed} activit${fixed===1?'y has':'ies have'} its own quantity`:''}">${it.acts.length?`${it.acts.length}${fixed?` <span class="su-fixed">${fixed} fixed</span>`:''}`:'—'}</td>
+        <td>${ro?'':`<button class="rm${S.epArm===p?' arm':''}" data-act="ep-del" data-p="${p}" aria-label="Delete bid item" title="${it.acts.length?'Has activities — click twice to delete':'Delete'}">${S.epArm===p?'Delete?':'×'}</button>`}</td></tr>`});
+    if(!ro)rows+=`<tr class="su-add"><td></td><td colspan="10"><input class="field" data-suadd="${s.id}" placeholder="+ New bid item in ${esc(s.name||'this section')} — start typing" aria-label="New bid item"></td></tr>`});
+  return `${pend.length&&!ro?`<div class="su-pend"><b>Quantities changed on ${pend.length} bid item${pend.length===1?'':'s'}.</b> Activities with their own quantity don’t move on their own. <button class="btn sm primary" data-act="qa-open">Update activity quantities…</button> <button class="btn sm ghost" data-act="qa-dismiss">Leave them</button></div>`:''}
+  <div class="panel su-wrap"><div class="eo-bar">${ro?'':'<button class="btn primary sm" data-act="eo-add" data-t="sec">+ Section</button><button class="btn sm" data-act="cbpick-open" data-v="biditem">🔍 Search bid item codebook</button>'}<span class="dim small su-tip">Enter moves down a column · paste rows straight from Excel (Item #, Description, Qty, Unit)</span></div>
+  <div class="su-scroll"><table class="su"><colgroup><col style="width:90px"><col><col style="width:100px"><col style="width:70px"><col style="width:46px"><col style="width:110px"><col style="width:100px"><col style="width:100px"><col style="width:110px"><col style="width:84px"><col style="width:44px"></colgroup>
+    <thead><tr><th>Item #</th><th>Description</th><th class="r">Qty</th><th>Unit</th><th class="c">Alt</th><th class="r">Price override</th><th class="r">Cost</th><th class="r">Unit price</th><th class="r">Total</th><th>Activities</th><th></th></tr></thead>
+    <tbody>${rows||'<tr><td colspan="11"><div class="empty"><b>No sections yet</b>Add a section, then type your bid items.</div></td></tr>'}</tbody>
+    <tfoot><tr><td></td><td><b>Base bid</b></td><td></td><td></td><td></td><td></td><td class="r num">${money(R.cost)}</td><td></td><td class="r num"><b>${money(R.total)}</b></td><td></td><td></td></tr></tfoot></table></div></div>`}
+
+/* ---------- quantity changes → activity quantities ---------- */
+function qaRows(){const E=S.est,d=E.data;const ch=E.qtyChanged||{};
+  return Object.entries(ch).map(([id,old])=>{const it=d.items.find(i=>i.id===id);if(!it)return null;const nq=num(it.qty);const o=num(old);
+    const fixed=it.acts.filter(a=>a.qty!=null&&a.qty!=='');return {it,old:o,nq,ratio:o&&nq!=null?nq/o:null,fixed,linked:it.acts.length-fixed.length}}).filter(Boolean)}
+function qaNeeded(){return qaRows().some(r=>r.fixed.length&&r.old!==r.nq)}
+function qaOpen(){const rows=qaRows();if(!rows.some(r=>r.fixed.length)){const n=rows.reduce((s,r)=>s+r.linked,0);S.est.qtyChanged={};if(n)toast(`${n} activit${n===1?'y follows':'ies follow'} the bid item quantity automatically`);render();return}
+  M={kind:'qtyapply',mode:rows.every(r=>r.ratio!=null)?'scale':'link',skip:new Set()};showModal()}
+function qaModal(){const rows=qaRows().filter(r=>r.fixed.length);const canScale=rows.every(r=>r.ratio!=null);const mode=canScale?M.mode:'link';
+  const nv=(r,a)=>mode==='scale'?+(num(a.qty)*r.ratio).toFixed(4):r.nq;
+  return mhead('Apply new quantities to activities?',`${rows.length} bid item${rows.length===1?'':'s'} changed`)+`<div class="mbody">
+    <div class="radio" style="flex-direction:column;align-items:flex-start;gap:8px;margin-bottom:12px">
+      <label${canScale?'':' class="dim"'}><input type="radio" name="qam" data-qam value="scale"${mode==='scale'?' checked':''}${canScale?'':' disabled'}> <b>Scale them</b> by the same ratio as the bid item (e.g. 400 → 500 LF is ×1.25)</label>
+      <label><input type="radio" name="qam" data-qam value="link"${mode==='link'?' checked':''}> <b>Match the bid item</b> — and keep following it from now on</label></div>
+    <div class="panel scroll"><table class="qa-t"><thead><tr><th></th><th>Activity</th><th class="r">Now</th><th class="r">New</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr class="qa-item"><td colspan="4"><b>${esc(r.it.code)} ${esc(r.it.desc||'')}</b> <span class="dim">${qtyFmt(r.old)} → <b>${qtyFmt(r.nq)}</b> ${esc(r.it.unit||'')}${r.ratio!=null?` (×${fmtN(r.ratio,3)})`:''}${r.linked?` · ${r.linked} other activit${r.linked===1?'y follows':'ies follow'} automatically`:''}</span></td></tr>
+      ${r.fixed.map(a=>`<tr><td><input type="checkbox" data-qaskip="${a.id}"${M.skip.has(a.id)?'':' checked'} aria-label="Update this activity"></td><td>${esc(a.code)} ${esc(a.desc||'')}</td><td class="r num">${qtyFmt(num(a.qty))} ${esc(a.unit||r.it.unit||'')}</td><td class="r num"><b>${M.skip.has(a.id)?'—':qtyFmt(nv(r,a))}</b>${mode==='link'&&!M.skip.has(a.id)?' <span class="dim small">linked</span>':''}</td></tr>`).join('')}`).join('')}</tbody></table></div>
+    <p class="hint">Activities with a blank quantity always use the bid item quantity, so they’ve already updated.</p></div>
+  <div class="mfoot"><div><button class="btn" data-act="qa-leave">Leave activities as they are</button></div><div class="r"><button class="btn primary" data-act="qa-apply">Apply to ${rows.reduce((s,r)=>s+r.fixed.filter(a=>!M.skip.has(a.id)).length,0)} activit${rows.reduce((s,r)=>s+r.fixed.filter(a=>!M.skip.has(a.id)).length,0)===1?'y':'ies'}</button></div></div>`}
+function qaApply(){const rows=qaRows();const mode=rows.filter(r=>r.fixed.length).every(r=>r.ratio!=null)?M.mode:'link';let n=0;
+  rows.forEach(r=>r.fixed.forEach(a=>{if(M.skip.has(a.id))return;a.qty=mode==='scale'?+(num(a.qty)*r.ratio).toFixed(4):null;n++}));
+  S.est.qtyChanged={};closeModal();estTouch();render();toast(`Updated ${n} activit${n===1?'y':'ies'}`)}
+// remember an item's quantity when you start editing it; when you finish, record the change
+const QTY_RX=/^items\.(\d+)\.qty$/;
+document.addEventListener('focusin',e=>{const t=e.target;const m=t.dataset&&t.dataset.ep&&QTY_RX.exec(t.dataset.ep);if(!m||!S.est||!S.est.data)return;const it=S.est.data.items[+m[1]];if(!it)return;
+  const o=S.est.qtyOld||(S.est.qtyOld={});if(!(it.id in o))o[it.id]=it.qty??null});
+document.addEventListener('change',e=>{const t=e.target;const m=t.dataset&&t.dataset.ep&&QTY_RX.exec(t.dataset.ep);if(!m||!S.est||!S.est.data||EC().ro)return;const E=S.est;const it=E.data.items[+m[1]];if(!it)return;
+  const o=E.qtyOld||{};const old=o[it.id];delete o[it.id];if(num(old)===num(it.qty))return;E.qtyChanged=E.qtyChanged||{};if(!(it.id in E.qtyChanged))E.qtyChanged[it.id]=old;
+  if(!it.acts.some(a=>a.qty!=null&&a.qty!=='')){delete E.qtyChanged[it.id];return}
+  if(E.tab==='setup'){render();return}setTimeout(()=>{if(!M)qaOpen()},0)});
+// paste a block from Excel into the setup grid
+const SU_COLS=['code','desc','qty','unit'];
+document.addEventListener('paste',e=>{const t=e.target;if(t.dataset?.grid!=='su'||!S.est||EC().ro)return;const txt=(e.clipboardData||window.clipboardData)?.getData('text')||'';if(!/[\t\n]/.test(txt.trim()))return;
+  const m=/^items\.(\d+)\.(\w+)$/.exec(t.dataset.ep||'');if(!m)return;e.preventDefault();const E=S.est,d=E.data;const start=d.items[+m[1]];const c0=SU_COLS.indexOf(m[2]);if(c0<0)return;
+  const lines=txt.replace(/\r/g,'').split('\n').filter((l,i,a)=>l.trim()!==''||i<a.length-1).filter(l=>l.trim()!=='');const sec=start.sec;let cur=start;let made=0;E.qtyChanged=E.qtyChanged||{};
+  lines.forEach((line,li)=>{if(li>0){const same=d.items.filter(i=>i.sec===sec);const k=same.indexOf(cur);cur=same[k+1]||(made++,estAddItem(d,sec,{desc:''}))}
+    line.split('\t').forEach((v,ci)=>{const col=SU_COLS[c0+ci];if(!col)return;v=v.trim();if(col==='qty'){const n=num(v.replace(/[,$\s]/g,''));if(cur.acts.some(a=>a.qty!=null&&a.qty!=='')&&!(cur.id in E.qtyChanged)&&num(cur.qty)!==n)E.qtyChanged[cur.id]=cur.qty??null;cur.qty=v===''?null:n}else cur[col]=v})});
+  estTouch();render();toast(`Pasted ${lines.length} row${lines.length===1?'':'s'}${made?` · ${made} new bid item${made===1?'':'s'}`:''}`)});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset.suadd==null||!S.est||EC().ro)return;const d=S.est.data;const it=estAddItem(d,t.dataset.suadd,{desc:t.value});estTouch();render();
+  setTimeout(()=>{const el=document.getElementById(epId(`items.${d.items.indexOf(it)}.desc`));if(el){el.focus();const n=el.value.length;el.setSelectionRange(n,n)}},0)});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
+  if(a==='qa-open'){qaOpen();return}
+  if(a==='qa-dismiss'){S.est.qtyChanged={};render();return}
+  if(!M||M.kind!=='qtyapply')return;
+  if(a==='qa-apply')qaApply();else if(a==='qa-leave'){S.est.qtyChanged={};closeModal();render()}});
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='qtyapply')return;if(t.dataset.qam!=null){M.mode=t.value;renderModal()}else if(t.dataset.qaskip){t.checked?M.skip.delete(t.dataset.qaskip):M.skip.add(t.dataset.qaskip);renderModal()}});
 
 function estBidBlock(b,work){if(b._new||!['admin','estimator','board'].includes(role()))return '';const x=estOf(b.id);
   if(S.estMissing)return `<fieldset><legend>Estimate</legend><p class="hint" style="margin:0">Estimates need a one-time database update (update-14-estimates.sql).</p></fieldset>`;

@@ -211,6 +211,16 @@ The defaults every new estimate starts with. Each estimate keeps its own copy, s
   - only the items you pick carry it,
   - or you adjust items by hand for an unbalanced bid. An "out of balance" check shows whether the adjustments still add up to $0.
 
+**Bid item setup tab:** every bid item in one spreadsheet, grouped by section.
+- **Editing:** type the item #, description, quantity, unit, alternate and price override in place. Enter moves down a column.
+- **Adding:** start typing in "+ New bid item…" to add one. Delete with ×; items that have activities take two clicks.
+- **Paste from Excel:** copy rows with Item #, Description, Qty and Unit columns and paste them into a cell. The rows fill down, and new bid items are created as needed.
+
+**When a bid item's quantity changes:**
+- Activities with a blank quantity follow the bid item automatically.
+- Activities that have their own quantity get a prompt, **"Apply new quantities to activities?"**. You can scale them by the same ratio (400 → 500 LF scales them ×1.25), or match the bid item and keep following it. Untick any activity to leave it alone.
+- In the Build tab the prompt comes up right away. In Bid item setup, a banner collects your changes and the prompt comes up when you click it or leave the tab.
+
 **🔍 Search codebook**
 - **Where:** a button on the outline toolbar, in a section ("Search bid item codebook"), in a bid item ("Search activity codebook"), and in an activity's cost sheet.
 - **What it searches:** opens the codebook with tabs for Bid items, Activities, Section templates, Materials, Labor, Equipment and Crews. Search by code, description, category or vendor, and filter by category.
