@@ -5472,7 +5472,7 @@ function estSetupView(d,R,ro){const E=S.est;const g=(p,v,col,o={})=>epIn(p,v,{..
         <td class="r num small">${money(x.total)}</td><td class="r num small">${x.q?money2(x.unitPrice):''}</td><td class="r num"><b>${money(x.price)}</b></td>
         <td class="small dim" title="${fixed?`${fixed} activit${fixed===1?'y has':'ies have'} its own quantity`:''}">${it.acts.length?`${it.acts.length}${fixed?` <span class="su-fixed">${fixed} fixed</span>`:''}`:'—'}</td>
         <td>${ro?'':`<button class="rm${S.epArm===p?' arm':''}" data-act="ep-del" data-p="${p}" aria-label="Delete bid item" title="${it.acts.length?'Has activities — click twice to delete':'Delete'}">${S.epArm===p?'Delete?':'×'}</button>`}</td></tr>`});
-    if(!ro)rows+=`<tr class="su-add"><td></td><td colspan="10"><input class="field" data-suadd="${s.id}" placeholder="+ New bid item in ${esc(s.name||'this section')} — start typing" aria-label="New bid item"></td></tr>`});
+    if(!ro)rows+=`<tr class="su-add"><td></td><td colspan="10"><input class="field" id="su-add-${s.id}" data-suadd="${s.id}" placeholder="+ New bid item in ${esc(s.name||'this section')} — start typing" aria-label="New bid item"></td></tr>`});
   return `${pend.length&&!ro?`<div class="su-pend"><b>Quantities changed on ${pend.length} bid item${pend.length===1?'':'s'}.</b> Activities with their own quantity don’t move on their own. <button class="btn sm primary" data-act="qa-open">Update activity quantities…</button> <button class="btn sm ghost" data-act="qa-dismiss">Leave them</button></div>`:''}
   <div class="panel su-wrap"><div class="eo-bar">${ro?'':'<button class="btn primary sm" data-act="eo-add" data-t="sec">+ Section</button><button class="btn sm" data-act="cbpick-open" data-v="biditem">🔍 Search bid item codebook</button>'}<span class="dim small su-tip">Enter moves down a column · paste rows straight from Excel (Item #, Description, Qty, Unit)</span></div>
   <div class="su-scroll"><table class="su"><colgroup><col style="width:90px"><col><col style="width:100px"><col style="width:70px"><col style="width:46px"><col style="width:110px"><col style="width:100px"><col style="width:100px"><col style="width:110px"><col style="width:84px"><col style="width:44px"></colgroup>
@@ -5509,6 +5509,12 @@ document.addEventListener('change',e=>{const t=e.target;const m=t.dataset&&t.dat
   const o=E.qtyOld||{};const old=o[it.id];delete o[it.id];if(num(old)===num(it.qty))return;E.qtyChanged=E.qtyChanged||{};if(!(it.id in E.qtyChanged))E.qtyChanged[it.id]=old;
   if(!it.acts.some(a=>a.qty!=null&&a.qty!=='')){delete E.qtyChanged[it.id];return}
   if(E.tab==='setup'){render();return}setTimeout(()=>{if(!M)qaOpen()},0)});
+// Tab walks Description → Qty → Unit, then drops to the next row (or the section's empty "new bid item" line)
+document.addEventListener('keydown',e=>{if(e.key!=='Tab'||e.altKey||e.ctrlKey||e.metaKey)return;const t=e.target;if(!S.est||S.est.tab!=='setup'||M)return;
+  const inGrid=t.dataset&&((t.dataset.grid==='su'&&['desc','qty','unit'].includes(t.dataset.col))||t.dataset.suadd!=null);if(!inGrid)return;
+  const cells=[...document.querySelectorAll('table.su tr.su-row, table.su tr.su-add')].flatMap(tr=>tr.classList.contains('su-add')?[tr.querySelector('[data-suadd]')]:['desc','qty','unit'].map(c=>tr.querySelector(`[data-col="${c}"]`))).filter(el=>el&&!el.disabled);
+  const i=cells.indexOf(t);if(i<0)return;const next=cells[i+(e.shiftKey?-1:1)];if(!next)return;e.preventDefault();const id=next.id;
+  t.blur();const el=document.getElementById(id);if(el){el.focus();el.select?.()}});
 // paste a block from Excel into the setup grid
 const SU_COLS=['code','desc','qty','unit'];
 document.addEventListener('paste',e=>{const t=e.target;if(t.dataset?.grid!=='su'||!S.est||EC().ro)return;const txt=(e.clipboardData||window.clipboardData)?.getData('text')||'';if(!/[\t\n]/.test(txt.trim()))return;
