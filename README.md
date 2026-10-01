@@ -217,6 +217,12 @@ The defaults every new estimate starts with. Each estimate keeps its own copy, s
 - **Adding:** start typing in "+ New bid item…" to add one. Delete with ×; items that have activities take two clicks.
 - **Paste from Excel:** copy rows with Item #, Description, Qty and Unit columns and paste them into a cell. The rows fill down, and new bid items are created as needed.
 
+**Look-alike check:**
+- **What it catches:** when a bid item you typed by hand (no activities yet) is close to one in the bid item codebook, for example "Silt fence" ≈ "Silt fence (Type C)" or "Const entrance" ≈ "Construction entrance".
+- **What happens:** a blue banner says so. When you click **✓ Done — review** or leave the tab, you get "These look like codebook bid items". Switch each one to the codebook version (its activities, crews and costs come in; your quantity stays), or keep it as typed.
+- **Sizes:** sizes have to match, so 15″ RCP won't be offered 18″ RCP.
+- **Keep mine:** once you keep one as typed, it won't ask again unless you change the description.
+
 **When a bid item's quantity changes:**
 - Activities with a blank quantity follow the bid item automatically.
 - Activities that have their own quantity get a prompt, **"Apply new quantities to activities?"**. You can scale them by the same ratio (400 → 500 LF scales them ×1.25), or match the bid item and keep following it. Untick any activity to leave it alone.

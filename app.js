@@ -940,8 +940,8 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal}[M.kind]();
-  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick'].includes(M.kind)?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
+  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck'].includes(M.kind)?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();
@@ -4679,7 +4679,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'est-open':S.estFrom='pipeline';estOpen(t.dataset.id||(M&&M.draft&&M.draft.id),'pipeline');break;
     case 'est-back':{const id=S.estBid;const E0=S.est;estSave();if(E0&&E0.tpl){S.view='estimates';S.estsTab='tpl';render();break}if(S.estFrom==='estimates'){S.view='estimates';render();break}S.view='pipeline';render();if(id&&byId(S.bids,id))openBid(id);break}
     case 'est-create':if(t.dataset.v==='copy')estCreate('copy',$('#est-copysrc')?.value);else if(t.dataset.v==='tpl')estCreate('tpl',$('#est-tplsrc')?.value);else estCreate(t.dataset.v);break;
-    case 'est-tab':{const was=S.est.tab;S.est.tab=t.dataset.v;render();if(was==='setup'&&t.dataset.v!=='setup'&&qaNeeded()&&!EC().ro)qaOpen();break}
+    case 'est-tab':{const was=S.est.tab;S.est.tab=t.dataset.v;render();if(was==='setup'&&t.dataset.v!=='setup'&&!EC().ro&&(qaNeeded()||simFind(S.est.data).length))setupReview();break}
     case 'est-sel':S.est.sel=t.dataset.id;render();if(window.innerWidth<1100)$('.est-detail')?.scrollIntoView({block:'start',behavior:'smooth'});break;
     case 'est-retry':S.est.saveErr=null;S.est.dirty=true;estSave();break;
     case 'est-reload':S.est.conflict=false;S.est.dirty=false;estOpen(S.est.bidId);break;
@@ -5473,8 +5473,9 @@ function estSetupView(d,R,ro){const E=S.est;const g=(p,v,col,o={})=>epIn(p,v,{..
         <td class="small dim" title="${fixed?`${fixed} activit${fixed===1?'y has':'ies have'} its own quantity`:''}">${it.acts.length?`${it.acts.length}${fixed?` <span class="su-fixed">${fixed} fixed</span>`:''}`:'—'}</td>
         <td>${ro?'':`<button class="rm${S.epArm===p?' arm':''}" data-act="ep-del" data-p="${p}" aria-label="Delete bid item" title="${it.acts.length?'Has activities — click twice to delete':'Delete'}">${S.epArm===p?'Delete?':'×'}</button>`}</td></tr>`});
     if(!ro)rows+=`<tr class="su-add"><td></td><td colspan="10"><input class="field" id="su-add-${s.id}" data-suadd="${s.id}" placeholder="+ New bid item in ${esc(s.name||'this section')} — start typing" aria-label="New bid item"></td></tr>`});
-  return `${pend.length&&!ro?`<div class="su-pend"><b>Quantities changed on ${pend.length} bid item${pend.length===1?'':'s'}.</b> Activities with their own quantity don’t move on their own. <button class="btn sm primary" data-act="qa-open">Update activity quantities…</button> <button class="btn sm ghost" data-act="qa-dismiss">Leave them</button></div>`:''}
-  <div class="panel su-wrap"><div class="eo-bar">${ro?'':'<button class="btn primary sm" data-act="eo-add" data-t="sec">+ Section</button><button class="btn sm" data-act="cbpick-open" data-v="biditem">🔍 Search bid item codebook</button>'}<span class="dim small su-tip">Enter moves down a column · paste rows straight from Excel (Item #, Description, Qty, Unit)</span></div>
+  const sims=ro?[]:simFind(d);
+  return `${sims.length?`<div class="su-pend su-sim"><b>${sims.length} bid item${sims.length===1?' looks':'s look'} like ${sims.length===1?'a codebook item':'codebook items'}</b> — e.g. “${esc(sims[0].it.desc)}” ≈ “${esc(sims[0].m[0].t.description)}”. <button class="btn sm primary" data-act="sim-open">Review</button></div>`:''}${pend.length&&!ro?`<div class="su-pend"><b>Quantities changed on ${pend.length} bid item${pend.length===1?'':'s'}.</b> Activities with their own quantity don’t move on their own. <button class="btn sm primary" data-act="qa-open">Update activity quantities…</button> <button class="btn sm ghost" data-act="qa-dismiss">Leave them</button></div>`:''}
+  <div class="panel su-wrap"><div class="eo-bar">${ro?'':'<button class="btn primary sm" data-act="eo-add" data-t="sec">+ Section</button><button class="btn sm" data-act="cbpick-open" data-v="biditem">🔍 Search bid item codebook</button><button class="btn sm" data-act="su-review" title="Check quantities and look-alike codebook items">✓ Done — review</button>'}<span class="dim small su-tip">Enter moves down a column · paste rows straight from Excel (Item #, Description, Qty, Unit)</span></div>
   <div class="su-scroll"><table class="su"><colgroup><col style="width:90px"><col><col style="width:100px"><col style="width:70px"><col style="width:46px"><col style="width:110px"><col style="width:100px"><col style="width:100px"><col style="width:110px"><col style="width:84px"><col style="width:44px"></colgroup>
     <thead><tr><th>Item #</th><th>Description</th><th class="r">Qty</th><th>Unit</th><th class="c">Alt</th><th class="r">Price override</th><th class="r">Cost</th><th class="r">Unit price</th><th class="r">Total</th><th>Activities</th><th></th></tr></thead>
     <tbody>${rows||'<tr><td colspan="11"><div class="empty"><b>No sections yet</b>Add a section, then type your bid items.</div></td></tr>'}</tbody>
@@ -5500,7 +5501,8 @@ function qaModal(){const rows=qaRows().filter(r=>r.fixed.length);const canScale=
   <div class="mfoot"><div><button class="btn" data-act="qa-leave">Leave activities as they are</button></div><div class="r"><button class="btn primary" data-act="qa-apply">Apply to ${rows.reduce((s,r)=>s+r.fixed.filter(a=>!M.skip.has(a.id)).length,0)} activit${rows.reduce((s,r)=>s+r.fixed.filter(a=>!M.skip.has(a.id)).length,0)===1?'y':'ies'}</button></div></div>`}
 function qaApply(){const rows=qaRows();const mode=rows.filter(r=>r.fixed.length).every(r=>r.ratio!=null)?M.mode:'link';let n=0;
   rows.forEach(r=>r.fixed.forEach(a=>{if(M.skip.has(a.id))return;a.qty=mode==='scale'?+(num(a.qty)*r.ratio).toFixed(4):null;n++}));
-  S.est.qtyChanged={};closeModal();estTouch();render();toast(`Updated ${n} activit${n===1?'y':'ies'}`)}
+  S.est.qtyChanged={};closeModal();estTouch();render();toast(`Updated ${n} activit${n===1?'y':'ies'}`);qaThen()}
+function qaThen(){if(S.est&&S.est.afterQa){S.est.afterQa=false;if(simFind(S.est.data).length)simOpen()}}
 // remember an item's quantity when you start editing it; when you finish, record the change
 const QTY_RX=/^items\.(\d+)\.qty$/;
 document.addEventListener('focusin',e=>{const t=e.target;const m=t.dataset&&t.dataset.ep&&QTY_RX.exec(t.dataset.ep);if(!m||!S.est||!S.est.data)return;const it=S.est.data.items[+m[1]];if(!it)return;
@@ -5529,8 +5531,51 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   if(a==='qa-open'){qaOpen();return}
   if(a==='qa-dismiss'){S.est.qtyChanged={};render();return}
   if(!M||M.kind!=='qtyapply')return;
-  if(a==='qa-apply')qaApply();else if(a==='qa-leave'){S.est.qtyChanged={};closeModal();render()}});
+  if(a==='qa-apply')qaApply();else if(a==='qa-leave'){S.est.qtyChanged={};closeModal();render();qaThen()}});
 document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='qtyapply')return;if(t.dataset.qam!=null){M.mode=t.value;renderModal()}else if(t.dataset.qaskip){t.checked?M.skip.delete(t.dataset.qaskip):M.skip.add(t.dataset.qaskip);renderModal()}});
+
+/* ---------- "looks like a codebook bid item" check ---------- */
+const simNorm=s=>String(s||'').toLowerCase().replace(/[″”"]/g,' in ').replace(/[′']/g,' ft ').replace(/&/g,' and ').replace(/[^a-z0-9.]+/g,' ').replace(/\s+/g,' ').trim();
+function simScore(a,b){a=simNorm(a);b=simNorm(b);if(!a||!b)return 0;if(a===b)return 1;
+  const bg=s=>{const m=new Map();const t=' '+s+' ';for(let i=0;i<t.length-1;i++){const k=t.slice(i,i+2);m.set(k,(m.get(k)||0)+1)}return m};
+  const A=bg(a),B=bg(b);let inter=0,na=0,nb=0;A.forEach(v=>na+=v);B.forEach(v=>nb+=v);A.forEach((v,k)=>{inter+=Math.min(v,B.get(k)||0)});const dice=2*inter/(na+nb);
+  // sizes have to agree: "15 in" shouldn't match "18 in"
+  const nums=s=>(s.match(/\d+(\.\d+)?/g)||[]).join(' ');const na2=nums(a),nb2=nums(b);const numPenalty=na2&&nb2&&na2!==nb2?0.35:0;
+  const wa=new Set(a.split(' ')),wb=new Set(b.split(' '));let wi=0;wa.forEach(w=>{if(wb.has(w))wi++});const words=wi/Math.max(wa.size,wb.size);
+  return Math.max(0,Math.max(dice,words*0.95)-numPenalty)}
+const SIM_MIN=0.62;
+// bid items typed by hand (no activities yet) that look like a codebook bid item
+function simFind(d){const tpls=cbList('biditem').filter(t=>t.active!==false);if(!tpls.length)return [];
+  return d.items.filter(it=>!it.acts.length&&String(it.desc||'').trim().length>=3&&!(it.simSkip&&it.simSkip===simNorm(it.desc))).map(it=>{
+    const m=tpls.map(t=>({t,s:simScore(it.desc,t.description)})).filter(x=>x.s>=SIM_MIN).sort((a,b)=>b.s-a.s).slice(0,3);return m.length?{it,m}:null}).filter(Boolean)}
+function fillItemFromTpl(it,tp,o={}){const src=cbD(tp).item||{acts:[]};if(o.desc||!String(it.desc||'').trim())it.desc=tp.description||src.desc||it.desc;
+  const u=cbD(tp).unit||src.unit;if(u&&(o.unit||!String(it.unit||'').trim()))it.unit=u;if(!it.notes&&src.notes)it.notes=src.notes;
+  const n0=it.acts.length;(src.acts||[]).forEach(a0=>{const a=actFromTpl(a0);a.code=estNextActCode(it);it.acts.push(a)});return it.acts.length-n0}
+function simOpen(){const L=simFind(S.est.data);if(!L.length){toast('No bid items look like codebook items.');return false}
+  M={kind:'simcheck',pick:Object.fromEntries(L.map(x=>[x.it.id,x.m[0].t.id])),use:new Set(L.map(x=>x.it.id))};showModal();return true}
+function simModal(){const d=S.est.data;const L=simFind(d);
+  return mhead('These look like codebook bid items',`${L.length} bid item${L.length===1?'':'s'} you typed`)+`<div class="mbody">
+    <p class="small" style="margin-top:0">Use the codebook version to bring in its activities, crews and costs — your quantity stays. Untick any you want to keep as typed.</p>
+    <div class="panel scroll"><table class="sim-t"><thead><tr><th></th><th>You typed</th><th>Qty</th><th>Codebook bid item</th><th class="r">Unit cost today</th></tr></thead><tbody>
+    ${L.map(({it,m})=>{const sel=cbById(M.pick[it.id])||m[0].t;const r=tplCalc(sel)||{};return `<tr class="${M.use.has(it.id)?'':'dim'}"><td><input type="checkbox" data-simuse="${it.id}"${M.use.has(it.id)?' checked':''} aria-label="Use the codebook item"></td>
+      <td><b>${esc(it.code)}</b> ${esc(it.desc)}</td><td class="small">${qtyFmt(it.qty)} ${esc(it.unit||'')}</td>
+      <td>${m.length>1?`<select class="field" data-simpick="${it.id}">${m.map(x=>`<option value="${x.t.id}"${x.t.id===sel.id?' selected':''}>${esc((x.t.code?x.t.code+' · ':'')+x.t.description)} — ${Math.round(x.s*100)}% match</option>`).join('')}</select>`:`<b>${esc((sel.code?sel.code+' · ':'')+sel.description)}</b> <span class="dim small">${Math.round(m[0].s*100)}% match</span>`}
+        <div class="dim small">${(cbD(sel).item?.acts||[]).length} activit${(cbD(sel).item?.acts||[]).length===1?'y':'ies'}${cbD(sel).unit?' · per '+esc(cbD(sel).unit):''}</div></td>
+      <td class="r num">${r.unit!=null?money2(r.unit):'—'}</td></tr>`}).join('')}</tbody></table></div></div>
+  <div class="mfoot"><div><button class="btn" data-act="sim-keep">Keep mine as typed</button></div><div class="r"><button class="btn primary" data-act="sim-apply"${M.use.size?'':' disabled'}>Use codebook for ${M.use.size}</button></div></div>`}
+function simApply(){const d=S.est.data;const L=simFind(d);let n=0;
+  L.forEach(({it,m})=>{if(!M.use.has(it.id)){it.simSkip=simNorm(it.desc);return}const tp=cbById(M.pick[it.id])||m[0].t;fillItemFromTpl(it,tp,{desc:true,unit:!it.unit});n++});
+  closeModal();estTouch();render();toast(`Switched ${n} bid item${n===1?'':'s'} to the codebook version`)}
+// reviews that run when you finish in Bid item setup: quantities first, then look-alikes
+function setupReview(){if(qaNeeded()){S.est.afterQa=true;qaOpen();return}const L=simFind(S.est.data);if(L.length)simOpen()}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
+  if(a==='su-review'){if(!qaNeeded()&&!simFind(S.est.data).length){toast('All set — nothing to review.');return}setupReview();return}
+  if(a==='sim-open'){simOpen();return}
+  if(!M||M.kind!=='simcheck')return;
+  if(a==='sim-apply')simApply();
+  else if(a==='sim-keep'){simFind(S.est.data).forEach(({it})=>it.simSkip=simNorm(it.desc));closeModal();estTouch();render()}});
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='simcheck')return;
+  if(t.dataset.simuse){t.checked?M.use.add(t.dataset.simuse):M.use.delete(t.dataset.simuse);renderModal()}else if(t.dataset.simpick){M.pick[t.dataset.simpick]=t.value;renderModal()}});
 
 function estBidBlock(b,work){if(b._new||!['admin','estimator','board'].includes(role()))return '';const x=estOf(b.id);
   if(S.estMissing)return `<fieldset><legend>Estimate</legend><p class="hint" style="margin:0">Estimates need a one-time database update (update-14-estimates.sql).</p></fieldset>`;

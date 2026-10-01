@@ -1184,3 +1184,6 @@ table.su .rm.arm{background:var(--bad);color:#fff;font-size:12px}
 .su-pend{background:var(--warn-soft);border:1px solid var(--warn);border-radius:10px;padding:10px 14px;margin-bottom:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
 table.qa-t td{padding:6px 8px}
 tr.qa-item td{background:var(--surface-2)}
+.su-pend.su-sim{background:var(--info-soft);border-color:var(--info)}
+table.sim-t td{padding:8px;vertical-align:top}
+table.sim-t select.field{width:100%;max-width:420px}
