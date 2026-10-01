@@ -98,9 +98,9 @@ const BRAND=CFG.brand||{};
 })();
 
 /* ---------- state ---------- */
-const TABLES=['bids','quotes','bid_files','bid_log','estimators','clients','vendors','settings','jobs','job_items','job_costs'];
+const TABLES=['bids','quotes','bid_files','bid_log','estimators','clients','vendors','settings','jobs','job_items','job_costs','codebook'];
 const S={loading:true,session:null,profile:null,profileFor:null,needPassword:/type=(invite|recovery)/.test(INITIAL_HASH),authView:'login',authMsg:null,
-  bids:[],quotes:[],bid_files:[],bid_log:[],tableErr:{},estimators:[],clients:[],vendors:[],profiles:[],settings:{},jobs:[],job_items:[],job_costs:[],pms:[],
+  bids:[],quotes:[],bid_files:[],bid_log:[],tableErr:{},estimators:[],clients:[],vendors:[],profiles:[],settings:{},jobs:[],job_items:[],job_costs:[],codebook:[],pms:[],
   view:'dashboard',dash:'precon',filter:'active',q:{},estF:'',clientF:'',year:new Date().getFullYear()};
 let channel=null;
 
@@ -221,7 +221,10 @@ const myName=()=>S.profile?.full_name||myEst()?.name||S.session?.user?.email||''
 
 /* ---------- data ---------- */
 async function loadTable(t){
-  const {data,error}=await sb.from(t).select('*');
+  // page through big tables (Supabase returns at most 1,000 rows per request)
+  const page=(from,ord)=>{let q=sb.from(t).select('*');if(ord)q=q.order('id');return q.range(from,from+999)};
+  let r=await page(0,false);let data=r.data||[],error=r.error;
+  if(!error&&data.length===1000){data=[];for(let from=0;;from+=1000){r=await page(from,true);if(r.error){error=r.error;break}data=data.concat(r.data||[]);if((r.data||[]).length<1000)break}}
   if(error){console.error(t,error);if(S.tableErr&&!S.tableErr[t]){S.tableErr[t]=true;schedule()}return}
   if(S.tableErr)delete S.tableErr[t];S.lastLoaded=new Date();
   if(t==='settings')S.settings=Object.fromEntries((data||[]).map(r=>[r.key,r.value||{}]));
@@ -272,7 +275,7 @@ function render(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;
-  const views={dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc};
+  const views={dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb};
   const navOk=v=>navItems().some(n=>n[0]===v)||(v==='job'&&navItems().some(n=>n[0]==='jobs'));
   if(!navOk(S.view))S.view=navItems()[0][0];
   main.innerHTML=views[S.view]();
@@ -281,18 +284,29 @@ function render(){
 }
 function navItems(){
   if(role()==='pm')return [['jobs','Jobs'],['calc','Calculators']];
-  if(isAdmin())return [['dashboard','Dashboard'],['pipeline','Pipeline'],['jobs','Jobs'],['estimators','Estimators'],['clients','Clients & GCs'],['vendors','Vendors'],['scopes','Scopes'],['calc','Calculators'],['team','Team & logins']];
-  if(role()==='estimator')return [['dashboard','My dashboard'],['pipeline','My bids'],['vendors','Vendors'],['clients','Clients & GCs'],['calc','Calculators']];
+  if(isAdmin())return [['dashboard','Dashboard'],['pipeline','Pipeline'],['jobs','Jobs'],['estimators','Estimators'],['clients','Clients & GCs'],['vendors','Vendors'],['scopes','Scopes'],['cb','Codebooks'],['calc','Calculators'],['team','Team & logins']];
+  if(role()==='estimator')return [['dashboard','My dashboard'],['pipeline','My bids'],['vendors','Vendors'],['clients','Clients & GCs'],['cb','Codebooks'],['calc','Calculators']];
   return [['dashboard','Board dashboard'],['pipeline','Pipeline']];
 }
 function renderTop(){
   const company=S.settings.general?.companyName||CFG.companyName||'Bid Pipeline';
   $('#top').innerHTML=`<button class="brand" ${isAdmin()?'data-act="company" title="Edit company name"':'tabindex="-1" style="cursor:default"'}>${BRAND.logo?`<img class="brand-logo" src="${esc(BRAND.logo)}" alt="">`:'<span class="stake"></span>'}<span><b>${esc(company)}</b><small>Bid pipeline</small></span></button>
   <nav class="nav">${navItems().map(([k,l])=>`<button class="${S.view===k||(k==='jobs'&&S.view==='job')?'on':''}" data-act="nav" data-v="${k}">${l}</button>`).join('')}</nav>
+  <div class="nav-more" hidden><button class="nav-morebtn" data-act="nav-more" aria-haspopup="true" aria-expanded="false">More ▾</button><div class="nav-menu" role="menu" hidden></div></div>
   <button class="topsearch" data-act="pal-open" aria-label="Search (Ctrl+K)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><span>Search</span><kbd>Ctrl K</kbd></button>
   <div class="userbox"><span>${esc(myName())}<br><span class="rolepill">${ROLE_LABEL[role()]}</span></span>
   ${isAdmin()?'<button class="btn primary" data-act="new-bid">+ New bid</button>':''}<button class="btn sm" data-act="signout">Sign out</button></div>`;
+  navFit();
 }
+
+// When the top bar is too narrow, tuck the last nav items into a “More” menu instead of cutting them off
+function navFit(){const nav=$('#top .nav'),more=$('#top .nav-more');if(!nav||!more)return;const menu=more.querySelector('.nav-menu');const btns=[...nav.querySelectorAll('button')];
+  btns.forEach(b=>b.hidden=false);more.hidden=true;menu.hidden=true;menu.innerHTML='';if(window.innerWidth<=800||nav.scrollWidth<=nav.clientWidth+1)return;
+  more.hidden=false;const tucked=[];for(let i=btns.length-1;i>0&&nav.scrollWidth>nav.clientWidth+1;i--){if(btns[i].classList.contains('on'))continue;btns[i].hidden=true;tucked.unshift(btns[i])}
+  menu.innerHTML=tucked.map(b=>`<button role="menuitem" data-act="nav" data-v="${b.dataset.v}">${b.textContent}</button>`).join('');more.querySelector('.nav-morebtn').classList.toggle('on',false)}
+window.addEventListener('resize',()=>{clearTimeout(navFit._t);navFit._t=setTimeout(navFit,80)});
+document.addEventListener('click',e=>{const mb=e.target.closest('[data-act=nav-more]');const menu=$('#top .nav-menu');if(!menu)return;
+  if(mb){menu.hidden=!menu.hidden;mb.setAttribute('aria-expanded',String(!menu.hidden));return}if(!menu.hidden)menu.hidden=true});
 
 /* ---------- auth screens ---------- */
 function brandBlock(){return BRAND.loginLogo?`<picture>${BRAND.loginLogoDark?`<source srcset="${esc(BRAND.loginLogoDark)}" media="(prefers-color-scheme: dark)">`:''}<img class="auth-logo" src="${esc(BRAND.loginLogo)}" alt="${esc(CFG.companyName||'')}"></picture>`:`<div class="auth-brand"><span class="stake"></span><div><b>${esc(CFG.companyName||'Bid Pipeline')}</b><small>Bid pipeline</small></div></div>`}
@@ -914,8 +928,8 @@ function focusKey(el){if(!el||!$('#modal')?.contains(el))return null;if(el.id)re
 function renderModal(first){
   if(!M)return;const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal}[M.kind]();
-  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='import'||M.kind==='jlog'?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
+  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal}[M.kind]();
+  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass'].includes(M.kind)?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();
@@ -3710,7 +3724,7 @@ function t3Draw(){const G=T3.gl;if(!G)return;const {gl,loc}=G;const cv=gl.canvas
 document.addEventListener('click',e=>{
   const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;
   if(a==='pal-close'){if(e.target===t)palClose();return}
-  if(a==='backdrop'){if(e.target===t&&!(M&&(M.picker||M.running||M.plan)))closeModal();return}
+  if(a==='backdrop'){if(e.target===t&&!(M&&(M.picker||M.running||M.plan||M.kind==='cbimp'||M.kind==='cbmass')))closeModal();return}
   switch(a){
     case 'auth-view':S.authView=t.dataset.v;S.authMsg=null;render();break;
     case 'signout':palClose();sb.auth.signOut();break;
@@ -4004,6 +4018,428 @@ document.addEventListener('change',e=>{
     case 'add-trade':if(t.value){const n=S.vendors.filter(v=>v.trade===t.value).map(v=>addQuote(v.id)).filter(Boolean).length;toast(n?`Added ${n} ${t.value.toLowerCase()} vendor${n===1?'':'s'}`:'Those vendors are already on this bid');renderModal()}break;
   }
 });
+
+/* =====================================================================
+   ESTIMATING CODEBOOKS — materials, labor, equipment and crews.
+   The price book estimates are built from. One table (codebook) with a
+   `book` column; book-specific numbers live in `data`. `cost` is kept as
+   the loaded $/unit so other screens can sort and use it directly.
+   Crews are built from labor + equipment and priced live, so a wage or
+   rate change flows into every crew that uses it.
+   ===================================================================== */
+const CB_BOOKS=[['material','Materials','material'],['labor','Labor','labor rate'],['equipment','Equipment','equipment'],['crew','Crews','crew']];
+const CB_MAT_TYPES=['Material','Subcontract','Trucking','Other'];
+const CB_OWN=['Owned','Rented'];
+const CB_CATS={material:['Stone & aggregate','Pipe','Precast structures','Fittings & accessories','Concrete','Asphalt','Erosion control','Geotextile & geogrid','Seed & landscape','Dump / disposal fees','Other'],
+  labor:['Superintendent','Foreman','Operator','Pipe layer','Laborer','Truck driver','Mechanic'],
+  equipment:['Excavator','Dozer','Loader','Skid steer','Motor grader','Roller / compactor','Scraper','Truck','Water truck','Trailer','Small tools','Other'],
+  crew:['Earthwork','Underground','Erosion control','Paving','Concrete','Demo','Other']};
+const CB_UNITS=['EA','LF','SF','SY','CY','TON','GAL','LB','LS','HR','DAY','LOAD','AC','BAG','ROLL'];
+// k = where it lives (column, or data.x); t = type; m = can be mass-updated / is a price field
+const CB_FIELDS={
+  material:[
+    {k:'code',l:'Code',t:'text',al:['code','itemcode','itemno','itemnumber','sku','partno','partnumber','productcode','materialcode','catalogno','catno','no','number','productno']},
+    {k:'description',l:'Description',t:'text',req:1,al:['description','desc','itemdescription','materialdescription','productdescription','material','product','name','itemname']},
+    {k:'category',l:'Category',t:'cat',al:['category','class','group','materialgroup','productgroup','productcategory','materialcategory']},
+    {k:'data.type',l:'Cost type',t:'sel',opts:CB_MAT_TYPES,al:['costtype','resourcetype','kind','type']},
+    {k:'unit',l:'Unit',t:'unit',al:['unit','uom','um','units','unitofmeasure','per','measure']},
+    {k:'cost',l:'Unit cost',t:'money',m:1,al:['unitcost','cost','price','unitprice','netprice','each','rate','amount','priceperunit','costperunit','materialcost','yourprice','net']},
+    {k:'vendor_id',l:'Vendor',t:'vendor',al:['vendor','supplier','vendorname','suppliername','source','quotedby']},
+    {k:'data.waste',l:'Waste %',t:'pct',al:['waste','wastepct','wastepercent','wastefactor']},
+    {k:'data.tax',l:'Taxable',t:'bool',al:['taxable','tax','salestax']},
+    {k:'price_date',l:'Price date',t:'date',al:['pricedate','date','effectivedate','effective','effdate','effectivedt','quotedate','asof','updated']},
+    {k:'notes',l:'Notes',t:'text',al:['notes','note','comment','comments','remarks']}],
+  labor:[
+    {k:'code',l:'Code',t:'text',al:['code','laborcode','craftcode','classcode','no','number','id']},
+    {k:'description',l:'Craft / classification',t:'text',req:1,al:['craftclassification','craft','classification','description','desc','trade','position','name','title','jobtitle']},
+    {k:'category',l:'Category',t:'cat',al:['category','group','class']},
+    {k:'data.base',l:'Base wage $/hr',t:'money',m:1,al:['basewagehr','basewage','base','wage','hourlyrate','basepay','payrate','straighttime','st','basehourly','rate','hourlywage','basewageperhour']},
+    {k:'data.fringe',l:'Fringe $/hr',t:'money',m:1,al:['fringehr','fringe','fringes','benefits','fringebenefits','fringeperhour']},
+    {k:'data.burden',l:'Burden %',t:'pct',m:1,al:['burden','burdenpct','burdenpercent','laborburden','payrollburden','taxesinsurance','taxesandinsurance']},
+    {k:'data.ot',l:'OT factor',t:'num',al:['otfactor','overtime','ot','otmultiplier','overtimefactor']},
+    {k:'notes',l:'Notes',t:'text',al:['notes','note','comment','comments']}],
+  equipment:[
+    {k:'code',l:'Code',t:'text',al:['code','equipmentcode','equipcode','unitno','unitnumber','assetno','asset','no','number','id']},
+    {k:'description',l:'Description',t:'text',req:1,al:['description','desc','equipment','machine','name','model','makemodel','equipmentdescription']},
+    {k:'category',l:'Category',t:'cat',al:['category','class','group','equipmentclass','type']},
+    {k:'data.own',l:'Owned / rented',t:'sel',opts:CB_OWN,al:['ownedrented','ownership','owned','rented','rental','ownrent']},
+    {k:'data.rate',l:'Rate $/hr',t:'money',m:1,al:['ratehr','rate','hourlyrate','ownershiprate','ownership','ownershipcost','rentalrate','rent','costperhour','hourly','perhour','hrrate','ownershiphr']},
+    {k:'data.op',l:'Operating $/hr',t:'money',m:1,al:['operatinghr','operating','operatingcost','operatingrate','opcost','fuel','fuelrepairs','fuelandrepairs','fog','operatingcostperhour']},
+    {k:'notes',l:'Notes',t:'text',al:['notes','note','comment','comments']}],
+  crew:[
+    {k:'code',l:'Code',t:'text',al:['code']},
+    {k:'description',l:'Crew name',t:'text',req:1,al:['description','crew','name']},
+    {k:'category',l:'Category',t:'cat',al:['category']},
+    {k:'notes',l:'Notes',t:'text',al:['notes']}]};
+const CB_KEY='bp-cb',CB_MAPKEY='bp-cbmap';
+S.cb=(()=>{const d={book:'material',sort:'code',dir:1,cat:'',vendor:'',inactive:false};try{Object.assign(d,JSON.parse(localStorage.getItem(CB_KEY)||'{}'))}catch(e){}return {...d,sel:new Set(),limit:400}})();
+function cbSaveUi(){const c=S.cb;try{localStorage.setItem(CB_KEY,JSON.stringify({book:c.book,sort:c.sort,dir:c.dir,inactive:c.inactive}))}catch(e){}}
+const cbBook=k=>CB_BOOKS.find(b=>b[0]===k)||CB_BOOKS[0];
+const cbList=book=>S.codebook.filter(x=>x.book===book);
+const cbById=id=>byId(S.codebook,id);
+const cbD=x=>x&&x.data&&typeof x.data==='object'?x.data:{};
+const cbGet=(x,k)=>k.startsWith('data.')?cbD(x)[k.slice(5)]:x[k];
+function cbSet(x,k,v){if(k.startsWith('data.')){x.data={...cbD(x),[k.slice(5)]:v}}else x[k]=v}
+const cbUnit=x=>x.book==='labor'||x.book==='equipment'||x.book==='crew'?'HR':(x.unit||'');
+const cbName=x=>x?[x.code,x.description].filter(Boolean).join(' · '):'Removed item';
+const cbEditable=()=>isAdmin();
+// ---- pricing
+function cbLabor(d){const b=num(d.base);if(b==null)return null;const bu=(num(d.burden)||0)/100,f=num(d.fringe)||0;return {st:b*(1+bu)+f,ot:b*(num(d.ot)||1.5)*(1+bu)+f}}
+function cbCrew(x){let labor=0,equip=0,men=0,missing=0;const lines=[];
+  (cbD(x).members||[]).forEach(m=>{const it=cbById(m.id);const q=num(m.qty)||0;if(!it||it.book==='crew'||it.book==='material'){missing++;return}const c=cbCost(it)||0;lines.push({it,q,c,ext:c*q});if(it.book==='labor'){labor+=c*q;men+=q}else equip+=c*q});
+  return {labor,equip,total:labor+equip,men,missing,lines}}
+function cbCost(x){if(!x)return null;const d=cbD(x);
+  if(x.book==='labor'){const L=cbLabor(d);return L?L.st:num(x.cost)}
+  if(x.book==='equipment'){const r=num(d.rate),o=num(d.op);return r==null&&o==null?num(x.cost):(r||0)+(o||0)}
+  if(x.book==='crew')return cbCrew(x).total;
+  return num(x.cost)}
+const cbAge=x=>x.price_date?-daysUntil(x.price_date):null;
+function cbHist(x,f,o,n,src,note){const h=Array.isArray(x.price_history)?x.price_history.slice():[];h.push({d:todayStr(),by:myName(),f,o:o??null,n:n??null,src,...(note?{note}:{})});x.price_history=h.slice(-25)}
+const CB_COLS=['id','book','code','description','category','unit','cost','data','vendor_id','price_date','price_history','active','notes'];
+function cbRow(x){const r={};CB_COLS.forEach(k=>r[k]=x[k]);r.code=String(r.code||'').trim();r.description=String(r.description||'').trim();r.category=String(r.category||'').trim();r.notes=r.notes||'';r.unit=cbUnit(x);
+  r.data=cbD(x);r.cost=x.book==='crew'?null:cbCost(x);r.vendor_id=r.vendor_id||null;r.price_date=r.price_date||null;r.price_history=Array.isArray(r.price_history)?r.price_history:[];r.active=r.active!==false;return r}
+async function cbUpsert(rows){for(let i=0;i<rows.length;i+=200)await run(sb.from('codebook').upsert(rows.slice(i,i+200)))}
+function cbErr(e){const m=errMsg(e);if(/codebook_code_uniq|duplicate key/i.test(m))return 'That code is already used in this codebook. Codes have to be unique.';if(/relation .*codebook|does not exist|schema cache/i.test(m))return 'The codebook table isn’t set up yet. Run update-13-codebooks.sql in Supabase.';return m}
+const cbFmt=(f,v)=>v==null||v===''?'':f.t==='money'?money2(v):f.t==='pct'?fmtN(v,2)+'%':f.t==='bool'?(v?'Yes':'No'):f.t==='vendor'?(vendorOf(v)?.company||''):f.t==='date'?fmtDate(v):String(v);
+
+/* ---------- page ---------- */
+function cbShown(){const c=S.cb;const q=(S.q.cb||'').trim().toLowerCase();
+  let list=cbList(c.book).filter(x=>(c.inactive||x.active!==false)&&(!c.cat||x.category===c.cat)&&(!c.vendor||(c.vendor==='none'?!x.vendor_id:x.vendor_id===c.vendor)));
+  if(q){const words=q.split(/\s+/);list=list.filter(x=>{const h=[x.code,x.description,x.category,x.notes,cbD(x).type,vendorOf(x.vendor_id)?.company].join(' ').toLowerCase();return words.every(w=>h.includes(w))})}
+  const k=c.sort,dir=c.dir||1;const val=x=>k==='cost'?cbCost(x)??-Infinity:k==='price_date'?x.price_date||'':k==='vendor'?vendorOf(x.vendor_id)?.company||'':k==='men'?cbCrew(x).men:k.startsWith('data.')?(num(cbGet(x,k))??String(cbGet(x,k)||'')):String(x[k]||'');
+  const cmp=(a,b)=>{const A=val(a),B=val(b);if(typeof A==='number'&&typeof B==='number')return (A-B)*dir;return String(A).localeCompare(String(B),undefined,{numeric:true,sensitivity:'base'})*dir};
+  return list.sort((a,b)=>cmp(a,b)||String(a.code).localeCompare(String(b.code),undefined,{numeric:true}))}
+function cbCats(book){return [...new Set([...cbList(book).map(x=>x.category).filter(Boolean),...(CB_CATS[book]||[])])].sort((a,b)=>a.localeCompare(b))}
+function vCb(){
+  const c=S.cb;const [bk,Label,one]=cbBook(c.book);const admin=cbEditable();const all=cbList(bk);const list=cbShown();const shown=list.slice(0,c.limit);
+  const sel=[...c.sel].filter(id=>cbById(id)?.book===bk);S.cbShownIds=list.map(x=>x.id);
+  const th=(k,l,r)=>`<th class="sortable${r?' r':''}" data-act="cb-sort" data-k="${k}" aria-sort="${c.sort===k?(c.dir>0?'ascending':'descending'):'none'}">${l}${c.sort===k?(c.dir>0?' ▲':' ▼'):''}</th>`;
+  const cats=cbCats(bk).filter(x=>all.some(i=>i.category===x));
+  const stale=x=>{const a=cbAge(x);return a!=null&&a>180};
+  const cols={
+    material:[th('code','Code'),th('description','Description'),th('category','Category'),th('unit','Unit'),th('cost','Unit cost',1),th('vendor','Vendor'),th('price_date','Price date')],
+    labor:[th('code','Code'),th('description','Craft'),th('category','Category'),th('data.base','Base',1),th('data.fringe','Fringe',1),th('data.burden','Burden',1),th('cost','Loaded $/hr',1),th('price_date','Updated')],
+    equipment:[th('code','Code'),th('description','Description'),th('category','Category'),th('data.own','Owned / rented'),th('data.rate','Rate',1),th('data.op','Operating',1),th('cost','Total $/hr',1),th('price_date','Updated')],
+    crew:[th('code','Code'),th('description','Crew'),th('category','Category'),'<th>Members</th>',th('men','Crew size',1),'<th class="r">Labor $/hr</th>','<th class="r">Equip $/hr</th>',th('cost','Crew $/hr',1)]}[bk];
+  const pd=x=>x.price_date?`<span class="${stale(x)?'cb-stale':''}" title="${stale(x)?'Price is more than 6 months old':''}">${fmtShort(x.price_date)}${String(x.price_date).slice(0,4)!==String(new Date().getFullYear())?', '+String(x.price_date).slice(2,4):''}</span>`:'<span class="dim">—</span>';
+  const row=x=>{const d=cbD(x);const inact=x.active===false?' '+pill('Inactive','na'):'';
+    const cells={
+      material:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}${d.type&&d.type!=='Material'?` <span class="pill cb-type">${esc(d.type)}</span>`:''}</td><td class="small">${esc(x.category)}</td><td class="small">${esc(x.unit)}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${esc(vendorOf(x.vendor_id)?.company||'')}</td><td class="small">${pd(x)}</td>`,
+      labor:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="r num">${money2(num(d.base))}</td><td class="r num">${num(d.fringe)?money2(d.fringe):'<span class="dim">—</span>'}</td><td class="r num">${num(d.burden)!=null?fmtN(d.burden,1)+'%':'<span class="dim">—</span>'}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${pd(x)}</td>`,
+      equipment:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="small">${esc(d.own||'Owned')}</td><td class="r num">${money2(num(d.rate))}</td><td class="r num">${num(d.op)?money2(d.op):'<span class="dim">—</span>'}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${pd(x)}</td>`,
+      crew:()=>{const C=cbCrew(x);const mem=(d.members||[]).map(m=>{const it=cbById(m.id);return it?`${fmtN(+m.qty||0,2)}× ${esc(it.description)}`:''}).filter(Boolean);
+        return `<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="small cb-mem">${mem.slice(0,4).join(', ')||'<span class="dim">No members</span>'}${mem.length>4?` <span class="dim">+${mem.length-4} more</span>`:''}${C.missing?` <span class="pill bad" title="Some members were deleted from the codebook">${C.missing} missing</span>`:''}</td><td class="r num">${fmtN(C.men,2)}</td><td class="r num">${money2(C.labor)}</td><td class="r num">${money2(C.equip)}</td><td class="r num"><b>${money2(C.total)}</b></td>`}}[bk]();
+    return `<tr class="click${c.sel.has(x.id)?' cb-on':''}${x.active===false?' cb-inactive':''}" data-act="cb-open" data-id="${x.id}" tabindex="0">${admin?`<td class="cb-ck" data-act="cb-noop"><input type="checkbox" data-cbsel="${x.id}" aria-label="Select"${c.sel.has(x.id)?' checked':''}></td>`:''}${cells}</tr>`};
+  const allOn=shown.length&&shown.every(x=>c.sel.has(x.id));
+  const vendors=bk==='material'?[...new Set(all.map(x=>x.vendor_id).filter(Boolean))].map(vendorOf).filter(Boolean).sort((a,b)=>a.company.localeCompare(b.company)):[];
+  const massFields=CB_FIELDS[bk].filter(f=>f.m);
+  const bulk=admin&&sel.length?`<div class="cb-bulk"><b>${sel.length} selected</b>
+    ${massFields.length?'<button class="btn sm primary" data-act="cb-mass">Mass update prices</button>':''}
+    <select class="field sm" data-cbbulk="category"><option value="">Set category…</option>${cbCats(bk).map(x=>`<option>${esc(x)}</option>`).join('')}<option value="__new">New category…</option></select>
+    ${bk==='material'?`<select class="field sm" data-cbbulk="vendor_id"><option value="">Set vendor…</option><option value="__none">No vendor</option>${S.vendors.slice().sort((a,b)=>a.company.localeCompare(b.company)).map(v=>`<option value="${v.id}">${esc(v.company)}</option>`).join('')}</select>`:''}
+    <button class="btn sm" data-act="cb-bulk-active" data-v="0">Mark inactive</button><button class="btn sm" data-act="cb-bulk-active" data-v="1">Mark active</button>
+    <button class="btn sm danger${c.delArm?' arm':''}" data-act="cb-bulk-del">${c.delArm?`Click again to delete ${sel.length}`:'Delete'}</button><button class="linkbtn" data-act="cb-selclear">Clear</button></div>`:'';
+  const tabs=`<div class="seg cb-tabs" role="tablist">${CB_BOOKS.map(([k,l])=>`<button class="${k===bk?'on':''}" data-act="cb-tab" data-v="${k}" role="tab" aria-selected="${k===bk}">${l}<small>${(n=>n+(n===1?' item':' items'))(cbList(k).filter(x=>x.active!==false).length)}</small></button>`).join('')}</div>`;
+  const missing=S.tableErr&&S.tableErr.codebook;
+  const empty=missing?'':`<div class="empty"><b>${all.length?`No ${Label.toLowerCase()} match`:`No ${Label.toLowerCase()} yet`}</b>${all.length?'Try another search or filter.':admin?(bk==='crew'?'Add labor and equipment first, then build crews from them.':`Add them one at a time, or bring in your list with <b>Import from Excel</b>.`):'An admin sets these up.'}</div>`;
+  return `<div class="head"><div><h1>Codebooks</h1><p>The materials, labor, equipment and crews your estimates are built from${admin?'':' · view only'}</p></div>
+    <div class="tools">${admin&&bk!=='crew'?'<button class="btn" data-act="cb-imp">Import from Excel</button>':''}<button class="btn" data-act="cb-export">Export to Excel</button>${admin?`<button class="btn primary" data-act="cb-new">+ Add ${esc(one)}</button>`:''}</div></div>
+  ${missing?`<div class="notice"><b>One setup step:</b> run <b>update-13-codebooks.sql</b> in Supabase (SQL Editor → New query → paste → Run), then refresh this page.</div>`:''}
+  ${tabs}
+  <div class="bar cb-bar"><input id="q-cb" class="field search" data-q="cb" placeholder="Search ${esc(Label.toLowerCase())}" value="${esc(S.q.cb||'')}">
+    <select class="field" data-cbf="cat"><option value="">All categories</option>${cats.map(x=>`<option${c.cat===x?' selected':''}>${esc(x)}</option>`).join('')}</select>
+    ${bk==='material'?`<select class="field" data-cbf="vendor"><option value="">All vendors</option>${vendors.map(v=>`<option value="${v.id}"${c.vendor===v.id?' selected':''}>${esc(v.company)}</option>`).join('')}<option value="none"${c.vendor==='none'?' selected':''}>No vendor</option></select>`:''}
+    <label class="check small"><input type="checkbox" data-cbf="inactive"${c.inactive?' checked':''}> Show inactive</label>
+    <span class="dim small cb-count">${list.length===all.length?`${all.length} ${all.length===1?'item':'items'}`:`${list.length} of ${all.length}`}</span>
+    ${admin&&!sel.length&&list.length&&massFields.length?`<button class="btn sm" data-act="cb-mass" data-all="1" title="Change prices on everything shown">Mass update ${list.length===all.length?'all':list.length+' shown'}</button>`:''}</div>
+  ${bulk}
+  <div class="panel scroll"><table class="cb-table cb-${bk}"><thead><tr>${admin?`<th class="cb-ck"><input type="checkbox" data-cbselall aria-label="Select all shown"${allOn?' checked':''}></th>`:''}${cols.join('')}</tr></thead><tbody>
+  ${shown.map(row).join('')||`<tr><td colspan="${cols.length+1}">${empty}</td></tr>`}</tbody></table></div>
+  ${list.length>shown.length?`<div class="adders"><button class="btn" data-act="cb-more">Show ${Math.min(400,list.length-shown.length)} more (${list.length-shown.length} not shown)</button></div>`:''}`;
+}
+
+/* ---------- item editor ---------- */
+function cbNew(book){const c=S.cb;const d={id:newId(),book,code:'',description:'',category:c.cat||'',unit:book==='material'?'':'HR',cost:null,data:{},vendor_id:book==='material'&&c.vendor&&c.vendor!=='none'?c.vendor:null,price_date:todayStr(),price_history:[],active:true,notes:''};
+  if(book==='material')d.data={type:'Material',tax:true};if(book==='labor')d.data={ot:1.5};if(book==='equipment')d.data={own:'Owned'};if(book==='crew')d.data={members:[]};return d}
+function cbOpen(id){const x=cbById(id);if(!x)return;const d=clone(x);d.data=cbD(d);if(d.book==='crew')d.data.members=(d.data.members||[]).map(m=>({...m}));M={kind:'cbitem',draft:d,orig:clone(x)};showModal()}
+function cbFieldHtml(f,d,dis){const v=cbGet(d,f.k);const id='cbe-'+f.k.replace('.','-');const a=`id="${id}" data-cbe="${f.k}"${dis}`;
+  if(f.t==='sel')return `<label class="f">${f.l}<select class="field" ${a}>${f.opts.map(o=>`<option${(v||f.opts[0])===o?' selected':''}>${o}</option>`).join('')}</select></label>`;
+  if(f.t==='bool')return `<label class="check cb-bool"><input type="checkbox" ${a}${v!==false?' checked':''}> ${f.l}</label>`;
+  if(f.t==='vendor')return `<label class="f">${f.l}<select class="field" ${a}><option value="">None</option>${S.vendors.slice().sort((x,y)=>x.company.localeCompare(y.company)).map(o=>`<option value="${o.id}"${v===o.id?' selected':''}>${esc(o.company)}</option>`).join('')}</select></label>`;
+  if(f.t==='cat')return `<label class="f">${f.l}<input class="field" ${a} list="cb-cats" value="${esc(v||'')}" placeholder="Pick or type"><datalist id="cb-cats">${cbCats(d.book).map(o=>`<option value="${esc(o)}">`).join('')}</datalist></label>`;
+  if(f.t==='unit')return `<label class="f">${f.l}<input class="field" ${a} list="cb-units" value="${esc(v||'')}" placeholder="TON, LF, EA…"><datalist id="cb-units">${CB_UNITS.map(o=>`<option value="${o}">`).join('')}</datalist></label>`;
+  if(f.t==='date')return `<label class="f">${f.l}<input class="field" type="date" ${a} value="${esc(v||'')}"></label>`;
+  const n=['money','pct','num'].includes(f.t);const pre=f.t==='money'?'<span class="cb-pre">$</span>':'';const post=f.t==='pct'?'<span class="cb-post">%</span>':'';
+  if(f.k==='notes')return `<label class="f s2">${f.l}<textarea class="field" rows="2" ${a}>${esc(v||'')}</textarea></label>`;
+  return `<label class="f${f.k==='description'?' s2':''}">${f.l}${f.req?' *':''}<span class="cb-inp${pre?' has-pre':''}${post?' has-post':''}">${pre}<input class="field${n?' num':''}" ${n?'type="number" step="any" inputmode="decimal"':''} ${a} value="${esc(v??'')}"${f.k==='data.ot'?' placeholder="1.5"':''}>${post}</span></label>`}
+function cbCalcHtml(d){
+  if(d.book==='labor'){const L=cbLabor(cbD(d));return L?`<div class="cb-calc"><div><span>Loaded rate</span><b>${money2(L.st)}/hr</b></div><div><span>Overtime</span><b>${money2(L.ot)}/hr</b></div><p class="hint">Base × (1 + burden %) + fringe. Overtime = base × OT factor × (1 + burden %) + fringe.</p></div>`:'<div class="cb-calc dim small">Enter a base wage to see the loaded rate.</div>'}
+  if(d.book==='equipment'){const c=cbCost(d);return `<div class="cb-calc"><div><span>Total</span><b>${money2(c)}/hr</b></div><p class="hint">${cbD(d).own==='Rented'?'Rental rate':'Ownership rate'} + operating cost (fuel, repairs, wear). Operators are priced from labor in crews.</p></div>`}
+  if(d.book==='material'){const c=num(d.cost),w=num(cbD(d).waste)||0;return c!=null&&w?`<div class="cb-calc"><div><span>With ${fmtN(w,2)}% waste</span><b>${money2(c*(1+w/100))}/${esc(d.unit||'unit')}</b></div></div>`:''}
+  return ''}
+function cbCrewHtml(d,dis){const C=cbCrew(d);const mem=cbD(d).members||[];
+  const opts=b=>cbList(b).filter(x=>x.active!==false||mem.some(m=>m.id===x.id)).sort((a,b)=>String(a.description).localeCompare(b.description));
+  const pick=(i,cur)=>`<select class="field" data-cbm="${i}.id"${dis}>${cur&&!cbById(cur)?'<option value="" selected>Removed item</option>':''}<optgroup label="Labor">${opts('labor').map(x=>`<option value="${x.id}"${x.id===cur?' selected':''}>${esc(x.description)}${x.code?' ('+esc(x.code)+')':''}</option>`).join('')}</optgroup><optgroup label="Equipment">${opts('equipment').map(x=>`<option value="${x.id}"${x.id===cur?' selected':''}>${esc(x.description)}${x.code?' ('+esc(x.code)+')':''}</option>`).join('')}</optgroup></select>`;
+  const addOpts=`<option value="">+ Add a member…</option><optgroup label="Labor">${opts('labor').map(x=>`<option value="${x.id}">${esc(x.description)} — ${money2(cbCost(x))}/hr</option>`).join('')}</optgroup><optgroup label="Equipment">${opts('equipment').map(x=>`<option value="${x.id}">${esc(x.description)} — ${money2(cbCost(x))}/hr</option>`).join('')}</optgroup>`;
+  return `<fieldset><legend>Crew members</legend>
+    ${mem.length?`<div class="cb-mhead"><span>Labor or equipment</span><span class="r">Qty</span><span class="r">$/hr each</span><span class="r">$/hr</span><span></span></div>`:''}
+    <div class="rows">${mem.map((m,i)=>{const it=cbById(m.id);const c=it?cbCost(it)||0:0;return `<div class="cb-mrow"><span class="cb-mtag ${it?.book==='equipment'?'eq':'lab'}">${it?.book==='equipment'?'EQ':'LAB'}</span>${pick(i,m.id)}<input class="field num" type="number" step="any" min="0" data-cbm="${i}.qty" id="cbm-${i}-qty" value="${esc(m.qty??'')}"${dis}><span class="r num small">${money2(c)}</span><span class="r num"><b>${money2(c*(num(m.qty)||0))}</b></span>${dis?'<span></span>':`<button class="rm" data-act="cb-m-rm" data-i="${i}" aria-label="Remove">×</button>`}</div>`}).join('')}</div>
+    ${dis?'':`<select class="field cb-madd" data-cbmadd>${addOpts}</select>`}
+    ${!cbList('labor').length&&!cbList('equipment').length?'<p class="hint">Add labor rates and equipment on their tabs first — crews are built from them.</p>':''}
+    <div class="cb-calc" id="cb-crewtot"><div><span>Crew size</span><b>${fmtN(C.men,2)} ${C.men===1?'person':'people'}</b></div><div><span>Labor</span><b>${money2(C.labor)}/hr</b></div><div><span>Equipment</span><b>${money2(C.equip)}/hr</b></div><div><span>Crew cost</span><b>${money2(C.total)}/hr</b></div></div>
+    <p class="hint">Crew cost updates automatically when a wage or equipment rate changes in the codebook.</p></fieldset>`}
+function cbHistHtml(x){const h=(Array.isArray(x.price_history)?x.price_history:[]).slice().reverse();if(!h.length)return '';const F=Object.fromEntries(CB_FIELDS[x.book].map(f=>[f.k,f]));
+  const src={edit:'Edited',mass:'Mass update',import:'Import',quote:'Quote'};
+  return `<fieldset><legend>Price history</legend><div class="list cb-hist">${h.map(e=>{const f=F[e.f]||{l:e.f,t:'money'};const ch=num(e.o)&&num(e.n)!=null?(e.n-e.o)/e.o*100:null;
+    return `<div class="li small"><div><b>${esc(f.l)}</b> ${e.o==null?'set to':`${cbFmt(f,e.o)} →`} <b>${cbFmt(f,e.n)}</b>${ch!=null&&f.t!=='pct'?` <span class="${ch>0?'cb-up':'cb-down'}">${ch>0?'+':''}${fmtN(ch,1)}%</span>`:''}${e.note?`<div class="dim">${esc(e.note)}</div>`:''}</div><div class="r dim">${fmtShort(e.d)} · ${esc(src[e.src]||e.src||'')}${e.by?`<br>${esc(e.by)}`:''}</div></div>`}).join('')}</div></fieldset>`}
+function cbUsedIn(x){return x.book==='labor'||x.book==='equipment'?cbList('crew').filter(c=>(cbD(c).members||[]).some(m=>m.id===x.id)):[]}
+function cbItemModal(){const d=M.draft;const [bk,Label,one]=cbBook(d.book);const admin=cbEditable();const dis=admin?'':' disabled';
+  const F=CB_FIELDS[bk];const used=M.orig?cbUsedIn(M.orig):[];
+  const main=F.filter(f=>!['notes','data.tax','price_date'].includes(f.k));
+  return mhead(M.isNew?`New ${one}`:d.description||Label,`${Label} codebook${M.isNew?'':d.code?' · '+d.code:''}`)+`<div class="mbody">
+    ${!admin?'<div class="notice">View only — an admin changes codebook prices.</div>':''}
+    <fieldset><legend>${esc(Label.replace(/s$/,''))}</legend><div class="fg">${main.map(f=>cbFieldHtml(f,d,dis)).join('')}
+      ${bk==='material'?cbFieldHtml(F.find(f=>f.k==='data.tax'),d,dis):''}
+      ${bk!=='crew'?cbFieldHtml({k:'price_date',l:bk==='material'?'Price date':'Rates updated',t:'date'},d,dis):''}
+      ${cbFieldHtml(F.find(f=>f.k==='notes'),d,dis)}</div>
+      <div id="cb-calcbox">${cbCalcHtml(d)}</div>
+      <label class="check small" style="margin-top:6px"><input type="checkbox" data-cbe="active"${d.active!==false?' checked':''}${dis}> Active — inactive items stay on old estimates but aren’t offered for new ones</label></fieldset>
+    ${bk==='crew'?cbCrewHtml(d,dis):''}
+    ${used.length?`<p class="hint">Used in ${used.length} crew${used.length===1?'':'s'}: ${used.slice(0,6).map(c=>esc(c.description)).join(', ')}${used.length>6?'…':''}</p>`:''}
+    ${M.isNew?'':cbHistHtml(M.orig)}</div>
+  <div class="mfoot"><div>${admin&&!M.isNew?`<button class="btn danger${M.cbArm?' arm':''}" data-act="cb-del">${M.cbArm?(used.length?`Delete — removes it from ${used.length} crew${used.length===1?'':'s'}`:'Click again to delete'):'Delete'}</button> <button class="btn" data-act="cb-dup">Duplicate</button>`:''}</div>
+    <div class="r"><button class="btn" data-act="close">${admin?'Cancel':'Close'}</button>${admin?`<button class="btn primary" data-act="cb-save">Save</button>`:''}</div></div>`}
+async function cbSaveItem(){const d=M.draft;const btn=$('#modal [data-act=cb-save]');
+  try{if(!String(d.description||'').trim())throw new Error('Add a description.');
+    const code=String(d.code||'').trim();if(code&&cbList(d.book).some(x=>x.id!==d.id&&String(x.code).trim().toLowerCase()===code.toLowerCase()))throw new Error(`Code ${code} is already used in this codebook.`);
+    if(d.book==='crew')d.data.members=(d.data.members||[]).filter(m=>m.id&&num(m.qty)>0);
+    const o=M.orig;if(o){let priced=false;CB_FIELDS[d.book].filter(f=>f.m).forEach(f=>{const a=num(cbGet(o,f.k)),b=num(cbGet(d,f.k));if(a!==b){cbHist(d,f.k,a,b,'edit');priced=true}});
+      if(priced&&d.price_date===o.price_date)d.price_date=todayStr()}
+    else CB_FIELDS[d.book].filter(f=>f.m).forEach(f=>{const b=num(cbGet(d,f.k));if(b!=null)cbHist(d,f.k,null,b,'edit')});
+    if(btn){btn.disabled=true;btn.textContent='Saving…'}
+    await run(sb.from('codebook').upsert(cbRow(d)));await loadTable('codebook');toast('Saved');closeModal()}
+  catch(e){toast(cbErr(e));if(btn){btn.disabled=false;btn.textContent='Save'}}}
+async function cbDelItem(){if(!M.cbArm){M.cbArm=true;renderModal();return}const d=M.draft;
+  try{const used=cbUsedIn(M.orig||d);if(used.length)await cbUpsert(used.map(c=>{const r=cbRow(c);r.data={...r.data,members:(r.data.members||[]).filter(m=>m.id!==d.id)};return r}));
+    await run(sb.from('codebook').delete().eq('id',d.id));await loadTable('codebook');S.cb.sel.delete(d.id);toast('Deleted');closeModal()}catch(e){toast(cbErr(e))}}
+
+/* ---------- bulk actions + mass update ---------- */
+function cbSelIds(){return [...S.cb.sel].filter(id=>cbById(id)?.book===S.cb.book)}
+async function cbBulkSet(k,v){const ids=cbSelIds();if(!ids.length)return;
+  try{await cbUpsert(ids.map(id=>{const r=cbRow(cbById(id));r[k]=v;return r}));await loadTable('codebook');toast(`Updated ${ids.length} item${ids.length===1?'':'s'}`)}catch(e){toast(cbErr(e))}}
+async function cbBulkDel(){const c=S.cb;const ids=cbSelIds();if(!ids.length)return;if(!c.delArm){c.delArm=true;render();setTimeout(()=>{if(c.delArm){c.delArm=false;render()}},5000);return}c.delArm=false;
+  try{const gone=new Set(ids);const crews=cbList('crew').filter(cr=>!gone.has(cr.id)&&(cbD(cr).members||[]).some(m=>gone.has(m.id)));
+    if(crews.length)await cbUpsert(crews.map(cr=>{const r=cbRow(cr);r.data={...r.data,members:(r.data.members||[]).filter(m=>!gone.has(m.id))};return r}));
+    for(let i=0;i<ids.length;i+=200)await run(sb.from('codebook').delete().in('id',ids.slice(i,i+200)));
+    ids.forEach(id=>c.sel.delete(id));await loadTable('codebook');toast(`Deleted ${ids.length} item${ids.length===1?'':'s'}${crews.length?` · updated ${crews.length} crew${crews.length===1?'':'s'}`:''}`)}catch(e){toast(cbErr(e))}}
+function cbMassStart(all){const c=S.cb;const ids=all?S.cbShownIds.slice():cbSelIds();if(!ids.length)return;const f=CB_FIELDS[c.book].find(x=>x.m);
+  M={kind:'cbmass',book:c.book,ids,field:f.k,op:'pct',val:'',round:'cent',note:'',date:todayStr()};showModal();setTimeout(()=>$('#cbm-val')?.focus(),0)}
+function cbMassNew(old,P){const v=num(P.val);if(v==null)return undefined;let n;
+  if(P.op==='pct'){if(old==null)return undefined;n=old*(1+v/100)}else if(P.op==='add'){if(old==null)return undefined;n=old+v}else n=v;
+  const f=CB_FIELDS[P.book].find(x=>x.k===P.field);if(f.t==='money'){const step={cent:.01,dime:.1,quarter:.25,dollar:1}[P.round];if(step)n=Math.round(n/step)*step;n=Math.round(n*1e4)/1e4}else n=Math.round(n*1e4)/1e4;
+  return Math.max(0,n)}
+function cbMassModal(){const P=M;const F=CB_FIELDS[P.book].filter(f=>f.m);const f=F.find(x=>x.k===P.field)||F[0];const items=P.ids.map(cbById).filter(Boolean);
+  const res=items.map(x=>{const o=num(cbGet(x,f.k));return {x,o,n:cbMassNew(o,P)}});const ch=res.filter(r=>r.n!==undefined&&r.n!==r.o);const skip=res.filter(r=>r.n===undefined&&num(P.val)!=null);
+  const before=ch.reduce((s,r)=>s+(r.o||0),0),after=ch.reduce((s,r)=>s+(r.n||0),0);
+  const unit=f.t==='pct'?'points':'$';
+  return mhead('Mass update prices',`${items.length} ${{material:'material',labor:'labor rate',equipment:'equipment',crew:'crew'}[P.book]}${items.length===1||P.book==='equipment'?'':'s'}`)+`<div class="mbody">
+    <fieldset><legend>Change</legend><div class="fg">
+      <label class="f">Field<select class="field" data-cbmass="field">${F.map(x=>`<option value="${x.k}"${x.k===f.k?' selected':''}>${x.l}</option>`).join('')}</select></label>
+      <label class="f">How<select class="field" data-cbmass="op"><option value="pct"${P.op==='pct'?' selected':''}>Increase / decrease by %</option><option value="add"${P.op==='add'?' selected':''}>Add / subtract ${f.t==='pct'?'points':'an amount'}</option><option value="set"${P.op==='set'?' selected':''}>Set to</option></select></label>
+      <label class="f">${P.op==='pct'?'Percent (use − to lower)':P.op==='add'?(f.t==='pct'?'Points (use − to lower)':'Amount (use − to lower)'):'New value'}<span class="cb-inp ${P.op==='pct'||f.t==='pct'?'has-post':P.op!=='pct'&&f.t==='money'?'has-pre':''}">${P.op!=='pct'&&f.t==='money'?'<span class="cb-pre">$</span>':''}<input class="field num" id="cbm-val" type="number" step="any" data-cbmass="val" value="${esc(P.val)}" placeholder="${P.op==='pct'?'e.g. 6':'0.00'}">${P.op==='pct'||f.t==='pct'?'<span class="cb-post">%</span>':''}</span></label>
+      ${f.t==='money'?`<label class="f">Round to<select class="field" data-cbmass="round">${[['cent','Nearest cent'],['dime','Nearest $0.10'],['quarter','Nearest $0.25'],['dollar','Nearest $1'],['none','No rounding']].map(([k,l])=>`<option value="${k}"${P.round===k?' selected':''}>${l}</option>`).join('')}</select></label>`:''}
+      <label class="f">${P.book==='material'?'New price date':'Rates updated'}<input class="field" type="date" data-cbmass="date" value="${esc(P.date)}"></label>
+      <label class="f s2">Note for price history<input class="field" data-cbmass="note" value="${esc(P.note)}" placeholder="e.g. Martin Marietta 2027 price increase"></label></div></fieldset>
+    <div class="statline"><div><b>${ch.length}</b>Will change</div>${skip.length?`<div><b>${skip.length}</b>Skipped (no current ${esc(f.l.toLowerCase())})</div>`:''}${ch.length&&f.t==='money'?`<div><b>${money2(before)} → ${money2(after)}</b>Sum of ${esc(f.l.toLowerCase())}</div>`:''}</div>
+    <div class="panel scroll cb-prev"><table><thead><tr><th>Code</th><th>Description</th><th class="r">Now</th><th class="r">New</th><th class="r">Change</th></tr></thead><tbody>
+    ${res.slice(0,200).map(r=>`<tr${r.n===undefined||r.n===r.o?' class="dim"':''}><td class="num">${esc(r.x.code)}</td><td>${esc(r.x.description)}</td><td class="r num">${cbFmt(f,r.o)||'—'}</td><td class="r num"><b>${r.n===undefined?'—':cbFmt(f,r.n)}</b></td><td class="r num small">${r.n!==undefined&&r.o?`<span class="${r.n>r.o?'cb-up':r.n<r.o?'cb-down':''}">${r.n>=r.o?'+':''}${f.t==='pct'?fmtN(r.n-r.o,2)+' pts':money2(r.n-r.o).replace('$-','−$')}</span>`:''}</td></tr>`).join('')}
+    ${res.length>200?`<tr><td colspan="5" class="dim small">…and ${res.length-200} more</td></tr>`:''}</tbody></table></div>
+    <p class="hint">Every change is kept in each item’s price history${P.book!=='material'?', and crews using these rates update automatically':''}.</p></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="cb-mass-go"${ch.length&&!P.busy?'':' disabled'}>${P.busy?'Updating…':`Update ${ch.length} price${ch.length===1?'':'s'}`}</button></div></div>`}
+async function cbMassRun(){const P=M;const f=CB_FIELDS[P.book].find(x=>x.k===P.field);P.busy=true;renderModal();
+  try{const rows=[];P.ids.map(cbById).filter(Boolean).forEach(x=>{const o=num(cbGet(x,f.k));const n=cbMassNew(o,P);if(n===undefined||n===o)return;const y=clone(x);y.data=cbD(y);cbSet(y,f.k,n);cbHist(y,f.k,o,n,'mass',P.note.trim());if(P.date)y.price_date=P.date;rows.push(cbRow(y))});
+    await cbUpsert(rows);await loadTable('codebook');toast(`Updated ${rows.length} price${rows.length===1?'':'s'}`);S.cb.sel.clear();closeModal();render()}
+  catch(e){P.busy=false;toast(cbErr(e));renderModal()}}
+
+/* ---------- export ---------- */
+async function cbExport(){let X;try{X=await loadXLSX()}catch(e){toast(errMsg(e));return}
+  const wb=X.utils.book_new();
+  CB_BOOKS.forEach(([bk,Label])=>{const F=CB_FIELDS[bk];const list=cbList(bk).slice().sort((a,b)=>String(a.code).localeCompare(String(b.code),undefined,{numeric:true})||String(a.description).localeCompare(b.description));
+    let head,rows;
+    if(bk==='crew'){head=['Code','Crew name','Category','Members','Crew size','Labor $/hr','Equipment $/hr','Crew $/hr','Notes'];
+      rows=list.map(x=>{const C=cbCrew(x);return [x.code,x.description,x.category,(cbD(x).members||[]).map(m=>{const it=cbById(m.id);return it?`${m.qty}× ${it.code||it.description}`:''}).filter(Boolean).join('; '),C.men,+C.labor.toFixed(2),+C.equip.toFixed(2),+C.total.toFixed(2),x.notes||'']})}
+    else{head=[...F.map(f=>f.l),...(bk==='material'?[]:[bk==='labor'?'Loaded $/hr':'Total $/hr']),'Active'];
+      rows=list.map(x=>[...F.map(f=>{const v=cbGet(x,f.k);if(f.t==='vendor')return vendorOf(v)?.company||'';if(f.t==='bool')return v===false?'No':'Yes';if(f.t==='date')return v||'';if(['money','pct','num'].includes(f.t))return num(v)??'';if(f.t==='sel')return v||f.opts[0];return v??''}),...(bk==='material'?[]:[+(cbCost(x)||0).toFixed(2)]),x.active===false?'No':'Yes'])}
+    const ws=X.utils.aoa_to_sheet([head,...rows]);ws['!cols']=head.map(h=>({wch:/Description|Craft|Crew name|Members|Notes/.test(h)?34:h.length>10?14:11}));X.utils.book_append_sheet(wb,ws,Label)});
+  X.writeFile(wb,`codebooks-${todayStr()}.xlsx`)}
+
+/* ---------- import with column mapping ---------- */
+function cbImpStart(){const bk=S.cb.book==='crew'?'material':S.cb.book;M={kind:'cbimp',book:bk,step:'file',opt:{existing:'update',vendor:'',cat:'',date:todayStr()}};showModal();loadXLSX().catch(()=>{})}
+async function cbImpRead(file){const X=await loadXLSX();const wb=X.read(await file.arrayBuffer(),{type:'array'});
+  const sheets={};wb.SheetNames.forEach(n=>{const rows=X.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''});if(rows.some(r=>r.some(c=>String(c).trim()!=='')))sheets[n]=rows});
+  const names=Object.keys(sheets);if(!names.length)throw new Error('That file doesn’t have anything in it.');
+  M.X=X;M.file=file.name;M.sheets=sheets;M.names=names;
+  const scored=names.map(n=>({n,s:cbHeaderGuess(sheets[n]).score})).sort((a,b)=>b.s-a.s);cbImpSheet(scored[0].n)}
+function cbAliasHit(book,h){const n=normH(h);if(!n)return null;return CB_FIELDS[book].find(f=>normH(f.l)===n||f.al.includes(n))||null}
+function cbHeaderGuess(rows){let best={r:0,score:-1};for(let r=0;r<Math.min(rows.length,25);r++){const row=rows[r]||[];const txt=row.filter(c=>typeof c==='string'&&c.trim()&&isNaN(+c)).length;if(txt<2)continue;
+    const hits=new Set();row.forEach(c=>{const f=cbAliasHit(M.book,c);if(f)hits.add(f.k)});const s=hits.size*10+txt;if(s>best.score)best={r,score:s}}
+  if(best.score<0){const r=rows.findIndex(x=>(x||[]).filter(c=>String(c).trim()).length>=2);best={r:Math.max(0,r),score:0}}return best}
+function cbImpSheet(n){M.sheet=n;M.hdr=cbHeaderGuess(M.sheets[n]).r;cbImpGuess();M.step='map'}
+function cbImpGuess(){const head=(M.sheets[M.sheet][M.hdr]||[]).map(c=>String(c??'').trim());const map={};let mem={};try{mem=JSON.parse(localStorage.getItem(CB_MAPKEY)||'{}')[M.book]||{}}catch(e){}
+  const used=new Set();CB_FIELDS[M.book].forEach(f=>{const want=mem[f.k];if(want==null)return;const i=head.findIndex((h,j)=>!used.has(j)&&normH(h)===want);if(i>=0){map[f.k]=i;used.add(i)}});
+  // exact label / alias matches, in field order (so “Item no.” goes to Code before Description looks at “Item”)
+  CB_FIELDS[M.book].forEach(f=>{if(map[f.k]!=null)return;const i=head.findIndex((h,j)=>!used.has(j)&&(normH(h)===normH(f.l)||f.al.includes(normH(h))));if(i>=0){map[f.k]=i;used.add(i)}});
+  // a bare “Item” / “Item #” column is the description when there's no other, otherwise the code
+  const it=head.findIndex((h,j)=>!used.has(j)&&/^item(s|no|number)?$/.test(normH(h)));if(it>=0){const k=map.description==null?'description':map.code==null?'code':null;if(k&&(k==='code'||!/no|number/.test(normH(head[it])))){map[k]=it;used.add(it)}else if(map.code==null){map.code=it;used.add(it)}}
+  M.map=map}
+const cbColName=i=>{let s='';i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s};
+function cbParse(f,v,X){if(v==null)return '';if(typeof v==='string'){v=v.trim();if(v===''||/^[-–—]+$/.test(v))return ''}
+  switch(f.t){
+    case 'money':case 'num':{const n=typeof v==='number'?v:+String(v).replace(/[$,\s]/g,'').replace(/^\((.*)\)$/,'-$1');return isNaN(n)?undefined:n}
+    case 'pct':{if(typeof v==='number')return v>0&&v<1?+(v*100).toFixed(6):v;const s=String(v).replace(/[%\s]/g,'');const n=+s;return isNaN(n)?undefined:n}
+    case 'bool':{const t=normH(v);if(['yes','y','true','x','1','taxable','t'].includes(t))return true;if(['no','n','false','0','nontaxable','exempt','f'].includes(t))return false;return undefined}
+    case 'date':{const d=xDate(v,X);return d===null?undefined:d}
+    case 'sel':{const t=normH(v);if(f.opts===CB_OWN){if(/rent|leas/.test(t))return 'Rented';if(/own|company|co/.test(t))return 'Owned';return undefined}
+      const hit=f.opts.find(o=>normH(o)===t)||(/sub/.test(t)?'Subcontract':/truck|haul/.test(t)?'Trucking':/mat|perm|const/.test(t)?'Material':null);return hit||undefined}
+    case 'vendor':{const t=normH(v);const vd=S.vendors.find(x=>normH(x.company)===t)||S.vendors.find(x=>t.length>3&&(normH(x.company).startsWith(t)||t.startsWith(normH(x.company))));return vd?vd.id:{miss:String(v)}}
+    case 'unit':{const u=String(v).trim().replace(/\.$/,'');const A={each:'EA',ea:'EA',ft:'LF',lf:'LF',lft:'LF',tn:'TON',tons:'TON',ton:'TON',yd:'CY',cy:'CY',cuyd:'CY',sy:'SY',sqyd:'SY',sf:'SF',sqft:'SF',gal:'GAL',gals:'GAL',ls:'LS',lb:'LB',lbs:'LB',hr:'HR',hrs:'HR',load:'LOAD',loads:'LOAD',ac:'AC',acre:'AC',bag:'BAG',bags:'BAG',day:'DAY',roll:'ROLL'};return A[normH(u)]||u}
+    default:return String(v).trim()}}
+function cbImpPlan(){const F=CB_FIELDS[M.book];const rows=M.sheets[M.sheet].slice(M.hdr+1);const O=M.opt;const X=M.X;
+  const have=cbList(M.book);const byCode=new Map(),byDesc=new Map();have.forEach(x=>{if(String(x.code).trim())byCode.set(String(x.code).trim().toLowerCase(),x);const k=normH(x.description);if(k&&!byDesc.has(k))byDesc.set(k,x)});
+  const seen=new Map();const items=[];const mapped=F.filter(f=>M.map[f.k]!=null&&M.map[f.k]!=='');
+  rows.forEach((row,ri)=>{const rowNo=M.hdr+ri+2;if(!row||row.every(c=>String(c??'').trim()===''))return;
+    const f={},issues=[],errors=[];
+    mapped.forEach(fl=>{const raw=row[M.map[fl.k]];const v=cbParse(fl,raw,X);if(v===undefined){issues.push(`${fl.l} “${raw}” not understood — left out`);return}
+      if(fl.t==='vendor'&&v&&v.miss){issues.push(`Vendor “${v.miss}” isn’t in your vendor list — left blank`);return}if(v!=='')f[fl.k]=v});
+    if(M.book==='material'&&O.vendor)f.vendor_id=O.vendor==='__none'?null:O.vendor;
+    if(!f.description&&!f.code)return; // not an item row (subtotal, blank, section header without code)
+    const priceK=F.filter(x=>x.m).map(x=>x.k);const hasPrice=priceK.some(k=>f[k]!=null);
+    const key=f.code?'c:'+String(f.code).toLowerCase():'d:'+normH(f.description);
+    if(seen.has(key)){items.push({rowNo,f,issues,errors:[],action:'skip',why:`Same ${f.code?'code':'description'} as row ${seen.get(key)} — first one kept`});return}seen.set(key,rowNo);
+    const dm=f.description?byDesc.get(normH(f.description)):null;
+    const ex=f.code?byCode.get(String(f.code).toLowerCase())||(dm&&!String(dm.code).trim()?dm:null):dm;
+    if(!ex&&!f.description){if(!hasPrice)return;errors.push('No description')}
+    if(!ex&&!f.code&&!hasPrice&&F.some(x=>x.m&&M.map[x.k]!=null&&M.map[x.k]!==''))return; // subtotal / heading rows
+    if(errors.length){items.push({rowNo,f,issues,errors,action:'error'});return}
+    if(!hasPrice&&!ex)issues.push('No price in this row');
+    if(!ex){items.push({rowNo,f,issues,errors,action:'new'});return}
+    const keys=O.existing==='price'?[...priceK,'price_date','vendor_id']:Object.keys(f);
+    const changes=keys.filter(k=>k in f&&(k!=='code'||!String(ex.code).trim())).filter(k=>{const a=cbGet(ex,k),b=f[k];const fl=F.find(x=>x.k===k)||{t:'text'};if(['money','pct','num'].includes(fl.t))return num(a)!==num(b);if(k==='price_date')return false;return String(a??'')!==String(b??'')});
+    const pc=priceK.filter(k=>changes.includes(k));
+    items.push({rowNo,f,issues,errors,ex,changes,pc,action:O.existing==='skip'?'exists':changes.length?'update':'same'})});
+  M.plan={items};M.step='preview'}
+function cbImpRows(){const P=M.plan,O=M.opt,F=CB_FIELDS[M.book];const note=`Imported from ${M.file}`;const out=[];
+  P.items.forEach(it=>{if(it.action==='new'){const d=cbNew(M.book);d.category='';d.vendor_id=null;d.price_date=O.date||todayStr();Object.entries(it.f).forEach(([k,v])=>cbSet(d,k,v));if(!d.category&&O.cat)d.category=O.cat;
+      F.filter(f=>f.m).forEach(f=>{const n=num(cbGet(d,f.k));if(n!=null)cbHist(d,f.k,null,n,'import',note)});out.push(cbRow(d))}
+    else if(it.action==='update'){const y=clone(it.ex);y.data=cbD(y);it.changes.forEach(k=>cbSet(y,k,it.f[k]));it.pc.forEach(k=>cbHist(y,k,num(cbGet(it.ex,k)),num(it.f[k]),'import',note));
+      if(it.pc.length)y.price_date=it.f.price_date||O.date||todayStr();out.push(cbRow(y))}});
+  return out}
+async function cbImpRun(){M.running=true;renderModal();const res={created:0,updated:0,failed:[]};
+  try{const rows=cbImpRows();const isNew=new Set(rows.filter(r=>!cbById(r.id)).map(r=>r.id));
+    for(let i=0;i<rows.length;i+=200){const ch=rows.slice(i,i+200);try{await run(sb.from('codebook').upsert(ch));ch.forEach(r=>isNew.has(r.id)?res.created++:res.updated++)}
+      catch(e){for(const r of ch){try{await run(sb.from('codebook').upsert(r));isNew.has(r.id)?res.created++:res.updated++}catch(e2){res.failed.push(`${r.code||r.description}: ${cbErr(e2)}`)}}}}
+    // remember the mapping by column heading for next time
+    try{const all=JSON.parse(localStorage.getItem(CB_MAPKEY)||'{}');const head=M.sheets[M.sheet][M.hdr]||[];all[M.book]=Object.fromEntries(Object.entries(M.map).filter(([,i])=>i!==''&&i!=null).map(([k,i])=>[k,normH(head[i])]));localStorage.setItem(CB_MAPKEY,JSON.stringify(all))}catch(e){}
+    await loadTable('codebook')}catch(e){res.failed.push(cbErr(e))}
+  M.running=false;M.result=res;M.step='done';renderModal();render()}
+function cbImpModal(){const [bk,Label]=cbBook(M.book);const foot=(l,r)=>`<div class="mfoot"><div>${l||''}</div><div class="r">${r}</div></div>`;
+  if(M.step==='done'){const r=M.result;return mhead('Import finished',M.file)+`<div class="mbody"><div class="statline"><div><b>${r.created}</b>Added</div><div><b>${r.updated}</b>Updated</div><div><b>${r.failed.length}</b>Problems</div></div>
+    ${r.failed.length?`<div class="err">${r.failed.slice(0,30).map(esc).join('<br>')}</div>`:'<p class="hint">Price changes were recorded in each item’s price history. Your column matching is remembered for next time.</p>'}</div>`+foot('','<button class="btn primary" data-act="close">Done</button>')}
+  const bookSel=`<div class="seg cb-impbook">${CB_BOOKS.filter(b=>b[0]!=='crew').map(([k,l])=>`<button class="${k===bk?'on':''}" data-act="cb-imp-book" data-v="${k}">${l}</button>`).join('')}</div>`;
+  if(M.step==='file')return mhead('Import from Excel','Bring in a price list, wage sheet or equipment rate list')+`<div class="mbody">
+    <fieldset><legend>1. Which codebook?</legend>${bookSel}</fieldset>
+    <fieldset><legend>2. Choose your file</legend><label class="drop${M.reading?' busy':''}"><input type="file" accept=".xlsx,.xls,.xlsm,.csv" data-cbfile>${M.reading?'Reading file…':'<b>Click to choose a file</b><span class="dim small">or drag it here · Excel or CSV</span>'}</label>
+      ${M.error?`<div class="err" style="margin-top:10px">${esc(M.error)}</div>`:''}
+      <p class="hint">Any layout works — next you’ll match your columns to the codebook fields. Items already in the codebook (same code) get updated instead of duplicated, and every price change goes into its price history. Tip: <b>Export to Excel</b> gives you a file in the right layout to fill in.</p></fieldset></div>`+foot('','<button class="btn" data-act="close">Cancel</button>');
+  const rows=M.sheets[M.sheet];const head=rows[M.hdr]||[];const ncol=Math.max(...rows.slice(M.hdr,M.hdr+40).map(r=>(r||[]).length),head.length);
+  const sample=rows.slice(M.hdr+1).filter(r=>r&&r.some(c=>String(c).trim()!=='')).slice(0,4);
+  if(M.step==='map'){const F=CB_FIELDS[bk];const colOpt=(k)=>{const cur=M.map[k];return `<option value=""${cur==null||cur===''?' selected':''}>— Not in my file —</option>${Array.from({length:ncol},(_,i)=>`<option value="${i}"${+cur===i&&cur!==''&&cur!=null?' selected':''}>${cbColName(i)} · ${esc(String(head[i]??'').trim()||'(no heading)')}</option>`).join('')}`};
+    const ex=k=>{const i=M.map[k];if(i==null||i==='')return '';const f=F.find(x=>x.k===k);return sample.map(r=>r[i]).filter(v=>String(v??'').trim()!=='').slice(0,3).map(v=>esc(f.t==='date'&&typeof v==='number'?fmtDate(xDate(v,M.X)):typeof v==='number'?fmtN(v,4):String(v).slice(0,30))).join(' · ')};
+    const req=F.filter(f=>f.req).every(f=>M.map[f.k]!=null&&M.map[f.k]!=='');const price=F.filter(f=>f.m).some(f=>M.map[f.k]!=null&&M.map[f.k]!=='');
+    return mhead('Match your columns',`${M.file} → ${Label}`)+`<div class="mbody">
+      <fieldset><legend>Codebook</legend>${bookSel}</fieldset>
+      <fieldset><legend>Where the list is</legend><div class="fg">${M.names.length>1?`<label class="f">Sheet<select class="field" data-cbi="sheet">${M.names.map(n=>`<option${n===M.sheet?' selected':''}>${esc(n)}</option>`).join('')}</select></label>`:''}
+        <label class="f">Headings are on row<input class="field num" type="number" min="1" max="${rows.length}" data-cbi="hdr" id="cbi-hdr" value="${M.hdr+1}"></label></div>
+        <p class="hint" style="margin-top:0">Row ${M.hdr+1}: ${head.filter(c=>String(c).trim()).slice(0,8).map(c=>'“'+esc(String(c).trim())+'”').join(', ')||'<i>empty</i>'}</p></fieldset>
+      <fieldset><legend>Match columns</legend><div class="cb-map"><div class="cb-maph"><span>Codebook field</span><span>Column in your file</span><span>First values</span></div>
+        ${F.map(f=>`<div class="cb-mapr"><span><b>${f.l}</b>${f.req?' <span class="req">required</span>':f.m?' <span class="dim small">price</span>':''}</span><select class="field${M.map[f.k]!=null&&M.map[f.k]!==''?' cb-mapped':''}" data-cbmap="${f.k}">${colOpt(f.k)}</select><span class="small dim cb-ex">${ex(f.k)}</span></div>`).join('')}</div>
+        ${!req?'<div class="err" style="margin-top:10px">Pick the column with the description.</div>':!price?'<div class="notice" style="margin:10px 0 0">No price column matched — items will come in without prices.</div>':''}</fieldset>
+      <fieldset><legend>Options</legend><div class="fg">
+        <label class="f">Items already in the codebook<select class="field" data-cbi="existing"><option value="update"${M.opt.existing==='update'?' selected':''}>Update prices and details</option><option value="price"${M.opt.existing==='price'?' selected':''}>Update prices only</option><option value="skip"${M.opt.existing==='skip'?' selected':''}>Leave them alone</option></select></label>
+        <label class="f">Price date<input class="field" type="date" data-cbi="date" value="${esc(M.opt.date)}"></label>
+        ${bk==='material'?`<label class="f">Vendor for every row<select class="field" data-cbi="vendor"><option value="">From the file (or none)</option>${S.vendors.slice().sort((a,b)=>a.company.localeCompare(b.company)).map(v=>`<option value="${v.id}"${M.opt.vendor===v.id?' selected':''}>${esc(v.company)}</option>`).join('')}</select></label>`:''}
+        <label class="f">Category for rows without one<input class="field" list="cb-cats2" data-cbi="cat" value="${esc(M.opt.cat)}" placeholder="Optional"><datalist id="cb-cats2">${cbCats(bk).map(o=>`<option value="${esc(o)}">`).join('')}</datalist></label></div>
+        <p class="hint">Matching is by <b>code</b>. Rows without a code match on description. Blank cells never erase what’s already in the codebook.</p></fieldset></div>`
+      +foot('<button class="btn" data-act="cb-imp-back">Choose a different file</button>',`<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="cb-imp-preview"${req?'':' disabled'}>Preview import</button>`)}
+  // preview
+  const it=M.plan.items;const cnt=a=>it.filter(x=>x.action===a).length;const F=CB_FIELDS[bk];const pf=F.filter(f=>f.m);
+  const label={new:['Add','good'],update:['Update','info'],same:['No change','na'],exists:['Left alone','na'],skip:['Skip','na'],error:['Error','bad']};
+  const show=it.slice(0,300);const n=cnt('new')+cnt('update');
+  const priceCell=x=>pf.map(f=>{const nv=x.f[f.k];const ov=x.ex?num(cbGet(x.ex,f.k)):null;if(nv==null)return x.ex?`<span class="dim">${cbFmt(f,ov)||'—'}</span>`:'<span class="dim">—</span>';
+    if(x.action==='update'&&x.pc.includes(f.k)){const ch=ov?(nv-ov)/ov*100:null;return `<span class="dim">${cbFmt(f,ov)||'—'}</span> → <b>${cbFmt(f,nv)}</b>${ch!=null&&f.t!=='pct'?` <span class="${ch>0?'cb-up':'cb-down'}">${ch>0?'+':''}${fmtN(ch,1)}%</span>`:''}`}
+    return `<b>${cbFmt(f,nv)}</b>`}).join('<br>');
+  return mhead('Review import',`${M.file} → ${Label}`)+`<div class="mbody">
+    <div class="statline"><div><b>${it.length}</b>Rows with items</div><div><b>${cnt('new')}</b>New</div><div><b>${cnt('update')}</b>Updated</div><div><b>${cnt('same')+cnt('exists')}</b>Unchanged</div><div><b>${cnt('skip')+cnt('error')}</b>Skipped / errors</div></div>
+    <div class="panel scroll cb-prev"><table><thead><tr><th>Row</th><th>Code</th><th>Description</th><th class="r">${pf.map(f=>esc(f.l)).join(' / ')}</th><th>Result</th><th>Notes</th></tr></thead><tbody>
+    ${show.map(x=>`<tr><td class="num dim small">${x.rowNo}</td><td class="num">${esc(x.f.code||x.ex?.code||'')}</td><td class="proj" style="white-space:normal">${esc(x.f.description||x.ex?.description||'—')}${x.f.unit?` <span class="dim small">/${esc(x.f.unit)}</span>`:''}</td><td class="r num small" style="white-space:nowrap">${priceCell(x)}</td><td>${pill(label[x.action][0],label[x.action][1])}</td>
+      <td class="small" style="min-width:180px">${[...x.errors.map(e=>`<b style="color:var(--bad)">${esc(e)}</b>`),...(x.why?[esc(x.why)]:[]),...(x.action==='update'&&x.changes.filter(k=>!x.pc.includes(k)).length?['Also changes '+x.changes.filter(k=>!x.pc.includes(k)).map(k=>esc((F.find(f=>f.k===k)||{l:k}).l.toLowerCase())).join(', ')]:[]),...x.issues.map(esc)].join('<br>')||'<span class="dim">—</span>'}</td></tr>`).join('')}
+    ${it.length>show.length?`<tr><td colspan="6" class="dim small">…and ${it.length-show.length} more rows</td></tr>`:''}</tbody></table></div></div>`
+    +foot('<button class="btn" data-act="cb-imp-remap">Back to columns</button>',`<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="cb-imp-run"${n&&!M.running?'':' disabled'}>${M.running?'Importing…':`Import ${cnt('new')?`${cnt('new')} new`:''}${cnt('new')&&cnt('update')?' + ':''}${cnt('update')?`${cnt('update')} update${cnt('update')===1?'':'s'}`:''}${n?'':'nothing'}`}</button>`)}
+
+/* ---------- events ---------- */
+FOCUS_ATTRS.push('data-cbe','data-cbm','data-cbi','data-cbmass');
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;if(!a.startsWith('cb-'))return;const c=S.cb;
+  switch(a){
+    case 'cb-tab':c.book=t.dataset.v;c.cat='';c.vendor='';c.limit=400;c.delArm=false;S.q.cb='';cbSaveUi();render();break;
+    case 'cb-sort':{const k=t.dataset.k;if(c.sort===k)c.dir=-c.dir;else{c.sort=k;c.dir=['cost','data.base','data.fringe','data.burden','data.rate','data.op','men','price_date'].includes(k)?-1:1}cbSaveUi();render();break}
+    case 'cb-more':c.limit+=400;render();break;
+    case 'cb-new':if(cbEditable()){M={kind:'cbitem',isNew:true,draft:cbNew(c.book)};showModal();setTimeout(()=>$('#cbe-code')?.focus(),0)}break;
+    case 'cb-open':cbOpen(t.dataset.id);break;
+    case 'cb-save':cbSaveItem();break;
+    case 'cb-del':cbDelItem();break;
+    case 'cb-dup':{const d=clone(M.draft);d.id=newId();d.code=d.code?d.code+'-COPY':'';d.description=d.description+' (copy)';d.price_history=[];M={kind:'cbitem',isNew:true,draft:d};renderModal();$('#cbe-code')?.select();break}
+    case 'cb-m-rm':M.draft.data.members.splice(+t.dataset.i,1);renderModal();break;
+    case 'cb-selclear':c.sel.clear();c.delArm=false;render();break;
+    case 'cb-mass':cbMassStart(!!t.dataset.all);break;
+    case 'cb-mass-go':if(!M.busy)cbMassRun();break;
+    case 'cb-bulk-active':cbBulkSet('active',t.dataset.v==='1');break;
+    case 'cb-bulk-del':cbBulkDel();break;
+    case 'cb-export':cbExport();break;
+    case 'cb-imp':if(cbEditable())cbImpStart();break;
+    case 'cb-imp-book':M.book=t.dataset.v;if(M.sheets){cbImpSheet(M.sheet);M.step='map'}renderModal();break;
+    case 'cb-imp-back':M={kind:'cbimp',book:M.book,step:'file',opt:M.opt};renderModal();break;
+    case 'cb-imp-remap':M.step='map';M.plan=null;renderModal();break;
+    case 'cb-imp-preview':cbImpPlan();renderModal();$('#modal .mbody').scrollTop=0;break;
+    case 'cb-imp-run':if(!M.running)cbImpRun();break;
+  }
+  if(c.delArm&&a!=='cb-bulk-del'){c.delArm=false;if(!M)render()}
+  if(M&&M.cbArm&&a!=='cb-del'){M.cbArm=false;renderModal()}
+});
+document.addEventListener('input',e=>{const t=e.target;
+  if(M&&M.kind==='cbitem'&&t.dataset.cbe&&t.type!=='checkbox'&&t.tagName!=='SELECT'){const f=CB_FIELDS[M.draft.book].find(x=>x.k===t.dataset.cbe);const n=f&&['money','pct','num'].includes(f.t);cbSet(M.draft,t.dataset.cbe,n?num(t.value):t.value);
+    const box=$('#cb-calcbox');if(box)box.innerHTML=cbCalcHtml(M.draft);return}
+  if(M&&M.kind==='cbitem'&&t.dataset.cbm&&t.tagName==='INPUT'){const [i,k]=t.dataset.cbm.split('.');M.draft.data.members[+i][k]=t.value;renderModal();return}
+  if(M&&M.kind==='cbmass'&&t.dataset.cbmass&&t.tagName==='INPUT'){M[t.dataset.cbmass]=t.value;if(['val','date'].includes(t.dataset.cbmass))renderModal();return}
+  if(M&&M.kind==='cbimp'&&t.dataset.cbi==='hdr'){const v=Math.round(+t.value);if(v>=1&&v<=M.sheets[M.sheet].length){M.hdr=v-1;cbImpGuess();renderModal()}return}
+  if(M&&M.kind==='cbimp'&&t.dataset.cbi&&t.tagName==='INPUT'&&t.type!=='date'){M.opt[t.dataset.cbi]=t.value;return}
+});
+document.addEventListener('change',e=>{const t=e.target;const c=S.cb;
+  if(t.dataset.cbsel){c.delArm=false;t.checked?c.sel.add(t.dataset.cbsel):c.sel.delete(t.dataset.cbsel);render();return}
+  if(t.dataset.cbselall!=null){c.delArm=false;const ids=(S.cbShownIds||[]).slice(0,c.limit);ids.forEach(id=>t.checked?c.sel.add(id):c.sel.delete(id));render();return}
+  if(t.dataset.cbf){const k=t.dataset.cbf;c[k]=t.type==='checkbox'?t.checked:t.value;c.limit=400;cbSaveUi();render();return}
+  if(t.dataset.cbbulk){let v=t.value;const k=t.dataset.cbbulk;if(!v)return;if(v==='__new'){v=(prompt('New category name')||'').trim();if(!v){render();return}}if(v==='__none')v=null;cbBulkSet(k,v);return}
+  if(M&&M.kind==='cbitem'&&t.dataset.cbe&&(t.type==='checkbox'||t.tagName==='SELECT'||t.type==='date')){const k=t.dataset.cbe;cbSet(M.draft,k,t.type==='checkbox'?t.checked:t.value||(k==='vendor_id'?null:''));renderModal();return}
+  if(M&&M.kind==='cbitem'&&t.dataset.cbm&&t.tagName==='SELECT'){const [i]=t.dataset.cbm.split('.');M.draft.data.members[+i].id=t.value;renderModal();return}
+  if(M&&M.kind==='cbitem'&&t.dataset.cbmadd!=null){if(t.value){const mem=M.draft.data.members=M.draft.data.members||[];const ex=mem.find(m=>m.id===t.value);if(ex)ex.qty=(num(ex.qty)||0)+1;else mem.push({id:t.value,qty:1})}renderModal();return}
+  if(M&&M.kind==='cbmass'&&t.dataset.cbmass&&(t.tagName==='SELECT'||t.type==='date')){M[t.dataset.cbmass]=t.value;if(t.dataset.cbmass==='field'){const f=CB_FIELDS[M.book].find(x=>x.k===t.value);if(f.t==='pct'&&M.op==='pct')M.op='add'}renderModal();return}
+  if(M&&M.kind==='cbimp'){
+    if(t.dataset.cbfile!=null){const file=t.files[0];if(!file)return;M.reading=true;M.error=null;renderModal();cbImpRead(file).then(()=>{M.reading=false;renderModal()}).catch(err=>{M.reading=false;M.error=errMsg(err);renderModal()});return}
+    if(t.dataset.cbi==='sheet'){cbImpSheet(t.value);renderModal();return}
+    if(t.dataset.cbi&&(t.tagName==='SELECT'||t.type==='date')){M.opt[t.dataset.cbi]=t.value;return}
+    if(t.dataset.cbmap){const k=t.dataset.cbmap;const v=t.value===''?'':+t.value;if(v!==''){Object.keys(M.map).forEach(o=>{if(o!==k&&M.map[o]===v)M.map[o]=''})}M.map[k]=v;renderModal();return}}
+});
+document.addEventListener('keydown',e=>{if((e.key==='Enter')&&M&&M.kind==='cbitem'&&e.target.dataset?.cbe&&e.target.tagName==='INPUT'&&cbEditable()){e.preventDefault();cbSaveItem()}});
+
 
 /* ---------- start ---------- */
 // Checks that config.js points at a real Supabase project with a valid key
