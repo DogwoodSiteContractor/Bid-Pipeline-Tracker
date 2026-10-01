@@ -931,8 +931,8 @@ function focusKey(el){if(!el||!$('#modal')?.contains(el))return null;if(el.id)re
 function renderModal(first){
   if(!M)return;const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal}[M.kind]();
-  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl'].includes(M.kind)?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
+  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal}[M.kind]();
+  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib'].includes(M.kind)?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();
@@ -4513,7 +4513,7 @@ function estCalc(d){const ctx=estCtx(d);const items=d.items.map(it=>itemCalc(it,
 // codebook prices that moved since they were copied in
 function estStale(d){const out=[];const acts=[];(d.items||[]).forEach(it=>(it.acts||[]).forEach(a=>acts.push(a)));if(d.act)acts.push(d.act);if(d.item)(d.item.acts||[]).forEach(a=>acts.push(a));
   acts.forEach(a=>{if(a.crew){const x=cbById(a.crew.id);if(x){const s=crewSnap(x);if(Math.abs(s.labor-(+a.crew.labor||0))>.004||Math.abs(s.equip-(+a.crew.equip||0))>.004||s.men!==(+a.crew.men||0))out.push({a,crew:s})}}
-    (a.res||[]).forEach(r=>{if(!r.cb)return;const x=cbById(r.cb);if(!x)return;const c=cbCost(x);if(c!=null&&Math.abs(c-(+r.price||0))>.004)out.push({r,price:+c.toFixed(4)})})});return out}
+    (a.res||[]).forEach(r=>{if(!r.cb||r.src)return;const x=cbById(r.cb);if(!x)return;const c=cbCost(x);if(c!=null&&Math.abs(c-(+r.price||0))>.004)out.push({r,price:+c.toFixed(4)})})});return out}
 function estApplyStale(list){list.forEach(s=>{if(s.crew)s.a.crew={...s.a.crew,...s.crew};else s.r.price=s.price})}
 // a fresh copy of a template, with new ids and today's codebook prices
 function actFromTpl(src){const a=clone(src);a.id=newId();a.qty=null;a.res=(a.res||[]).map(r=>({...r,id:newId()}));estApplyStale(estStale({act:a}));return a}
@@ -4575,7 +4575,7 @@ function actCardHtml(a,p,r,itemQty,o={}){const ec=EC();const ro=ec.ro;const crew
   const unitOf=x=>esc(x.unit||(x.basis==='hour'?'HR':''));
   const resRow=(x,i)=>{const rp=`${p}.res.${i}`;const rr=r.res[i]||{qty:0,cost:0};const kind=RES_KINDS.find(k=>k[0]===x.kind)||RES_KINDS[5];const cb=x.cb?cbById(x.cb):null;
     return `<tr><td><span class="est-tag k-${x.kind}">${kind[2]}</span></td>
-      <td class="est-rdesc">${x.cb?`<div class="est-cbname">${esc(x.desc)}${x.code?` <span class="dim small">${esc(x.code)}</span>`:''}${!cb?' <span class="pill bad">removed from codebook</span>':''}</div>`:epIn(rp+'.desc',x.desc,{ph:`${kind[1]} description`,aria:'Description'})}</td>
+      <td class="est-rdesc">${x.cb?`<div class="est-cbname">${esc(x.desc)}${x.code?` <span class="dim small">${esc(x.code)}</span>`:''}${!cb?' <span class="pill bad">removed from codebook</span>':''}</div>`:epIn(rp+'.desc',x.desc,{ph:`${kind[1]} description`,aria:'Description'})}${x.src?`<div><span class="pill info est-src" title="Price from a vendor quote — type a new price to replace it">Quote · ${esc(x.src.v)}</span></div>`:''}</td>
       <td class="est-fac">${epIn(rp+'.factor',x.factor,{n:1,aria:'Quantity factor'})}${epSel(rp+'.basis',x.basis,BASIS,{aria:'Basis'})}</td>
       <td class="r num small est-q">${qtyFmt(rr.qty)} ${x.cb?unitOf(x):epIn(rp+'.unit',x.unit,{cls:'est-unit',ph:'unit',aria:'Unit',list:'cb-units'})}</td>
       <td class="est-w">${x.kind==='material'?epIn(rp+'.waste',x.waste,{n:1,ph:'0',aria:'Waste %',title:'Waste %'}):''}</td>
@@ -4613,9 +4613,9 @@ function vEstimate(){const E=S.est;const b=byId(S.bids,S.estBid);
       <p class="hint">Bid items are built from activities. Each activity uses a crew and a production rate to get hours, then adds materials, subs, trucking and other costs from your codebooks.</p>`
     :'<div class="empty"><b>No estimate yet</b>The estimators on this bid start it.</div>'}`}
   const d=E.data;const R=estCalc(d);const ro=EC().ro;estPick();const stale=estStale(d);
-  const tabs=[['items','Bid items'],['res','Resources'],['sum','Markup & totals']];
+  const tabs=[['items','Bid items'],['res','Resources'],['quotes','Quotes'],['sum','Markup & totals'],['prop','Proposal']];
   const kpi=(l,v,s,c)=>`<div class="est-kpi${c?' '+c:''}"><span>${l}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
-  const body=E.tab==='res'?estResView(d,R):E.tab==='sum'?estSumView(d,R,b,ro):estItemsView(d,R,ro);
+  const body=E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='sum'?estSumView(d,R,b,ro):estItemsView(d,R,ro);
   return `<div class="head est-headrow"><div>${back}<h1>${esc(b.name)}</h1><p class="small"><b>Estimate</b> · <span id="est-status">${estStatusText()}</span></p></div>
     <div class="tools">${stale.length&&!ro?`<button class="btn" data-act="est-stale" title="Codebook prices changed since they were added">↻ Update ${stale.length} price${stale.length===1?'':'s'}</button>`:''}<button class="btn" data-act="est-export">Export to Excel</button></div></div>
   ${E.conflict?`<div class="err est-conflict"><b>Someone else saved this estimate while you were working.</b> Your last changes haven’t been saved. <button class="btn sm" data-act="est-reload">Load their version</button> <button class="btn sm danger" data-act="est-keep">Keep mine (overwrite theirs)</button></div>`:''}
@@ -4742,7 +4742,9 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'ep-tocb':epToCodebook(p,t.dataset.k);break;
   }});
 document.addEventListener('input',e=>{const t=e.target;if(!t.dataset.ep||t.type==='checkbox')return;const ec=EC();if(!ec.root||ec.ro)return;
-  const v=t.dataset.ept==='n'?(t.value===''?null:num(t.value)):t.value;epSet(ec.root,t.dataset.ep,v);ec.redraw()});
+  const v=t.dataset.ept==='n'?(t.value===''?null:num(t.value)):t.value;epSet(ec.root,t.dataset.ep,v);
+  if(/\.res\.\d+\.price$/.test(t.dataset.ep)){const r=epGet(ec.root,t.dataset.ep.replace(/\.price$/,''));if(r)delete r.src}
+  ec.redraw()});
 document.addEventListener('change',e=>{const t=e.target;const ec=EC();if(!ec.root||ec.ro)return;
   if(t.dataset.ep&&t.type==='checkbox'){epSet(ec.root,t.dataset.ep,t.checked);ec.redraw();return}
   if(t.dataset.epcrew){const a=epGet(ec.root,t.dataset.epcrew);const x=cbById(t.value);a.crew=x?crewSnap(x):null;ec.redraw();return}
@@ -4753,6 +4755,235 @@ document.addEventListener('change',e=>{const t=e.target;const ec=EC();if(!ec.roo
     it.acts=it.acts.map(a=>actFromTpl(a));d.items.push(it);S.est.sel=it.id;ec.redraw();setTimeout(()=>document.getElementById(epId(`items.${d.items.length-1}.qty`))?.focus(),0);return}});
 // keyboard: Enter moves on from a field instead of doing nothing
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset?.ep&&e.target.tagName==='INPUT'&&S.view==='estimate'&&!M){e.preventDefault();e.target.blur()}});
+
+/* =====================================================================
+   QUOTES FOLDER — compare vendor quotes line by line inside an estimate.
+   A package (the quote's scope, e.g. "Storm drainage" or "Stone") holds
+   rows = the estimate's materials / subs / trucking / rentals, and one
+   column per vendor quote. Vendors price each row (or give a lump sum),
+   plus freight / other charges. Pick a vendor per row (or award the whole
+   package), then apply: the picked prices go into every matching cost in
+   the estimate, and optionally into the codebook with price history.
+   Quote prices live on the quote rows (quotes.lines / quotes.meta);
+   packages and picks live in the estimate (data.pkgs).
+   ===================================================================== */
+const QF_KINDS=['material','sub','trucking','equipment','other'];
+const rkOf=r=>r.cb||('c:'+r.kind+'|'+normH(r.desc)+'|'+String(r.unit||'').toLowerCase());
+function estResIndex(d,R){R=R||estCalc(d);const m=new Map();
+  d.items.forEach((it,i)=>it.acts.forEach((a,j)=>a.res.forEach((r,n)=>{const k=rkOf(r);const rr=R.items[i].acts[j].res[n];let o=m.get(k);
+    if(!o)m.set(k,o={rk:k,kind:r.kind,code:r.code||'',desc:r.desc||'(no description)',unit:r.unit||(r.basis==='hour'?'HR':''),cb:r.cb||null,qty:0,qtyAll:0,cost:0,costAll:0,refs:[]});
+    o.refs.push(r);o.qtyAll+=rr.qty;o.costAll+=rr.cost;if(!it.alt){o.qty+=rr.qty;o.cost+=rr.cost}})));
+  m.forEach(o=>{o.q=o.qty||o.qtyAll;o.price=o.qtyAll?o.costAll/o.qtyAll:(num(o.refs[0].price)||0)});return m}
+// quote edits wait here until they're saved, so a refresh doesn't wipe what's being typed
+const QP={};
+const qGet=q=>q&&QP[q.id]?{...q,...QP[q.id]}:q;
+const qQuotes=(bidId,pkg)=>S.quotes.filter(q=>q.bid_id===bidId&&q.scope===pkg).map(qGet).sort((a,b)=>String(vendorOf(a.vendor_id)?.company||'').localeCompare(String(vendorOf(b.vendor_id)?.company||'')));
+function qPkg(d,name){d.pkgs=d.pkgs&&typeof d.pkgs==='object'?d.pkgs:{};return d.pkgs[name]=d.pkgs[name]||{rows:[],pick:{}}}
+function qCalc(d,pkg,idx){const P=(d.pkgs||{})[pkg]||{rows:[],pick:{}};
+  const rows=(P.rows||[]).map(rk=>idx.get(rk)||{rk,missing:true,desc:'No longer in the estimate',q:0,price:0,cost:0,unit:'',refs:[]});
+  const cols=qQuotes(S.est.bidId,pkg).map(q=>{const lm=new Map((q.lines||[]).map(l=>[l.rk,l]));const meta=q.meta||{};const lump=!!meta.lump;let quoted=0,missing=0,filled=0;
+    const cells=rows.map(r=>{const l=lm.get(r.rk);const p=l&&l.price!==''&&l.price!=null?num(l.price):null;const ext=p!=null?p*(r.q||0):null;
+      if(!r.missing){if(p!=null)quoted+=ext;else{missing++;filled+=r.price*(r.q||0)}}return {p,ext}});
+    const extra=lump?0:num(meta.extra)||0;const total=lump?(num(q.amount)||0):quoted+extra;
+    return {q,meta,lump,cells,quoted,missing:lump?0:missing,extra,total,complete:lump?total:total+filled,v:vendorOf(q.vendor_id)}});
+  const low=rows.map((r,i)=>{let b=null;cols.forEach((c,j)=>{const p=c.cells[i].p;if(!c.lump&&p!=null&&(b==null||p<cols[b].cells[i].p))b=j});return b});
+  const lowPkg=cols.length?cols.reduce((b,c,j)=>c.total>0&&(b<0||c.complete<cols[b].complete)?j:b,-1):-1;
+  const estTotal=rows.reduce((s,r)=>s+(r.missing?0:r.price*(r.q||0)),0);
+  // what the picks add up to
+  const used=new Set();let sel=0;rows.forEach((r,i)=>{if(r.missing)return;const pk=P.pick?.[r.rk];const j=pk&&pk!=='est'?cols.findIndex(c=>c.q.id===pk):-1;
+    if(j<0){sel+=r.price*(r.q||0);return}const c=cols[j];if(c.lump){if(!used.has(j)){used.add(j);sel+=c.total}return}if(c.cells[i].p==null){sel+=r.price*(r.q||0);return}if(!used.has(j)){used.add(j);sel+=c.extra}sel+=c.cells[i].ext});
+  return {P,rows,cols,low,lowPkg,estTotal,sel}}
+function qEdit(id,fn){const base=S.quotes.find(x=>x.id===id);if(!base)return;const q=qGet(base);
+  const c={lines:clone(q.lines||[]),meta:{...(q.meta||{})},amount:q.amount??null,status:q.status,received_date:q.received_date||null};fn(c);
+  if(['Requested','Not requested','No response'].includes(c.status)&&((c.lines||[]).some(l=>num(l.price)!=null)||(c.meta.lump&&num(c.amount)!=null))){c.status='Received';c.received_date=c.received_date||todayStr()}
+  QP[id]=c;if(!c.meta.lump&&S.est&&S.est.data){const C=qCalc(S.est.data,base.scope,estResIndex(S.est.data));const col=C.cols.find(x=>x.q.id===id);if(col)c.amount=r2(col.total)}
+  clearTimeout(qEdit['_'+id]);qEdit['_'+id]=setTimeout(()=>qFlush(id),800)}
+async function qFlush(id){const c=QP[id];if(!c)return;
+  try{await run(sb.from('quotes').update({lines:c.lines,meta:c.meta,amount:c.amount,status:c.status,received_date:c.received_date||null,updated_by:S.session.user.id}).eq('id',id));if(QP[id]===c)delete QP[id];await loadTable('quotes')}
+  catch(e){toast(/lines|meta|schema cache|column/i.test(errMsg(e))?'Quote prices need a one-time database update (update-15-quote-lines.sql).':errMsg(e))}}
+async function qAddVendor(pkg,vid){const E=S.est;if(!vid)return;if(qQuotes(E.bidId,pkg).some(q=>q.vendor_id===vid)){toast('That vendor is already in this package.');return}
+  try{await run(sb.from('quotes').insert({id:newId(),bid_id:E.bidId,vendor_id:vid,scope:pkg,status:'Requested',requested_date:todayStr(),lines:[],meta:{},updated_by:S.session.user.id}));await loadTable('quotes');qPkg(E.data,pkg);estTouch();render()}
+  catch(e){toast(/lines|meta|column/i.test(errMsg(e))?'Quote prices need a one-time database update (update-15-quote-lines.sql).':errMsg(e))}}
+async function qRemoveVendor(id){try{await run(sb.from('quotes').delete().eq('id',id));delete QP[id];await loadTable('quotes');render()}catch(e){toast(errMsg(e))}}
+function qApply(pkg,toCb){const E=S.est,d=E.data;const C=qCalc(d,pkg,estResIndex(d));const b=byId(S.bids,E.bidId);const byV=new Map();
+  C.rows.forEach((r,i)=>{if(r.missing)return;const pk=C.P.pick?.[r.rk];if(!pk||pk==='est')return;const j=C.cols.findIndex(c=>c.q.id===pk);if(j<0)return;const c=C.cols[j];if(!c.lump&&c.cells[i].p==null)return;if(!byV.has(j))byV.set(j,[]);byV.get(j).push(i)});
+  let n=0;const cbRows=[];
+  byV.forEach((is,j)=>{const c=C.cols[j];const vn=c.v?.company||'Vendor';let up;
+    if(c.lump){let w=is.map(i=>C.rows[i].price*(C.rows[i].q||0));if(!(w.reduce((a,x)=>a+x,0)>0))w=is.map(i=>C.rows[i].q||1);const W=w.reduce((a,x)=>a+x,0);up=is.map((i,k)=>c.total*w[k]/W/(C.rows[i].q||1))}
+    else{const ext=is.map(i=>c.cells[i].ext||0);const X=ext.reduce((a,x)=>a+x,0);up=is.map((i,k)=>c.cells[i].p+(X>0?c.extra*ext[k]/X/(C.rows[i].q||1):0))}
+    is.forEach((i,k)=>{const r=C.rows[i];const price=+up[k].toFixed(4);r.refs.forEach(x=>{x.price=price;x.src={q:c.q.id,v:vn};if(c.meta.taxIncl&&x.kind==='material')x.tax=false});n++;
+      if(toCb&&!c.lump&&r.cb){const cb=cbById(r.cb);if(cb&&cb.book==='material'){const y=clone(cb);y.data=cbD(y);const o=num(y.cost),nw=c.cells[i].p;if(o!==nw){y.cost=nw;cbHist(y,'cost',o,nw,'quote',`${vn} quote — ${b?.name||''}`);y.price_date=todayStr();if(c.q.vendor_id)y.vendor_id=c.q.vendor_id;cbRows.push(cbRow(y))}}}})});
+  if(!n){toast('Pick a vendor on at least one line first.');return}
+  estTouch();render();toast(`Applied ${n} quoted price${n===1?'':'s'} to the estimate`);
+  if(cbRows.length)cbUpsert(cbRows).then(()=>loadTable('codebook')).then(()=>toast(`Also updated ${cbRows.length} codebook price${cbRows.length===1?'':'s'}`)).catch(e=>toast(cbErr(e)))}
+function estQuotesView(d,R,ro){const E=S.est;const b=byId(S.bids,E.bidId);const idx=estResIndex(d,R);
+  const names=[...new Set([...S.quotes.filter(q=>q.bid_id===b.id).map(q=>q.scope),...Object.keys(d.pkgs||{})])].filter(Boolean);
+  if(!names.includes(E.pkg))E.pkg=names[0]||null;const pk=E.pkg;
+  const inPkg=new Map();Object.entries(d.pkgs||{}).forEach(([n,P])=>(P.rows||[]).forEach(rk=>inPkg.set(rk,n)));
+  const pkgSugg=[...new Set([...scopeItems(b).map(s=>s.name),...QUOTE_EXTRA])].filter(n=>!names.includes(n));
+  const chips=`<div class="qf-pkgs">${names.map(n=>{const qs=qQuotes(b.id,n);const rows=(d.pkgs?.[n]?.rows||[]).length;return `<button class="qf-chip${n===pk?' on':''}" data-act="qf-pkg" data-v="${esc(n)}"><b>${esc(n)}</b><small>${qs.length} vendor${qs.length===1?'':'s'} · ${rows} line${rows===1?'':'s'}</small></button>`}).join('')}
+    ${ro?'':`<span class="qf-new"><input class="field" id="qf-newpkg" list="qf-pkgsugg" placeholder="New package — e.g. Pipe & structures"><datalist id="qf-pkgsugg">${pkgSugg.map(n=>`<option value="${esc(n)}">`).join('')}</datalist><button class="btn sm" data-act="qf-newpkg">Add</button></span>`}</div>`;
+  if(!pk)return chips+`<div class="panel pad empty"><b>No quote packages yet</b>A package is what you send out for pricing — like “Pipe & structures”, “Stone” or “Erosion control sub”. Add one, pick the estimate’s materials or subs that go in it, add the vendors, and enter their prices side by side.</div>`;
+  const C=qCalc(d,pk,idx);const dis=ro?' disabled':'';
+  const free=[...idx.values()].filter(o=>QF_KINDS.includes(o.kind)&&!inPkg.has(o.rk)).sort((a,c)=>QF_KINDS.indexOf(a.kind)-QF_KINDS.indexOf(c.kind)||c.cost-a.cost);
+  const sel=E.qAdd||(E.qAdd=new Set());
+  const addRows=ro?'':`<details class="qf-add"${E.qAddOpen?' open':''}><summary data-act="qf-addtoggle">+ Add estimate lines to this package <span class="dim">(${free.length} not in a package)</span></summary>
+    ${free.length?`<div class="qf-addq">${QF_KINDS.filter(k=>free.some(o=>o.kind===k)).map(k=>`<button class="btn sm" data-act="qf-addkind" data-k="${k}">All ${COST_LABEL[k].toLowerCase()} (${free.filter(o=>o.kind===k).length})</button>`).join('')}</div>
+      <div class="qf-addlist">${free.map(o=>`<label class="check small"><input type="checkbox" data-qfsel="${esc(o.rk)}"${sel.has(o.rk)?' checked':''}> <span class="est-tag k-${o.kind}">${(RES_KINDS.find(k=>k[0]===o.kind)||RES_KINDS[5])[2]}</span> ${esc(o.desc)} <span class="dim">${qtyFmt(o.q)} ${esc(o.unit)} · ${money(o.cost||o.costAll)}</span></label>`).join('')}</div>
+      <button class="btn primary sm" data-act="qf-addrows"${sel.size?'':' disabled'}>Add ${sel.size||''} selected</button>`:'<p class="dim small">Every material, sub, trucking and rental cost in the estimate is already in a package. Add more on the Bid items tab.</p>'}</details>`;
+  const vOpts=()=>{const have=new Set(C.cols.map(c=>c.q.vendor_id));const vs=S.vendors.filter(v=>!have.has(v.id)).sort((a,c)=>a.company.localeCompare(c.company));const fit=vs.filter(v=>vendorFits(v,pk));const rest=vs.filter(v=>!vendorFits(v,pk));
+    return `<option value="">+ Add a vendor…</option>${fit.length?`<optgroup label="Quote ${esc(pk)}">${fit.map(v=>`<option value="${v.id}">${esc(v.company)}</option>`).join('')}</optgroup>`:''}<optgroup label="${fit.length?'Other vendors':'Vendors'}">${rest.map(v=>`<option value="${v.id}">${esc(v.company)}</option>`).join('')}</optgroup>`};
+  const pick=(r)=>C.P.pick?.[r.rk]||'est';
+  const head=`<tr><th class="qf-item">Line</th><th class="r">Est. qty</th><th class="r qf-estc">Estimate</th>${C.cols.map((c,j)=>`<th class="qf-v${j===C.lowPkg?' qf-lowpkg':''}"><div class="qf-vh"><b>${esc(c.v?.company||'Removed vendor')}</b>${pill(c.q.status,QUOTE_CLS[c.q.status])}</div>
+      <div class="qf-vopts"><label class="check"><input type="checkbox" data-qm="${c.q.id}|lump"${c.lump?' checked':''}${dis}> Lump sum</label><label class="check"><input type="checkbox" data-qm="${c.q.id}|taxIncl"${c.meta.taxIncl?' checked':''}${dis}> Tax incl.</label></div>
+      ${ro?'':`<div class="qf-vbtns"><button class="btn sm" data-act="qf-award" data-q="${c.q.id}">Award all</button><button class="btn sm ghost danger-t${E.qArm===c.q.id?' arm':''}" data-act="qf-rmq" data-q="${c.q.id}">${E.qArm===c.q.id?'Remove?':'×'}</button></div>`}</th>`).join('')}
+    ${ro?'':`<th class="qf-addv"><select class="field sm" data-qvadd="${esc(pk)}">${vOpts()}</select></th>`}</tr>`;
+  const body=C.rows.map((r,i)=>{const pc=pick(r);
+    return `<tr${r.missing?' class="qf-gone"':''}><td class="qf-item"><span class="est-tag k-${r.kind||'other'}">${(RES_KINDS.find(k=>k[0]===r.kind)||RES_KINDS[5])[2]}</span> ${esc(r.desc)}${r.code?` <span class="dim small">${esc(r.code)}</span>`:''}${ro?'':` <button class="rm" data-act="qf-rmrow" data-rk="${esc(r.rk)}" aria-label="Remove from package">×</button>`}</td>
+      <td class="r num small">${r.missing?'':qtyFmt(r.q)+' '+esc(r.unit)}</td>
+      <td class="r qf-estc${pc==='est'?' qf-picked':''}"><label class="qf-cell"><input type="radio" name="qfp-${i}" data-qpick="${esc(r.rk)}" value="est"${pc==='est'?' checked':''}${dis}><span class="num">${r.missing?'':money2(r.price)}</span></label><small class="dim">${r.missing?'':money(r.price*(r.q||0))}</small></td>
+      ${C.cols.map((c,j)=>{const cell=c.cells[i];if(c.lump)return `<td class="qf-lumpcell${pc===c.q.id?' qf-picked':''}"><label class="qf-cell"><input type="radio" name="qfp-${i}" data-qpick="${esc(r.rk)}" value="${c.q.id}"${pc===c.q.id?' checked':''}${dis}><span class="dim small">in lump sum</span></label></td>`;
+        return `<td class="${pc===c.q.id?'qf-picked':''}${C.low[i]===j?' qf-low':''}"><label class="qf-cell"><input type="radio" name="qfp-${i}" data-qpick="${esc(r.rk)}" value="${c.q.id}"${pc===c.q.id?' checked':''}${dis||cell.p==null?' disabled':''}><input class="field num" id="qp-${c.q.id}-${i}" data-qp="${c.q.id}|${esc(r.rk)}" type="number" step="any" inputmode="decimal" value="${cell.p??''}" placeholder="—"${dis}${r.missing?' disabled':''}></label><small class="dim">${cell.ext!=null?money(cell.ext):''}</small></td>`}).join('')}${ro?'':'<td></td>'}</tr>`}).join('')
+    ||`<tr><td colspan="${4+C.cols.length}"><div class="empty small">No lines yet — add the estimate’s materials, subs or trucking that go in this package.</div></td></tr>`;
+  const foot=`<tr class="qf-f"><td>Freight / other charges</td><td></td><td></td>${C.cols.map(c=>c.lump?'<td></td>':`<td><input class="field num" id="qx-${c.q.id}" data-qm="${c.q.id}|extra" type="number" step="any" value="${c.meta.extra??''}" placeholder="0"${dis}></td>`).join('')}${ro?'':'<td></td>'}</tr>
+    <tr class="qf-f"><td>Lump sum</td><td></td><td></td>${C.cols.map(c=>c.lump?`<td><input class="field num" id="qa-${c.q.id}" data-qa="${c.q.id}" type="number" step="any" value="${c.q.amount??''}" placeholder="Total"${dis}></td>`:'<td></td>').join('')}${ro?'':'<td></td>'}</tr>
+    <tr class="qf-t"><td><b>Quoted total</b></td><td></td><td class="r num"><b>${money(C.estTotal)}</b></td>${C.cols.map(c=>`<td class="r num"><b>${money(c.total)}</b>${c.missing?`<div class="qf-miss">${c.missing} line${c.missing===1?'':'s'} not quoted</div>`:''}</td>`).join('')}${ro?'':'<td></td>'}</tr>
+    <tr class="qf-t"><td>Complete total <span class="dim small">(lines not quoted at the estimate price)</span></td><td></td><td></td>${C.cols.map((c,j)=>`<td class="r num${j===C.lowPkg?' qf-lowpkg':''}">${money(c.complete)}${j===C.lowPkg&&C.cols.length>1?' <span class="pill good">Low</span>':''}</td>`).join('')}${ro?'':'<td></td>'}</tr>`;
+  return chips+`<div class="panel pad qf-panel"><div class="qf-top"><div><h2 class="qf-h">${esc(pk)}</h2><div class="dim small">${C.rows.length} line${C.rows.length===1?'':'s'} · ${C.cols.length} vendor${C.cols.length===1?'':'s'} · estimate ${money(C.estTotal)} · your picks ${money(C.sel)}</div></div>
+    ${ro?'':`<div class="qf-actions"><button class="btn sm" data-act="qf-low"${C.cols.length?'':' disabled'}>Pick the low price on every line</button><button class="btn primary sm" data-act="qf-apply">Apply picks to estimate</button>${cbEditable()?`<label class="check small"><input type="checkbox" id="qf-tocb"${E.qToCb?' checked':''} data-qfcb> Also update codebook prices</label>`:''}</div>`}</div>
+    ${addRows}
+    <div class="qf-scroll"><table class="qf-grid"><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>
+    <p class="hint">Enter each vendor’s unit price; the low price on each line is outlined. Click a price’s dot to pick it, or <b>Award all</b> to one vendor. <b>Apply</b> puts the picked prices into every matching cost in the estimate — freight is spread over that vendor’s lines and a lump sum over its lines by estimate cost. Prices save as you type; quotes with prices switch to Received.</p>
+    ${ro||C.cols.length||C.rows.length?'':`<button class="linkbtn danger-t" data-act="qf-rmpkg">Remove this empty package</button>`}</div>`}
+
+/* ---------- events ---------- */
+FOCUS_ATTRS.push('data-qp','data-qm','data-qa');
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;if(!a.startsWith('qf-'))return;const E=S.est;if(!E||!E.data)return;const d=E.data;
+  if(E.qArm&&!(a==='qf-rmq'&&t.dataset.q===E.qArm))E.qArm=null;
+  switch(a){
+    case 'qf-pkg':E.pkg=t.dataset.v;E.qAdd=new Set();render();break;
+    case 'qf-newpkg':{const v=($('#qf-newpkg')?.value||'').trim();if(!v)break;qPkg(d,v);E.pkg=v;E.qAddOpen=true;estTouch();render();break}
+    case 'qf-addtoggle':e.preventDefault();E.qAddOpen=!E.qAddOpen;render();break;
+    case 'qf-addkind':{const idx=estResIndex(d);const inP=new Set(Object.values(d.pkgs||{}).flatMap(P=>P.rows||[]));const P=qPkg(d,E.pkg);[...idx.values()].filter(o=>o.kind===t.dataset.k&&!inP.has(o.rk)).forEach(o=>P.rows.push(o.rk));estTouch();render();break}
+    case 'qf-addrows':{const P=qPkg(d,E.pkg);(E.qAdd||new Set()).forEach(rk=>{Object.values(d.pkgs).forEach(Q=>{Q.rows=(Q.rows||[]).filter(x=>x!==rk)});P.rows.push(rk)});E.qAdd=new Set();E.qAddOpen=false;estTouch();render();break}
+    case 'qf-rmrow':{const P=qPkg(d,E.pkg);P.rows=P.rows.filter(x=>x!==t.dataset.rk);if(P.pick)delete P.pick[t.dataset.rk];estTouch();render();break}
+    case 'qf-rmpkg':delete d.pkgs[E.pkg];E.pkg=null;estTouch();render();break;
+    case 'qf-award':{const P=qPkg(d,E.pkg);const C=qCalc(d,E.pkg,estResIndex(d));const j=C.cols.findIndex(c=>c.q.id===t.dataset.q);const c=C.cols[j];P.pick=P.pick||{};
+      C.rows.forEach((r,i)=>{if(c.lump||c.cells[i].p!=null)P.pick[r.rk]=c.q.id});estTouch();render();break}
+    case 'qf-low':{const P=qPkg(d,E.pkg);const C=qCalc(d,E.pkg,estResIndex(d));P.pick=P.pick||{};C.rows.forEach((r,i)=>{const j=C.low[i];P.pick[r.rk]=j==null?'est':C.cols[j].q.id});estTouch();render();break}
+    case 'qf-apply':qApply(E.pkg,!!$('#qf-tocb')?.checked);break;
+    case 'qf-rmq':if(E.qArm!==t.dataset.q){E.qArm=t.dataset.q;render();break}E.qArm=null;qRemoveVendor(t.dataset.q);break;
+  }});
+document.addEventListener('input',e=>{const t=e.target;if(!S.est||!S.est.data||S.view!=='estimate')return;
+  if(t.dataset.qp){const [id,rk]=t.dataset.qp.split('|');qEdit(id,c=>{const l=c.lines.find(x=>x.rk===rk);const v=t.value===''?null:num(t.value);if(l)l.price=v;else c.lines.push({rk,price:v})});render();return}
+  if(t.dataset.qa){qEdit(t.dataset.qa,c=>{c.amount=t.value===''?null:num(t.value)});render();return}
+  if(t.dataset.qm&&t.type!=='checkbox'){const [id,k]=t.dataset.qm.split('|');qEdit(id,c=>{c.meta[k]=t.value===''?null:num(t.value)});render();return}});
+document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data||S.view!=='estimate')return;const E=S.est;
+  if(t.dataset.qm&&t.type==='checkbox'){const [id,k]=t.dataset.qm.split('|');qEdit(id,c=>{c.meta[k]=t.checked});render();return}
+  if(t.dataset.qpick){const P=qPkg(E.data,E.pkg);P.pick=P.pick||{};P.pick[t.dataset.qpick]=t.value;estTouch();render();return}
+  if(t.dataset.qvadd){qAddVendor(t.dataset.qvadd,t.value);return}
+  if(t.dataset.qfsel){const s=E.qAdd||(E.qAdd=new Set());t.checked?s.add(t.dataset.qfsel):s.delete(t.dataset.qfsel);render();return}
+  if(t.dataset.qfcb!=null){E.qToCb=t.checked;return}});
+
+/* =====================================================================
+   PROPOSAL — built from the estimate. Pick who it goes to and how the
+   price is shown (unit prices, lump sums by scope, or one lump sum),
+   check off inclusions / exclusions / clarifications from the company
+   library, add terms, then print or save as PDF and mark it sent.
+   Settings for this proposal live in the estimate (data.prop); the
+   library and letterhead live in settings (prop_library).
+   ===================================================================== */
+const PROP_DEFAULT_LIB={
+  letterhead:'',
+  incl:['Mobilization and demobilization','Erosion control installation and maintenance per the approved plan','Clearing and grubbing within the limits of disturbance','Mass grading to ±0.1′ of subgrade','Fine grading of building pad and paving areas','Storm drainage as shown, including structures and bedding','Sanitary sewer and water as shown, to 5′ outside the building','Compaction to 95% standard Proctor (98% in the top 12″ under paving)','Final stabilization and permanent seeding of disturbed areas'],
+  excl:['Rock excavation (rock is defined as material that cannot be removed with a 330-class excavator)','Removal or replacement of unsuitable soils','Dewatering beyond normal pumping','Permits, bonds, inspections and tap or impact fees','Construction staking and layout','Materials testing and special inspections','Utility company charges and work by others','Landscaping, irrigation and sod unless listed above','Traffic control beyond standard signage','Asphalt and concrete paving unless listed above','Winter conditions, frost protection and snow removal','Builder’s risk insurance'],
+  clar:['Pricing is based on the plans and addenda listed above; changes will be priced separately','Quantities assume a balanced site; import or export beyond the plan quantities will be billed at unit rates','Work is priced as one continuous mobilization; additional mobilizations billed at $___ each','Owner to provide access, staging area and water for dust control','Retainage to be reduced to 5% at 50% complete','This proposal is valid for 30 days'],
+  terms:'Payment due within 30 days of invoice. Progress billing monthly.',
+};
+const propLib=()=>{const L=S.settings.prop_library;return L&&Array.isArray(L.incl)?{...PROP_DEFAULT_LIB,...L}:PROP_DEFAULT_LIB};
+function propData(){const E=S.est,d=E.data,b=byId(S.bids,E.bidId)||{};const L=propLib();
+  if(!d.prop||typeof d.prop!=='object'){const ad=addenda(b).map(a=>a.number).filter(x=>x!=null&&x!=='');
+    d.prop={date:todayStr(),to:(b.client_ids||[]).slice(),format:'unit',subtotals:true,showQty:true,valid:30,
+      intro:`${S.settings.general?.companyName||CFG.companyName||'We'} ${S.settings.general?.companyName||CFG.companyName?'is':'are'} pleased to provide pricing for the site work on the above project.`,
+      basis:ad.length?`Plans and specifications as issued, including Addend${ad.length===1?'um':'a'} ${ad.join(', ')}.`:'Plans and specifications as issued.',
+      incl:L.incl.slice(0,4),excl:L.excl.slice(),clar:L.clar.slice(0,2),inclX:'',exclX:'',clarX:'',terms:L.terms||'',sign:myName(),title:myEst()?.title||''}}
+  const P=d.prop;['incl','excl','clar','to'].forEach(k=>{if(!Array.isArray(P[k]))P[k]=[]});return P}
+const propLines=t=>String(t||'').split(/\n+/).map(x=>x.trim()).filter(Boolean);
+// what the client sees for each line, depending on the format
+function propRows(d,R,P){const base=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>!o.it.alt);
+  if(P.format==='total')return {total:R.total,groups:[]};
+  const gname=o=>String(o.it.group||'').trim()||'General';
+  const groups=[];base.forEach(o=>{const n=gname(o);let g=groups.find(x=>x.name===n);if(!g)groups.push(g={name:n,items:[],total:0});g.items.push(o);g.total+=o.x.price});
+  return {total:R.total,groups}}
+function propPaper(d,R,b,P){const L=propLib();const co=S.settings.general?.companyName||CFG.companyName||'';const logo=BRAND.loginLogo||'';
+  const to=P.to.map(id=>byId(S.clients,id)).filter(Boolean);const PR=propRows(d,R,P);const alts=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>o.it.alt);
+  const list=(arr,extra)=>{const all=[...arr,...propLines(extra)];return all.length?`<ul>${all.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''};
+  const table=P.format==='total'?`<table class="pp-t"><tbody><tr class="pp-grand"><td>Lump sum — ${esc([...new Set(d.items.filter(i=>!i.alt).map(i=>String(i.group||'').trim()).filter(Boolean))].join(', ')||'site work as described')}</td><td class="r">${money2(PR.total)}</td></tr></tbody></table>`
+    :P.format==='scope'?`<table class="pp-t"><thead><tr><th>Scope</th><th class="r">Amount</th></tr></thead><tbody>${PR.groups.map(g=>`<tr><td>${esc(g.name)}</td><td class="r">${money2(g.total)}</td></tr>`).join('')}</tbody><tfoot><tr class="pp-grand"><td>Total base bid</td><td class="r">${money2(PR.total)}</td></tr></tfoot></table>`
+    :`<table class="pp-t"><thead><tr><th>Item</th><th>Description</th>${P.showQty?'<th class="r">Qty</th><th>Unit</th><th class="r">Unit price</th>':''}<th class="r">Amount</th></tr></thead><tbody>
+      ${PR.groups.map(g=>`${PR.groups.length>1||g.name!=='General'?`<tr class="pp-g"><td colspan="${P.showQty?6:3}">${esc(g.name)}</td></tr>`:''}${g.items.map(o=>`<tr><td>${esc(o.it.code)}</td><td>${esc(o.it.desc)}</td>${P.showQty?`<td class="r">${qtyFmt(o.it.qty)}</td><td>${esc(o.it.unit||'')}</td><td class="r">${o.x.q?money2(o.x.unitPrice):''}</td>`:''}<td class="r">${money2(o.x.price)}</td></tr>`).join('')}
+        ${P.subtotals&&PR.groups.length>1?`<tr class="pp-sub"><td></td><td>${esc(g.name)} subtotal</td>${P.showQty?'<td></td><td></td><td></td>':''}<td class="r">${money2(g.total)}</td></tr>`:''}`).join('')}</tbody>
+      <tfoot><tr class="pp-grand"><td></td><td>Total base bid</td>${P.showQty?'<td></td><td></td><td></td>':''}<td class="r">${money2(PR.total)}</td></tr></tfoot></table>`;
+  return `<div class="pp" id="prop-paper"><div class="pp-head">${logo?`<img src="${esc(logo)}" alt="" class="pp-logo">`:`<div class="pp-co">${esc(co)}</div>`}<div class="pp-lh">${propLines(L.letterhead).map(esc).join('<br>')}</div></div>
+    <h1 class="pp-title">Proposal</h1>
+    <div class="pp-meta"><div><span>Project</span><b>${esc(b.name)}</b>${b.location?`<div>${esc(b.location)}</div>`:''}</div><div><span>Date</span><b>${fmtDate(P.date)}</b></div>
+      <div><span>To</span>${to.length?to.map(c=>`<b>${esc(c.company)}</b>${(b.client_contacts||{})[c.id]?`<div>Attn: ${esc(b.client_contacts[c.id])}</div>`:''}`).join(''):'<b>—</b>'}</div><div><span>Bid date</span><b>${fmtDate(b.due_date)}</b></div></div>
+    ${P.intro?`<p>${esc(P.intro)}</p>`:''}${P.basis?`<p class="pp-basis"><b>Basis:</b> ${esc(P.basis)}</p>`:''}
+    <h2>Pricing</h2>${table}
+    ${alts.length?`<h2>Alternates</h2><table class="pp-t"><tbody>${alts.map(o=>`<tr><td>${esc(o.it.code)}</td><td>${esc(o.it.desc)}${o.x.q&&P.format==='unit'?` <span class="pp-dim">(${qtyFmt(o.it.qty)} ${esc(o.it.unit||'')} @ ${money2(o.x.unitPrice)})</span>`:''}</td><td class="r">${o.x.price<0?'Deduct ':'Add '}${money2(Math.abs(o.x.price))}</td></tr>`).join('')}</tbody></table>`:''}
+    ${P.incl.length||propLines(P.inclX).length?`<h2>Inclusions</h2>${list(P.incl,P.inclX)}`:''}
+    ${P.excl.length||propLines(P.exclX).length?`<h2>Exclusions</h2>${list(P.excl,P.exclX)}`:''}
+    ${P.clar.length||propLines(P.clarX).length?`<h2>Clarifications</h2>${list(P.clar,P.clarX)}`:''}
+    ${P.terms||P.valid?`<h2>Terms</h2><p>${esc(P.terms||'')}${P.valid?` This proposal is valid for ${esc(P.valid)} days from the date above.`:''}${num(d.markup.ret)?` Retainage of ${fmtN(d.markup.ret,1)}% as held by contract.`:''}</p>`:''}
+    <div class="pp-sign"><div><p>Respectfully submitted,</p><div class="pp-line"></div><b>${esc(P.sign||'')}</b>${P.title?`<div>${esc(P.title)}</div>`:''}<div>${esc(co)}</div></div>
+      <div><p>Accepted by:</p><div class="pp-line"></div><div>Name / title</div><div class="pp-line" style="margin-top:28px"></div><div>Date</div></div></div></div>`}
+function estPropView(d,R,b,ro){const P=propData();const L=propLib();const dis=ro?' disabled':'';
+  const chk=(k,arr)=>`<div class="pr-chks">${[...new Set([...arr,...P[k].filter(x=>!arr.includes(x))])].map(x=>`<label class="check small"><input type="checkbox" data-prl="${k}" value="${esc(x)}"${P[k].includes(x)?' checked':''}${dis}> ${esc(x)}</label>`).join('')}</div>`;
+  const pin=(k,o={})=>`<input class="field" id="pr-${k}" data-pr="${k}"${o.n?' type="number"':o.date?' type="date"':''} value="${esc(P[k]??'')}"${o.ph?` placeholder="${esc(o.ph)}"`:''}${dis}>`;
+  const ptx=(k,ph,rows=2)=>`<textarea class="field" id="pr-${k}" data-pr="${k}" rows="${rows}" placeholder="${esc(ph)}"${dis}>${esc(P[k]||'')}</textarea>`;
+  const sentTo=(b.client_ids||[]).filter(id=>propOf(b,id).status==='Sent');
+  return `<div class="pr-grid"><div class="pr-form">
+    <div class="panel pad"><div class="pr-actions"><button class="btn primary" data-act="pr-print">Print / save as PDF</button>${ro?'':`<button class="btn" data-act="pr-sent"${P.to.length?'':' disabled title="Pick who it goes to first"'}>Mark sent${P.to.length?` to ${P.to.length} GC${P.to.length===1?'':'s'}`:''}</button>`}${isAdmin()?'<button class="btn" data-act="pr-lib">Edit library</button>':''}</div>
+      ${sentTo.length?`<p class="hint">Sent to ${sentTo.map(id=>esc(clientName(id))+(propOf(b,id).sent_date?' ('+fmtShort(propOf(b,id).sent_date)+')':'')).join(', ')}.</p>`:''}</div>
+    <div class="panel pad"><h3 class="pr-h">To</h3>${(b.client_ids||[]).length?`<div class="pr-chks">${b.client_ids.map(id=>`<label class="check small"><input type="checkbox" data-prto value="${id}"${P.to.includes(id)?' checked':''}${dis}> ${esc(clientName(id))}${(b.client_contacts||{})[id]?` <span class="dim">· ${esc(b.client_contacts[id])}</span>`:''}</label>`).join('')}</div>`:'<p class="dim small">Add GCs to the bid first.</p>'}
+      <div class="fg pr-fg"><label class="f">Date${pin('date',{date:1})}</label><label class="f">Valid for (days)${pin('valid',{n:1})}</label></div></div>
+    <div class="panel pad"><h3 class="pr-h">Pricing</h3><div class="radio pr-fmt">${[['unit','Unit prices — every bid item'],['scope','Lump sum by scope'],['total','One lump sum']].map(([k,l])=>`<label><input type="radio" name="prfmt" data-prf value="${k}"${P.format===k?' checked':''}${dis}> ${l}</label>`).join('')}</div>
+      ${P.format==='unit'?`<label class="check small"><input type="checkbox" data-prb="showQty"${P.showQty?' checked':''}${dis}> Show quantities and unit prices</label><label class="check small"><input type="checkbox" data-prb="subtotals"${P.subtotals?' checked':''}${dis}> Subtotal by scope</label>`:''}
+      <p class="hint">Scopes come from each bid item’s <b>Scope</b> field. Alternates are always listed separately.</p></div>
+    <div class="panel pad"><h3 class="pr-h">Opening</h3><label class="f">Intro${ptx('intro','A sentence or two before the pricing')}</label><label class="f">Basis of the proposal${ptx('basis','Plans dated …, Addenda …')}</label></div>
+    <div class="panel pad"><h3 class="pr-h">Inclusions</h3>${chk('incl',L.incl)}<label class="f">More, one per line${ptx('inclX','Anything else that’s included')}</label></div>
+    <div class="panel pad"><h3 class="pr-h">Exclusions</h3>${chk('excl',L.excl)}<label class="f">More, one per line${ptx('exclX','Anything else that’s excluded')}</label></div>
+    <div class="panel pad"><h3 class="pr-h">Clarifications</h3>${chk('clar',L.clar)}<label class="f">More, one per line${ptx('clarX','Assumptions and qualifications')}</label></div>
+    <div class="panel pad"><h3 class="pr-h">Terms & signature</h3><label class="f">Terms${ptx('terms','Payment terms',2)}</label><div class="fg pr-fg"><label class="f">Signed by${pin('sign')}</label><label class="f">Title${pin('title',{ph:'e.g. Chief Estimator'})}</label></div></div>
+  </div><div class="pr-prev">${propPaper(d,R,b,P)}</div></div>`}
+function propLibModal(){const x=M.draft;const ta=(k,l,h,rows=8)=>`<label class="f s4">${l}<textarea class="field" rows="${rows}" data-plib="${k}">${esc(x[k])}</textarea>${h?`<span class="hint">${h}</span>`:''}</label>`;
+  return mhead('Proposal library','The lines estimators check off on every proposal, and your letterhead')+`<div class="mbody"><fieldset><legend>Lists — one per line</legend><div class="fg">
+    ${ta('incl','Inclusions')}${ta('excl','Exclusions')}${ta('clar','Clarifications')}${ta('terms','Default terms','',2)}${ta('letterhead','Letterhead','Address, phone, email, license # — printed at the top of every proposal.',4)}</div></fieldset>
+    <p class="hint">Changes apply to new proposals and add new choices to existing ones; lines already checked on a proposal stay as they are.</p></div>
+  <div class="mfoot"><div><button class="btn" data-act="pr-libdefault">Reset to starter lists</button></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="pr-libsave">Save library</button></div></div>`}
+async function propMarkSent(){const E=S.est;const b=byId(S.bids,E.bidId);const P=propData();const R=estCalc(E.data);if(!b||!P.to.length)return;
+  const key=b.use_for==='without'?'amount_without':'amount_with';const cp={...(b.client_proposals||{})};
+  P.to.forEach(id=>{cp[id]={...(cp[id]||{}),[key]:r2(R.total),status:'Sent',sent_date:P.date||todayStr()}});
+  try{await run(sb.from('bids').update({client_proposals:cp,proposal_status:'Sent',[key]:r2(R.total),submitted_date:b.submitted_date||P.date||todayStr()}).eq('id',b.id));await loadTable('bids');toast(`Marked sent to ${P.to.length} GC${P.to.length===1?'':'s'} at ${money(R.total)}`)}catch(e){toast(errMsg(e))}}
+FOCUS_ATTRS.push('data-plib');
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;if(!a.startsWith('pr-'))return;
+  switch(a){
+    case 'pr-print':{const b=byId(S.bids,S.est.bidId);const old=document.title;document.title=`Proposal - ${b?.name||''}`;const pr=document.createElement('div');pr.id='print-root';pr.innerHTML=$('#prop-paper')?.outerHTML.replace('id="prop-paper"','')||'';document.body.appendChild(pr);document.body.classList.add('printing-prop');window.print();setTimeout(()=>{document.body.classList.remove('printing-prop');pr.remove();document.title=old},500);break}
+    case 'pr-sent':propMarkSent();break;
+    case 'pr-lib':{const L=propLib();M={kind:'proplib',draft:{incl:L.incl.join('\n'),excl:L.excl.join('\n'),clar:L.clar.join('\n'),terms:L.terms||'',letterhead:L.letterhead||''}};showModal();break}
+    case 'pr-libdefault':M.draft={incl:PROP_DEFAULT_LIB.incl.join('\n'),excl:PROP_DEFAULT_LIB.excl.join('\n'),clar:PROP_DEFAULT_LIB.clar.join('\n'),terms:PROP_DEFAULT_LIB.terms,letterhead:M.draft.letterhead};renderModal();break;
+    case 'pr-libsave':(async()=>{const x=M.draft;const v={incl:propLines(x.incl),excl:propLines(x.excl),clar:propLines(x.clar),terms:String(x.terms||'').trim(),letterhead:String(x.letterhead||'').trim()};
+      try{await run(sb.from('settings').upsert({key:'prop_library',value:v}));await loadTable('settings');closeModal();toast('Proposal library saved');render()}catch(err){toast(errMsg(err))}})();break;
+  }});
+document.addEventListener('input',e=>{const t=e.target;
+  if(M&&M.kind==='proplib'&&t.dataset.plib){M.draft[t.dataset.plib]=t.value;return}
+  if(!S.est||!S.est.data||S.view!=='estimate'||EC().ro)return;
+  if(t.dataset.pr){const P=propData();P[t.dataset.pr]=t.type==='number'?num(t.value):t.value;estTouch();render()}});
+document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data||S.view!=='estimate'||EC().ro)return;const P=()=>propData();
+  if(t.dataset.prl){const p=P(),k=t.dataset.prl;p[k]=p[k].filter(x=>x!==t.value);if(t.checked){const L=propLib()[k];p[k].push(t.value);p[k].sort((a,b)=>{const i=L.indexOf(a),j=L.indexOf(b);return (i<0?999:i)-(j<0?999:j)})}estTouch();render();return}
+  if(t.dataset.prto!=null){const p=P();p.to=p.to.filter(x=>x!==t.value);if(t.checked)p.to.push(t.value);estTouch();render();return}
+  if(t.dataset.prf!=null){P().format=t.value;estTouch();render();return}
+  if(t.dataset.prb){P()[t.dataset.prb]=t.checked;estTouch();render();return}});
 
 function estBidBlock(b,work){if(b._new||!['admin','estimator','board'].includes(role()))return '';const x=estOf(b.id);
   if(S.estMissing)return `<fieldset><legend>Estimate</legend><p class="hint" style="margin:0">Estimates need a one-time database update (update-14-estimates.sql).</p></fieldset>`;

@@ -37,6 +37,7 @@ supabase/update-11-estimator-log.sql   one-time update for the estimator log
 supabase/update-12-supersede.sql   one-time update for superseding projects
 supabase/update-13-codebooks.sql   one-time update for estimating codebooks
 supabase/update-14-estimates.sql   one-time update for estimates and activity / bid item templates
+supabase/update-15-quote-lines.sql   one-time update for line-item vendor quotes
 ```
 
 > **Already set up before these updates?** Run each `supabase/update-*.sql` file you haven't run yet, once, in number order, in the SQL Editor. New installs only need `schema.sql`.
@@ -159,6 +160,18 @@ Open a bid and click **Start estimate** (or **Open estimate**). You can start bl
 - **Resources** totals every material, sub, trucking and extra cost, plus crew hours, across the base bid. Use it as your list for quotes.
 - **Autosave:** the estimate saves itself a second after you stop typing. If someone else saved in the meantime, you get a warning and can load their version or keep yours.
 - **Export to Excel:** bid items, full detail and the markup summary.
+- **Quotes:** the Quotes tab is the estimate's quote folder. Needs `supabase/update-15-quote-lines.sql`.
+  - **Packages:** a package is what you send out for pricing, such as "Pipe & structures", "Stone" or "Erosion control sub". Add the estimate's materials, subs, trucking or rentals to it, then add vendors.
+  - **Vendor prices:** each vendor gets a column for unit prices on each line, plus freight / other charges. Tick **Lump sum** for vendors who give one total, and **Tax incl.** when their prices include sales tax.
+  - **Comparing:** the low price on each line is outlined. **Complete total** prices any line a vendor skipped at the estimate price, so totals compare fairly.
+  - **Picking:** pick a price per line, **Award all** to one vendor, or **Pick the low price on every line**.
+  - **Apply picks to estimate:** puts the prices into every matching cost and tags them "Quote · Vendor". Freight is spread over that vendor's lines, and a lump sum is spread over its lines by estimate cost. Admins can also update the codebook prices, which are recorded in price history.
+  - **Saving:** prices save as you type, and a quote with prices switches to Received. Quote totals show on the bid's quote list too.
+- **Proposal:** the Proposal tab builds the proposal from the estimate. A live preview is on the right.
+  - **Contents:** pick which GCs it goes to and how pricing shows: unit prices for every bid item (with scope subtotals), a lump sum per scope, or one lump sum. Alternates are always listed separately. Check off inclusions, exclusions and clarifications from the company library, add your own lines, and set terms, how long the price is valid, and the signer.
+  - **Print / save as PDF** prints just the proposal.
+  - **Mark sent** records the total, status "Sent" and the date for each GC on the bid, and sets the proposal status to Sent.
+  - **Edit library** (admins) holds the standard lists and the letterhead (address, phone, license #).
 - **Templates:** the **Activities** and **Bid items** tabs in Codebooks hold reusable templates, always priced at today's codebook rates. Build them there, or click **→ Codebook** / **Save to codebook** in an estimate (admins). Add them to an estimate from the **From … codebook** lists.
 
 ## Calculators
@@ -186,8 +199,7 @@ Edit a file on GitHub (click it, then the pencil icon) and commit. The live site
 
 ## On the list for the future
 - **Estimating, next phases:**
-  - A quotes folder that compares vendor quotes line by line and pushes the low price into the estimate.
-  - A proposal built from the estimate.
+  - Push calculator and takeoff quantities into bid items.
 - **AI takeoff — the whole site** — upload the plan set and have the app do the full takeoff for the estimator to review: **dirtwork** (cut/fill, import/export, strip, pads), **underground** (storm, sanitary and water pipe LF by size and material, structures with inverts and depths, fittings, bedding, trench), **erosion control** (silt fence, inlet protection, construction entrance, check dams, matting, seeding), **demo** (pavement, concrete, curb, structures, clearing, utilities), plus paving, curb and concrete. Every quantity links back to where it was found on the sheet.
 - Pull contour lines straight out of vector PDFs (label elevations only).
 - Save takeoffs to a bid and share them with the team.
