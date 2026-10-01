@@ -150,14 +150,14 @@ Every bid has an **Estimator log** under Scope takeoff. Estimators on the bid (a
 - **Export to Excel:** writes all four codebooks in the same layout the import reads. You can export, edit prices in Excel, and import the file back.
 
 ## Top bar
-**Dashboard · Pipeline · Estimates · Jobs · Contacts · Library · Calculators · Team · Settings.** Related pages share one tab, with sub-tabs inside it:
+**Dashboard · Pipeline · Estimates · Jobs · Contacts · Library · Calculators · Team.** Related pages share one tab, with sub-tabs inside it:
 - **Contacts:** Clients & GCs, and Vendors & subs.
 - **Library:** Codebooks, and Scopes & templates.
 - **Team:** Logins & roles, and Estimators.
 
 When the bar is too narrow, the last tabs fold into a **More** menu.
 
-## Settings (admins)
+## Bid settings (Estimates → Bid settings, admins)
 The defaults every new estimate starts with. Each estimate keeps its own copy, so changing a setting never moves a bid that's already priced.
 - **Markup & overhead:**
   - **Simple:** overhead % and markup % on bid cost.
@@ -205,7 +205,7 @@ The defaults every new estimate starts with. Each estimate keeps its own copy, s
 
 **Markup & totals tab**
 - **Modes:** Simple (overhead + markup on bid cost) or By cost type, with the compounding option, bond, tax and retainage.
-- **Load company defaults** pulls in the Settings page defaults.
+- **Load company defaults** pulls in the Bid settings defaults.
 - **Getting markup into unit prices:**
   - each item carries its own share,
   - only the items you pick carry it,
@@ -213,7 +213,7 @@ The defaults every new estimate starts with. Each estimate keeps its own copy, s
 
 **Templates**
 - **Save as master template** (admins) saves the whole estimate, including its settings: work schedule, crews at once, markup mode and rates, bond, tax, retainage, the indirect list, both spread choices and which items carry the markup. Every estimate started from it begins with exactly those settings. Only the job duration is recalculated for each job.
-- **Make these the company defaults** (admins), on the Markup and Schedule & indirects tabs, copies an estimate's setup to the Settings page so every new estimate starts that way, with or without a template. **Save as section template** on any section saves one scope.
+- **Make these the company defaults** (admins), on the Markup and Schedule & indirects tabs, copies an estimate's setup to Bid settings so every new estimate starts that way, with or without a template. **Save as section template** on any section saves one scope.
 - Each time you save, you choose whether to clear the quantities or keep them as "typical".
 - Templates are always priced at the codebook rates on the day an estimate is started from them.
 - Starting from a master template opens **quantity entry**: blank bid items are highlighted so you can punch in your takeoff. **Remove items left blank** drops the ones you don't need.

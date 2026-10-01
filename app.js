@@ -290,8 +290,8 @@ function renderNow(){
 // top-bar tabs; related pages share a tab and get small sub-tabs inside it
 function navGroups(){
   if(role()==='pm')return [['jobs','Jobs',['jobs','job']],['calc','Calculators',['calc']]];
-  if(isAdmin())return [['dashboard','Dashboard',['dashboard']],['pipeline','Pipeline',['pipeline']],['estimates','Estimates',['estimates','estimate']],['jobs','Jobs',['jobs','job']],
-    ['clients','Contacts',['clients','vendors']],['cb','Library',['cb','scopes']],['calc','Calculators',['calc']],['team','Team',['team','estimators']],['settings','Settings',['settings']]];
+  if(isAdmin())return [['dashboard','Dashboard',['dashboard']],['pipeline','Pipeline',['pipeline']],['estimates','Estimates',['estimates','estimate','settings']],['jobs','Jobs',['jobs','job']],
+    ['clients','Contacts',['clients','vendors']],['cb','Library',['cb','scopes']],['calc','Calculators',['calc']],['team','Team',['team','estimators']]];
   if(role()==='estimator')return [['dashboard','My dashboard',['dashboard']],['pipeline','My bids',['pipeline']],['estimates','Estimates',['estimates','estimate']],['clients','Contacts',['clients','vendors']],['cb','Library',['cb']],['calc','Calculators',['calc']]];
   return [['dashboard','Board dashboard',['dashboard']],['pipeline','Pipeline',['pipeline']],['estimates','Estimates',['estimates','estimate']]];
 }
@@ -5173,8 +5173,10 @@ async function estTplSave(){const x=M;const E=S.est,d=E.data;if(!String(x.name||
   catch(e){toast(/codebook_book_check|check constraint/i.test(errMsg(e))?'Templates need a one-time database update (update-16-estimate-sections.sql).':cbErr(e))}}
 
 /* ---------- Estimates page ---------- */
+// Estimates page tabs: the list, master templates, and (admins) the bid-building settings
+function estsTabs(on){return `<div class="seg est-tabs">${[['list','Estimates'],['tpl','Master templates'],...(isAdmin()?[['set','Bid settings']]:[])].map(([k,l])=>`<button class="${on===k?'on':''}" data-act="ests-tab" data-v="${k}">${l}</button>`).join('')}</div>`}
 function vEstimates(){const tab=S.estsTab||'list';const can=['admin','estimator'].includes(role());
-  const tabs=`<div class="seg est-tabs">${[['list','Estimates'],['tpl','Master templates']].map(([k,l])=>`<button class="${tab===k?'on':''}" data-act="ests-tab" data-v="${k}">${l}</button>`).join('')}</div>`;
+  const tabs=estsTabs(tab);
   const head=`<div class="head"><div><h1>Estimates</h1><p>${S.estIndex.length} estimate${S.estIndex.length===1?'':'s'} · ${cbList('estimate').length} master template${cbList('estimate').length===1?'':'s'}</p></div><div class="tools">${can?'<button class="btn primary" data-act="ests-new">+ New estimate</button>':''}</div></div>`;
   if(S.estMissing)return head+`<div class="notice"><b>One setup step:</b> run <b>update-14-estimates.sql</b> in Supabase, then refresh.</div>`;
   if(tab==='tpl'){const ts=['estimate','section'].flatMap(bk=>cbList(bk)).sort((a,b)=>a.book.localeCompare(b.book)||String(a.description).localeCompare(b.description));const admin=cbEditable();
@@ -5247,7 +5249,7 @@ document.addEventListener('click',e=>{
     case 'ef-fold':{const s=E.fold||(E.fold=new Set());const k=t.dataset.k;s.has(k)?s.delete(k):s.add(k);render();break}
     case 'est-savetpl':estTplStart(t.dataset.v,t.dataset.id);break;
     case 'esttpl-save':estTplSave();break;
-    case 'ests-tab':S.estsTab=t.dataset.v;render();break;
+    case 'ests-tab':if(t.dataset.v==='set'){S.view='settings';render();break}S.estsTab=t.dataset.v;S.view='estimates';render();break;
     case 'ests-open':estOpen(t.dataset.id,'estimates');break;
     case 'ests-opentpl':S.estFrom='estimates';estOpenTpl(t.dataset.id);break;
     case 'ests-newtpl':estNewTpl(t.dataset.v);break;
@@ -5292,7 +5294,7 @@ function estIndView(d,R,ro){const st=d.settings;const D=estDefaultsRaw();const s
       <label class="f">Job duration (work days)${epIn('settings.durDays',st.durDays,{n:1,ph:fmtN(R.dur.autoDays,1),title:'Leave blank to use the calculated duration'})}</label></div>
       ${sc?`<div class="sched-week">${DAYS.map((n,i)=>`<div class="${sc.h[i]?'on':''}"><span>${n}</span><b>${sc.h[i]||'—'}</b></div>`).join('')}</div><p class="small" style="margin:8px 0 0">${esc(schedText(st.sched))}</p>`:''}
       <div class="est-isum"><div><span>Crew days</span><b>${fmtN(R.dur.crewDays,1)}</b></div><div><span>Duration</span><b>${fmtN(R.dur.days,1)} days</b><small>${fmtN(R.dur.weeks,1)} weeks · ${fmtN(R.dur.months,1)} months</small></div><div><span>Overtime premium</span><b>${money(R.ot)}</b><small>in labor cost</small></div></div>
-      <p class="hint">Duration = crew days ÷ crews working at once (type over it if you know the schedule). Schedules and overtime rules are set up on the Settings page.</p></div></div>
+      <p class="hint">Duration = crew days ÷ crews working at once (type over it if you know the schedule). Schedules and overtime rules are set up under Estimates → Bid settings.</p></div></div>
     <div class="sec"><div class="sec-h"><h2>Indirects</h2><span>${money(R.ind)} · ${R.cost?fmtN(R.ind/R.cost*100,1)+'% of direct':''}</span></div><div class="panel pad">
       <div class="panel scroll ind-t"><table><thead><tr><th>Indirect cost</th><th>Basis</th><th>Rate</th><th class="r">Calc. qty</th><th>Qty override</th><th class="r">Total</th><th></th></tr></thead><tbody>${lines||'<tr><td colspan="7" class="dim small">No indirect costs yet.</td></tr>'}</tbody>
         <tfoot><tr><td colspan="5"><b>Total indirects</b></td><td class="r num"><b>${money(R.ind)}</b></td><td></td></tr></tfoot></table></div>
@@ -5344,8 +5346,8 @@ function vSettings(){const x=setDraft();const m=x.markup;const sf=(path,v,o={})=
       <label class="check small"><input type="checkbox" data-sfb="schedules.${i}.satOT"${s.satOT?' checked':''}> Saturday is all overtime</label><label class="check small"><input type="checkbox" data-sfb="schedules.${i}.sunDT"${s.sunDT?' checked':''}> Sunday is all double time</label></div>
     <p class="small sched-sum">${esc(schedText(s))}</p></div>`;
   const typeT=`<table class="mk-t"><thead><tr><th>Cost type</th><th>Overhead %</th><th>Markup %</th></tr></thead><tbody>${MK_TYPES.map(k=>`<tr><td>${MK_LABEL[k]}</td><td>${sf(`markup.byType.${k}.oh`,m.byType?.[k]?.oh,{n:1,cls:'mk-n',ph:'0'})}</td><td>${sf(`markup.byType.${k}.mu`,m.byType?.[k]?.mu,{n:1,cls:'mk-n',ph:'0'})}</td></tr>`).join('')}</tbody></table>`;
-  return `<div class="head"><div><h1>Settings</h1><p>How bids are built — defaults every new estimate starts with. Each estimate can still change its own.</p></div><div class="tools">${S.setDirty?'<span class="dim small">Unsaved changes</span>':''}<button class="btn" data-act="sf-reset"${S.setDirty?'':' disabled'}>Discard changes</button><button class="btn primary" data-act="sf-save"${S.setDirty?'':' disabled'}>Save settings</button></div></div>
-  <div class="set-grid">
+  return `<div class="head"><div><h1>Estimates</h1><p>Bid settings — how bids are built. Every new estimate starts with these; each one can still change its own.</p></div><div class="tools">${S.setDirty?'<span class="dim small">Unsaved changes</span>':''}<button class="btn" data-act="sf-reset"${S.setDirty?'':' disabled'}>Discard changes</button><button class="btn primary" data-act="sf-save"${S.setDirty?'':' disabled'}>Save settings</button></div></div>
+  ${estsTabs('set')}<div class="set-grid">
   <div class="sec"><div class="sec-h"><h2>Markup & overhead</h2><span>Default for new estimates</span></div><div class="panel pad">
     <div class="seg" style="margin-bottom:12px"><button class="${m.mode!=='type'?'on':''}" data-act="sf-mode" data-v="simple">Simple — on bid cost</button><button class="${m.mode==='type'?'on':''}" data-act="sf-mode" data-v="type">By cost type</button></div>
     ${m.mode==='type'?typeT:`<div class="fg"><label class="f">Overhead %${sf('markup.oh',m.oh,{n:1})}</label><label class="f">Markup / profit %${sf('markup.profit',m.profit,{n:1})}</label></div>`}
@@ -5363,7 +5365,7 @@ function vSettings(){const x=setDraft();const m=x.markup;const sf=(path,v,o={})=
     <div class="sched-list">${x.schedules.map(sched).join('')}</div><div class="adders"><button class="btn sm" data-act="sf-schadd">+ Schedule</button>${SCHED_PRESETS.filter(p=>!x.schedules.some(s=>s.name===p.name)).map(p=>`<button class="btn sm ghost" data-act="sf-preset" data-v="${esc(p.name)}">+ ${esc(p.name)}</button>`).join('')}</div>
     <p class="hint">Overtime premium = base wage × burden × (OT rate − 1) for the overtime share of hours; fringe isn’t marked up. Estimates keep a copy of their schedule, so changing one here doesn’t move bids already priced — pick it again on the estimate to update.</p></div></div>`}
 async function setSave(){const x=S.setDraft;if(!x)return;const clean={...x,ind:x.ind.filter(l=>String(l.desc||'').trim()).map(({id,qty,...l})=>l),schedules:x.schedules.map(s=>({...s,days:DAYS.map((_,j)=>num(s.days[j])||0)}))};
-  try{await run(sb.from('settings').upsert({key:'est_settings',value:clean}));await loadTable('settings');S.setDraft=null;S.setDirty=false;toast('Settings saved — new estimates will use them');render()}catch(e){toast(errMsg(e))}}
+  try{await run(sb.from('settings').upsert({key:'est_settings',value:clean}));await loadTable('settings');S.setDraft=null;S.setDirty=false;toast('Bid settings saved — new estimates will use them');render()}catch(e){toast(errMsg(e))}}
 
 /* ---------- events ---------- */
 FOCUS_ATTRS.push('data-sf2');
