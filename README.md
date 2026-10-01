@@ -201,7 +201,15 @@ The defaults every new estimate starts with. Each estimate keeps its own copy, s
 - **Schedule:** pick the work schedule. Its hours per day drive units/day and crew-day production. Its overtime rule adds the overtime premium to labor (base wage × burden × the OT rate above straight time, on the overtime share of hours).
 - **Duration:** crew days ÷ crews working at once. Type over it if you know the schedule.
 - **Indirect lines:** totaled from the duration, or from labor or direct cost. Type over any line's quantity.
-- **Getting indirects into the price:** spread over every bid item by cost, carried only by items you pick, or shown as its own lump-sum line (e.g. "General conditions") on the proposal.
+- **Getting indirects into the price:** choose one of these:
+  - Spread over every bid item by cost.
+  - Spread only over bid items with sub work, weighted by their sub cost.
+  - Split between self-perform and subs:
+    - Set the self-perform share (e.g. 80 / 20). Each side is spread over its own items by that side's cost.
+    - Leave the share blank to split by cost, which gives the same result as spreading over everything.
+    - A breakdown shows each side's direct cost, indirects, and the % they add.
+  - Carried only by items you pick.
+  - Shown as its own lump-sum line (e.g. "General conditions") on the proposal.
 
 **Markup & totals tab**
 - **Modes:** Simple (overhead + markup on bid cost) or By cost type, with the compounding option, bond, tax and retainage.

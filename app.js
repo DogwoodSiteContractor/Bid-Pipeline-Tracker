@@ -4574,8 +4574,23 @@ function estCalc(d){const ctx=estCtx(d);const items=d.items.map(it=>itemCalc(it,
   // indirect allocation
   const carry=m.carry||{};const sel=i=>!!carry[d.items[i].id];
   const wts=(mode)=>{let w=items.map((x,i)=>isBase(i)&&(mode!=='select'||sel(i))?Math.max(0,x.total):0);if(!w.some(v=>v>0))w=items.map((x,i)=>isBase(i)?Math.max(0,x.total):0);if(!w.some(v=>v>0))w=items.map((x,i)=>isBase(i)?1:0);const W=w.reduce((a,b)=>a+b,0);return w.map(v=>W>0?v/W:0)};
-  const si=m.spreadInd||'cost',sm=m.spreadMu||'cost';const wI=wts(si==='select'?'select':'cost');const lump=si==='lump';
-  items.forEach((x,i)=>{x.ind=!isBase(i)||lump?0:ind*wI[i];x.mk0=mkOf(x.c)+x.ind*R.ind.eff;x.oh0=ohOf(x.c)+x.ind*R.ind.o});
+  const si=m.spreadInd||'cost',sm=m.spreadMu||'cost';const lump=si==='lump';
+  // weights from any measure of a base item; null when nothing has any
+  const wBy=f=>{const w=items.map((x,i)=>isBase(i)?Math.max(0,f(x,i)):0);const W=w.reduce((a,b)=>a+b,0);return W>0?w.map(v=>v/W):null};
+  const selfOf=x=>x.total-(x.c.sub||0),subOf=x=>x.c.sub||0;
+  const selfCost=bi.reduce((s,i)=>s+Math.max(0,selfOf(items[i])),0),subCost=bi.reduce((s,i)=>s+Math.max(0,subOf(items[i])),0);
+  const costPct=selfCost+subCost>0?selfCost/(selfCost+subCost)*100:100;
+  let indAmt=items.map(()=>0),split=null;
+  if(si==='sub'||si==='split'){const wS=wBy(selfOf),wU=wBy(subOf),wA=wts('cost');
+    const set=num(m.indSelf);const pS=si==='sub'?0:Math.min(100,Math.max(0,set!=null?set:costPct))/100;
+    let poolS=ind*pS,poolU=ind-poolS;const sp={self:poolS,sub:poolU};
+    // a pool with nothing to land on goes to the other side (or everything)
+    if(!wU){poolS+=poolU;poolU=0}if(!wS&&poolS){poolU+=poolS;poolS=0}
+    indAmt=items.map((x,i)=>poolS*(wS||wA)[i]+poolU*(wU||wA)[i]);
+    split={mode:si,pct:pS*100,set:set!=null&&si==='split',costPct,selfCost,subCost,planned:sp,self:poolS,sub:poolU,
+      nSelf:bi.filter(i=>selfOf(items[i])>0).length,nSub:bi.filter(i=>subOf(items[i])>0).length,moved:(sp.sub>0.005&&!wU)||(sp.self>0.005&&!wS)}}
+  else{const wI=wts(si==='select'?'select':'cost');indAmt=items.map((x,i)=>ind*wI[i])}
+  items.forEach((x,i)=>{x.ind=!isBase(i)||lump?0:indAmt[i];x.mk0=mkOf(x.c)+x.ind*R.ind.eff;x.oh0=ohOf(x.c)+x.ind*R.ind.o});
   const gcMk=lump?ind*R.ind.eff:0;
   const mkBase=bi.reduce((s,i)=>s+items[i].mk0,0)+gcMk;const oh=bi.reduce((s,i)=>s+items[i].oh0,0)+(lump?ind*R.ind.o:0);const profit=mkBase-oh;
   // markup spread
@@ -4587,7 +4602,7 @@ function estCalc(d){const ctx=estCtx(d);const items=d.items.map(it=>itemCalc(it,
   const gc=lump&&ind>0?r2((ind+gcMk)*(1+bondR)):0;
   const total=bi.reduce((s,i)=>s+items[i].price,0)+gc,alts=items.reduce((s,x,i)=>s+(isBase(i)?0:x.price),0);
   const F=cost>0?calcTotal/cost:1;
-  return {ctx,items,c,cost,mh,ot,ind,indLines,dur:{crewDays,conc,autoDays,days,weeks,months},oh,profit,bond,calcTotal,F,gc,adjSum,total,alts,adj:total-calcTotal,ret:total*(num(m.ret)||0)/100,margin:total-cost-ind,marginPct:total?(total-cost-ind)/total*100:0,rates:R}}
+  return {ctx,items,c,cost,mh,ot,ind,indLines,dur:{crewDays,conc,autoDays,days,weeks,months},oh,profit,bond,calcTotal,F,gc,adjSum,total,alts,adj:total-calcTotal,ret:total*(num(m.ret)||0)/100,split,margin:total-cost-ind,marginPct:total?(total-cost-ind)/total*100:0,rates:R}}
 
 // codebook prices that moved since they were copied in
 function estStale(d){const out=[];const acts=[];(d.items||[]).forEach(it=>(it.acts||[]).forEach(a=>acts.push(a)));if(d.act)acts.push(d.act);if(d.item)(d.item.acts||[]).forEach(a=>acts.push(a));
@@ -5210,7 +5225,7 @@ function vEstimates(){const tab=S.estsTab||'list';const can=['admin','estimator'
     ||`<tr><td colspan="9"><div class="empty"><b>No estimates ${q||f!=='all'?'match':'yet'}</b>${can?'Click <b>+ New estimate</b> to start one.':''}</div></td></tr>`}</tbody></table></div>`}
 function tplSettingsText(e){const m=e.markup||{};const s=e.settings||{};const bits=[];if(s.sched)bits.push(s.sched.name);
   bits.push(m.mode==='type'?'markup by cost type':`${fmtN(num(m.oh)||0,1)}% OH / ${fmtN(num(m.profit)||0,1)}% MU`);if(num(m.bond))bits.push(`${fmtN(m.bond,2)}% bond`);
-  if((e.ind||[]).length)bits.push(`${e.ind.length} indirect${e.ind.length===1?'':'s'}`);if(m.spreadInd==='lump')bits.push('GC line');else if(m.spreadInd==='select'||m.spreadMu==='select')bits.push('picked items carry');else if(m.spreadMu==='manual')bits.push('unbalanced');return esc(bits.join(' · '))}
+  if((e.ind||[]).length)bits.push(`${e.ind.length} indirect${e.ind.length===1?'':'s'}`);if(m.spreadInd==='lump')bits.push('GC line');else if(m.spreadInd==='sub')bits.push('indirects on sub items');else if(m.spreadInd==='split')bits.push('indirects split self/sub');else if(m.spreadInd==='select'||m.spreadMu==='select')bits.push('picked items carry');else if(m.spreadMu==='manual')bits.push('unbalanced');return esc(bits.join(' · '))}
 function estNewModal(){const x=M;const bids=S.bids.filter(b=>!b.archived_at&&!DECIDED.includes(b.status)&&canWork(b)&&!estOf(b.id)).sort((a,c)=>String(a.due_date||'9').localeCompare(String(c.due_date||'9')));
   const tpls=cbList('estimate').filter(t=>t.active!==false).sort((a,c)=>String(a.description).localeCompare(c.description));const others=S.estIndex.map(e=>({e,b:byId(S.bids,e.bid_id)})).filter(o=>o.b);
   const eb=x.mode==='existing'?byId(S.bids,x.bidId):null;const sc=eb?scopeItems(eb):[];
@@ -5313,9 +5328,21 @@ function estIndView(d,R,ro){const st=d.settings;const D=estDefaultsRaw();const s
       <div class="panel scroll ind-t"><table><thead><tr><th>Indirect cost</th><th>Basis</th><th>Rate</th><th class="r">Calc. qty</th><th>Qty override</th><th class="r">Total</th><th></th></tr></thead><tbody>${lines||'<tr><td colspan="7" class="dim small">No indirect costs yet.</td></tr>'}</tbody>
         <tfoot><tr><td colspan="5"><b>Total indirects</b></td><td class="r num"><b>${money(R.ind)}</b></td><td></td></tr></tfoot></table></div>
       ${ro?'':`<div class="adders"><button class="btn sm primary" data-act="ind-add">+ Indirect cost</button><button class="btn sm" data-act="ind-defaults">Load company list</button>${isAdmin()?'<button class="btn sm ghost" data-act="mk-tocompany" data-v="ind" title="Use this list, schedule and crew count on every new estimate">Make these the company defaults</button>':''}</div>`}
-      <div class="fg" style="margin-top:12px"><label class="f s2">How indirects get into the price<select class="field" data-ep="markup.spreadInd"${dis}>${[['cost','Spread over every bid item by cost'],['select','Carried only by the items I pick'],['lump','Shown as its own lump-sum line']].map(([k,l])=>`<option value="${k}"${(m.spreadInd||'cost')===k?' selected':''}>${l}</option>`).join('')}</select></label>
+      <div class="fg" style="margin-top:12px"><label class="f s2">How indirects get into the price<select class="field" data-ep="markup.spreadInd"${dis}>${IND_SPREAD.map(([k,l])=>`<option value="${k}"${(m.spreadInd||'cost')===k?' selected':''}>${l}</option>`).join('')}</select></label>
         ${m.spreadInd==='lump'?`<label class="f s2">Lump-sum line name${epIn('markup.gcName',m.gcName,{ph:'General conditions'})}</label>`:''}</div>
-      ${m.spreadInd==='select'?estCarryList(d,R,ro):''}</div></div></div>`}
+      ${m.spreadInd==='select'?estCarryList(d,R,ro):''}${R.split?estSplitView(R,ro):''}</div></div></div>`}
+const IND_SPREAD=[['cost','Spread over every bid item by cost'],['sub','Only bid items with sub work (by sub cost)'],['split','Split between self-perform and subs'],['select','Carried only by the items I pick'],['lump','Shown as its own lump-sum line']];
+// self-perform vs sub breakdown for the two sub-aware spreads
+function estSplitView(R,ro){const x=R.split;const pc=(a,b)=>b>0?fmtN(a/b*100,1)+'%':'—';
+  const row=(l,n,cost,pct,amt)=>`<tr><td><b>${l}</b><div class="dim small">${n} bid item${n===1?'':'s'}</div></td><td class="r num">${money(cost)}</td><td class="r num">${fmtN(pct,1)}%</td><td class="r num"><b>${money(amt)}</b></td><td class="r num">${pc(amt,cost)}</td></tr>`;
+  return `<div class="split">
+    ${x.mode==='split'?`<div class="fg split-in"><label class="f">Self-perform share %${epIn('markup.indSelf',x.set?x.pct:'',{n:1,cls:'ind-n',ph:fmtN(x.costPct,1),title:'Blank = the same split as the costs'})}</label>
+      <div class="f"><span class="small dim">Subs get</span><b>${fmtN(100-x.pct,1)}%</b></div>
+      ${ro||!x.set?'':`<button class="btn sm ghost" data-act="ind-splitcost">Match the cost split (${fmtN(x.costPct,0)} / ${fmtN(100-x.costPct,0)})</button>`}</div>`:''}
+    <table class="split-t"><thead><tr><th></th><th class="r">Direct cost</th><th class="r">Share</th><th class="r">Indirects</th><th class="r">Adds to cost</th></tr></thead><tbody>
+      ${row('Self-perform',x.nSelf,x.selfCost,x.mode==='sub'?0:x.pct,x.self)}${row('Subcontract',x.nSub,x.subCost,x.mode==='sub'?100:100-x.pct,x.sub)}</tbody></table>
+    ${x.moved?`<p class="notice small" style="margin:8px 0 0">${x.subCost>0?'No self-perform cost':'No bid items have sub cost yet'}, so all of the indirects are spread over ${x.subCost>0?'the sub items':'every bid item by cost'} for now.</p>`:''}
+    <p class="hint">Each side is spread over its own bid items by that side's cost. Self-perform cost is labor, equipment, materials, trucking and other costs (everything except subs). Sub cost is the subcontract lines. ${x.mode==='split'?'Leave the share blank to split by cost, which gives the same result as spreading over every bid item.':''}</p></div>`}
 function estCarryList(d,R,ro){const carry=d.markup.carry||{};const dis=ro?' disabled':'';const base=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>!o.it.alt);
   return `<div class="carry"><div class="small" style="font-weight:600;margin:8px 0 6px">Items that carry it ${Object.values(carry).some(Boolean)?'':'<span class="dim">(none picked — spread over everything)</span>'}</div>
     ${d.sections.map(s=>{const its=base.filter(o=>o.it.sec===s.id);return its.length?`<div class="carry-s"><b class="small">${esc(s.code)} ${esc(s.name)}</b>${its.map(o=>`<label class="check small"><input type="checkbox" data-carry="${o.it.id}"${carry[o.it.id]?' checked':''}${dis}> ${esc(o.it.code)} ${esc(o.it.desc)} <span class="dim">${money(o.x.total)}</span></label>`).join('')}</div>`:''}).join('')}</div>`}
@@ -5367,9 +5394,10 @@ function vSettings(){const x=setDraft();const m=x.markup;const sf=(path,v,o={})=
     ${m.mode==='type'?typeT:`<div class="fg"><label class="f">Overhead %${sf('markup.oh',m.oh,{n:1})}</label><label class="f">Markup / profit %${sf('markup.profit',m.profit,{n:1})}</label></div>`}
     <label class="check small" style="margin-top:10px"><input type="checkbox" data-sfb="markup.compound"${m.compound!==false?' checked':''}> Markup is figured on cost + overhead</label>
     <div class="fg" style="margin-top:12px"><label class="f">Bond %${sf('markup.bond',m.bond,{n:1,ph:'0'})}</label><label class="f">Sales tax %${sf('markup.tax',m.tax,{n:1,ph:'0'})}</label><label class="f">Retainage %${sf('markup.ret',m.ret,{n:1,ph:'0'})}</label></div>
-    <div class="fg" style="margin-top:12px"><label class="f s2">Spread indirects${sel('markup.spreadInd',m.spreadInd||'cost',[['cost','Over every item by cost'],['select','Only items picked on each bid'],['lump','As a lump-sum line']])}</label>
+    <div class="fg" style="margin-top:12px"><label class="f s2">Spread indirects${sel('markup.spreadInd',m.spreadInd||'cost',[['cost','Over every item by cost'],['sub','Only items with sub work'],['split','Split self-perform / subs'],['select','Only items picked on each bid'],['lump','As a lump-sum line']])}</label>
       <label class="f s2">Spread markup${sel('markup.spreadMu',m.spreadMu||'cost',[['cost','Each item carries its share'],['select','Only items picked on each bid'],['manual','Adjust by hand (unbalanced)']])}</label>
-      ${m.spreadInd==='lump'?`<label class="f s2">Lump-sum line name${sf('markup.gcName',m.gcName,{ph:'General conditions'})}</label>`:''}</div></div></div>
+      ${m.spreadInd==='lump'?`<label class="f s2">Lump-sum line name${sf('markup.gcName',m.gcName,{ph:'General conditions'})}</label>`:''}
+      ${m.spreadInd==='split'?`<label class="f">Self-perform share %${sf('markup.indSelf',m.indSelf,{n:1,ph:'by cost'})}</label>`:''}</div></div></div>
   <div class="sec"><div class="sec-h"><h2>Indirect costs</h2><span>Starting list on new estimates</span></div><div class="panel pad">
     <div class="panel scroll"><table><thead><tr><th>Indirect cost</th><th>Basis</th><th>Rate</th><th></th></tr></thead><tbody>${x.ind.map((l,i)=>`<tr><td>${sf(`ind.${i}.desc`,l.desc,{ph:'Description'})}</td><td>${sel(`ind.${i}.basis`,l.basis,IND_BASIS)}</td><td>${sf(`ind.${i}.rate`,l.rate,{n:1,cls:'ind-n',ph:'0'})}</td><td><button class="rm" data-act="sf-indrm" data-i="${i}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table></div>
     <div class="adders"><button class="btn sm" data-act="sf-indadd">+ Indirect cost</button></div>
@@ -5393,7 +5421,8 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
       case 'sf-schdup':{const s=clone(x.schedules[+t.dataset.i]);s.id=newId();s.name+=' (copy)';x.schedules.splice(+t.dataset.i+1,0,s);dirty();break}
       case 'sf-schrm':{const s=x.schedules[+t.dataset.i];if(x.schedules.length<2)break;x.schedules.splice(+t.dataset.i,1);if(x.defSched===s.id)x.defSched=x.schedules[0].id;dirty();break}}return}
   const E=S.est;if(!E||!E.data||EC().ro)return;const d=E.data;
-  switch(a){case 'ind-add':(d.ind=d.ind||[]).push({id:newId(),desc:'',basis:'week',rate:null,qty:null});estTouch();render();focusSoon(`ind.${d.ind.length-1}.desc`);break;
+  switch(a){case 'ind-splitcost':d.markup.indSelf=null;estTouch();render();break;
+    case 'ind-add':(d.ind=d.ind||[]).push({id:newId(),desc:'',basis:'week',rate:null,qty:null});estTouch();render();focusSoon(`ind.${d.ind.length-1}.desc`);break;
     case 'ind-defaults':{const D=estDefaultsRaw();const have=new Set((d.ind||[]).map(l=>normH(l.desc)));D.ind.forEach(l=>{if(!have.has(normH(l.desc)))(d.ind=d.ind||[]).push({...l,id:newId(),qty:null})});estTouch();render();break}
     case 'mk-mode':d.markup.mode=t.dataset.v;if(t.dataset.v==='type'&&!d.markup.byType)d.markup.byType=clone(estDefaultsRaw().markup.byType);estTouch();render();break;
     case 'mk-tocompany':{const cur=S.settings.est_settings||{};const D=estDefaultsRaw();const v={...cur};

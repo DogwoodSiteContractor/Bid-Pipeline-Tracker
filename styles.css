@@ -1188,3 +1188,9 @@ tr.qa-item td{background:var(--surface-2)}
 table.sim-t td{padding:8px;vertical-align:top}
 table.sim-t select.field{width:100%;max-width:420px}
 .field.est-shift{width:64px}
+/* indirects: self-perform / sub split */
+.split{margin-top:12px;border-top:1px solid var(--line);padding-top:12px}
+.split-in{align-items:end;margin-bottom:10px}
+.split-in .f b{display:block;font-size:15px;padding:7px 0}
+.split-t{width:100%;font-size:13px}
+.split-t td,.split-t th{padding:6px 8px}
