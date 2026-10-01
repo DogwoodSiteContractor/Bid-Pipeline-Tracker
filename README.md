@@ -255,7 +255,7 @@ The defaults every new estimate starts with. Each estimate keeps its own copy, s
 - Estimates made before sections existed are converted automatically: each bid item goes into a section named after its old Scope field, or "General".
 
 - **Bid items** have a quantity and unit and are built from **activities**. Use **Alternate** to price an item but keep it out of the base bid. Enter a **unit price override** to set an item's price yourself.
-- **Activities** have a quantity (blank means the bid item's quantity), a **crew** and a **production rate**: units/hr, units/day, crew hours or crew days. These give crew hours, days and man-hours, and crew $/hr × hours gives the labor and equipment cost.
+- **Activities** have a quantity (blank means the bid item's quantity), a **crew** and a **production rate**. The rate can be entered as units/hr, hrs/unit, units/shift, units/day, units/week, or as a fixed total of crew hours, shifts, days or weeks. Shift modes have their own shift length (blank means the schedule's hours per day), and week modes use the schedule's weekly hours. Together these give the crew hours, days and man-hours. Crew $/hr × hours gives the crew's labor and equipment cost. Any cost line set to **per crew hr** (say, a laborer or an excavator added on its own) is multiplied by those same hours. For example, 1,000 CY at 250 CY/hr is 4 crew hours, so a $50/hr laborer costs $200. A line under the production rate shows the math.
 - **Costs on an activity:** add labor, equipment or materials from the codebook (type to search), or a custom labor, equipment, material, sub, trucking or other cost.
   - Each cost is figured per unit of the activity, per crew hour, or as a total.
   - Materials can carry a waste % and sales tax.

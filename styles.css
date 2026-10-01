@@ -1187,3 +1187,4 @@ tr.qa-item td{background:var(--surface-2)}
 .su-pend.su-sim{background:var(--info-soft);border-color:var(--info)}
 table.sim-t td{padding:8px;vertical-align:top}
 table.sim-t select.field{width:100%;max-width:420px}
+.field.est-shift{width:64px}
