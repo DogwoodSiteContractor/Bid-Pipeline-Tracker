@@ -150,9 +150,9 @@ Every bid has an **Estimator log** under Scope takeoff. Estimators on the bid (a
 - **Export to Excel:** writes all four codebooks in the same layout the import reads. You can export, edit prices in Excel, and import the file back.
 
 ## Top bar
-**Dashboard · Pipeline · Estimates · Jobs · Contacts · Library · Calculators · Team.** Related pages share one tab, with sub-tabs inside it:
+**Dashboard · Pipeline · Estimates · Jobs · Contacts · Calculators · Team.** Related pages share one tab, with sub-tabs inside it:
 - **Contacts:** Clients & GCs, and Vendors & subs.
-- **Library:** Codebooks, and Scopes & templates.
+- **Estimates:** Estimates, Master templates, Codebooks, Scopes & templates (admins) and Bid settings (admins).
 - **Team:** Logins & roles, and Estimators.
 
 When the bar is too narrow, the last tabs fold into a **More** menu.

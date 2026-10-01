@@ -282,7 +282,7 @@ function renderNow(){
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
-  main.innerHTML=subNav()+views[S.view]();
+  main.innerHTML=(estsTabFor()?estsTabs(estsTabFor()):subNav())+views[S.view]();
   keep.forEach(([id,top])=>{const e=id&&document.getElementById(id);if(e)e.scrollTop=top});
   if(fid){const n=document.getElementById(fid);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});try{n.setSelectionRange(pos,pos)}catch(e){}if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();if(S.view==='calc'&&$('#tk-canvas'))tkMount();
@@ -290,13 +290,13 @@ function renderNow(){
 // top-bar tabs; related pages share a tab and get small sub-tabs inside it
 function navGroups(){
   if(role()==='pm')return [['jobs','Jobs',['jobs','job']],['calc','Calculators',['calc']]];
-  if(isAdmin())return [['dashboard','Dashboard',['dashboard']],['pipeline','Pipeline',['pipeline']],['estimates','Estimates',['estimates','estimate','settings']],['jobs','Jobs',['jobs','job']],
-    ['clients','Contacts',['clients','vendors']],['cb','Library',['cb','scopes']],['calc','Calculators',['calc']],['team','Team',['team','estimators']]];
-  if(role()==='estimator')return [['dashboard','My dashboard',['dashboard']],['pipeline','My bids',['pipeline']],['estimates','Estimates',['estimates','estimate']],['clients','Contacts',['clients','vendors']],['cb','Library',['cb']],['calc','Calculators',['calc']]];
+  if(isAdmin())return [['dashboard','Dashboard',['dashboard']],['pipeline','Pipeline',['pipeline']],['estimates','Estimates',['estimates','estimate','settings','cb','scopes']],['jobs','Jobs',['jobs','job']],
+    ['clients','Contacts',['clients','vendors']],['calc','Calculators',['calc']],['team','Team',['team','estimators']]];
+  if(role()==='estimator')return [['dashboard','My dashboard',['dashboard']],['pipeline','My bids',['pipeline']],['estimates','Estimates',['estimates','estimate','cb']],['clients','Contacts',['clients','vendors']],['calc','Calculators',['calc']]];
   return [['dashboard','Board dashboard',['dashboard']],['pipeline','Pipeline',['pipeline']],['estimates','Estimates',['estimates','estimate']]];
 }
 function navItems(){return navGroups().map(g=>[g[0],g[1]])}
-const SUBNAV_LABEL={clients:'Clients & GCs',vendors:'Vendors & subs',cb:'Codebooks',scopes:'Scopes & templates',team:'Logins & roles',estimators:'Estimators'};
+const SUBNAV_LABEL={clients:'Clients & GCs',vendors:'Vendors & subs',team:'Logins & roles',estimators:'Estimators'};
 function subNav(){const g=navGroups().find(x=>x[2].includes(S.view));if(!g)return '';const subs=g[2].filter(v=>SUBNAV_LABEL[v]);if(subs.length<2)return '';
   return `<div class="subnav">${subs.map(v=>`<button class="${S.view===v?'on':''}" data-act="nav" data-v="${v}">${SUBNAV_LABEL[v]}</button>`).join('')}</div>`}
 function renderTop(){
@@ -5174,9 +5174,10 @@ async function estTplSave(){const x=M;const E=S.est,d=E.data;if(!String(x.name||
 
 /* ---------- Estimates page ---------- */
 // Estimates page tabs: the list, master templates, and (admins) the bid-building settings
-function estsTabs(on){return `<div class="seg est-tabs">${[['list','Estimates'],['tpl','Master templates'],...(isAdmin()?[['set','Bid settings']]:[])].map(([k,l])=>`<button class="${on===k?'on':''}" data-act="ests-tab" data-v="${k}">${l}</button>`).join('')}</div>`}
+function estsTabs(on){return `<div class="subnav">${[['list','Estimates'],['tpl','Master templates'],['cb','Codebooks'],...(isAdmin()?[['scopes','Scopes & templates'],['set','Bid settings']]:[])].map(([k,l])=>`<button class="${on===k?'on':''}" data-act="ests-tab" data-v="${k}">${l}</button>`).join('')}</div>`}
+const estsTabFor=()=>({estimates:S.estsTab==='tpl'?'tpl':'list',settings:'set',cb:'cb',scopes:'scopes'})[S.view];
 function vEstimates(){const tab=S.estsTab||'list';const can=['admin','estimator'].includes(role());
-  const tabs=estsTabs(tab);
+  const tabs='';
   const head=`<div class="head"><div><h1>Estimates</h1><p>${S.estIndex.length} estimate${S.estIndex.length===1?'':'s'} · ${cbList('estimate').length} master template${cbList('estimate').length===1?'':'s'}</p></div><div class="tools">${can?'<button class="btn primary" data-act="ests-new">+ New estimate</button>':''}</div></div>`;
   if(S.estMissing)return head+`<div class="notice"><b>One setup step:</b> run <b>update-14-estimates.sql</b> in Supabase, then refresh.</div>`;
   if(tab==='tpl'){const ts=['estimate','section'].flatMap(bk=>cbList(bk)).sort((a,b)=>a.book.localeCompare(b.book)||String(a.description).localeCompare(b.description));const admin=cbEditable();
@@ -5249,7 +5250,7 @@ document.addEventListener('click',e=>{
     case 'ef-fold':{const s=E.fold||(E.fold=new Set());const k=t.dataset.k;s.has(k)?s.delete(k):s.add(k);render();break}
     case 'est-savetpl':estTplStart(t.dataset.v,t.dataset.id);break;
     case 'esttpl-save':estTplSave();break;
-    case 'ests-tab':if(t.dataset.v==='set'){S.view='settings';render();break}S.estsTab=t.dataset.v;S.view='estimates';render();break;
+    case 'ests-tab':{const v=t.dataset.v;if(v==='set')S.view='settings';else if(v==='cb'||v==='scopes')S.view=v;else{S.estsTab=v;S.view='estimates'}render();window.scrollTo(0,0);break}
     case 'ests-open':estOpen(t.dataset.id,'estimates');break;
     case 'ests-opentpl':S.estFrom='estimates';estOpenTpl(t.dataset.id);break;
     case 'ests-newtpl':estNewTpl(t.dataset.v);break;
@@ -5347,7 +5348,7 @@ function vSettings(){const x=setDraft();const m=x.markup;const sf=(path,v,o={})=
     <p class="small sched-sum">${esc(schedText(s))}</p></div>`;
   const typeT=`<table class="mk-t"><thead><tr><th>Cost type</th><th>Overhead %</th><th>Markup %</th></tr></thead><tbody>${MK_TYPES.map(k=>`<tr><td>${MK_LABEL[k]}</td><td>${sf(`markup.byType.${k}.oh`,m.byType?.[k]?.oh,{n:1,cls:'mk-n',ph:'0'})}</td><td>${sf(`markup.byType.${k}.mu`,m.byType?.[k]?.mu,{n:1,cls:'mk-n',ph:'0'})}</td></tr>`).join('')}</tbody></table>`;
   return `<div class="head"><div><h1>Estimates</h1><p>Bid settings — how bids are built. Every new estimate starts with these; each one can still change its own.</p></div><div class="tools">${S.setDirty?'<span class="dim small">Unsaved changes</span>':''}<button class="btn" data-act="sf-reset"${S.setDirty?'':' disabled'}>Discard changes</button><button class="btn primary" data-act="sf-save"${S.setDirty?'':' disabled'}>Save settings</button></div></div>
-  ${estsTabs('set')}<div class="set-grid">
+  <div class="set-grid">
   <div class="sec"><div class="sec-h"><h2>Markup & overhead</h2><span>Default for new estimates</span></div><div class="panel pad">
     <div class="seg" style="margin-bottom:12px"><button class="${m.mode!=='type'?'on':''}" data-act="sf-mode" data-v="simple">Simple — on bid cost</button><button class="${m.mode==='type'?'on':''}" data-act="sf-mode" data-v="type">By cost type</button></div>
     ${m.mode==='type'?typeT:`<div class="fg"><label class="f">Overhead %${sf('markup.oh',m.oh,{n:1})}</label><label class="f">Markup / profit %${sf('markup.profit',m.profit,{n:1})}</label></div>`}
