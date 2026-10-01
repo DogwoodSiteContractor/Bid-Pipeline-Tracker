@@ -256,7 +256,7 @@ async function afterLogin(){
   }
   S.loading=false;schedule();
 }
-function resetData(){TABLES.forEach(t=>{if(t!=='settings')S[t]=[]});S.est=null;S.estIndex=[];S.settings={};S.profiles=[];S.profile=null;S.profileFor=null;S.view='dashboard';S.dash='precon';if(channel){sb.removeChannel(channel);channel=null}}
+function resetData(){TABLES.forEach(t=>{if(t!=='settings')S[t]=[]});S.est=null;S.estIndex=[];S.estsTab='list';S.settings={};S.profiles=[];S.profile=null;S.profileFor=null;S.view='dashboard';S.dash='precon';if(channel){sb.removeChannel(channel);channel=null}}
 function errMsg(e){const m=(e&&(e.message||e.error_description))||'Something went wrong.';
   if(/row-level security|permission denied/i.test(m))return 'You don’t have permission to make that change.';
   if(/Failed to fetch|NetworkError/i.test(m))return 'Can’t reach the server. Check your connection and try again.';
@@ -267,6 +267,8 @@ async function run(p){const {data,error}=await p;if(error)throw error;return dat
 let rq=0;
 function schedule(){if(rq)return;rq=requestAnimationFrame(()=>{rq=0;render()})}
 function render(){
+  if(render._busy){schedule();return}render._busy=true;try{renderNow()}finally{render._busy=false}}
+function renderNow(){
   const main=$('#main');const top=$('#topwrap');
   if(!CONFIGURED){top.hidden=true;main.innerHTML=setupScreen();return}
   if(S.loading){top.hidden=true;main.innerHTML=`<div class="auth"><div class="spin" aria-label="Loading"></div></div>`;return}
@@ -275,26 +277,32 @@ function render(){
   if(!S.profile){top.hidden=true;main.innerHTML=`<div class="auth"><div class="spin" aria-label="Loading"></div></div>`;return}
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
-  const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;
-  const views={dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,estimate:vEstimate};
-  const navOk=v=>navItems().some(n=>n[0]===v)||(v==='job'&&navItems().some(n=>n[0]==='jobs'))||(v==='estimate'&&['admin','estimator','board'].includes(role()));
+  const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
+  const views={dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
-  main.innerHTML=views[S.view]();
+  main.innerHTML=subNav()+views[S.view]();
   keep.forEach(([id,top])=>{const e=id&&document.getElementById(id);if(e)e.scrollTop=top});
-  if(fid){const n=document.getElementById(fid);if(n){n.focus({preventScroll:true});try{n.setSelectionRange(pos,pos)}catch(e){}if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
+  if(fid){const n=document.getElementById(fid);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});try{n.setSelectionRange(pos,pos)}catch(e){}if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();if(S.view==='calc'&&$('#tk-canvas'))tkMount();
 }
-function navItems(){
-  if(role()==='pm')return [['jobs','Jobs'],['calc','Calculators']];
-  if(isAdmin())return [['dashboard','Dashboard'],['pipeline','Pipeline'],['jobs','Jobs'],['estimators','Estimators'],['clients','Clients & GCs'],['vendors','Vendors'],['scopes','Scopes'],['cb','Codebooks'],['calc','Calculators'],['team','Team & logins']];
-  if(role()==='estimator')return [['dashboard','My dashboard'],['pipeline','My bids'],['vendors','Vendors'],['clients','Clients & GCs'],['cb','Codebooks'],['calc','Calculators']];
-  return [['dashboard','Board dashboard'],['pipeline','Pipeline']];
+// top-bar tabs; related pages share a tab and get small sub-tabs inside it
+function navGroups(){
+  if(role()==='pm')return [['jobs','Jobs',['jobs','job']],['calc','Calculators',['calc']]];
+  if(isAdmin())return [['dashboard','Dashboard',['dashboard']],['pipeline','Pipeline',['pipeline']],['estimates','Estimates',['estimates','estimate']],['jobs','Jobs',['jobs','job']],
+    ['clients','Contacts',['clients','vendors']],['cb','Library',['cb','scopes']],['calc','Calculators',['calc']],['team','Team',['team','estimators']],['settings','Settings',['settings']]];
+  if(role()==='estimator')return [['dashboard','My dashboard',['dashboard']],['pipeline','My bids',['pipeline']],['estimates','Estimates',['estimates','estimate']],['clients','Contacts',['clients','vendors']],['cb','Library',['cb']],['calc','Calculators',['calc']]];
+  return [['dashboard','Board dashboard',['dashboard']],['pipeline','Pipeline',['pipeline']],['estimates','Estimates',['estimates','estimate']]];
 }
+function navItems(){return navGroups().map(g=>[g[0],g[1]])}
+const SUBNAV_LABEL={clients:'Clients & GCs',vendors:'Vendors & subs',cb:'Codebooks',scopes:'Scopes & templates',team:'Logins & roles',estimators:'Estimators'};
+function subNav(){const g=navGroups().find(x=>x[2].includes(S.view));if(!g)return '';const subs=g[2].filter(v=>SUBNAV_LABEL[v]);if(subs.length<2)return '';
+  return `<div class="subnav">${subs.map(v=>`<button class="${S.view===v?'on':''}" data-act="nav" data-v="${v}">${SUBNAV_LABEL[v]}</button>`).join('')}</div>`}
 function renderTop(){
   const company=S.settings.general?.companyName||CFG.companyName||'Bid Pipeline';
   $('#top').innerHTML=`<button class="brand" ${isAdmin()?'data-act="company" title="Edit company name"':'tabindex="-1" style="cursor:default"'}>${BRAND.logo?`<img class="brand-logo" src="${esc(BRAND.logo)}" alt="">`:'<span class="stake"></span>'}<span><b>${esc(company)}</b><small>Bid pipeline</small></span></button>
-  <nav class="nav">${navItems().map(([k,l])=>`<button class="${S.view===k||(k==='jobs'&&S.view==='job')?'on':''}" data-act="nav" data-v="${k}">${l}</button>`).join('')}</nav>
+  <nav class="nav">${navGroups().map(([k,l,mem])=>`<button class="${mem.includes(S.view)?'on':''}" data-act="nav" data-v="${k}">${l}</button>`).join('')}</nav>
   <div class="nav-more" hidden><button class="nav-morebtn" data-act="nav-more" aria-haspopup="true" aria-expanded="false">More ▾</button><div class="nav-menu" role="menu" hidden></div></div>
   <button class="topsearch" data-act="pal-open" aria-label="Search (Ctrl+K)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><span>Search</span><kbd>Ctrl K</kbd></button>
   <div class="userbox"><span>${esc(myName())}<br><span class="rolepill">${ROLE_LABEL[role()]}</span></span>
@@ -331,7 +339,7 @@ function setPasswordScreen(){return `<div class="auth"><div class="auth-card">${
   <form id="password-form">${msgBlock()}<label class="f">New password<input class="field" type="password" name="p1" minlength="8" autocomplete="new-password" required autofocus></label>
   <label class="f">Confirm password<input class="field" type="password" name="p2" minlength="8" autocomplete="new-password" required></label>
   <button class="btn primary" type="submit">Save password</button></form></div></div>`}
-function pendingScreen(){return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Almost there</h1><p class="lead">You’re signed in as ${esc(S.session?.user?.email)}, but an admin hasn’t given your account access yet. Ask your precon manager to set your role on the Team & logins page, then sign in again.</p>${msgBlock()}
+function pendingScreen(){return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Almost there</h1><p class="lead">You’re signed in as ${esc(S.session?.user?.email)}, but an admin hasn’t given your account access yet. Ask your precon manager to set your role on the Team page, then sign in again.</p>${msgBlock()}
   <div class="rowx"><button class="btn" data-act="recheck">Check again</button><button class="btn" data-act="signout">Sign out</button></div></div></div>`}
 function setupScreen(){return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Connect Supabase</h1><p class="lead">This copy of the app isn’t connected to a database yet. Open <b>config.js</b> and paste your Supabase project URL and anon key, then reload. The README walks through every step.</p></div></div>`}
 
@@ -514,7 +522,7 @@ function setupGuide(){
   return `<div class="sec"><div class="sec-h"><h2>Set up your pipeline</h2></div><div class="panel pad"><div class="list">
   ${step(!!S.settings.general?.companyName,'Name your company','Click the name in the top-left corner.','')}
   ${step(S.estimators.length>0,'Add your estimators','Use the same email they log in with so their account links automatically.','estimators')}
-  ${step(S.profiles.length>1,'Give your team logins','Add people in Supabase, then set their role on the Team & logins page.','team')}
+  ${step(S.profiles.length>1,'Give your team logins','Add people in Supabase, then set their role on the Team page.','team')}
   ${step(S.clients.length>0,'Add clients and GCs','Store companies and their contacts once, then pick them on each bid.','clients')}
   ${step(S.vendors.length>0,'Build your vendor list','Suppliers and subs by trade, so anyone on a bid can request and log quotes.','vendors')}
   ${step(false,'Enter your first bid','Assign estimators, GCs and vendors from the lists above.','new-bid')}</div></div></div>`;
@@ -523,7 +531,7 @@ function setupGuide(){
 /* ----- estimator personal view ----- */
 function mine(){
   const me=myEst();
-  if(!me)return `<div class="notice">Your login isn’t linked to an estimator record yet, so no bids can be assigned to you. Ask your precon manager to link your account on the Team & logins page.</div>`;
+  if(!me)return `<div class="notice">Your login isn’t linked to an estimator record yet, so no bids can be assigned to you. Ask your precon manager to link your account on the Team page.</div>`;
   const my=S.bids.filter(b=>live(b)&&assigned(b));
   const act=my.filter(b=>ACTIVE.includes(b.status)).sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999'));
   const est=act.filter(isWorking);
@@ -797,7 +805,7 @@ function palItems(){
   const q=S.pal.q.trim().toLowerCase();const out=[];const add=(group,label,sub,run,extra)=>out.push({group,label,sub,run,extra});
   const acts=isPM()?[['Go to Jobs',()=>{S.view='jobs';render()}],['New job',()=>{M={kind:'job',isNew:true,draft:newJob()};showModal()}]]:[['Go to Dashboard',()=>{S.view='dashboard';render()}],['Go to Pipeline',()=>{S.view='pipeline';render()}],
     ['Pipeline: Cards view',()=>{S.view='pipeline';S.pv.mode='cards';savePv();render()}],['Pipeline: List view',()=>{S.view='pipeline';S.pv.mode='list';savePv();render()}],['Pipeline: Calendar view',()=>{S.view='pipeline';S.pv.mode='calendar';savePv();render()}],
-    ...(isAdmin()?[['Go to Jobs',()=>{S.view='jobs';render()}],['New job',()=>{M={kind:'job',isNew:true,draft:newJob()};showModal()}],['New bid',()=>{M={kind:'bid',draft:newBid(),origQuoteIds:[]};showModal()}],['Go to Clients & GCs',()=>{S.view='clients';render()}],['Go to Vendors',()=>{S.view='vendors';render()}],['Go to Estimators',()=>{S.view='estimators';render()}],['Go to Scopes',()=>{S.view='scopes';render()}],['Go to Team & logins',()=>{S.view='team';render()}]]:[]),
+    ...(isAdmin()?[['Go to Jobs',()=>{S.view='jobs';render()}],['New job',()=>{M={kind:'job',isNew:true,draft:newJob()};showModal()}],['New bid',()=>{M={kind:'bid',draft:newBid(),origQuoteIds:[]};showModal()}],['Go to Clients & GCs',()=>{S.view='clients';render()}],['Go to Vendors',()=>{S.view='vendors';render()}],['Go to Estimators',()=>{S.view='estimators';render()}],['Go to Scopes',()=>{S.view='scopes';render()}],['Go to Team',()=>{S.view='team';render()}]]:[]),
     ...(role()==='estimator'?[['Go to Vendors',()=>{S.view='vendors';render()}],['Go to Clients & GCs',()=>{S.view='clients';render()}]]:[])];
   if(role()!=='board')acts.push(['Go to Calculators',()=>{S.view='calc';render()}]);
   acts.filter(([l])=>!q||matchesQuery(l.toLowerCase(),q)).slice(0,q?4:6).forEach(([l,fn])=>add('Actions',l,'',fn));
@@ -901,7 +909,7 @@ function tplModal(){const d=M.draft;const L=lib();const names=[...new Set([...L.
 /* ----- team & logins (admin) ----- */
 function vTeam(){
   const me=S.session.user.id;
-  return `<div class="head"><div><h1>Team & logins</h1><p>${S.profiles.length} account${S.profiles.length===1?'':'s'}</p></div><div class="tools"><button class="btn" data-act="reload-team">Refresh</button></div></div>
+  return `<div class="head"><div><h1>Logins & roles</h1><p>${S.profiles.length} account${S.profiles.length===1?'':'s'}</p></div><div class="tools"><button class="btn" data-act="reload-team">Refresh</button></div></div>
   <div class="notice"><b>To add someone:</b> in Supabase go to Authentication → Users → Add user → Send invitation (or Create new user with a password). They show up here as “No access yet”. Set their role, and for estimators pick which estimator record is theirs. Tip: if their email matches an estimator record, they’re linked automatically.</div>
   <div class="panel scroll"><table><thead><tr><th>Person</th><th>Name</th><th>Role</th><th>Linked estimator</th><th>Joined</th></tr></thead><tbody>
   ${S.profiles.map(p=>{const linked=S.estimators.find(e=>e.user_id===p.id);const self=p.id===me;
@@ -923,18 +931,19 @@ async function makeEstimatorFor(uid){const p=byId(S.profiles,uid);if(!p)return;
 
 /* ---------- modals ---------- */
 let M=null;
-function closeModal(){M=null;$('#modal').innerHTML='';document.body.style.overflow=''}
+function closeModal(){const ae=document.activeElement;if(ae&&$('#modal')?.contains(ae))ae.blur();M=null;$('#modal').innerHTML='';document.body.style.overflow=''}
 function showModal(){document.body.style.overflow='hidden';renderModal(true)}
 // keep the cursor in the same field when a modal re-renders
 const FOCUS_ATTRS=['data-itp','data-jip','data-itf','data-entf','data-logf','data-jobf','data-logdate','data-ef','data-bf','data-qf','data-cp','data-ad','data-rv','data-sf','data-lf','data-ctf','data-ff','data-tn','data-pickq','data-bulktype'];
 function focusKey(el){if(!el||!$('#modal')?.contains(el))return null;if(el.id)return '#'+CSS.escape(el.id);for(const a of FOCUS_ATTRS)if(el.hasAttribute(a))return `[${a}="${CSS.escape(el.getAttribute(a))}"]`;return null}
-function renderModal(first){
-  if(!M)return;const body=$('#modal .mbody');const st=body?body.scrollTop:0;
-  const ae=document.activeElement;const fk=focusKey(ae);let sel=null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal}[M.kind]();
+function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=true;try{renderModalNow(first)}finally{renderModal._busy=false}}
+function renderModalNow(first){
+  const body=$('#modal .mbody');const st=body?body.scrollTop:0;
+  const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
+  const html={job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estnew:estNewModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib'].includes(M.kind)?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
-  if(fk&&!first){const n=$('#modal '+fk);if(n){n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
+  if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();
 }
 function mhead(t,s){return `<div class="mhead"><div><h2>${esc(t)}</h2>${s?`<p>${esc(s)}</p>`:''}</div><button class="x" data-act="close" aria-label="Close">×</button></div>`}
@@ -2102,7 +2111,7 @@ function jobModal(){
     <label class="f">Default overhead %${jf('overhead_pct','number','0')}</label><label class="f">Default markup %${jf('markup_pct','number','0')}</label>
     <div class="f s2 hint" style="align-self:end;margin:0 0 10px">Taken out of bid prices for new lines and imports. Changing them doesn’t alter existing lines.</div>
     <label class="f s4">Notes<textarea class="field" data-jobf="notes" placeholder="Scope notes, contacts, retainage…">${esc(d.notes||'')}</textarea></label></div>
-    ${pms.length?'':'<p class="hint">No Project Manager logins yet. Set someone’s role to Project manager on Team & logins.</p>'}</fieldset></div>
+    ${pms.length?'':'<p class="hint">No Project Manager logins yet. Set someone’s role to Project manager on the Team page.</p>'}</fieldset></div>
   <div class="mfoot"><div>${isAdmin()&&!isNew?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again — deletes all costs too':'Delete job'}</button>`:''}</div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="save">${isNew?'Create job':'Save changes'}</button></div></div>`;
 }
 function newItem(jobId){const n=jobItems(jobId);const j=jobOf(jobId)||{};return {id:newId(),job_id:jobId,code:'',description:'',unit:'',quantity:null,labor:0,equipment:0,materials:0,subcontract:0,other:0,overhead_pct:+j.overhead_pct||0,markup_pct:+j.markup_pct||0,pct_override:null,sort:(n.length?Math.max(...n.map(i=>i.sort||0)):0)+1,notes:''}}
@@ -4479,37 +4488,95 @@ const PROD_MODES=[['uph','units / hr'],['upd','units / day'],['hrs','crew hours'
 const BASIS=[['unit','per unit'],['hour','per crew hr'],['total','total']];
 const r2=n=>Math.round((+n||0)*100)/100;
 S.est=null;S.estIndex=[];S.estMissing=false;
-function estBlank(){return {v:1,settings:{hpd:10},markup:{tax:0,oh:10,profit:10,bond:0,ret:5},items:[]}}
-function estNorm(d){d=d&&typeof d==='object'?d:{};const b=estBlank();d.settings={...b.settings,...(d.settings||{})};d.markup={...b.markup,...(d.markup||{})};d.items=Array.isArray(d.items)?d.items:[];
-  d.items.forEach(it=>{it.acts=Array.isArray(it.acts)?it.acts:[];it.acts.forEach(a=>{a.res=Array.isArray(a.res)?a.res:[]})});return d}
 function estNextCode(d){const n=(d.items||[]).map(i=>parseInt(i.code,10)).filter(x=>!isNaN(x));return String(n.length?Math.max(...n)+10:10)}
 function estNewItem(d,o={}){return {id:newId(),code:estNextCode(d),desc:'',qty:1,unit:'LS',group:'',alt:false,override:null,notes:'',acts:[],...o}}
 function estNewAct(o={}){return {id:newId(),code:'',desc:'',qty:null,unit:'',mode:'uph',prod:null,crew:null,res:[],...o}}
 function resKindOf(x){if(x.book==='labor')return 'labor';if(x.book==='equipment')return 'equipment';const t=cbD(x).type;return t==='Subcontract'?'sub':t==='Trucking'?'trucking':t==='Other'?'other':'material'}
-function resFromCb(x){const k=resKindOf(x);const timed=k==='labor'||k==='equipment';
-  return {id:newId(),kind:k,cb:x.id,code:x.code||'',desc:x.description,unit:timed?'HR':x.unit||'',basis:timed?'hour':'unit',factor:1,waste:k==='material'?num(cbD(x).waste)||0:0,price:+(cbCost(x)||0).toFixed(4),tax:k==='material'&&cbD(x).tax!==false}}
 function resCustom(k){const timed=k==='labor'||k==='equipment';return {id:newId(),kind:k,cb:null,code:'',desc:'',unit:timed?'HR':k==='sub'?'LS':'',basis:timed?'hour':k==='sub'?'total':'unit',factor:1,waste:0,price:null,tax:k==='material'}}
-function crewSnap(x){const C=cbCrew(x);return {id:x.id,code:x.code||'',name:x.description,labor:+C.labor.toFixed(4),equip:+C.equip.toFixed(4),men:C.men}}
+/* ---------- math ---------- */
+function sumC(list){const c={labor:0,equipment:0,material:0,sub:0,trucking:0,other:0,tax:0};list.forEach(x=>Object.keys(c).forEach(k=>c[k]+=x.c[k]||0));return c}
+/* ---------- company estimating settings (Settings page) ---------- */
+const SCHED_PRESETS=[
+  {name:'5 × 8s',days:[8,8,8,8,8,0,0],rule:'weekly',otWeek:40,otDay:8,otf:1.5,dtDay:null,dtf:2,satOT:true,sunDT:true},
+  {name:'5 × 10s',days:[10,10,10,10,10,0,0],rule:'weekly',otWeek:40,otDay:8,otf:1.5,dtDay:null,dtf:2,satOT:true,sunDT:true},
+  {name:'4 × 10s',days:[10,10,10,10,0,0,0],rule:'weekly',otWeek:40,otDay:8,otf:1.5,dtDay:null,dtf:2,satOT:true,sunDT:true},
+  {name:'6 × 10s',days:[10,10,10,10,10,10,0],rule:'weekly',otWeek:40,otDay:8,otf:1.5,dtDay:null,dtf:2,satOT:false,sunDT:true}];
+const IND_BASIS=[['week','per week'],['month','per month'],['day','per work day'],['mh','per man-hour'],['ls','lump sum'],['pct_labor','% of labor'],['pct_direct','% of direct cost']];
+const IND_DEFAULT=[{desc:'Superintendent',basis:'week',rate:2400},{desc:'Foreman pickup truck',basis:'week',rate:350},{desc:'Mobilization / demobilization',basis:'ls',rate:8500},
+  {desc:'Construction layout & staking',basis:'ls',rate:0},{desc:'Small tools & consumables',basis:'pct_labor',rate:3},{desc:'Temporary facilities (toilets, office)',basis:'month',rate:450},{desc:'Insurance (GL)',basis:'pct_direct',rate:1.2}];
+const MK_TYPES=[...COST_KEYS,'ind'];
+const MK_LABEL={...COST_LABEL,ind:'Indirects',material:'Material (+ tax)'};
+function estDefaultsRaw(){const D=S.settings.est_settings||{};const sch=Array.isArray(D.schedules)&&D.schedules.length?D.schedules:SCHED_PRESETS.map(s=>({...s,id:'pre-'+normH(s.name)}));
+  return {markup:{mode:'simple',oh:10,profit:10,compound:true,bond:0,tax:0,ret:5,spreadInd:'cost',spreadMu:'cost',byType:Object.fromEntries(MK_TYPES.map(k=>[k,{oh:10,mu:10}])),...(D.markup||{})},
+    ind:Array.isArray(D.ind)?D.ind:IND_DEFAULT,schedules:sch,defSched:D.defSched||sch.find(s=>s.name==='5 × 10s')?.id||sch[0].id,crews:num(D.crews)||2}}
+function estBlank(){const D=estDefaultsRaw();const sched=D.schedules.find(s=>s.id===D.defSched)||D.schedules[0];
+  return {v:3,settings:{hpd:10,sched:clone(sched),crews:D.crews,durDays:null},markup:clone(D.markup),ind:D.ind.map(l=>({...l,id:newId(),qty:null})),items:[]}}
+
+/* ---------- calendar & overtime ---------- */
+function schedCalc(s){const h=(s&&Array.isArray(s.days)?s.days:[10,10,10,10,10,0,0]).map(x=>Math.max(0,num(x)||0));const H=h.reduce((a,b)=>a+b,0);const days=h.filter(x=>x>0).length;
+  let st=0,ot=0,dt=0;const rule=s?.rule||'weekly';const od=num(s?.otDay)??8,ow=num(s?.otWeek)??40,dd=num(s?.dtDay);
+  h.forEach((x,i)=>{if(!x)return;if(i===6&&s?.sunDT){dt+=x;return}if(i===5&&s?.satOT){ot+=x;return}let a=x,d=0,o=0;if(dd&&a>dd){d=a-dd;a=dd}if((rule==='daily'||rule==='both')&&a>od){o=a-od;a=od}st+=a;ot+=o;dt+=d});
+  if((rule==='weekly'||rule==='both')&&st>ow){ot+=st-ow;st=ow}
+  const otf=num(s?.otf)||1.5,dtf=num(s?.dtf)||2;const mult=H?(ot*(otf-1)+dt*(dtf-1))/H:0;
+  return {h,H,days,hpd:days?H/days:10,st,ot,dt,otf,dtf,mult}}
+const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+function schedText(s){const c=schedCalc(s);return `${fmtN(c.H,1)} hrs/week over ${c.days} day${c.days===1?'':'s'} · ${fmtN(c.st,1)} straight${c.ot?` · ${fmtN(c.ot,1)} OT ×${c.otf}`:''}${c.dt?` · ${fmtN(c.dt,1)} DT ×${c.dtf}`:''}${c.mult?` · labor +${fmtN(c.mult*100,1)}% premium`:''}`}
+// straight-time base used for the overtime premium (base wage × burden, no fringe)
+function cbOtp(x){if(!x)return 0;if(x.book==='labor'){const d=cbD(x);return (num(d.base)||0)*(1+(num(d.burden)||0)/100)}
+  if(x.book==='crew')return (cbD(x).members||[]).reduce((s,m)=>{const it=cbById(m.id);return s+(it&&it.book==='labor'?cbOtp(it)*(num(m.qty)||0):0)},0);return 0}
+const crewOtp=cr=>cr.otp!=null?num(cr.otp)||0:cbById(cr.id)?cbOtp(cbById(cr.id)):(num(cr.labor)||0)*0.75;
+const resOtp=r=>r.otp!=null?num(r.otp)||0:r.cb&&cbById(r.cb)?cbOtp(cbById(r.cb)):(num(r.price)||0)*0.75;
 
 /* ---------- math ---------- */
+function resFromCb(x){const k=resKindOf(x);const timed=k==='labor'||k==='equipment';
+  return {id:newId(),kind:k,cb:x.id,code:x.code||'',desc:x.description,unit:timed?'HR':x.unit||'',basis:timed?'hour':'unit',factor:1,waste:k==='material'?num(cbD(x).waste)||0:0,price:+(cbCost(x)||0).toFixed(4),tax:k==='material'&&cbD(x).tax!==false,...(k==='labor'?{otp:+cbOtp(x).toFixed(4)}:{})}}
+function crewSnap(x){const C=cbCrew(x);return {id:x.id,code:x.code||'',name:x.description,labor:+C.labor.toFixed(4),equip:+C.equip.toFixed(4),men:C.men,otp:+cbOtp(x).toFixed(4)}}
+function estCtx(d){const s=d.settings||{};if(s.sched){const c=schedCalc(s.sched);return {hpd:c.hpd,days:c.days||5,ot:c.mult,sc:c,tax:num(d.markup?.tax)||0}}return {hpd:num(s.hpd)||10,days:5,ot:0,sc:null,tax:num(d.markup?.tax)||0}}
 function actCalc(a,itemQty,ctx){const hpd=num(ctx.hpd)||10;const q=a.qty==null||a.qty===''?(num(itemQty)||0):(num(a.qty)||0);const pv=num(a.prod);let hrs=0;
   switch(a.mode){case 'upd':hrs=pv>0?q/pv*hpd:0;break;case 'hrs':hrs=pv||0;break;case 'days':hrs=(pv||0)*hpd;break;default:hrs=pv>0?q/pv:0}
-  const c={labor:0,equipment:0,material:0,sub:0,trucking:0,other:0,tax:0};let mh=0;const cr=a.crew;
-  if(cr){c.labor+=(num(cr.labor)||0)*hrs;c.equipment+=(num(cr.equip)||0)*hrs;mh+=(num(cr.men)||0)*hrs}
+  const c={labor:0,equipment:0,material:0,sub:0,trucking:0,other:0,tax:0};let mh=0,otBase=0;const cr=a.crew;
+  if(cr){c.labor+=(num(cr.labor)||0)*hrs;c.equipment+=(num(cr.equip)||0)*hrs;mh+=(num(cr.men)||0)*hrs;otBase+=crewOtp(cr)*hrs}
   const res=(a.res||[]).map(r=>{const f=num(r.factor)||0;const base=r.basis==='unit'?f*q:r.basis==='hour'?f*hrs:f;const qty=base*(1+(num(r.waste)||0)/100);const cost=qty*(num(r.price)||0);
-    const k=COST_KEYS.includes(r.kind)?r.kind:'other';c[k]+=cost;const tax=r.kind==='material'&&r.tax&&ctx.tax?cost*ctx.tax/100:0;c.tax+=tax;if(k==='labor')mh+=qty;return {qty,cost,tax}});
-  const total=COST_KEYS.reduce((s,k)=>s+c[k],0)+c.tax;return {q,hrs,days:hrs/hpd,mh,c,res,total,unit:q?total/q:0}}
-function sumC(list){const c={labor:0,equipment:0,material:0,sub:0,trucking:0,other:0,tax:0};list.forEach(x=>Object.keys(c).forEach(k=>c[k]+=x.c[k]||0));return c}
+    const k=COST_KEYS.includes(r.kind)?r.kind:'other';c[k]+=cost;const tax=r.kind==='material'&&r.tax&&ctx.tax?cost*ctx.tax/100:0;c.tax+=tax;if(k==='labor'){mh+=qty;otBase+=resOtp(r)*qty}return {qty,cost,tax}});
+  const ot=otBase*(ctx.ot||0);c.labor+=ot;
+  const total=COST_KEYS.reduce((s,k)=>s+c[k],0)+c.tax;return {q,hrs,days:hrs/hpd,mh,c,res,total,ot,unit:q?total/q:0}}
 function itemCalc(it,ctx){const acts=(it.acts||[]).map(a=>actCalc(a,it.qty,ctx));const total=acts.reduce((s,a)=>s+a.total,0);const q=num(it.qty)||0;
-  return {acts,c:sumC(acts),total,mh:acts.reduce((s,a)=>s+a.mh,0),q,unit:q?total/q:0}}
-function estCtx(d){return {hpd:num(d.settings?.hpd)||10,tax:num(d.markup?.tax)||0}}
-function estCalc(d){const ctx=estCtx(d);const items=d.items.map(it=>itemCalc(it,ctx));const isBase=i=>!d.items[i].alt;
-  const base=items.filter((x,i)=>isBase(i));const cost=base.reduce((s,x)=>s+x.total,0);const m=d.markup||{};
-  const oh=cost*(num(m.oh)||0)/100,profit=(cost+oh)*(num(m.profit)||0)/100,bond=(cost+oh+profit)*(num(m.bond)||0)/100;const calcTotal=cost+oh+profit+bond;
-  const F=cost>0?calcTotal/cost:(1+(num(m.oh)||0)/100)*(1+(num(m.profit)||0)/100)*(1+(num(m.bond)||0)/100);
-  items.forEach((x,i)=>{const ov=num(d.items[i].override);x.calcUnit=x.q?r2(x.unit*F):0;x.ov=ov!=null&&x.q>0;x.unitPrice=x.ov?ov:x.calcUnit;x.price=x.q?r2(x.unitPrice*x.q):r2(x.total*F);x.margin=x.price-x.total});
-  const total=items.reduce((s,x,i)=>s+(isBase(i)?x.price:0),0),alts=items.reduce((s,x,i)=>s+(isBase(i)?0:x.price),0);
-  return {ctx,items,c:sumC(base),cost,mh:base.reduce((s,x)=>s+x.mh,0),oh,profit,bond,calcTotal,F,total,alts,adj:total-calcTotal,ret:total*(num(m.ret)||0)/100,margin:total-cost,marginPct:total?(total-cost)/total*100:0}}
+  return {acts,c:sumC(acts),total,mh:acts.reduce((s,a)=>s+a.mh,0),ot:acts.reduce((s,a)=>s+a.ot,0),q,unit:q?total/q:0}}
+/* The whole estimate:
+   direct cost (items) → indirects (from duration) → overhead + markup (simple, or by cost type;
+   compounded or not) → bond → spread into bid items → unit prices (rounded; overrides win). */
+function estCalc(d){const ctx=estCtx(d);const items=d.items.map(it=>itemCalc(it,ctx));const isBase=i=>!d.items[i].alt;const m=d.markup||{};const st=d.settings||{};
+  const bi=items.map((x,i)=>i).filter(isBase);const c=sumC(bi.map(i=>items[i]));const cost=bi.reduce((s,i)=>s+items[i].total,0);const mh=bi.reduce((s,i)=>s+items[i].mh,0);const ot=bi.reduce((s,i)=>s+items[i].ot,0);
+  // duration from crew days
+  let crewDays=0;bi.forEach(i=>items[i].acts.forEach((a,j)=>{if(d.items[i].acts[j].crew)crewDays+=a.days}));
+  const conc=Math.max(1,num(st.crews)||1);const autoDays=crewDays/conc;const days=num(st.durDays)!=null?num(st.durDays):autoDays;const weeks=days/(ctx.days||5);const months=weeks*12/52;
+  // indirects
+  const indLines=(d.ind||[]).map(l=>{const auto=l.basis==='week'?weeks:l.basis==='month'?months:l.basis==='day'?days:l.basis==='mh'?mh:l.basis==='ls'?1:null;
+    const q=l.qty!=null&&l.qty!==''?num(l.qty):auto;const rate=num(l.rate)||0;const amt=l.basis==='pct_labor'?c.labor*rate/100:l.basis==='pct_direct'?cost*rate/100:(q||0)*rate;return {auto,q,amt}});
+  const ind=indLines.reduce((s,x)=>s+x.amt,0);
+  // markup rates
+  const comp=m.compound!==false;const rate=(o,u)=>{o=(num(o)||0)/100;u=(num(u)||0)/100;return {o,u:comp?(1+o)*u:u,eff:comp?(1+o)*(1+u)-1:o+u}};
+  const R={};if(m.mode==='type'){const T=m.byType||{};MK_TYPES.forEach(k=>R[k]=rate(T[k]?.oh,T[k]?.mu));R.tax=R.material}else{const r=rate(m.oh,m.profit);[...MK_TYPES,'tax'].forEach(k=>R[k]=r)}
+  const mkOf=cc=>[...COST_KEYS,'tax'].reduce((s,k)=>s+(cc[k]||0)*R[k].eff,0);const ohOf=cc=>[...COST_KEYS,'tax'].reduce((s,k)=>s+(cc[k]||0)*R[k].o,0);
+  const bondR=(num(m.bond)||0)/100;
+  // indirect allocation
+  const carry=m.carry||{};const sel=i=>!!carry[d.items[i].id];
+  const wts=(mode)=>{let w=items.map((x,i)=>isBase(i)&&(mode!=='select'||sel(i))?Math.max(0,x.total):0);if(!w.some(v=>v>0))w=items.map((x,i)=>isBase(i)?Math.max(0,x.total):0);const W=w.reduce((a,b)=>a+b,0);return w.map(v=>W>0?v/W:0)};
+  const si=m.spreadInd||'cost',sm=m.spreadMu||'cost';const wI=wts(si==='select'?'select':'cost');const lump=si==='lump';
+  items.forEach((x,i)=>{x.ind=!isBase(i)||lump?0:ind*wI[i];x.mk0=mkOf(x.c)+x.ind*R.ind.eff;x.oh0=ohOf(x.c)+x.ind*R.ind.o});
+  const gcMk=lump?ind*R.ind.eff:0;
+  const mkBase=bi.reduce((s,i)=>s+items[i].mk0,0)+gcMk;const oh=bi.reduce((s,i)=>s+items[i].oh0,0)+(lump?ind*R.ind.o:0);const profit=mkBase-oh;
+  // markup spread
+  if(sm==='select'){const w=wts('select');const tot=bi.reduce((s,i)=>s+items[i].mk0,0);items.forEach((x,i)=>{x.mk=isBase(i)?tot*w[i]:x.mk0})}else items.forEach(x=>{x.mk=x.mk0});
+  const adj=m.adj||{};let adjSum=0;items.forEach((x,i)=>{x.adj=sm==='manual'&&isBase(i)?num(adj[d.items[i].id])||0:0;adjSum+=x.adj});
+  const bond=(cost+ind+mkBase)*bondR;const calcTotal=cost+ind+mkBase+bond;
+  items.forEach((x,i)=>{const pre=x.total+x.ind+x.mk;x.bond=pre*bondR;const calc=pre+x.bond+x.adj;const ov=num(d.items[i].override);
+    x.calcUnit=x.q?r2(calc/x.q):0;x.ov=ov!=null&&x.q>0;x.unitPrice=x.ov?ov:x.calcUnit;x.price=x.q?r2(x.unitPrice*x.q):r2(calc);x.margin=x.price-x.total-x.ind});
+  const gc=lump&&ind>0?r2((ind+gcMk)*(1+bondR)):0;
+  const total=bi.reduce((s,i)=>s+items[i].price,0)+gc,alts=items.reduce((s,x,i)=>s+(isBase(i)?0:x.price),0);
+  const F=cost>0?calcTotal/cost:1;
+  return {ctx,items,c,cost,mh,ot,ind,indLines,dur:{crewDays,conc,autoDays,days,weeks,months},oh,profit,bond,calcTotal,F,gc,adjSum,total,alts,adj:total-calcTotal,ret:total*(num(m.ret)||0)/100,margin:total-cost-ind,marginPct:total?(total-cost-ind)/total*100:0,rates:R}}
+
 // codebook prices that moved since they were copied in
 function estStale(d){const out=[];const acts=[];(d.items||[]).forEach(it=>(it.acts||[]).forEach(a=>acts.push(a)));if(d.act)acts.push(d.act);if(d.item)(d.item.acts||[]).forEach(a=>acts.push(a));
   acts.forEach(a=>{if(a.crew){const x=cbById(a.crew.id);if(x){const s=crewSnap(x);if(Math.abs(s.labor-(+a.crew.labor||0))>.004||Math.abs(s.equip-(+a.crew.equip||0))>.004||s.men!==(+a.crew.men||0))out.push({a,crew:s})}}
@@ -4519,30 +4586,12 @@ function estApplyStale(list){list.forEach(s=>{if(s.crew)s.a.crew={...s.a.crew,..
 function actFromTpl(src){const a=clone(src);a.id=newId();a.qty=null;a.res=(a.res||[]).map(r=>({...r,id:newId()}));estApplyStale(estStale({act:a}));return a}
 
 /* ---------- loading / saving ---------- */
-const estCanEdit=()=>{const b=byId(S.bids,S.est?.bidId);return !!b&&canWork(b)};
+const estCanEdit=()=>{if(S.est&&S.est.tpl)return cbEditable();const b=byId(S.bids,S.est?.bidId);return !!b&&canWork(b)};
 async function loadEstIndex(){if(!sb||!['admin','estimator','board'].includes(role()))return;
   const {data,error}=await sb.from('estimates').select('id,bid_id,version,total_cost,total_price,updated_at,updated_by_name');
   if(error){S.estMissing=/estimates|does not exist|schema cache/i.test(error.message||'');return}S.estMissing=false;S.estIndex=data||[];schedule()}
 const estOf=bidId=>S.estIndex.find(e=>e.bid_id===bidId);
-async function estOpen(bidId){closeModal();S.view='estimate';S.estBid=bidId;S.est={bidId,loading:true};render();window.scrollTo(0,0);
-  try{const {data,error}=await sb.from('estimates').select('*').eq('bid_id',bidId).maybeSingle();if(error)throw error;
-    S.est={bidId,row:data?{id:data.id,version:data.version,updated_at:data.updated_at,updated_by_name:data.updated_by_name}:null,data:data?estNorm(data.data):null,sel:null,tab:(S.est&&S.est.tab)||'items',dirty:false};
-    if(S.est.data)S.est.sel=S.est.data.items[0]?.id||null}
-  catch(e){S.est={bidId,err:/estimates|does not exist|schema cache/i.test(errMsg(e))?'missing':errMsg(e)}}render()}
-async function estCreate(mode,src){const b=byId(S.bids,S.est.bidId);if(!b)return;let d=estBlank();
-  try{if(mode==='scopes')scopeItems(b).forEach(s=>d.items.push(estNewItem(d,{desc:s.name,group:s.name})));
-    if(mode==='copy'){if(!src)throw new Error('Pick an estimate to copy.');const r=await run(sb.from('estimates').select('data').eq('id',src).maybeSingle());if(!r)throw new Error('That estimate isn’t available.');d=estNorm(clone(r.data))}
-    const R=estCalc(d);const row={id:newId(),bid_id:b.id,data:d,version:1,total_cost:r2(R.cost),total_price:r2(R.total),updated_by_name:myName()};
-    await run(sb.from('estimates').insert(row));S.est={bidId:b.id,row:{id:row.id,version:1,updated_at:new Date().toISOString(),updated_by_name:myName()},data:d,sel:d.items[0]?.id||null,tab:'items',dirty:false};
-    loadEstIndex();render()}catch(e){toast(errMsg(e))}}
 function estTouch(){const E=S.est;if(!E||!E.row)return;E.dirty=true;E.saveErr=null;clearTimeout(E._t);E._t=setTimeout(estSave,1200)}
-async function estSave(){const E=S.est;if(!E||!E.row||!E.dirty||E.saving||E.conflict||!estCanEdit())return;clearTimeout(E._t);E.saving=true;E.dirty=false;estStatus();
-  const R=estCalc(E.data);const v=E.row.version;
-  try{const rows=await run(sb.from('estimates').update({data:E.data,version:v+1,total_cost:r2(R.cost),total_price:r2(R.total),updated_by_name:myName()}).eq('id',E.row.id).eq('version',v).select('id,version,updated_at'));
-    if(!rows||!rows.length){E.conflict=true;E.dirty=true}else{E.row.version=v+1;E.row.updated_at=rows[0].updated_at||new Date().toISOString();E.row.updated_by_name=myName();
-      const ix=estOf(E.bidId);if(ix)Object.assign(ix,{version:v+1,total_cost:r2(R.cost),total_price:r2(R.total),updated_at:E.row.updated_at,updated_by_name:myName()})}}
-  catch(e){E.dirty=true;E.saveErr=errMsg(e)}
-  E.saving=false;if(E.conflict&&S.view==='estimate')render();else estStatus();if(E.dirty&&!E.conflict&&!E.saveErr)E._t=setTimeout(estSave,1200)}
 function estStatusText(){const E=S.est;if(!E||!E.row)return '';if(E.conflict)return '<b class="bad-t">Not saved — someone else changed this estimate</b>';if(E.saveErr)return `<b class="bad-t">Not saved: ${esc(E.saveErr)}</b> <button class="linkbtn" data-act="est-retry">Try again</button>`;
   if(E.saving)return 'Saving…';if(E.dirty)return 'Unsaved changes…';const t=E.row.updated_at?new Date(E.row.updated_at):null;return `Saved${t?' '+t.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):''}${E.row.updated_by_name?' by '+esc(E.row.updated_by_name):''}`}
 function estStatus(){const el=$('#est-status');if(el)el.innerHTML=estStatusText()}
@@ -4558,7 +4607,7 @@ function epGet(o,p){return String(p).split('.').reduce((x,k)=>x==null?x:x[k],o)}
 function epSet(o,p,v){const ks=String(p).split('.');const last=ks.pop();const t=ks.reduce((x,k)=>x[k],o);t[last]=v}
 function epParent(o,p){const ks=String(p).split('.');const i=+ks.pop();return {arr:epGet(o,ks.join('.')),i}}
 const epId=p=>'ep-'+String(p).replace(/\./g,'_');
-function epIn(p,v,o={}){const ro=EC().ro?' disabled':'';return `<input class="field${o.n?' num':''}${o.cls?' '+o.cls:''}" id="${epId(p)}" data-ep="${p}"${o.n?' data-ept="n" type="number" step="any" inputmode="decimal"':''}${o.list?` list="${o.list}"`:''} value="${esc(v??'')}"${o.ph!=null?` placeholder="${esc(o.ph)}"`:''}${o.title?` title="${esc(o.title)}"`:''}${o.aria?` aria-label="${esc(o.aria)}"`:''}${ro}>`}
+function epIn(p,v,o={}){const ro=EC().ro?' disabled':'';return `<input class="field${o.n?' num':''}${o.cls?' '+o.cls:''}" id="${epId(p)}" data-ep="${p}"${o.n?' data-ept="n" inputmode="decimal" autocomplete="off"':''}${o.list?` list="${o.list}"`:''} value="${esc(v??'')}"${o.ph!=null?` placeholder="${esc(o.ph)}"`:''}${o.title?` title="${esc(o.title)}"`:''}${o.aria?` aria-label="${esc(o.aria)}"`:''}${o.attrs||''}${ro}>`}
 function epSel(p,v,opts,o={}){const ro=EC().ro?' disabled':'';return `<select class="field${o.cls?' '+o.cls:''}" id="${epId(p)}" data-ep="${p}"${o.aria?` aria-label="${esc(o.aria)}"`:''}${ro}>${opts.map(([k,l])=>`<option value="${k}"${String(v)===String(k)?' selected':''}>${esc(l)}</option>`).join('')}</select>`}
 // searchable list of codebook items for "add a cost"
 let EST_PICK={key:null,html:'',map:new Map()};
@@ -4569,87 +4618,7 @@ function estPick(){const key=S.codebook.length+':'+(S.lastLoaded?.getTime?.()||0
 const crewOpts=()=>cbList('crew').filter(x=>x.active!==false).sort((a,b)=>String(a.description).localeCompare(b.description));
 
 /* ---------- activity card (shared by estimates and the activity codebook) ---------- */
-function actCardHtml(a,p,r,itemQty,o={}){const ec=EC();const ro=ec.ro;const crews=crewOpts();const q=r.q;
-  const crewSel=`<select class="field est-crewsel" data-epcrew="${p}" aria-label="Crew"${ro?' disabled':''}><option value="">No crew</option>${a.crew&&!crews.some(c=>c.id===a.crew.id)?`<option value="${esc(a.crew.id)}" selected>${esc(a.crew.name)} (removed)</option>`:''}${crews.map(c=>`<option value="${c.id}"${a.crew&&a.crew.id===c.id?' selected':''}>${esc(c.description)} — ${money2(cbCost(c))}/hr</option>`).join('')}</select>`;
-  const stale=new Set(estStale({act:a}).map(s=>s.r||'crew'));
-  const unitOf=x=>esc(x.unit||(x.basis==='hour'?'HR':''));
-  const resRow=(x,i)=>{const rp=`${p}.res.${i}`;const rr=r.res[i]||{qty:0,cost:0};const kind=RES_KINDS.find(k=>k[0]===x.kind)||RES_KINDS[5];const cb=x.cb?cbById(x.cb):null;
-    return `<tr><td><span class="est-tag k-${x.kind}">${kind[2]}</span></td>
-      <td class="est-rdesc">${x.cb?`<div class="est-cbname">${esc(x.desc)}${x.code?` <span class="dim small">${esc(x.code)}</span>`:''}${!cb?' <span class="pill bad">removed from codebook</span>':''}</div>`:epIn(rp+'.desc',x.desc,{ph:`${kind[1]} description`,aria:'Description'})}${x.src?`<div><span class="pill info est-src" title="Price from a vendor quote — type a new price to replace it">Quote · ${esc(x.src.v)}</span></div>`:''}</td>
-      <td class="est-fac">${epIn(rp+'.factor',x.factor,{n:1,aria:'Quantity factor'})}${epSel(rp+'.basis',x.basis,BASIS,{aria:'Basis'})}</td>
-      <td class="r num small est-q">${qtyFmt(rr.qty)} ${x.cb?unitOf(x):epIn(rp+'.unit',x.unit,{cls:'est-unit',ph:'unit',aria:'Unit',list:'cb-units'})}</td>
-      <td class="est-w">${x.kind==='material'?epIn(rp+'.waste',x.waste,{n:1,ph:'0',aria:'Waste %',title:'Waste %'}):''}</td>
-      <td class="est-p">${epIn(rp+'.price',x.price,{n:1,ph:'0.00',aria:'Unit price',cls:stale.has(x)?'est-stale':''})}${stale.has(x)?`<span class="est-stale-dot" title="Codebook price is now ${money2(cbCost(cb))}">●</span>`:''}</td>
-      <td class="r num"><b>${money(rr.cost+rr.tax)}</b>${rr.tax?`<div class="dim small">incl. ${money2(rr.tax)} tax</div>`:''}</td>
-      <td>${ro?'':`<button class="rm" data-act="ep-del" data-p="${rp}" aria-label="Remove">×</button>`}</td></tr>`};
-  const P=EST_PICK;
-  return `<div class="est-act" id="act-${a.id}">
-    <div class="est-act-h">${o.noHead?'':`${epIn(p+'.code',a.code,{cls:'est-code',ph:'Code',aria:'Activity code'})}${epIn(p+'.desc',a.desc,{cls:'est-adesc',ph:'Activity — e.g. Excavate & lay pipe',aria:'Activity description'})}`}
-      ${o.noHead?'':`<span class="est-aq">${epIn(p+'.qty',a.qty,{n:1,ph:itemQty!=null?qtyFmt(itemQty):'Qty',aria:'Activity quantity',title:'Leave blank to use the bid item quantity'})}${epIn(p+'.unit',a.unit,{cls:'est-unit',ph:o.unit||'unit',list:'cb-units',aria:'Unit'})}</span>`}
-      ${ro||o.noHead?'':`<span class="est-actbtns"><button class="btn sm ghost" data-act="ep-mv" data-p="${p}" data-d="-1" title="Move up" aria-label="Move up">↑</button><button class="btn sm ghost" data-act="ep-mv" data-p="${p}" data-d="1" title="Move down" aria-label="Move down">↓</button><button class="btn sm ghost" data-act="ep-dup" data-p="${p}" title="Duplicate">⧉</button>${!ec.tpl&&cbEditable()?`<button class="btn sm ghost" data-act="ep-tocb" data-p="${p}" data-k="activity" title="Save to the Activities codebook">→ Codebook</button>`:''}<button class="btn sm ghost danger-t${S.epArm===p?' arm':''}" data-act="ep-del" data-p="${p}">${S.epArm===p?'Delete?':'×'}</button></span>`}</div>
-    <div class="est-prod"><label>Crew ${crewSel}${stale.has('crew')?'<span class="est-stale-dot" title="Crew rates changed in the codebook">●</span>':''}</label>
-      <label>Production ${epIn(p+'.prod',a.prod,{n:1,ph:'0',aria:'Production',cls:'est-prodv'})}${epSel(p+'.mode',a.mode||'uph',PROD_MODES.map(([k,l])=>[k,k==='uph'||k==='upd'?l.replace('units',a.unit||o.unit||'units'):l]),{aria:'Production basis'})}</label>
-      <span class="est-hrs">${r.hrs?`<b>${fmtN(r.hrs,1)}</b> crew hrs · <b>${fmtN(r.days,2)}</b> days${r.mh?` · <b>${fmtN(r.mh,1)}</b> MH`:''}`:'<span class="dim">Set a production rate to get hours</span>'}${a.crew?` · <span class="dim">${esc(a.crew.name)} ${money2((+a.crew.labor||0)+(+a.crew.equip||0))}/hr</span>`:''}</span></div>
-    ${a.res.length?`<div class="est-rtable"><table><thead><tr><th></th><th>Cost</th><th>Qty × basis</th><th class="r">Total qty</th><th>Waste</th><th>Unit $</th><th class="r">Cost</th><th></th></tr></thead><tbody>${a.res.map(resRow).join('')}</tbody></table></div>`:''}
-    ${ro?'':`<div class="est-addres"><input class="field" list="est-cbl" data-epadd="${p}" placeholder="+ Add labor, equipment or material from the codebook — type to search" aria-label="Add a cost from the codebook">
-      <select class="field" data-epcustom="${p}" aria-label="Add a custom cost"><option value="">+ Custom…</option>${RES_KINDS.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></div>`}
-    <div class="est-act-f">${COST_KEYS.filter(k=>r.c[k]).map(k=>`<span>${COST_LABEL[k]} <b>${money(r.c[k])}</b></span>`).join('')}${r.c.tax?`<span>Tax <b>${money(r.c.tax)}</b></span>`:''}
-      <span class="est-tot">Activity <b>${money(r.total)}</b>${q?` · <b>${money2(r.unit)}</b>/${esc(a.unit||o.unit||'unit')}`:''}</span></div></div>`}
-
 /* ---------- estimate page ---------- */
-function vEstimate(){const E=S.est;const b=byId(S.bids,S.estBid);
-  if(!b)return `<div class="empty"><b>That bid isn’t available.</b><button class="btn" data-act="nav" data-v="pipeline">Back to pipeline</button></div>`;
-  const back=`<button class="linkbtn est-back" data-act="est-back">← Back to bid</button>`;
-  if(!E||E.loading)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="auth"><div class="spin"></div></div>`;
-  if(E.err==='missing'||S.estMissing)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="notice"><b>One setup step:</b> run <b>update-14-estimates.sql</b> in Supabase (SQL Editor → New query → paste → Run), then refresh.</div>`;
-  if(E.err)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="err">${esc(E.err)}</div>`;
-  if(!E.row){const work=canWork(b);const others=S.estIndex.filter(x=>x.bid_id!==b.id).map(x=>({x,b:byId(S.bids,x.bid_id)})).filter(o=>o.b).sort((p,q)=>String(q.x.updated_at).localeCompare(String(p.x.updated_at)));
-    return `<div class="head"><div>${back}<h1>Start the estimate</h1><p>${esc(b.name)}${b.location?' · '+esc(b.location):''}</p></div></div>
-    ${work?`<div class="est-start">
-      <button class="est-opt" data-act="est-create" data-v="blank"><b>Blank estimate</b><span>Start with an empty list of bid items.</span></button>
-      <button class="est-opt" data-act="est-create" data-v="scopes"${scopeItems(b).length?'':' disabled'}><b>From this bid’s scopes</b><span>${scopeItems(b).length?`One bid item per scope (${scopeItems(b).length}) — ${esc(scopeItems(b).slice(0,4).map(s=>s.name).join(', '))}${scopeItems(b).length>4?'…':''}`:'This bid has no scopes yet.'}</span></button>
-      <div class="est-opt"><b>Copy another estimate</b><span>Similar job? Start from its bid items, activities and prices.</span>
-        <div class="est-copy"><select class="field" id="est-copysrc"><option value="">${others.length?'Pick a bid…':'No other estimates yet'}</option>${others.map(o=>`<option value="${o.x.id}">${esc(o.b.name)} — ${money(o.x.total_price)}</option>`).join('')}</select><button class="btn primary" data-act="est-create" data-v="copy"${others.length?'':' disabled'}>Copy</button></div></div></div>
-      <p class="hint">Bid items are built from activities. Each activity uses a crew and a production rate to get hours, then adds materials, subs, trucking and other costs from your codebooks.</p>`
-    :'<div class="empty"><b>No estimate yet</b>The estimators on this bid start it.</div>'}`}
-  const d=E.data;const R=estCalc(d);const ro=EC().ro;estPick();const stale=estStale(d);
-  const tabs=[['items','Bid items'],['res','Resources'],['quotes','Quotes'],['sum','Markup & totals'],['prop','Proposal']];
-  const kpi=(l,v,s,c)=>`<div class="est-kpi${c?' '+c:''}"><span>${l}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
-  const body=E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='sum'?estSumView(d,R,b,ro):estItemsView(d,R,ro);
-  return `<div class="head est-headrow"><div>${back}<h1>${esc(b.name)}</h1><p class="small"><b>Estimate</b> · <span id="est-status">${estStatusText()}</span></p></div>
-    <div class="tools">${stale.length&&!ro?`<button class="btn" data-act="est-stale" title="Codebook prices changed since they were added">↻ Update ${stale.length} price${stale.length===1?'':'s'}</button>`:''}<button class="btn" data-act="est-export">Export to Excel</button></div></div>
-  ${E.conflict?`<div class="err est-conflict"><b>Someone else saved this estimate while you were working.</b> Your last changes haven’t been saved. <button class="btn sm" data-act="est-reload">Load their version</button> <button class="btn sm danger" data-act="est-keep">Keep mine (overwrite theirs)</button></div>`:''}
-  ${ro&&!E.conflict?'<div class="notice">View only — you’re not on this bid’s estimating team.</div>':''}
-  <div class="est-kpis">${kpi('Direct cost',money(R.cost),`${fmtN(R.mh,0)} man-hours`)}${kpi('Markup',money(R.total-R.cost),R.cost?`${fmtN((R.total/R.cost-1)*100,1)}% on cost`:'')}${kpi('Bid total',money(R.total),R.alts?`+ ${money(R.alts)} alternates`:`${d.items.filter(i=>!i.alt).length} bid items`,'main')}${kpi('Margin',R.total?fmtN(R.marginPct,1)+'%':'—','of bid total')}${kpi('Retainage held',money(R.ret),`${fmtN(num(d.markup.ret)||0,1)}%`)}</div>
-  <div class="seg est-tabs" role="tablist">${tabs.map(([k,l])=>`<button class="${E.tab===k?'on':''}" data-act="est-tab" data-v="${k}" role="tab">${l}</button>`).join('')}</div>
-  ${body}${EST_PICK.html}<datalist id="cb-units">${CB_UNITS.map(u=>`<option value="${u}">`).join('')}</datalist>`}
-function estItemsView(d,R,ro){const E=S.est;let si=d.items.findIndex(i=>i.id===E.sel);if(si<0&&d.items.length){si=0;E.sel=d.items[0].id}
-  const tpls=cbList('biditem').filter(x=>x.active!==false).sort((a,b)=>String(a.code||a.description).localeCompare(String(b.code||b.description),undefined,{numeric:true}));
-  const list=`<div class="panel est-list" id="est-list" data-keepscroll><table><thead><tr><th>Item</th><th>Description</th><th class="r">Qty</th><th class="r">Cost</th><th class="r">Unit price</th><th class="r">Total</th></tr></thead><tbody>
-    ${d.items.map((it,i)=>{const x=R.items[i];return `<tr class="click${i===si?' on':''}${it.alt?' est-alt':''}" data-act="est-sel" data-id="${it.id}" tabindex="0"><td class="num">${esc(it.code)}</td><td class="est-ldesc">${esc(it.desc)||'<span class="dim">Untitled</span>'}${it.alt?' <span class="pill info">Alt</span>':''}${x.ov?' <span class="pill warn" title="Unit price overridden">Override</span>':''}${!it.acts.length?' <span class="pill na">No activities</span>':''}</td>
-      <td class="r num small">${qtyFmt(it.qty)} ${esc(it.unit||'')}</td><td class="r num small">${money(x.total)}</td><td class="r num">${money2(x.unitPrice)}</td><td class="r num"><b>${money(x.price)}</b></td></tr>`}).join('')||`<tr><td colspan="6"><div class="empty"><b>No bid items yet</b>${ro?'':'Add one below.'}</div></td></tr>`}</tbody>
-    <tfoot><tr><td></td><td><b>Base bid</b></td><td></td><td class="r num">${money(R.cost)}</td><td></td><td class="r num"><b>${money(R.total)}</b></td></tr>${R.alts?`<tr><td></td><td class="dim">Alternates</td><td></td><td></td><td></td><td class="r num dim">${money(R.alts)}</td></tr>`:''}</tfoot></table>
-    ${ro?'':`<div class="est-listadd"><button class="btn primary sm" data-act="ep-add-item">+ Bid item</button>${tpls.length?`<select class="field sm" data-epitem><option value="">+ From bid item codebook…</option>${tpls.map(t=>`<option value="${t.id}">${esc((t.code?t.code+' · ':'')+t.description)}</option>`).join('')}</select>`:''}</div>`}</div>`;
-  return `<div class="est-grid">${list}<div class="est-detail">${si>=0?estItemHtml(d,si,R.items[si],ro):`<div class="panel pad empty"><b>Add your first bid item</b>Then build it from activities — a crew and production rate, plus materials, subs and trucking.</div>`}</div></div>`}
-function estItemHtml(d,i,x,ro){const it=d.items[i];const p=`items.${i}`;const scopes=scopeItems(byId(S.bids,S.est.bidId)||{}).map(s=>s.name);
-  const tpls=cbList('activity').filter(t=>t.active!==false).sort((a,b)=>String(a.description).localeCompare(b.description));
-  return `<div class="panel pad est-item">
-    <div class="est-item-h"><div class="fg">
-      <label class="f">Item #${epIn(p+'.code',it.code,{aria:'Item number'})}</label>
-      <label class="f s3">Description${epIn(p+'.desc',it.desc,{ph:'e.g. 8″ PVC sanitary sewer'})}</label>
-      <label class="f">Quantity${epIn(p+'.qty',it.qty,{n:1,cls:it.qty==null||it.qty===''?'est-need':''})}</label>
-      <label class="f">Unit${epIn(p+'.unit',it.unit,{list:'cb-units'})}</label>
-      <label class="f">Scope${epIn(p+'.group',it.group,{list:'est-scopes',ph:'Optional'})}<datalist id="est-scopes">${scopes.map(s=>`<option value="${esc(s)}">`).join('')}</datalist></label>
-      <label class="f">Unit price override${epIn(p+'.override',it.override,{n:1,ph:x.calcUnit?money2(x.calcUnit).replace('$',''):'Calculated',title:'Leave blank to use the calculated unit price'})}</label>
-    </div>
-    <div class="est-item-opts"><label class="check small"><input type="checkbox" data-ep="${p}.alt" data-ept="b"${it.alt?' checked':''}${ro?' disabled':''}> Alternate — priced, but not in the base bid</label>
-      ${ro?'':`<span class="est-actbtns"><button class="btn sm" data-act="ep-mv" data-p="${p}" data-d="-1">↑ Up</button><button class="btn sm" data-act="ep-mv" data-p="${p}" data-d="1">↓ Down</button><button class="btn sm" data-act="ep-dup" data-p="${p}">Duplicate</button>${cbEditable()?`<button class="btn sm" data-act="ep-tocb" data-p="${p}" data-k="biditem" title="Save to the Bid items codebook">Save to codebook</button>`:''}<button class="btn sm danger${S.epArm===p?' arm':''}" data-act="ep-del" data-p="${p}">${S.epArm===p?'Click again to delete':'Delete'}</button></span>`}</div></div>
-    <div class="est-isum"><div><span>Cost</span><b>${money(x.total)}</b></div><div><span>Unit cost</span><b>${x.q?money2(x.unit):'—'}</b></div><div><span>Unit price</span><b>${x.q?money2(x.unitPrice):'—'}</b>${x.ov?`<small>calc. ${money2(x.calcUnit)}</small>`:''}</div><div><span>Total price</span><b>${money(x.price)}</b></div><div><span>Margin</span><b class="${x.margin<0?'bad-t':''}">${money(x.margin)}</b></div><div><span>Man-hours</span><b>${fmtN(x.mh,1)}</b></div></div>
-    ${COST_KEYS.some(k=>x.c[k])||x.c.tax?`<div class="est-mix">${[...COST_KEYS,'tax'].filter(k=>x.c[k]).map(k=>`<span class="k-${k}" style="flex:${x.c[k]}" title="${COST_LABEL[k]} ${money(x.c[k])}"></span>`).join('')}</div><div class="est-mixl small">${[...COST_KEYS,'tax'].filter(k=>x.c[k]).map(k=>`<span><i class="k-${k}"></i>${COST_LABEL[k]} ${money(x.c[k])}</span>`).join('')}</div>`:''}
-    <label class="f" style="margin-top:10px">Notes${epIn(p+'.notes',it.notes,{ph:'Assumptions, inclusions, exclusions for this item'})}</label></div>
-  <h3 class="est-h3">Activities <span class="dim small">${it.acts.length}</span></h3>
-  ${it.acts.map((a,j)=>actCardHtml(a,`${p}.acts.${j}`,x.acts[j],it.qty,{unit:it.unit})).join('')||'<div class="panel pad dim small">No activities yet. Add one to price this item.</div>'}
-  ${ro?'':`<div class="est-addact"><button class="btn primary sm" data-act="ep-add-act" data-p="${p}">+ Activity</button>${tpls.length?`<select class="field sm" data-epact="${p}"><option value="">+ From activity codebook…</option>${tpls.map(t=>`<option value="${t.id}">${esc((t.code?t.code+' · ':'')+t.description)}</option>`).join('')}</select>`:''}</div>`}`}
 function estResView(d,R){const map=new Map();const crews=new Map();
   d.items.forEach((it,i)=>{if(it.alt)return;it.acts.forEach((a,j)=>{const ar=R.items[i].acts[j];if(a.crew){const k=a.crew.id;const c=crews.get(k)||{name:a.crew.name,hrs:0,cost:0};c.hrs+=ar.hrs;c.cost+=((+a.crew.labor||0)+(+a.crew.equip||0))*ar.hrs;crews.set(k,c)}
     a.res.forEach((r,n)=>{const rr=ar.res[n];const k=r.cb||r.kind+'|'+normH(r.desc)+'|'+r.unit;const o=map.get(k)||{kind:r.kind,code:r.code,desc:r.desc||'(no description)',unit:r.unit||(r.basis==='hour'?'HR':''),qty:0,cost:0,tax:0};o.qty+=rr.qty;o.cost+=rr.cost;o.tax+=rr.tax;map.set(k,o)})})});
@@ -4660,22 +4629,6 @@ function estResView(d,R){const map=new Map();const crews=new Map();
     <div class="sec"><div class="sec-h"><h2>Crews</h2><span>Hours across the base bid</span></div><div class="panel scroll"><table><thead><tr><th>Crew</th><th class="r">Crew hours</th><th class="r">Days</th><th class="r">Cost</th></tr></thead><tbody>
     ${[...crews.values()].sort((a,b)=>b.cost-a.cost).map(c=>`<tr><td>${esc(c.name)}</td><td class="r num">${fmtN(c.hrs,1)}</td><td class="r num">${fmtN(c.hrs/(num(d.settings.hpd)||10),1)}</td><td class="r num"><b>${money(c.cost)}</b></td></tr>`).join('')||'<tr><td colspan="4"><div class="empty">No crews used yet.</div></td></tr>'}</tbody></table></div>
     <div class="panel pad" style="margin-top:14px"><div class="est-isum"><div><span>Man-hours</span><b>${fmtN(R.mh,0)}</b></div><div><span>Labor</span><b>${money(R.c.labor)}</b></div><div><span>Equipment</span><b>${money(R.c.equipment)}</b></div></div></div></div></div>`}
-function estSumView(d,R,b,ro){const m=d.markup;const p='markup';const line=(l,v,cls,s)=>`<div class="li${cls?' '+cls:''}"><span>${l}${s?` <span class="dim small">${s}</span>`:''}</span><b class="num">${v}</b></div>`;
-  return `<div class="grid2"><div class="sec"><div class="sec-h"><h2>Markup</h2><span>Applied to the base bid, then spread into unit prices</span></div><div class="panel pad"><div class="fg est-mk">
-    <label class="f">Sales tax on materials %${epIn(p+'.tax',m.tax,{n:1,ph:'0'})}</label><label class="f">Overhead %${epIn(p+'.oh',m.oh,{n:1,ph:'0'})}</label>
-    <label class="f">Profit %${epIn(p+'.profit',m.profit,{n:1,ph:'0'})}</label><label class="f">Bond %${epIn(p+'.bond',m.bond,{n:1,ph:'0'})}</label>
-    <label class="f">Retainage %${epIn(p+'.ret',m.ret,{n:1,ph:'0'})}</label><label class="f">Hours per crew day${epIn('settings.hpd',d.settings.hpd,{n:1,ph:'10'})}</label></div>
-    <p class="hint">Sales tax goes on materials marked taxable and is part of cost. Overhead is on cost, profit on cost + overhead, bond on everything above. Retainage doesn’t change the price — it’s what the GC holds back until the end.</p></div>
-    ${ro?'':`<div class="panel pad" style="margin-top:14px"><b>Send to the bid</b><p class="small dim" style="margin:4px 0 10px">Puts the base bid total into the bid’s proposal amount.</p><div class="adders" style="margin:0"><button class="btn primary sm" data-act="est-push" data-v="amount_with">Base — with site improvements</button><button class="btn sm" data-act="est-push" data-v="amount_without">Base — without</button></div>
-      <p class="hint">Now on the bid: with ${money(num(b.amount_with))} · without ${money(num(b.amount_without))}</p></div>`}</div>
-  <div class="sec"><div class="sec-h"><h2>Totals</h2><span>Base bid</span></div><div class="panel pad est-sum"><div class="list">
-    ${COST_KEYS.filter(k=>R.c[k]).map(k=>line(COST_LABEL[k],money2(R.c[k]))).join('')}${R.c.tax?line('Sales tax',money2(R.c.tax),'',`${fmtN(m.tax,2)}% on taxable materials`):''}
-    ${line('Direct cost',money2(R.cost),'est-sub')}${line('Overhead',money2(R.oh),'',`${fmtN(num(m.oh)||0,2)}%`)}${line('Profit',money2(R.profit),'',`${fmtN(num(m.profit)||0,2)}%`)}${R.bond?line('Bond',money2(R.bond),'',`${fmtN(num(m.bond)||0,2)}%`):''}
-    ${line('Calculated total',money2(R.calcTotal),'est-sub')}${Math.abs(R.adj)>=.01?line('Unit price rounding & overrides',(R.adj>0?'+':'−')+money2(Math.abs(R.adj)),'',''):''}
-    ${line('Bid total',money2(R.total),'est-grand')}${line('Margin',`${money2(R.margin)} · ${fmtN(R.marginPct,1)}%`)}${line('Retainage held',money2(R.ret),'',`${fmtN(num(m.ret)||0,2)}% until closeout`)}
-    ${R.alts?line('Alternates (not in base bid)',money2(R.alts)):''}</div></div>
-    ${d.items.filter(i=>i.alt).length?`<div class="panel scroll" style="margin-top:14px"><table><thead><tr><th>Alternate</th><th class="r">Qty</th><th class="r">Unit price</th><th class="r">Total</th></tr></thead><tbody>${d.items.map((it,i)=>it.alt?`<tr><td>${esc(it.code)} · ${esc(it.desc)}</td><td class="r num">${qtyFmt(it.qty)} ${esc(it.unit)}</td><td class="r num">${money2(R.items[i].unitPrice)}</td><td class="r num"><b>${money(R.items[i].price)}</b></td></tr>`:'').join('')}</tbody></table></div>`:''}</div></div>`}
-
 /* ---------- actions ---------- */
 function epAddRes(p,res){const ec=EC();const a=epGet(ec.root,p);a.res.push(res);ec.redraw();setTimeout(()=>{const i=a.res.length-1;const el=document.getElementById(epId(`${p}.res.${i}.${res.cb?'factor':'desc'}`));if(el){el.focus();el.select?.()}},0)}
 async function epToCodebook(p,k){const ec=EC();const src=epGet(ec.root,p);if(!src)return;const ctx=ec.ctx;
@@ -4686,16 +4639,17 @@ async function epToCodebook(p,k){const ec=EC();const src=epGet(ec.root,p);if(!sr
 async function estPush(field){const E=S.est;const R=estCalc(E.data);try{await run(sb.from('bids').update({[field]:r2(R.total)}).eq('id',E.bidId));await loadTable('bids');toast(`Bid total ${money(R.total)} sent to the bid`)}catch(e){toast(errMsg(e))}}
 async function estExport(){let X;try{X=await loadXLSX()}catch(e){toast(errMsg(e));return}const E=S.est,d=E.data,R=estCalc(d);const b=byId(S.bids,E.bidId);
   const wb=X.utils.book_new();const put=(name,rows,w)=>{const ws=X.utils.aoa_to_sheet(rows);ws['!cols']=w.map(x=>({wch:x}));X.utils.book_append_sheet(wb,ws,name)};
-  put('Bid items',[['Item','Description','Quantity','Unit','Unit price','Total price','Cost','Unit cost','Labor','Equipment','Material','Subcontract','Trucking','Other','Sales tax','Man-hours','Alternate'],
-    ...d.items.map((it,i)=>{const x=R.items[i];return [it.code,it.desc,num(it.qty)??'',it.unit,r2(x.unitPrice),r2(x.price),r2(x.total),r2(x.unit),r2(x.c.labor),r2(x.c.equipment),r2(x.c.material),r2(x.c.sub),r2(x.c.trucking),r2(x.c.other),r2(x.c.tax),+x.mh.toFixed(1),it.alt?'Yes':'']})],[8,40,10,6,11,13,13,11,11,11,11,11,11,11,10,10,9]);
+  const secName=it=>secOf(d,it.sec)?.name||'';
+  put('Bid items',[['Section','Item','Description','Quantity','Unit','Unit price','Total price','Cost','Unit cost','Labor','Equipment','Material','Subcontract','Trucking','Other','Sales tax','Man-hours','Alternate'],
+    ...d.items.map((it,i)=>({it,i})).sort((a,c)=>d.sections.findIndex(s=>s.id===a.it.sec)-d.sections.findIndex(s=>s.id===c.it.sec)).map(({it,i})=>{const x=R.items[i];return [secName(it),it.code,it.desc,num(it.qty)??'',it.unit,r2(x.unitPrice),r2(x.price),r2(x.total),r2(x.unit),r2(x.c.labor),r2(x.c.equipment),r2(x.c.material),r2(x.c.sub),r2(x.c.trucking),r2(x.c.other),r2(x.c.tax),+x.mh.toFixed(1),it.alt?'Yes':'']})],[22,8,40,10,6,11,13,13,11,11,11,11,11,11,11,10,10,9]);
   const det=[['Item','Activity','Type','Code','Description','Quantity','Unit','Unit cost','Cost','Crew hours','Man-hours']];
   d.items.forEach((it,i)=>{det.push([it.code,'','Bid item','',it.desc,num(it.qty)??'',it.unit,'',r2(R.items[i].total),'',+R.items[i].mh.toFixed(1)]);
     it.acts.forEach((a,j)=>{const ar=R.items[i].acts[j];det.push([it.code,a.code||String(j+1),'Activity','',a.desc,+ar.q.toFixed(3),a.unit||it.unit,'',r2(ar.total),+ar.hrs.toFixed(2),+ar.mh.toFixed(1)]);
       if(a.crew)det.push([it.code,a.code||String(j+1),'Crew',a.crew.code||'',a.crew.name,+ar.hrs.toFixed(2),'HR',r2((+a.crew.labor||0)+(+a.crew.equip||0)),r2(((+a.crew.labor||0)+(+a.crew.equip||0))*ar.hrs),'','']);
       a.res.forEach((r,n)=>{const rr=ar.res[n];det.push([it.code,a.code||String(j+1),COST_LABEL[r.kind]||'Other',r.code||'',r.desc,+rr.qty.toFixed(3),r.unit||(r.basis==='hour'?'HR':''),num(r.price)??'',r2(rr.cost+rr.tax),'',''])})})});
   put('Detail',det,[8,9,11,10,40,11,6,10,12,10,10]);
-  const m=d.markup;put('Summary',[['Project',b?.name||''],['Exported',todayStr()],[],...COST_KEYS.filter(k=>R.c[k]).map(k=>[COST_LABEL[k],r2(R.c[k])]),...(R.c.tax?[['Sales tax ('+(num(m.tax)||0)+'%)',r2(R.c.tax)]]:[]),['Direct cost',r2(R.cost)],
-    ['Overhead ('+(num(m.oh)||0)+'%)',r2(R.oh)],['Profit ('+(num(m.profit)||0)+'%)',r2(R.profit)],['Bond ('+(num(m.bond)||0)+'%)',r2(R.bond)],['Calculated total',r2(R.calcTotal)],['Rounding & overrides',r2(R.adj)],['Bid total',r2(R.total)],['Margin',r2(R.margin)],['Retainage ('+(num(m.ret)||0)+'%)',r2(R.ret)],['Alternates',r2(R.alts)],['Man-hours',Math.round(R.mh)]],[30,16]);
+  const m=d.markup;put('Summary',[['Project',b?.name||''],['Exported',todayStr()],[],...COST_KEYS.filter(k=>R.c[k]).map(k=>[COST_LABEL[k],r2(R.c[k])]),...(R.c.tax?[['Sales tax ('+(num(m.tax)||0)+'%)',r2(R.c.tax)]]:[]),['Direct cost',r2(R.cost)],...(R.ind?[['Indirects ('+fmtN(R.dur.weeks,1)+' weeks)',r2(R.ind)]]:[]),...(R.ot?[['  (overtime premium in labor)',r2(R.ot)]]:[]),
+    ['Overhead',r2(R.oh)],['Markup / profit',r2(R.profit)],...(R.gc?[[(m.gcName||'General conditions')+' (lump-sum line)',r2(R.gc)]]:[]),['Bond ('+(num(m.bond)||0)+'%)',r2(R.bond)],['Calculated total',r2(R.calcTotal)],['Rounding & overrides',r2(R.adj)],['Bid total',r2(R.total)],['Margin',r2(R.margin)],['Retainage ('+(num(m.ret)||0)+'%)',r2(R.ret)],['Alternates',r2(R.alts)],['Man-hours',Math.round(R.mh)]],[30,16]);
   X.writeFile(wb,`estimate-${String(b?.name||'bid').replace(/[^\w-]+/g,'-').slice(0,40)}-${todayStr()}.xlsx`)}
 
 /* ---------- activity & bid item templates in the codebook ---------- */
@@ -4722,9 +4676,9 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   if(!a.startsWith('est-')&&!a.startsWith('ep-'))return;const ec=EC();const p=t.dataset.p;
   if(S.epArm&&!(a==='ep-del'&&p===S.epArm)){S.epArm=null}
   switch(a){
-    case 'est-open':if(M&&M.kind==='bid'&&!M.draft._new)estOpen(t.dataset.id||M.draft.id);else estOpen(t.dataset.id);break;
-    case 'est-back':{const id=S.estBid;estSave();S.view='pipeline';render();if(id&&byId(S.bids,id))openBid(id);break}
-    case 'est-create':if(t.dataset.v==='copy')estCreate('copy',$('#est-copysrc')?.value);else estCreate(t.dataset.v);break;
+    case 'est-open':S.estFrom='pipeline';estOpen(t.dataset.id||(M&&M.draft&&M.draft.id),'pipeline');break;
+    case 'est-back':{const id=S.estBid;const E0=S.est;estSave();if(E0&&E0.tpl){S.view='estimates';S.estsTab='tpl';render();break}if(S.estFrom==='estimates'){S.view='estimates';render();break}S.view='pipeline';render();if(id&&byId(S.bids,id))openBid(id);break}
+    case 'est-create':if(t.dataset.v==='copy')estCreate('copy',$('#est-copysrc')?.value);else if(t.dataset.v==='tpl')estCreate('tpl',$('#est-tplsrc')?.value);else estCreate(t.dataset.v);break;
     case 'est-tab':S.est.tab=t.dataset.v;render();break;
     case 'est-sel':S.est.sel=t.dataset.id;render();if(window.innerWidth<1100)$('.est-detail')?.scrollIntoView({block:'start',behavior:'smooth'});break;
     case 'est-retry':S.est.saveErr=null;S.est.dirty=true;estSave();break;
@@ -4742,7 +4696,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'ep-tocb':epToCodebook(p,t.dataset.k);break;
   }});
 document.addEventListener('input',e=>{const t=e.target;if(!t.dataset.ep||t.type==='checkbox')return;const ec=EC();if(!ec.root||ec.ro)return;
-  const v=t.dataset.ept==='n'?(t.value===''?null:num(t.value)):t.value;epSet(ec.root,t.dataset.ep,v);
+  const v=t.dataset.ept==='n'?(t.value.trim()===''?null:num(t.value.replace(/[,$\s]/g,''))):t.value;epSet(ec.root,t.dataset.ep,v);
   if(/\.res\.\d+\.price$/.test(t.dataset.ep)){const r=epGet(ec.root,t.dataset.ep.replace(/\.price$/,''));if(r)delete r.src}
   ec.redraw()});
 document.addEventListener('change',e=>{const t=e.target;const ec=EC();if(!ec.root||ec.ro)return;
@@ -4753,8 +4707,6 @@ document.addEventListener('change',e=>{const t=e.target;const ec=EC();if(!ec.roo
   if(t.dataset.epact){const it=epGet(ec.root,t.dataset.epact);const tp=cbById(t.value);if(tp&&cbD(tp).act){const a=actFromTpl(cbD(tp).act);a.code=tp.code||a.code||'';a.desc=tp.description||a.desc;if(!a.unit)a.unit=cbD(tp).unit||it.unit||'';it.acts.push(a);ec.redraw()}return}
   if(t.dataset.epitem!=null){const tp=cbById(t.value);if(!tp||!cbD(tp).item)return;const d=ec.root;const src=cbD(tp).item;const it=clone(src);it.id=newId();it.code=estNextCode(d);it.desc=it.desc||tp.description;it.unit=cbD(tp).unit||it.unit||'LS';it.qty=null;it.alt=false;it.override=null;
     it.acts=it.acts.map(a=>actFromTpl(a));d.items.push(it);S.est.sel=it.id;ec.redraw();setTimeout(()=>document.getElementById(epId(`items.${d.items.length-1}.qty`))?.focus(),0);return}});
-// keyboard: Enter moves on from a field instead of doing nothing
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.dataset?.ep&&e.target.tagName==='INPUT'&&S.view==='estimate'&&!M){e.preventDefault();e.target.blur()}});
 
 /* =====================================================================
    QUOTES FOLDER — compare vendor quotes line by line inside an estimate.
@@ -4843,10 +4795,10 @@ function estQuotesView(d,R,ro){const E=S.est;const b=byId(S.bids,E.bidId);const 
       <td class="r num small">${r.missing?'':qtyFmt(r.q)+' '+esc(r.unit)}</td>
       <td class="r qf-estc${pc==='est'?' qf-picked':''}"><label class="qf-cell"><input type="radio" name="qfp-${i}" data-qpick="${esc(r.rk)}" value="est"${pc==='est'?' checked':''}${dis}><span class="num">${r.missing?'':money2(r.price)}</span></label><small class="dim">${r.missing?'':money(r.price*(r.q||0))}</small></td>
       ${C.cols.map((c,j)=>{const cell=c.cells[i];if(c.lump)return `<td class="qf-lumpcell${pc===c.q.id?' qf-picked':''}"><label class="qf-cell"><input type="radio" name="qfp-${i}" data-qpick="${esc(r.rk)}" value="${c.q.id}"${pc===c.q.id?' checked':''}${dis}><span class="dim small">in lump sum</span></label></td>`;
-        return `<td class="${pc===c.q.id?'qf-picked':''}${C.low[i]===j?' qf-low':''}"><label class="qf-cell"><input type="radio" name="qfp-${i}" data-qpick="${esc(r.rk)}" value="${c.q.id}"${pc===c.q.id?' checked':''}${dis||cell.p==null?' disabled':''}><input class="field num" id="qp-${c.q.id}-${i}" data-qp="${c.q.id}|${esc(r.rk)}" type="number" step="any" inputmode="decimal" value="${cell.p??''}" placeholder="—"${dis}${r.missing?' disabled':''}></label><small class="dim">${cell.ext!=null?money(cell.ext):''}</small></td>`}).join('')}${ro?'':'<td></td>'}</tr>`}).join('')
+        return `<td class="${pc===c.q.id?'qf-picked':''}${C.low[i]===j?' qf-low':''}"><label class="qf-cell"><input type="radio" name="qfp-${i}" data-qpick="${esc(r.rk)}" value="${c.q.id}"${pc===c.q.id?' checked':''}${dis||cell.p==null?' disabled':''}><input class="field num" id="qp-${c.q.id}-${i}" data-qp="${c.q.id}|${esc(r.rk)}" inputmode="decimal" value="${cell.p??''}" placeholder="—"${dis}${r.missing?' disabled':''}></label><small class="dim">${cell.ext!=null?money(cell.ext):''}</small></td>`}).join('')}${ro?'':'<td></td>'}</tr>`}).join('')
     ||`<tr><td colspan="${4+C.cols.length}"><div class="empty small">No lines yet — add the estimate’s materials, subs or trucking that go in this package.</div></td></tr>`;
-  const foot=`<tr class="qf-f"><td>Freight / other charges</td><td></td><td></td>${C.cols.map(c=>c.lump?'<td></td>':`<td><input class="field num" id="qx-${c.q.id}" data-qm="${c.q.id}|extra" type="number" step="any" value="${c.meta.extra??''}" placeholder="0"${dis}></td>`).join('')}${ro?'':'<td></td>'}</tr>
-    <tr class="qf-f"><td>Lump sum</td><td></td><td></td>${C.cols.map(c=>c.lump?`<td><input class="field num" id="qa-${c.q.id}" data-qa="${c.q.id}" type="number" step="any" value="${c.q.amount??''}" placeholder="Total"${dis}></td>`:'<td></td>').join('')}${ro?'':'<td></td>'}</tr>
+  const foot=`<tr class="qf-f"><td>Freight / other charges</td><td></td><td></td>${C.cols.map(c=>c.lump?'<td></td>':`<td><input class="field num" id="qx-${c.q.id}" data-qm="${c.q.id}|extra" inputmode="decimal" value="${c.meta.extra??''}" placeholder="0"${dis}></td>`).join('')}${ro?'':'<td></td>'}</tr>
+    <tr class="qf-f"><td>Lump sum</td><td></td><td></td>${C.cols.map(c=>c.lump?`<td><input class="field num" id="qa-${c.q.id}" data-qa="${c.q.id}" inputmode="decimal" value="${c.q.amount??''}" placeholder="Total"${dis}></td>`:'<td></td>').join('')}${ro?'':'<td></td>'}</tr>
     <tr class="qf-t"><td><b>Quoted total</b></td><td></td><td class="r num"><b>${money(C.estTotal)}</b></td>${C.cols.map(c=>`<td class="r num"><b>${money(c.total)}</b>${c.missing?`<div class="qf-miss">${c.missing} line${c.missing===1?'':'s'} not quoted</div>`:''}</td>`).join('')}${ro?'':'<td></td>'}</tr>
     <tr class="qf-t"><td>Complete total <span class="dim small">(lines not quoted at the estimate price)</span></td><td></td><td></td>${C.cols.map((c,j)=>`<td class="r num${j===C.lowPkg?' qf-lowpkg':''}">${money(c.complete)}${j===C.lowPkg&&C.cols.length>1?' <span class="pill good">Low</span>':''}</td>`).join('')}${ro?'':'<td></td>'}</tr>`;
   return chips+`<div class="panel pad qf-panel"><div class="qf-top"><div><h2 class="qf-h">${esc(pk)}</h2><div class="dim small">${C.rows.length} line${C.rows.length===1?'':'s'} · ${C.cols.length} vendor${C.cols.length===1?'':'s'} · estimate ${money(C.estTotal)} · your picks ${money(C.sel)}</div></div>
@@ -4912,13 +4864,13 @@ const propLines=t=>String(t||'').split(/\n+/).map(x=>x.trim()).filter(Boolean);
 // what the client sees for each line, depending on the format
 function propRows(d,R,P){const base=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>!o.it.alt);
   if(P.format==='total')return {total:R.total,groups:[]};
-  const gname=o=>String(o.it.group||'').trim()||'General';
-  const groups=[];base.forEach(o=>{const n=gname(o);let g=groups.find(x=>x.name===n);if(!g)groups.push(g={name:n,items:[],total:0});g.items.push(o);g.total+=o.x.price});
+  const groups=(d.sections||[]).map(s=>{const items=base.filter(o=>o.it.sec===s.id);return {name:s.name||'General',items,total:items.reduce((a,o)=>a+o.x.price,0)}}).filter(g=>g.items.length);
+  if(R.gc){const nm=d.markup.gcName||'General conditions';groups.unshift({name:nm,items:[{it:{code:'',desc:nm,qty:1,unit:'LS'},x:{price:R.gc,unitPrice:R.gc,q:1}}],total:R.gc})}
   return {total:R.total,groups}}
 function propPaper(d,R,b,P){const L=propLib();const co=S.settings.general?.companyName||CFG.companyName||'';const logo=BRAND.loginLogo||'';
   const to=P.to.map(id=>byId(S.clients,id)).filter(Boolean);const PR=propRows(d,R,P);const alts=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>o.it.alt);
   const list=(arr,extra)=>{const all=[...arr,...propLines(extra)];return all.length?`<ul>${all.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''};
-  const table=P.format==='total'?`<table class="pp-t"><tbody><tr class="pp-grand"><td>Lump sum — ${esc([...new Set(d.items.filter(i=>!i.alt).map(i=>String(i.group||'').trim()).filter(Boolean))].join(', ')||'site work as described')}</td><td class="r">${money2(PR.total)}</td></tr></tbody></table>`
+  const table=P.format==='total'?`<table class="pp-t"><tbody><tr class="pp-grand"><td>Lump sum — ${esc((d.sections||[]).filter(s=>d.items.some(i=>!i.alt&&i.sec===s.id)).map(s=>s.name).join(', ')||'site work as described')}</td><td class="r">${money2(PR.total)}</td></tr></tbody></table>`
     :P.format==='scope'?`<table class="pp-t"><thead><tr><th>Scope</th><th class="r">Amount</th></tr></thead><tbody>${PR.groups.map(g=>`<tr><td>${esc(g.name)}</td><td class="r">${money2(g.total)}</td></tr>`).join('')}</tbody><tfoot><tr class="pp-grand"><td>Total base bid</td><td class="r">${money2(PR.total)}</td></tr></tfoot></table>`
     :`<table class="pp-t"><thead><tr><th>Item</th><th>Description</th>${P.showQty?'<th class="r">Qty</th><th>Unit</th><th class="r">Unit price</th>':''}<th class="r">Amount</th></tr></thead><tbody>
       ${PR.groups.map(g=>`${PR.groups.length>1||g.name!=='General'?`<tr class="pp-g"><td colspan="${P.showQty?6:3}">${esc(g.name)}</td></tr>`:''}${g.items.map(o=>`<tr><td>${esc(o.it.code)}</td><td>${esc(o.it.desc)}</td>${P.showQty?`<td class="r">${qtyFmt(o.it.qty)}</td><td>${esc(o.it.unit||'')}</td><td class="r">${o.x.q?money2(o.x.unitPrice):''}</td>`:''}<td class="r">${money2(o.x.price)}</td></tr>`).join('')}
@@ -4949,7 +4901,7 @@ function estPropView(d,R,b,ro){const P=propData();const L=propLib();const dis=ro
       <div class="fg pr-fg"><label class="f">Date${pin('date',{date:1})}</label><label class="f">Valid for (days)${pin('valid',{n:1})}</label></div></div>
     <div class="panel pad"><h3 class="pr-h">Pricing</h3><div class="radio pr-fmt">${[['unit','Unit prices — every bid item'],['scope','Lump sum by scope'],['total','One lump sum']].map(([k,l])=>`<label><input type="radio" name="prfmt" data-prf value="${k}"${P.format===k?' checked':''}${dis}> ${l}</label>`).join('')}</div>
       ${P.format==='unit'?`<label class="check small"><input type="checkbox" data-prb="showQty"${P.showQty?' checked':''}${dis}> Show quantities and unit prices</label><label class="check small"><input type="checkbox" data-prb="subtotals"${P.subtotals?' checked':''}${dis}> Subtotal by scope</label>`:''}
-      <p class="hint">Scopes come from each bid item’s <b>Scope</b> field. Alternates are always listed separately.</p></div>
+      <p class="hint">Scopes are the estimate’s sections. Alternates are always listed separately.</p></div>
     <div class="panel pad"><h3 class="pr-h">Opening</h3><label class="f">Intro${ptx('intro','A sentence or two before the pricing')}</label><label class="f">Basis of the proposal${ptx('basis','Plans dated …, Addenda …')}</label></div>
     <div class="panel pad"><h3 class="pr-h">Inclusions</h3>${chk('incl',L.incl)}<label class="f">More, one per line${ptx('inclX','Anything else that’s included')}</label></div>
     <div class="panel pad"><h3 class="pr-h">Exclusions</h3>${chk('excl',L.excl)}<label class="f">More, one per line${ptx('exclX','Anything else that’s excluded')}</label></div>
@@ -4984,6 +4936,466 @@ document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data||
   if(t.dataset.prto!=null){const p=P();p.to=p.to.filter(x=>x!==t.value);if(t.checked)p.to.push(t.value);estTouch();render();return}
   if(t.dataset.prf!=null){P().format=t.value;estTouch();render();return}
   if(t.dataset.prb){P()[t.dataset.prb]=t.checked;estTouch();render();return}});
+
+/* =====================================================================
+   ESTIMATE STRUCTURE v2 — Sections (scopes) → Bid items → Activities → Costs.
+   Items stay in one flat list (d.items) and point at their section with
+   item.sec; d.sections sets the section order. Codes auto-number
+   (400 / 410 / 410.10) and can be typed over.
+   ===================================================================== */
+function estNorm(d){d=d&&typeof d==='object'?d:{};const old=!(d.v>=3),hadSched=!!(d.settings&&d.settings.sched);const b=estBlank();d.settings={...b.settings,...(d.settings||{})};if(old&&!hadSched){d.settings.sched=null;d.settings.crews=d.settings.crews||1}d.markup={...b.markup,...(d.markup||{})};
+  d.markup.byType={...b.markup.byType,...(d.markup.byType||{})};MK_TYPES.forEach(k=>{d.markup.byType[k]={oh:null,mu:null,...(d.markup.byType[k]||{})}});d.ind=Array.isArray(d.ind)?d.ind:[];if(old&&!d.markup.mode)d.markup.mode='simple';d.items=Array.isArray(d.items)?d.items:[];
+  d.items.forEach(it=>{it.acts=Array.isArray(it.acts)?it.acts:[];it.acts.forEach(a=>{a.res=Array.isArray(a.res)?a.res:[]})});
+  // v1 → v2: items were grouped by their Scope text; that becomes the section
+  if(!Array.isArray(d.sections)){d.sections=[];const by=new Map();d.items.forEach(it=>{const g=String(it.group||'').trim()||'General';let s=by.get(g);if(!s){s={id:newId(),code:String((by.size+1)*100),name:g,notes:''};by.set(g,s);d.sections.push(s)}it.sec=s.id})}
+  d.items.forEach(it=>{if(!it.sec||!d.sections.some(s=>s.id===it.sec)){let g=d.sections.find(s=>s.name==='General');if(!g){g={id:newId(),code:estNextSecCode(d),name:'General',notes:''};d.sections.push(g)}it.sec=g.id}});
+  d.v=3;return d}
+const secOf=(d,id)=>d.sections.find(s=>s.id===id);
+const itemsOf=(d,secId)=>d.items.filter(i=>i.sec===secId);
+function estNextSecCode(d){const n=(d.sections||[]).map(s=>parseInt(s.code,10)).filter(x=>!isNaN(x));return String(n.length?Math.floor(Math.max(...n)/100)*100+100:100)}
+function estNextItemCode(d,secId){const s=secOf(d,secId);const base=parseInt(s?.code,10);const n=itemsOf(d,secId).map(i=>parseInt(i.code,10)).filter(x=>!isNaN(x));
+  if(isNaN(base)&&!n.length)return estNextCode(d);return String(Math.max(isNaN(base)?0:base,...n)+10)}
+function estNextActCode(it){const n=(it.acts||[]).map(a=>{const m=/\.(\d+)$/.exec(a.code||'');return m?+m[1]:NaN}).filter(x=>!isNaN(x));return `${it.code||''}.${n.length?Math.max(...n)+10:10}`}
+function estRenumber(d){d.sections.forEach((s,k)=>{s.code=String((k+1)*100);itemsOf(d,s.id).forEach((it,i)=>{it.code=String((k+1)*100+(i+1)*10);it.acts.forEach((a,j)=>{a.code=`${it.code}.${(j+1)*10}`})})})}
+// copy a section's items (from an estimate or a section template) into d under a new section
+function estAddSection(d,src,items,after){const s={id:newId(),code:estNextSecCode(d),name:src?.name||'New section',notes:src?.notes||''};
+  const k=after!=null?after+1:d.sections.length;d.sections.splice(k,0,s);
+  (items||[]).forEach((it0,n)=>{const it=clone(it0);it.id=newId();it.sec=s.id;it.code=String((parseInt(s.code,10)||0)+(n+1)*10);(it.acts||[]).forEach((a,j)=>{a.code=`${it.code}.${(j+1)*10}`});it.acts=(it.acts||[]).map(a=>({...a,id:newId(),res:(a.res||[]).map(r=>({...r,id:newId()}))}));d.items.push(it)});return s}
+function estAddItem(d,secId,o={}){const it=estNewItem(d,{code:estNextItemCode(d,secId),sec:secId,qty:null,unit:'',...o});let at=-1;d.items.forEach((x,i)=>{if(x.sec===secId)at=i});d.items.splice(at<0?d.items.length:at+1,0,it);return it}
+
+/* ---------- open / create / save ---------- */
+async function estOpen(bidId,from){closeModal();S.view='estimate';S.estBid=bidId;const tab=S.est&&S.est.bidId===bidId?S.est.tab:'build';S.estFrom=from||S.estFrom||'pipeline';S.est={bidId,loading:true};render();window.scrollTo(0,0);
+  try{const {data,error}=await sb.from('estimates').select('*').eq('bid_id',bidId).maybeSingle();if(error)throw error;
+    S.est={bidId,row:data?{id:data.id,version:data.version,updated_at:data.updated_at,updated_by_name:data.updated_by_name}:null,data:data?estNorm(data.data):null,sel:null,tab:tab||'build',dirty:false};
+    if(S.est.data&&S.est.data.sections[0])S.est.sel={t:'sec',id:S.est.data.sections[0].id}}
+  catch(e){S.est={bidId,err:/estimates|does not exist|schema cache/i.test(errMsg(e))?'missing':errMsg(e)}}render()}
+function tplSecData(D,name){const sid=newId();return {sections:[{...(D.sec||{name}),id:sid,code:(D.sec&&D.sec.code)||'100'}],items:(D.items||[]).map(it=>({...it,sec:sid})),markup:D.markup,settings:D.settings}}
+function estFromTpl(tpl){const D=cbD(tpl);const d=estNorm(clone(tpl.book==='section'?tplSecData(D,tpl.description):(D.est||{})));
+  const idm={};d.items.forEach(it=>{const nid=newId();idm[it.id]=nid;it.id=nid;it.acts.forEach(a=>{a.id=newId();a.res.forEach(r=>{r.id=newId();delete r.src})})});
+  ['carry','adj'].forEach(k=>{const o=d.markup[k]||{};d.markup[k]=Object.fromEntries(Object.entries(o).filter(([id])=>idm[id]).map(([id,v])=>[idm[id],v]))});
+  (d.ind||[]).forEach(l=>l.id=newId());estApplyStale(estStale(d));delete d.pkgs;delete d.prop;return d}
+async function estCreate(mode,src){const b=byId(S.bids,S.est.bidId);if(!b)return;let d=estNorm(estBlank());
+  try{if(mode==='scopes'){scopeItems(b).forEach((s,k)=>d.sections.push({id:newId(),code:String((k+1)*100),name:s.name,notes:''}))}
+    if(mode==='copy'){if(!src)throw new Error('Pick an estimate to copy.');const r=await run(sb.from('estimates').select('data').eq('id',src).maybeSingle());if(!r)throw new Error('That estimate isn’t available.');d=estNorm(clone(r.data));delete d.prop}
+    if(mode==='tpl'){const t=cbById(src);if(!t)throw new Error('Pick a master template.');d=estFromTpl(t)}
+    if(!d.sections.length)d.sections.push({id:newId(),code:'100',name:'General',notes:''});
+    const R=estCalc(d);const row={id:newId(),bid_id:b.id,data:d,version:1,total_cost:r2(R.cost),total_price:r2(R.total),updated_by_name:myName()};
+    await run(sb.from('estimates').insert(row));
+    S.est={bidId:b.id,row:{id:row.id,version:1,updated_at:new Date().toISOString(),updated_by_name:myName()},data:d,sel:{t:'sec',id:d.sections[0].id},tab:'build',dirty:false};
+    if(mode==='tpl'){S.est.qtyMode=true;S.est.open=new Set(d.sections.map(s=>s.id));estOpenSave()}
+    loadEstIndex();render()}catch(e){toast(errMsg(e))}}
+// a master or section template opened in the builder (saved back to the codebook)
+function estOpenTpl(id){const t=cbById(id);if(!t)return;closeModal();const D=cbD(t);
+  const d=estNorm(clone(t.book==='section'?tplSecData(D,t.description):(D.est||{})));estApplyStale(estStale(d));
+  S.view='estimate';S.estBid=null;S.est={tpl:t.id,tplBook:t.book,tplName:t.description,bidId:null,row:{id:t.id,version:0,updated_at:t.updated_at},data:d,sel:d.sections[0]?{t:'sec',id:d.sections[0].id}:null,tab:'build',dirty:false};render();window.scrollTo(0,0)}
+async function estSave(){const E=S.est;if(!E||!E.row||!E.dirty||E.saving||E.conflict||!estCanEdit())return;clearTimeout(E._t);E.saving=true;E.dirty=false;estStatus();
+  const R=estCalc(E.data);const v=E.row.version;
+  try{if(E.tpl){const data=E.tplBook==='section'?{sec:{name:E.data.sections[0]?.name||E.tplName,notes:E.data.sections[0]?.notes||''},items:E.data.items,markup:E.data.markup,settings:E.data.settings}:{est:E.data};
+      await run(sb.from('codebook').update({data,cost:r2(R.cost),description:String(E.tplName||'').trim()||'Template'}).eq('id',E.tpl));E.row.updated_at=new Date().toISOString();E.row.updated_by_name=myName();clearTimeout(estSave._cb);estSave._cb=setTimeout(()=>loadTable('codebook'),800)}
+    else{const rows=await run(sb.from('estimates').update({data:E.data,version:v+1,total_cost:r2(R.cost),total_price:r2(R.total),updated_by_name:myName()}).eq('id',E.row.id).eq('version',v).select('id,version,updated_at'));
+      if(!rows||!rows.length){E.conflict=true;E.dirty=true}else{E.row.version=v+1;E.row.updated_at=rows[0].updated_at||new Date().toISOString();E.row.updated_by_name=myName();
+        const ix=estOf(E.bidId);if(ix)Object.assign(ix,{version:v+1,total_cost:r2(R.cost),total_price:r2(R.total),updated_at:E.row.updated_at,updated_by_name:myName()})}}}
+  catch(e){E.dirty=true;E.saveErr=errMsg(e)}
+  E.saving=false;if(E.conflict&&S.view==='estimate')render();else estStatus();if(E.dirty&&!E.conflict&&!E.saveErr)E._t=setTimeout(estSave,1200)}
+
+/* ---------- estimate page ---------- */
+function vEstimate(){const E=S.est;const tpl=!!(E&&E.tpl);const b=tpl?null:byId(S.bids,S.estBid);
+  if(!tpl&&!b)return `<div class="empty"><b>That bid isn’t available.</b><button class="btn" data-act="nav" data-v="estimates">Back to estimates</button></div>`;
+  const back=`<button class="linkbtn est-back" data-act="est-back">← ${tpl?'Templates':S.estFrom==='estimates'?'Estimates':'Back to bid'}</button>`;
+  if(!E||E.loading)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="auth"><div class="spin"></div></div>`;
+  if(E.err==='missing'||S.estMissing)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="notice"><b>One setup step:</b> run <b>update-14-estimates.sql</b> in Supabase (SQL Editor → New query → paste → Run), then refresh.</div>`;
+  if(E.err)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="err">${esc(E.err)}</div>`;
+  if(!E.row)return estStartView(b,back);
+  const d=E.data;const R=estCalc(d);const ro=EC().ro;estPick();const stale=estStale(d);
+  const tabs=tpl?[['build','Build'],['ind','Schedule & indirects'],['res','Resources'],['sum','Default markup']]:[['build','Build'],['ind','Schedule & indirects'],['res','Resources'],['quotes','Quotes'],['sum','Markup & totals'],['prop','Proposal']];
+  if(!tabs.some(t=>t[0]===E.tab))E.tab='build';
+  const kpi=(l,v,s,c)=>`<div class="est-kpi${c?' '+c:''}"><span>${l}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
+  const body=E.tab==='ind'?estIndView(d,R,ro):E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='sum'?estSumView(d,R,b||{},ro):estBuildView(d,R,ro);
+  const title=tpl?`<input class="field est-tplname" id="est-tplname" data-tplname value="${esc(E.tplName||'')}" placeholder="Template name"${ro?' disabled':''}>`:`<h1>${esc(b.name)}</h1>`;
+  return `<div class="head est-headrow"><div>${back}${title}<p class="small"><b>${tpl?(E.tplBook==='section'?'Section template':'Master template'):'Estimate'}</b> · <span id="est-status">${estStatusText()}</span></p></div>
+    <div class="tools">${stale.length&&!ro?`<button class="btn" data-act="est-stale" title="Codebook prices changed since they were added">↻ Update ${stale.length} price${stale.length===1?'':'s'}</button>`:''}${tpl?'':'<button class="btn" data-act="est-export">Export to Excel</button>'}${!tpl&&cbEditable()?'<button class="btn" data-act="est-savetpl" data-v="estimate">Save as master template</button>':''}</div></div>
+  ${E.conflict?`<div class="err est-conflict"><b>Someone else saved this estimate while you were working.</b> Your last changes haven’t been saved. <button class="btn sm" data-act="est-reload">Load their version</button> <button class="btn sm danger" data-act="est-keep">Keep mine (overwrite theirs)</button></div>`:''}
+  ${ro&&!E.conflict?`<div class="notice">View only — ${tpl?'only admins change templates':'you’re not on this bid’s estimating team'}.</div>`:''}
+  ${tpl?'<div class="notice est-tplnote">This is a template. It’s priced at today’s codebook rates; quantities here are “typical”. Estimates started from it get their own copy.</div>':''}
+  <div class="est-kpis">${kpi('Direct cost',money(R.cost),`${fmtN(R.mh,0)} man-hours${R.ot?' · '+money(R.ot)+' OT':''}`)}${kpi('Indirects',money(R.ind),R.ind?`${fmtN(R.dur.weeks,1)} weeks`:'none yet')}${kpi('Markup',money(R.total-R.cost-R.ind),R.cost?`${fmtN((R.total-R.cost-R.ind)/(R.cost+R.ind||1)*100,1)}% on cost`:'')}${kpi('Bid total',money(R.total),R.alts?`+ ${money(R.alts)} alternates`:`${d.sections.length} section${d.sections.length===1?'':'s'} · ${(n=>n+' bid item'+(n===1?'':'s'))(d.items.filter(i=>!i.alt).length)}`,'main')}${kpi('Margin',R.total?fmtN(R.marginPct,1)+'%':'—','of bid total')}${kpi('Retainage held',money(R.ret),`${fmtN(num(d.markup.ret)||0,1)}%`)}</div>
+  <div class="seg est-tabs" role="tablist">${tabs.map(([k,l])=>`<button class="${E.tab===k?'on':''}" data-act="est-tab" data-v="${k}" role="tab">${l}</button>`).join('')}</div>
+  ${body}${EST_PICK.html}<datalist id="cb-units">${CB_UNITS.map(u=>`<option value="${u}">`).join('')}</datalist>${estCtxMenu(d)}`}
+function estStartView(b,back){const work=canWork(b);const others=S.estIndex.filter(x=>x.bid_id!==b.id).map(x=>({x,b:byId(S.bids,x.bid_id)})).filter(o=>o.b).sort((p,q)=>String(q.x.updated_at).localeCompare(String(p.x.updated_at)));
+  const tpls=cbList('estimate').filter(t=>t.active!==false).sort((a,c)=>String(a.description).localeCompare(c.description));const sc=scopeItems(b);
+  return `<div class="head"><div>${back}<h1>Start the estimate</h1><p>${esc(b.name)}${b.location?' · '+esc(b.location):''}</p></div></div>
+    ${work?`<div class="est-start">
+      <div class="est-opt"><b>From a master template</b><span>Sections, bid items, activities and production rates ready to go — then punch in your quantities.</span>
+        <div class="est-copy"><select class="field" id="est-tplsrc"><option value="">${tpls.length?'Pick a template…':'No master templates yet'}</option>${tpls.map(t=>`<option value="${t.id}">${esc(t.description)}</option>`).join('')}</select><button class="btn primary" data-act="est-create" data-v="tpl"${tpls.length?'':' disabled'}>Start</button></div></div>
+      <button class="est-opt" data-act="est-create" data-v="scopes"${sc.length?'':' disabled'}><b>From this bid’s scopes</b><span>${sc.length?`One section per scope (${sc.length}) — ${esc(sc.slice(0,4).map(s=>s.name).join(', '))}${sc.length>4?'…':''}`:'This bid has no scopes yet.'}</span></button>
+      <button class="est-opt" data-act="est-create" data-v="blank"><b>Blank estimate</b><span>Start with one empty section.</span></button>
+      <div class="est-opt"><b>Copy another estimate</b><span>Similar job? Start from its sections, items, activities and prices.</span>
+        <div class="est-copy"><select class="field" id="est-copysrc"><option value="">${others.length?'Pick a bid…':'No other estimates yet'}</option>${others.map(o=>`<option value="${o.x.id}">${esc(o.b.name)} — ${money(o.x.total_price)}</option>`).join('')}</select><button class="btn primary" data-act="est-create" data-v="copy"${others.length?'':' disabled'}>Copy</button></div></div></div>`
+    :'<div class="empty"><b>No estimate yet</b>The estimators on this bid start it.</div>'}`}
+
+/* ---------- build: outline (left) + sheet (right) ---------- */
+const EOPEN_KEY='bp-estopen-';
+function estOpenSet(){const E=S.est;if(!E.open){let ids=null;try{ids=JSON.parse(localStorage.getItem(EOPEN_KEY+(E.tpl||E.bidId))||'null')}catch(e){}E.open=new Set(ids||E.data.sections.map(s=>s.id))}return E.open}
+function estOpenSave(){const E=S.est;try{localStorage.setItem(EOPEN_KEY+(E.tpl||E.bidId),JSON.stringify([...(E.open||[])]))}catch(e){}}
+function estSelResolve(d){let s=S.est.sel;if(typeof s==='string')s=S.est.sel={t:'item',id:s};if(!s)return null;
+  if(s.t==='sec'){const k=d.sections.findIndex(x=>x.id===s.id);return k<0?null:{t:'sec',k,o:d.sections[k],p:`sections.${k}`}}
+  if(s.t==='item'){const i=d.items.findIndex(x=>x.id===s.id);return i<0?null:{t:'item',i,o:d.items[i],p:`items.${i}`}}
+  for(let i=0;i<d.items.length;i++){const j=d.items[i].acts.findIndex(a=>a.id===s.id);if(j>=0)return {t:'act',i,j,o:d.items[i].acts[j],it:d.items[i],p:`items.${i}.acts.${j}`}}return null}
+function estLevel(lv){const E=S.est,d=E.data;E.open=new Set(lv==='sec'?[]:lv==='items'?d.sections.map(s=>s.id):[...d.sections.map(s=>s.id),...d.items.map(i=>i.id)]);estOpenSave();render()}
+function estBuildView(d,R,ro){const E=S.est;const open=estOpenSet();const sel=E.sel||{};const g=(p,v,col,o={})=>epIn(p,v,{...o,attrs:` data-grid="eo" data-col="${col}"`});
+  const secTot=new Map();d.items.forEach((it,i)=>{const x=R.items[i];const t=secTot.get(it.sec)||{cost:0,price:0,alt:0,mh:0};if(it.alt)t.alt+=x.price;else{t.cost+=x.total;t.price+=x.price;t.mh+=x.mh}secTot.set(it.sec,t)});
+  const dots=(t,id)=>ro?'':`<button class="eo-dots" data-act="eo-menu" data-t="${t}" data-id="${id}" aria-label="More">⋯</button>`;
+  let rows='';
+  d.sections.forEach((s,k)=>{const sp=`sections.${k}`;const t=secTot.get(s.id)||{cost:0,price:0,alt:0};const op=open.has(s.id);const its=d.items.map((it,i)=>({it,i})).filter(o=>o.it.sec===s.id);
+    rows+=`<tr class="eo-sec${sel.id===s.id?' sel':''}" data-act="eo-sel" data-t="sec" data-id="${s.id}"><td class="eo-code"><button class="eo-tg" data-act="eo-tg" data-id="${s.id}" aria-label="${op?'Collapse':'Expand'}">${op?'▾':'▸'}</button>${g(sp+'.code',s.code,'code',{cls:'eo-c',aria:'Section code'})}</td>
+      <td class="eo-dc">${g(sp+'.name',s.name,'desc',{cls:'eo-d',ph:'Section name',aria:'Section name'})}<span class="eo-cnt">${its.length}</span></td><td></td><td></td><td class="r num">${money(t.cost)}</td><td></td><td class="r num"><b>${money(t.price)}</b></td><td class="eo-more">${dots('sec',s.id)}</td></tr>`;
+    if(!op)return;
+    its.forEach(({it,i})=>{const x=R.items[i];const ip=`items.${i}`;const io=open.has(it.id);const blank=it.qty==null||it.qty==='';
+      rows+=`<tr class="eo-item${sel.id===it.id?' sel':''}${it.alt?' alt':''}${E.qtyMode&&blank?' need':''}" data-act="eo-sel" data-t="item" data-id="${it.id}"><td class="eo-code"><button class="eo-tg" data-act="eo-tg" data-id="${it.id}" aria-label="${io?'Collapse':'Expand'}">${it.acts.length?(io?'▾':'▸'):'<span class="eo-dot">·</span>'}</button>${g(ip+'.code',it.code,'code',{cls:'eo-c',aria:'Item number'})}</td>
+        <td class="eo-dc">${g(ip+'.desc',it.desc,'desc',{cls:'eo-d',ph:'Bid item',aria:'Bid item description'})}${it.alt?'<span class="pill info">Alt</span>':''}${x.ov?'<span class="pill warn">Override</span>':''}</td>
+        <td>${g(ip+'.qty',it.qty,'qty',{n:1,cls:'eo-q'+(blank?' est-need':''),ph:blank?'Qty':'',aria:'Quantity'})}</td><td>${g(ip+'.unit',it.unit,'unit',{cls:'eo-u',list:'cb-units',aria:'Unit'})}</td>
+        <td class="r num">${money(x.total)}</td><td class="r num">${x.q?money2(x.unitPrice):''}</td><td class="r num"><b>${money(x.price)}</b></td><td class="eo-more">${dots('item',it.id)}</td></tr>`;
+      if(!io)return;
+      it.acts.forEach((a,j)=>{const ar=x.acts[j];const ap=`${ip}.acts.${j}`;
+        rows+=`<tr class="eo-act${sel.id===a.id?' sel':''}" data-act="eo-sel" data-t="act" data-id="${a.id}"><td class="eo-code">${g(ap+'.code',a.code,'code',{cls:'eo-c',aria:'Activity code'})}</td>
+          <td class="eo-dc">${g(ap+'.desc',a.desc,'desc',{cls:'eo-d',ph:'Activity',aria:'Activity description'})}</td><td>${g(ap+'.qty',a.qty,'qty',{n:1,cls:'eo-q',ph:it.qty!=null&&it.qty!==''?qtyFmt(it.qty):'',aria:'Activity quantity'})}</td>
+          <td>${g(ap+'.unit',a.unit,'unit',{cls:'eo-u',ph:it.unit||'',list:'cb-units',aria:'Unit'})}</td><td class="r num">${money(ar.total)}</td><td class="r num small dim">${ar.q?money2(ar.unit):''}</td><td class="r num small dim">${ar.hrs?fmtN(ar.hrs,1)+' hr':''}</td><td class="eo-more">${dots('act',a.id)}</td></tr>`})})});
+  const secT=cbList('section').filter(t=>t.active!==false).sort((a,c)=>String(a.description).localeCompare(c.description));
+  const blanks=d.items.filter(i=>!i.alt&&(i.qty==null||i.qty==='')).length;
+  const outline=`<div class="panel eo-wrap"><div class="eo-bar">${ro?'':`<button class="btn primary sm" data-act="eo-add" data-t="sec">+ Section</button>${secT.length?`<select class="field sm" data-eosectpl><option value="">+ Section from template…</option>${secT.map(t=>`<option value="${t.id}">${esc(t.description)}</option>`).join('')}</select>`:''}`}
+      <span class="eo-lv">Show <button class="btn sm" data-act="eo-lv" data-v="sec">Sections</button><button class="btn sm" data-act="eo-lv" data-v="items">Bid items</button><button class="btn sm" data-act="eo-lv" data-v="all">Everything</button></span>
+      ${ro?'':'<button class="btn sm ghost" data-act="eo-renum" title="Renumber everything 100 / 110 / 110.10">Renumber</button>'}<button class="btn sm ghost" data-act="eo-wide" title="${E.wide?'Show':'Hide'} the right panel">${E.wide?'◨ Show panel':'◧ Hide panel'}</button></div>
+    ${E.qtyMode?`<div class="eo-qty"><b>Enter quantities.</b> ${blanks?`${blanks} bid item${blanks===1?'':'s'} still blank — highlighted below.`:'Every bid item has a quantity.'} <button class="btn sm" data-act="eo-dropblank"${blanks?'':' disabled'}>Remove items left blank</button> <button class="btn sm primary" data-act="eo-qtydone">Done</button></div>`:''}
+    <div class="eo-scroll" id="eo-scroll" data-keepscroll><table class="eo"><thead><tr><th class="eo-code">Code</th><th>Description</th><th class="r">Qty</th><th>Unit</th><th class="r">Cost</th><th class="r">Unit price</th><th class="r">Total</th><th></th></tr></thead>
+      <tbody>${rows||`<tr><td colspan="8"><div class="empty"><b>No sections yet</b>${ro?'':'Add a section, then bid items under it.'}</div></td></tr>`}</tbody>
+      <tfoot>${R.gc?`<tr><td></td><td>${esc(d.markup.gcName||'General conditions')} <span class="dim small">(indirects, lump sum)</span></td><td></td><td></td><td class="r num">${money(R.ind)}</td><td></td><td class="r num">${money(R.gc)}</td><td></td></tr>`:''}<tr><td></td><td><b>Base bid</b></td><td></td><td></td><td class="r num">${money(R.cost+R.ind)}</td><td></td><td class="r num"><b>${money(R.total)}</b></td><td></td></tr>${R.alts?`<tr><td></td><td class="dim">Alternates</td><td></td><td></td><td></td><td></td><td class="r num dim">${money(R.alts)}</td><td></td></tr>`:''}</tfoot></table></div></div>`;
+  return `<div class="eb${E.wide?' wide':''}${(E.sel||{}).t==='act'?' act':''}">${outline}${E.wide?'':`<div class="eb-right" id="eb-right">${estRight(d,R,ro)}</div>`}</div>`}
+function estFold(key,title,body,extra){const E=S.est;const shut=(E.fold||(E.fold=new Set())).has(key);
+  return `<div class="ef${shut?' shut':''}"><div class="ef-h"><button class="ef-t" data-act="ef-fold" data-k="${key}">${shut?'▸':'▾'} ${title}</button>${extra||''}</div>${shut?'':`<div class="ef-b">${body}</div>`}</div>`}
+function estRight(d,R,ro){const s=estSelResolve(d);if(!s)return `<div class="panel pad empty"><b>Pick a row on the left</b>A section, bid item or activity opens here.</div>`;
+  if(s.t==='sec'){const sec=s.o;const its=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>o.it.sec===sec.id);const base=its.filter(o=>!o.it.alt);const c=sumC(base.map(o=>o.x));const cost=base.reduce((a,o)=>a+o.x.total,0),price=base.reduce((a,o)=>a+o.x.price,0);
+    const btpl=cbList('biditem').filter(t=>t.active!==false);
+    return `<div class="eb-pane"><div class="eb-crumb">Section</div>
+      ${estFold('sh','Section',`<div class="fg eb-fg"><label class="f">Code${epIn(s.p+'.code',sec.code)}</label><label class="f s3">Name${epIn(s.p+'.name',sec.name,{ph:'e.g. Storm drainage'})}</label><label class="f s4">Notes${epIn(s.p+'.notes',sec.notes,{ph:'Scope notes, assumptions'})}</label></div>
+        <div class="est-isum"><div><span>Bid items</span><b>${its.length}</b></div><div><span>Cost</span><b>${money(cost)}</b></div><div><span>Price</span><b>${money(price)}</b></div><div><span>Margin</span><b>${price?fmtN((price-cost)/price*100,1)+'%':'—'}</b></div></div>${estMix(c)}`)}
+      ${estFold('si','Bid items',`<table class="eb-list"><tbody>${its.map(o=>`<tr class="click" data-act="eo-pick" data-t="item" data-id="${o.it.id}"><td class="num">${esc(o.it.code)}</td><td>${esc(o.it.desc)||'<span class="dim">Untitled</span>'}</td><td class="r num small">${qtyFmt(o.it.qty)} ${esc(o.it.unit||'')}</td><td class="r num"><b>${money(o.x.price)}</b></td></tr>`).join('')||'<tr><td class="dim small">No bid items yet.</td></tr>'}</tbody></table>
+        ${ro?'':`<div class="est-addact"><button class="btn primary sm" data-act="eo-add" data-t="item" data-id="${sec.id}">+ Bid item</button>${btpl.length?`<select class="field sm" data-eoitemtpl="${sec.id}"><option value="">+ From bid item codebook…</option>${btpl.map(t=>`<option value="${t.id}">${esc((t.code?t.code+' · ':'')+t.description)}</option>`).join('')}</select>`:''}${cbEditable()&&!S.est.tpl?`<button class="btn sm" data-act="est-savetpl" data-v="section" data-id="${sec.id}">Save as section template</button>`:''}</div>`}`)}</div>`}
+  if(s.t==='item'){const it=s.o,x=R.items[s.i];const atpl=cbList('activity').filter(t=>t.active!==false).sort((a,b)=>String(a.description).localeCompare(b.description));
+    return `<div class="eb-pane"><div class="eb-crumb">${esc(secOf(d,it.sec)?.name||'')} › Bid item</div>
+      ${estFold('ih','Bid item',`<div class="fg eb-fg"><label class="f">Item #${epIn(s.p+'.code',it.code)}</label><label class="f s3">Description${epIn(s.p+'.desc',it.desc,{ph:'e.g. 8″ PVC sanitary sewer'})}</label>
+        <label class="f">Quantity${epIn(s.p+'.qty',it.qty,{n:1,cls:it.qty==null||it.qty===''?'est-need':''})}</label><label class="f">Unit${epIn(s.p+'.unit',it.unit,{list:'cb-units'})}</label>
+        <label class="f">Section<select class="field" data-eosec="${it.id}"${ro?' disabled':''}>${d.sections.map(z=>`<option value="${z.id}"${z.id===it.sec?' selected':''}>${esc(z.code+' · '+z.name)}</option>`).join('')}</select></label>
+        <label class="f">Unit price override${epIn(s.p+'.override',it.override,{n:1,ph:x.calcUnit?money2(x.calcUnit).replace('$',''):'Calculated',title:'Leave blank to use the calculated unit price'})}</label>
+        <label class="f s4">Notes${epIn(s.p+'.notes',it.notes,{ph:'Assumptions, inclusions, exclusions for this item'})}</label></div>
+        <label class="check small"><input type="checkbox" data-ep="${s.p}.alt" data-ept="b"${it.alt?' checked':''}${ro?' disabled':''}> Alternate — priced, but not in the base bid</label>
+        <div class="est-isum"><div><span>Cost</span><b>${money(x.total)}</b></div><div><span>Unit cost</span><b>${x.q?money2(x.unit):'—'}</b></div><div><span>Unit price</span><b>${x.q?money2(x.unitPrice):'—'}</b>${x.ov?`<small>calc. ${money2(x.calcUnit)}</small>`:''}</div><div><span>Total</span><b>${money(x.price)}</b></div><div><span>Man-hours</span><b>${fmtN(x.mh,1)}</b></div></div>${estMix(x.c)}`)}
+      ${estFold('ia',`Activities (${it.acts.length})`,`<table class="eb-list"><tbody>${it.acts.map((a,j)=>{const ar=x.acts[j];return `<tr class="click" data-act="eo-pick" data-t="act" data-id="${a.id}"><td class="num">${esc(a.code)}</td><td>${esc(a.desc)||'<span class="dim">Untitled</span>'}${a.crew?` <span class="dim small">· ${esc(a.crew.name)}</span>`:''}</td><td class="r num small">${ar.hrs?fmtN(ar.hrs,1)+' hr':''}</td><td class="r num"><b>${money(ar.total)}</b></td></tr>`}).join('')||'<tr><td class="dim small">No activities yet — add one to price this item.</td></tr>'}</tbody></table>
+        ${ro?'':`<div class="est-addact"><button class="btn primary sm" data-act="eo-add" data-t="act" data-id="${it.id}">+ Activity</button>${atpl.length?`<select class="field sm" data-epact="${s.p}"><option value="">+ From activity codebook…</option>${atpl.map(t=>`<option value="${t.id}">${esc((t.code?t.code+' · ':'')+t.description)}</option>`).join('')}</select>`:''}${cbEditable()&&!S.est.tpl?`<button class="btn sm" data-act="ep-tocb" data-p="${s.p}" data-k="biditem">Save to bid item codebook</button>`:''}</div>`}`)}</div>`}
+  const a=s.o,x=R.items[s.i];
+  return `<div class="eb-pane"><div class="eb-crumb">${esc(secOf(d,s.it.sec)?.name||'')} › ${esc(s.it.code)} ${esc(s.it.desc)} › Activity</div>${actCardHtml(a,s.p,x.acts[s.j],s.it.qty,{unit:s.it.unit})}</div>`}
+function estMix(c){const ks=[...COST_KEYS,'tax'].filter(k=>c[k]);if(!ks.length)return '';return `<div class="est-mix">${ks.map(k=>`<span class="k-${k}" style="flex:${c[k]}" title="${COST_LABEL[k]} ${money(c[k])}"></span>`).join('')}</div><div class="est-mixl small">${ks.map(k=>`<span><i class="k-${k}"></i>${COST_LABEL[k]} ${money(c[k])}</span>`).join('')}</div>`}
+
+/* ---------- activity cost sheet (estimates + activity templates) ---------- */
+function actCardHtml(a,p,r,itemQty,o={}){const ec=EC();const ro=ec.ro;const crews=crewOpts();const q=r.q;const unit=a.unit||o.unit||'unit';
+  const stale=new Set(estStale({act:a}).map(s=>s.r||'crew'));const g=(pp,v,col,oo={})=>epIn(pp,v,{...oo,attrs:` data-grid="sh" data-col="${col}"`});
+  const crewSel=`<select class="field est-crewsel" data-epcrew="${p}" aria-label="Crew"${ro?' disabled':''}><option value="">No crew</option>${a.crew&&!crews.some(c=>c.id===a.crew.id)?`<option value="${esc(a.crew.id)}" selected>${esc(a.crew.name)} (removed)</option>`:''}${crews.map(c=>`<option value="${c.id}"${a.crew&&a.crew.id===c.id?' selected':''}>${esc(c.description)} — ${money2(cbCost(c))}/hr</option>`).join('')}</select>`;
+  const crewRate=a.crew?(+a.crew.labor||0)+(+a.crew.equip||0):0;
+  const head=o.noHead?'':estFold('ah','Activity',`<div class="est-act-h">${epIn(p+'.code',a.code,{cls:'est-code',ph:'Code',aria:'Activity code'})}${epIn(p+'.desc',a.desc,{cls:'est-adesc',ph:'Activity — e.g. Excavate & lay pipe',aria:'Activity description'})}
+      <span class="est-aq">${epIn(p+'.qty',a.qty,{n:1,ph:itemQty!=null&&itemQty!==''?qtyFmt(itemQty):'Qty',aria:'Activity quantity',title:'Leave blank to use the bid item quantity'})}${epIn(p+'.unit',a.unit,{cls:'est-unit',ph:o.unit||'unit',list:'cb-units',aria:'Unit'})}</span>
+      ${ro?'':`<span class="est-actbtns"><button class="btn sm ghost" data-act="ep-mv" data-p="${p}" data-d="-1" title="Move up" aria-label="Move up">↑</button><button class="btn sm ghost" data-act="ep-mv" data-p="${p}" data-d="1" title="Move down" aria-label="Move down">↓</button><button class="btn sm ghost" data-act="ep-dup" data-p="${p}" title="Duplicate">⧉</button>${!ec.tpl&&cbEditable()?`<button class="btn sm ghost" data-act="ep-tocb" data-p="${p}" data-k="activity" title="Save to the Activities codebook">→ Codebook</button>`:''}<button class="btn sm ghost danger-t${S.epArm===p?' arm':''}" data-act="ep-del" data-p="${p}">${S.epArm===p?'Delete?':'×'}</button></span>`}</div>
+      ${o.noHead?'':epIn(p+'.notes',a.notes,{cls:'est-anotes',ph:'Notes for this activity',aria:'Notes'})}`);
+  const prod=`<div class="est-prod"><label>Crew ${crewSel}${stale.has('crew')?'<span class="est-stale-dot" title="Crew rates changed in the codebook">●</span>':''}</label>
+      <label>Production ${epIn(p+'.prod',a.prod,{n:1,ph:'0',aria:'Production',cls:'est-prodv'})}${epSel(p+'.mode',a.mode||'uph',PROD_MODES.map(([k,l])=>[k,k==='uph'||k==='upd'?l.replace('units',unit):l]),{aria:'Production basis'})}</label>
+      <span class="est-hrs">${r.hrs?`<b>${fmtN(r.hrs,1)}</b> crew hrs · <b>${fmtN(r.days,2)}</b> days${r.mh?` · <b>${fmtN(r.mh,1)}</b> MH`:''}`:'<span class="dim">Set a production rate to get hours</span>'}</span></div>`;
+  const resRow=(x,i)=>{const rp=`${p}.res.${i}`;const rr=r.res[i]||{qty:0,cost:0,tax:0};const kind=RES_KINDS.find(k=>k[0]===x.kind)||RES_KINDS[5];const cb=x.cb?cbById(x.cb):null;
+    return `<tr><td><span class="est-tag k-${x.kind}">${kind[2]}</span></td>
+      <td class="sh-desc">${x.cb?`<div class="est-cbname">${esc(x.desc)}${x.code?` <span class="dim small">${esc(x.code)}</span>`:''}${!cb?' <span class="pill bad">removed from codebook</span>':''}</div>`:g(rp+'.desc',x.desc,'desc',{ph:`${kind[1]} description`,aria:'Description'})}${x.src?`<div><span class="pill info est-src" title="Price from a vendor quote — type a new price to replace it">Quote · ${esc(x.src.v)}</span></div>`:''}</td>
+      <td>${g(rp+'.factor',x.factor,'f',{n:1,cls:'sh-n',aria:'Quantity'})}</td><td>${epSel(rp+'.basis',x.basis,BASIS,{aria:'Basis',cls:'sh-basis'})}</td>
+      <td class="r num">${qtyFmt(rr.qty)}</td><td>${x.cb?`<span class="small">${esc(x.unit||(x.basis==='hour'?'HR':''))}</span>`:g(rp+'.unit',x.unit,'u',{cls:'sh-u',ph:'unit',aria:'Unit',list:'cb-units'})}</td>
+      <td>${x.kind==='material'?g(rp+'.waste',x.waste,'w',{n:1,cls:'sh-w',ph:'0',aria:'Waste %'}):''}</td>
+      <td class="sh-p">${g(rp+'.price',x.price,'p',{n:1,cls:'sh-n'+(stale.has(x)?' est-stale':''),ph:'0.00',aria:'Unit price'})}${stale.has(x)?`<span class="est-stale-dot" title="Codebook price is now ${money2(cbCost(cb))}">●</span>`:''}</td>
+      <td class="r num"><b>${money(rr.cost+rr.tax)}</b>${rr.tax?`<div class="dim small">incl. ${money(rr.tax)} tax</div>`:''}</td>
+      <td>${ro?'':`<button class="rm" data-act="ep-del" data-p="${rp}" aria-label="Remove">×</button>`}</td></tr>`};
+  const crewRow=a.crew?`<tr class="sh-crew"><td><span class="est-tag k-crew">CREW</span></td><td class="sh-desc"><div class="est-cbname">${esc(a.crew.name)}</div><div class="dim small">${fmtN(+a.crew.men||0,2)} people · labor ${money2(a.crew.labor)}/hr · equipment ${money2(a.crew.equip)}/hr</div></td><td></td><td class="small dim">crew hrs</td><td class="r num">${fmtN(r.hrs,1)}</td><td class="small">HR</td><td></td><td class="r num">${money2(crewRate)}</td><td class="r num"><b>${money(crewRate*r.hrs)}</b></td><td></td></tr>`:'';
+  const grid=`<div class="sh-wrap"><table class="sh"><thead><tr><th></th><th>Cost</th><th>Qty</th><th>Basis</th><th class="r">Total qty</th><th>Unit</th><th>Waste %</th><th>$ / unit</th><th class="r">Total</th><th></th></tr></thead>
+    <tbody>${crewRow}${a.res.map(resRow).join('')}${ro?'':`<tr class="sh-add"><td></td><td colspan="9"><div class="est-addres"><input class="field" list="est-cbl" data-epadd="${p}" data-grid="sh" data-col="add" placeholder="+ Type a code or name to add labor, equipment or material from the codebook" aria-label="Add a cost from the codebook"><select class="field" data-epcustom="${p}" aria-label="Add a custom cost"><option value="">+ Custom…</option>${RES_KINDS.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select></div></td></tr>`}</tbody>
+    <tfoot><tr><td colspan="10"><div class="est-act-f">${COST_KEYS.filter(k=>r.c[k]).map(k=>`<span>${COST_LABEL[k]} <b>${money(r.c[k])}</b></span>`).join('')}${r.c.tax?`<span>Tax <b>${money(r.c.tax)}</b></span>`:''}<span class="est-tot">Activity <b>${money(r.total)}</b>${q?` · <b>${money2(r.unit)}</b>/${esc(unit)}`:''}</span></div></td></tr></tfoot></table></div>`;
+  return `<div class="est-act sheet" id="act-${a.id}">${head}${estFold('ap','Crew & production',prod)}${estFold('ac','Costs',grid)}</div>`}
+
+/* ---------- right-click menu ---------- */
+function estCtxMenu(d){const c=S.est&&S.est.ctx;if(!c)return '';const ro=EC().ro;if(ro)return '';const admin=cbEditable()&&!S.est.tpl;
+  const it=(op,l,cls)=>`<button class="${cls||''}" data-act="eo-cm" data-op="${op}">${l}</button>`;
+  const del=c.arm?it('del','Click again to delete','danger-t arm'):it('del','Delete…','danger-t');
+  const items=c.t==='sec'?[it('additem','+ Bid item'),it('dup','Duplicate section'),it('up','Move up'),it('down','Move down'),admin?it('tpl','Save as section template'):'',del]
+    :c.t==='item'?[it('addact','+ Activity'),it('dup','Duplicate'),it('up','Move up'),it('down','Move down'),it('alt',(()=>{const x=d.items.find(i=>i.id===c.id);return x&&x.alt?'Not an alternate':'Make it an alternate'})()),admin?it('tocb','Save to bid item codebook'):'',del]
+    :[it('dup','Duplicate'),it('up','Move up'),it('down','Move down'),admin?it('tocb','Save to activity codebook'):'',del];
+  return `<div class="eo-ctx" id="eo-ctx" style="left:${Math.min(c.x,window.innerWidth-230)}px;top:${Math.min(c.y,window.innerHeight-300)}px">${items.join('')}</div>`}
+function estFind(d,t,id){if(t==='sec'){const k=d.sections.findIndex(s=>s.id===id);return k<0?null:{k,o:d.sections[k]}}
+  if(t==='item'){const i=d.items.findIndex(x=>x.id===id);return i<0?null:{i,o:d.items[i]}}
+  for(let i=0;i<d.items.length;i++){const j=d.items[i].acts.findIndex(a=>a.id===id);if(j>=0)return {i,j,o:d.items[i].acts[j],it:d.items[i]}}return null}
+function estOp(op,t,id){const E=S.est,d=E.data;const f=estFind(d,t,id);if(!f)return;const open=estOpenSet();
+  const sel=(tt,ii)=>{E.sel={t:tt,id:ii}};
+  if(op==='additem'){const it=estAddItem(d,id);open.add(id);sel('item',it.id);estOpenSave();focusSoon(`items.${d.items.indexOf(it)}.desc`)}
+  else if(op==='addact'){const it=f.o;const a=estNewAct({code:estNextActCode(it),unit:''});it.acts.push(a);open.add(it.id);open.add(it.sec);sel('act',a.id);estOpenSave();focusSoon(`items.${f.i}.acts.${it.acts.length-1}.desc`)}
+  else if(op==='dup'){if(t==='sec'){const s=estAddSection(d,{name:f.o.name+' (copy)',notes:f.o.notes},itemsOf(d,f.o.id),f.k);open.add(s.id);sel('sec',s.id)}
+    else if(t==='item'){const c=clone(f.o);c.id=newId();c.code=estNextItemCode(d,c.sec);c.acts.forEach(a=>{a.id=newId();a.res.forEach(r=>r.id=newId())});d.items.splice(f.i+1,0,c);sel('item',c.id)}
+    else{const c=clone(f.o);c.id=newId();c.res.forEach(r=>r.id=newId());c.code=estNextActCode(f.it);f.it.acts.splice(f.j+1,0,c);sel('act',c.id)}}
+  else if(op==='up'||op==='down'){const dir=op==='up'?-1:1;
+    if(t==='sec'){const j=f.k+dir;if(j>=0&&j<d.sections.length)[d.sections[f.k],d.sections[j]]=[d.sections[j],d.sections[f.k]]}
+    else if(t==='item'){const same=d.items.map((x,i)=>x.sec===f.o.sec?i:-1).filter(i=>i>=0);const pos=same.indexOf(f.i);const j=same[pos+dir];if(j!=null)[d.items[f.i],d.items[j]]=[d.items[j],d.items[f.i]]}
+    else{const j=f.j+dir;const A=f.it.acts;if(j>=0&&j<A.length)[A[f.j],A[j]]=[A[j],A[f.j]]}}
+  else if(op==='del'){if(t==='sec'){d.items=d.items.filter(x=>x.sec!==f.o.id);d.sections.splice(f.k,1);E.sel=d.sections[0]?{t:'sec',id:d.sections[Math.max(0,f.k-1)].id}:null}
+    else if(t==='item'){d.items.splice(f.i,1);sel('sec',f.o.sec)}else{f.it.acts.splice(f.j,1);sel('item',f.it.id)}}
+  else if(op==='alt'){f.o.alt=!f.o.alt}
+  else if(op==='tocb'){epToCodebook(t==='item'?`items.${f.i}`:`items.${f.i}.acts.${f.j}`,t==='item'?'biditem':'activity');return}
+  else if(op==='tpl'){estTplStart('section',f.o.id);return}
+  estTouch();render()}
+function focusSoon(path){setTimeout(()=>{const el=document.getElementById(epId(path));if(el){el.focus();el.select?.()}},0)}
+
+/* ---------- templates ---------- */
+function estTplStart(what,secId){const E=S.est,d=E.data;const s=secId?secOf(d,secId):null;const b=byId(S.bids,E.bidId);
+  M={kind:'esttpl',what,secId,name:what==='section'?(s?.name||'Section'):(b?`${b.project_type||''} ${b.name}`.trim():'Master template'),cat:what==='section'?(s?.name||''):(b?.project_type||''),qty:'clear'};showModal();setTimeout(()=>$('#tpl-name')?.select(),0)}
+function estTplModal(){const x=M;const E=S.est,d=E.data;const s=x.secId?secOf(d,x.secId):null;const n=x.what==='section'?itemsOf(d,x.secId).length:d.items.length;
+  return mhead(x.what==='section'?'Save section template':'Save as master template',x.what==='section'?`${s?.name||''} · ${n} bid item${n===1?'':'s'}`:`${d.sections.length} sections · ${n} bid items`)+`<div class="mbody">
+    <fieldset><legend>Template</legend><div class="fg"><label class="f s2">Name<input class="field" id="tpl-name" data-esttpl="name" value="${esc(x.name)}" placeholder="${x.what==='section'?'e.g. Storm drainage — RCP':'e.g. Retail pad site'}"></label>
+      <label class="f s2">Category<input class="field" data-esttpl="cat" list="tpl-cats" value="${esc(x.cat)}" placeholder="Optional"><datalist id="tpl-cats">${[...new Set([...PROJECT_TYPES,...cbList(x.what).map(t=>t.category).filter(Boolean)])].map(c=>`<option value="${esc(c)}">`).join('')}</datalist></label></div></fieldset>
+    <fieldset><legend>Quantities</legend><div class="radio" style="flex-direction:column;align-items:flex-start;gap:8px">
+      <label><input type="radio" name="tplq" data-esttpl="qty" value="clear"${x.qty==='clear'?' checked':''}> <b>Clear them</b> — the template keeps structure, crews, production rates and costs; you enter quantities each time</label>
+      <label><input type="radio" name="tplq" data-esttpl="qty" value="keep"${x.qty==='keep'?' checked':''}> <b>Keep them as “typical”</b> — a starting point you adjust</label></div></fieldset>
+    ${x.what==='estimate'?`<fieldset><legend>Settings saved with it</legend><p class="small" style="margin:0">${tplSettingsText(E.data)}, ${S.est.data.settings.crews||1} crew${(S.est.data.settings.crews||1)==1?'':'s'} at once — plus the indirect list, spread choices and which items carry the markup. Every estimate started from this template begins with exactly these settings.</p></fieldset>`:''}
+    <p class="hint">Prices aren’t frozen — estimates started from the template are priced at the codebook rates on the day they’re created. Vendor quotes and proposal wording aren’t copied; the job duration is recalculated for each job.</p></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="esttpl-save">Save template</button></div></div>`}
+async function estTplSave(){const x=M;const E=S.est,d=E.data;if(!String(x.name||'').trim()){toast('Name the template.');return}
+  const strip=items=>items.map(it0=>{const it=clone(it0);if(x.qty==='clear')it.qty=null;it.override=null;it.acts.forEach(a=>{a.res.forEach(r=>delete r.src);if(x.qty==='clear'&&a.qty!=null&&a.qty!=='')a.qty=null});return it});
+  let data;if(x.what==='section'){const s=secOf(d,x.secId);data={sec:{name:s.name,notes:s.notes||''},items:strip(itemsOf(d,x.secId))}}
+  else{const c={v:3,settings:{...clone(d.settings),durDays:null},markup:clone(d.markup),ind:clone(d.ind||[]),sections:clone(d.sections),items:strip(d.items)};data={est:c}}
+  const cost=estCalc(estNorm(clone(x.what==='section'?tplSecData(data,x.name):data.est))).cost;
+  try{await run(sb.from('codebook').insert(cbRow({...cbNew(x.what),description:String(x.name).trim(),category:String(x.cat||'').trim(),data,cost:r2(cost)})));await loadTable('codebook');closeModal();toast(`Saved “${x.name}” to ${x.what==='section'?'section':'master'} templates`)}
+  catch(e){toast(/codebook_book_check|check constraint/i.test(errMsg(e))?'Templates need a one-time database update (update-16-estimate-sections.sql).':cbErr(e))}}
+
+/* ---------- Estimates page ---------- */
+function vEstimates(){const tab=S.estsTab||'list';const can=['admin','estimator'].includes(role());
+  const tabs=`<div class="seg est-tabs">${[['list','Estimates'],['tpl','Master templates']].map(([k,l])=>`<button class="${tab===k?'on':''}" data-act="ests-tab" data-v="${k}">${l}</button>`).join('')}</div>`;
+  const head=`<div class="head"><div><h1>Estimates</h1><p>${S.estIndex.length} estimate${S.estIndex.length===1?'':'s'} · ${cbList('estimate').length} master template${cbList('estimate').length===1?'':'s'}</p></div><div class="tools">${can?'<button class="btn primary" data-act="ests-new">+ New estimate</button>':''}</div></div>`;
+  if(S.estMissing)return head+`<div class="notice"><b>One setup step:</b> run <b>update-14-estimates.sql</b> in Supabase, then refresh.</div>`;
+  if(tab==='tpl'){const ts=['estimate','section'].flatMap(bk=>cbList(bk)).sort((a,b)=>a.book.localeCompare(b.book)||String(a.description).localeCompare(b.description));const admin=cbEditable();
+    return head+tabs+`<div class="adders" style="margin:0 0 12px">${admin?'<button class="btn sm" data-act="ests-newtpl" data-v="estimate">+ Blank master template</button><button class="btn sm" data-act="ests-newtpl" data-v="section">+ Blank section template</button>':''}</div>
+    <div class="panel scroll"><table><thead><tr><th>Template</th><th>Type</th><th>Category</th><th>Settings it carries</th><th class="r">Sections</th><th class="r">Bid items</th><th class="r">Cost at today’s rates</th><th>Updated</th></tr></thead><tbody>
+    ${ts.map(t=>{const D=cbD(t);const e=t.book==='estimate'?(D.est||{}):{sections:[D.sec||{}],items:D.items||[]};return `<tr class="click" data-act="ests-opentpl" data-id="${t.id}"><td class="proj">${esc(t.description)}</td><td>${t.book==='estimate'?pill('Master','hot'):pill('Section')}</td><td class="small">${esc(t.category||'')}</td><td class="small dim">${t.book==='estimate'?tplSettingsText(e):'—'}</td><td class="r num">${(e.sections||[]).length}</td><td class="r num">${(e.items||[]).length}</td><td class="r num">${money(t.cost)}</td><td class="small dim">${t.updated_at?fmtShort(String(t.updated_at).slice(0,10)):''}</td></tr>`}).join('')
+      ||`<tr><td colspan="7"><div class="empty"><b>No templates yet</b>${admin?'Open a finished estimate and click <b>Save as master template</b>, or start a blank one here. Save a single scope with <b>Save as section template</b> on any section.':'An admin sets these up.'}</div></td></tr>`}</tbody></table></div>`}
+  const q=(S.q.ests||'').trim().toLowerCase();const f=S.estsF||'active';
+  let list=S.estIndex.map(x=>({x,b:byId(S.bids,x.bid_id)})).filter(o=>o.b);
+  if(f==='active')list=list.filter(o=>!DECIDED.includes(o.b.status)&&!o.b.archived_at);else if(f==='won')list=list.filter(o=>o.b.status==='Awarded');
+  if(q)list=list.filter(o=>[o.b.name,o.b.location,clientsLine(o.b,5),estName(o.b.lead_estimator_id)].join(' ').toLowerCase().includes(q));
+  list.sort((a,c)=>String(a.b.due_date||'9').localeCompare(String(c.b.due_date||'9'))||String(c.x.updated_at).localeCompare(String(a.x.updated_at)));
+  return head+tabs+`<div class="bar"><input id="q-ests" class="field search" data-q="ests" placeholder="Search projects, GCs, estimators" value="${esc(S.q.ests||'')}"><select class="field" data-estsf><option value="active"${f==='active'?' selected':''}>Active bids</option><option value="won"${f==='won'?' selected':''}>Awarded</option><option value="all"${f==='all'?' selected':''}>All</option></select></div>
+  <div class="panel scroll"><table><thead><tr><th>Project</th><th>GC / client</th><th>Due</th><th>Status</th><th>Lead</th><th class="r">Cost</th><th class="r">Bid total</th><th class="r">Margin</th><th>Updated</th></tr></thead><tbody>
+  ${list.map(({x,b})=>`<tr class="click" data-act="ests-open" data-id="${b.id}"><td class="proj">${esc(b.name)}${b.location?`<div class="dim small">${esc(b.location)}</div>`:''}</td><td class="small">${clientsLine(b,2)}</td><td class="small">${dueCell(b)}</td><td>${pill(b.status,BID_CLS[b.status])}</td><td>${b.lead_estimator_id?avatar(b.lead_estimator_id):'<span class="dim">—</span>'}</td>
+    <td class="r num">${money(x.total_cost)}</td><td class="r num"><b>${money(x.total_price)}</b></td><td class="r num">${num(x.total_price)?fmtN((x.total_price-x.total_cost)/x.total_price*100,1)+'%':'—'}</td><td class="small dim">${x.updated_at?fmtShort(String(x.updated_at).slice(0,10)):''}${x.updated_by_name?`<br>${esc(x.updated_by_name)}`:''}</td></tr>`).join('')
+    ||`<tr><td colspan="9"><div class="empty"><b>No estimates ${q||f!=='all'?'match':'yet'}</b>${can?'Click <b>+ New estimate</b> to start one.':''}</div></td></tr>`}</tbody></table></div>`}
+function tplSettingsText(e){const m=e.markup||{};const s=e.settings||{};const bits=[];if(s.sched)bits.push(s.sched.name);
+  bits.push(m.mode==='type'?'markup by cost type':`${fmtN(num(m.oh)||0,1)}% OH / ${fmtN(num(m.profit)||0,1)}% MU`);if(num(m.bond))bits.push(`${fmtN(m.bond,2)}% bond`);
+  if((e.ind||[]).length)bits.push(`${e.ind.length} indirect${e.ind.length===1?'':'s'}`);if(m.spreadInd==='lump')bits.push('GC line');else if(m.spreadInd==='select'||m.spreadMu==='select')bits.push('picked items carry');else if(m.spreadMu==='manual')bits.push('unbalanced');return esc(bits.join(' · '))}
+function estNewModal(){const x=M;const bids=S.bids.filter(b=>!b.archived_at&&!DECIDED.includes(b.status)&&canWork(b)&&!estOf(b.id)).sort((a,c)=>String(a.due_date||'9').localeCompare(String(c.due_date||'9')));
+  const tpls=cbList('estimate').filter(t=>t.active!==false).sort((a,c)=>String(a.description).localeCompare(c.description));const others=S.estIndex.map(e=>({e,b:byId(S.bids,e.bid_id)})).filter(o=>o.b);
+  const eb=x.mode==='existing'?byId(S.bids,x.bidId):null;const sc=eb?scopeItems(eb):[];
+  const opt=(v,l,dis)=>`<label class="est-sopt${x.start===v?' on':''}${dis?' dis':''}"><input type="radio" name="estst" data-estnew="start" value="${v}"${x.start===v?' checked':''}${dis?' disabled':''}> ${l}</label>`;
+  return mhead('New estimate','Pick the project, then how to start')+`<div class="mbody">
+    <fieldset><legend>Project</legend><div class="seg" style="margin-bottom:12px"><button class="${x.mode==='existing'?'on':''}" data-act="estnew-mode" data-v="existing">A bid in the pipeline</button><button class="${x.mode==='new'?'on':''}" data-act="estnew-mode" data-v="new">New project</button></div>
+      ${x.mode==='existing'?`<label class="f">Bid<select class="field" data-estnew="bidId"><option value="">${bids.length?'Pick a bid…':'No open bids without an estimate'}</option>${bids.map(b=>`<option value="${b.id}"${x.bidId===b.id?' selected':''}>${esc(b.name)}${b.due_date?' — due '+fmtShort(b.due_date):''}</option>`).join('')}</select></label>`
+      :`<div class="fg"><label class="f s2">Project name<input class="field" id="estnew-name" data-estnew="name" value="${esc(x.name)}" placeholder="e.g. Riverside Commerce Park"></label><label class="f s2">Location<input class="field" data-estnew="location" value="${esc(x.location)}" placeholder="City or address"></label>
+        <label class="f s2">GC / client<select class="field" data-estnew="client"><option value="">None yet</option>${S.clients.slice().sort((a,c)=>a.company.localeCompare(c.company)).map(c=>`<option value="${c.id}"${x.client===c.id?' selected':''}>${esc(c.company)}</option>`).join('')}</select></label>
+        <label class="f">Bid due<input class="field" type="date" data-estnew="due" value="${esc(x.due)}"></label><label class="f">Bid type<select class="field" data-estnew="type">${BID_TYPES.map(t=>`<option${x.type===t?' selected':''}>${t}</option>`).join('')}</select></label></div>
+        <p class="hint">This adds the project to the pipeline too${isAdmin()?'':', with you as lead estimator'}, so dashboards and the bid log stay in sync.</p>`}</fieldset>
+    <fieldset><legend>Start from</legend><div class="est-sopts">
+      ${opt('tpl','<b>Master template</b>',!tpls.length)}${x.start==='tpl'?`<select class="field" data-estnew="src">${tpls.length?'':'<option value="">No master templates yet</option>'}${tpls.map(t=>`<option value="${t.id}"${x.src===t.id?' selected':''}>${esc(t.description)}</option>`).join('')}</select>`:''}
+      ${opt('scopes',`<b>The bid’s scopes as sections</b>${eb?` <span class="dim">(${sc.length})</span>`:' <span class="dim">(pick a pipeline bid)</span>'}`,!sc.length)}
+      ${opt('blank','<b>Blank</b>')}
+      ${opt('copy','<b>Copy another estimate</b>',!others.length)}${x.start==='copy'?`<select class="field" data-estnew="src">${others.map(o=>`<option value="${o.e.id}"${x.src===o.e.id?' selected':''}>${esc(o.b.name)} — ${money(o.e.total_price)}</option>`).join('')}</select>`:''}</div></fieldset></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="estnew-go"${x.busy?' disabled':''}>${x.busy?'Creating…':'Create estimate'}</button></div></div>`}
+async function estNewGo(){const x=M;let bidId=x.mode==='existing'?x.bidId:null;
+  if(x.mode==='existing'&&!bidId){toast('Pick a bid.');return}if(x.mode==='new'&&!String(x.name||'').trim()){toast('Name the project.');return}
+  if((x.start==='tpl'||x.start==='copy')&&!x.src){toast(x.start==='tpl'?'Pick a master template.':'Pick an estimate to copy.');return}
+  x.busy=true;renderModal();
+  try{if(!bidId){const {data,error}=await sb.rpc('create_estimate_bid',{p_name:x.name.trim(),p_location:x.location||'',p_client:x.client||null,p_due:x.due||null,p_type:x.type||'Hard bid'});if(error)throw error;bidId=data;await loadTable('bids')}
+    const start=x.start,src=x.src;closeModal();await estOpen(bidId,'estimates');if(S.est&&!S.est.row)await estCreate(start,src)}
+  catch(e){x.busy=false;renderModal();toast(/create_estimate_bid|function/i.test(errMsg(e))?'Starting a new project from here needs a one-time database update (update-16-estimate-sections.sql).':errMsg(e))}}
+async function estNewTpl(book){const name=book==='section'?'New section template':'New master template';const d=estNorm(estBlank());d.sections.push({id:newId(),code:'100',name:book==='section'?'Section':'General',notes:''});
+  const data=book==='section'?{sec:{name:'Section',notes:''},items:[]}:{est:d};
+  try{const row=cbRow({...cbNew(book),description:name,data,cost:0});await run(sb.from('codebook').insert(row));await loadTable('codebook');estOpenTpl(row.id);S.estFrom='estimates'}
+  catch(e){toast(/codebook_book_check|check constraint/i.test(errMsg(e))?'Templates need a one-time database update (update-16-estimate-sections.sql).':cbErr(e))}}
+
+/* ---------- events ---------- */
+FOCUS_ATTRS.push('data-esttpl','data-estnew');
+document.addEventListener('click',e=>{
+  if(S.est&&S.est.ctx&&!e.target.closest('#eo-ctx')&&!e.target.closest('[data-act=eo-menu]')){S.est.ctx=null;if(S.view==='estimate')render()}
+  const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;
+  if(!/^(eo-|ef-|ests-|estnew-|esttpl-)/.test(a)&&a!=='est-savetpl')return;const E=S.est;
+  switch(a){
+    case 'eo-sel':case 'eo-pick':if(!E)break;if(E.sel&&E.sel.id===t.dataset.id&&a==='eo-sel')break;E.sel={t:t.dataset.t,id:t.dataset.id};
+      if(a==='eo-pick'){const f=estFind(E.data,t.dataset.t,t.dataset.id);const o=estOpenSet();if(f&&f.o.sec)o.add(f.o.sec);if(f&&f.it){o.add(f.it.sec);o.add(f.it.id)}estOpenSave()}render();break;
+    case 'eo-tg':{const o=estOpenSet();const id=t.dataset.id;o.has(id)?o.delete(id):o.add(id);estOpenSave();render();break}
+    case 'eo-lv':estLevel(t.dataset.v);break;
+    case 'eo-wide':E.wide=!E.wide;render();break;
+    case 'eo-renum':estRenumber(E.data);estTouch();render();toast('Renumbered');break;
+    case 'eo-add':{const d=E.data;if(t.dataset.t==='sec'){const s=estAddSection(d,{name:''},[]);estOpenSet().add(s.id);E.sel={t:'sec',id:s.id};estOpenSave();estTouch();render();focusSoon(`sections.${d.sections.length-1}.name`)}
+      else estOp(t.dataset.t==='item'?'additem':'addact',t.dataset.t==='item'?'sec':'item',t.dataset.id);break}
+    case 'eo-menu':{const r=t.getBoundingClientRect();E.ctx={x:r.left-170,y:r.bottom+4,t:t.dataset.t,id:t.dataset.id};render();break}
+    case 'eo-cm':{const c=E.ctx;if(!c)break;if(t.dataset.op==='del'){const f=estFind(E.data,c.t,c.id);const big=c.t==='sec'?itemsOf(E.data,c.id).length:c.t==='item'?f?.o.acts.length:f?.o.res.length;if(big&&!c.arm){c.arm=true;render();break}}
+      E.ctx=null;estOp(t.dataset.op,c.t,c.id);break}
+    case 'eo-dropblank':{const d=E.data;const n=d.items.length;d.items=d.items.filter(i=>i.alt||!(i.qty==null||i.qty===''));toast(`Removed ${n-d.items.length} bid item${n-d.items.length===1?'':'s'}`);estTouch();render();break}
+    case 'eo-qtydone':E.qtyMode=false;render();break;
+    case 'ef-fold':{const s=E.fold||(E.fold=new Set());const k=t.dataset.k;s.has(k)?s.delete(k):s.add(k);render();break}
+    case 'est-savetpl':estTplStart(t.dataset.v,t.dataset.id);break;
+    case 'esttpl-save':estTplSave();break;
+    case 'ests-tab':S.estsTab=t.dataset.v;render();break;
+    case 'ests-open':estOpen(t.dataset.id,'estimates');break;
+    case 'ests-opentpl':S.estFrom='estimates';estOpenTpl(t.dataset.id);break;
+    case 'ests-newtpl':estNewTpl(t.dataset.v);break;
+    case 'ests-new':M={kind:'estnew',mode:S.bids.some(b=>!b.archived_at&&!DECIDED.includes(b.status)&&canWork(b)&&!estOf(b.id))?'existing':'new',bidId:'',name:'',location:'',client:'',due:'',type:'Hard bid',start:cbList('estimate').length?'tpl':'blank',src:cbList('estimate')[0]?.id||''};showModal();break;
+    case 'estnew-mode':M.mode=t.dataset.v;if(M.start==='scopes')M.start='blank';renderModal();if(M.mode==='new')setTimeout(()=>$('#estnew-name')?.focus(),0);break;
+    case 'estnew-go':if(!M.busy)estNewGo();break;
+  }});
+document.addEventListener('contextmenu',e=>{const tr=e.target.closest('tr[data-act=eo-sel]');if(!tr||!S.est||EC().ro)return;if(e.target.tagName==='INPUT'&&e.target.selectionStart!==e.target.selectionEnd)return; // keep the normal copy/paste menu when text is selected
+  e.preventDefault();S.est.ctx={x:e.clientX,y:e.clientY,t:tr.dataset.t,id:tr.dataset.id};S.est.sel={t:tr.dataset.t,id:tr.dataset.id};render()});
+// selecting a row by tabbing into it
+document.addEventListener('focusin',e=>{const tr=e.target.closest?.('tr[data-act=eo-sel]');if(!tr||!S.est||S.view!=='estimate')return;const s=S.est.sel;if(s&&s.id===tr.dataset.id)return;S.est.sel={t:tr.dataset.t,id:tr.dataset.id};setTimeout(render,0)});
+document.addEventListener('input',e=>{const t=e.target;
+  if(t.dataset.tplname!=null&&S.est&&S.est.tpl){S.est.tplName=t.value;estTouch();return}
+  if(M&&M.kind==='esttpl'&&t.dataset.esttpl&&t.type!=='radio'){M[t.dataset.esttpl]=t.value;return}
+  if(M&&M.kind==='estnew'&&t.dataset.estnew&&t.tagName==='INPUT'&&t.type!=='radio'){M[t.dataset.estnew]=t.value;return}});
+document.addEventListener('change',e=>{const t=e.target;
+  if(M&&M.kind==='esttpl'&&t.dataset.esttpl==='qty'){M.qty=t.value;renderModal();return}
+  if(M&&M.kind==='estnew'&&t.dataset.estnew){const k=t.dataset.estnew;M[k]=t.value;if(k==='start'){M.src=t.value==='tpl'?(cbList('estimate')[0]?.id||''):t.value==='copy'?(S.estIndex[0]?.id||''):''}if(k==='bidId'&&M.start==='blank'&&scopeItems(byId(S.bids,t.value)||{}).length)M.start='scopes';renderModal();return}
+  if(t.dataset.estsf!=null){S.estsF=t.value;render();return}
+  if(!S.est||!S.est.data||S.view!=='estimate'||EC().ro)return;const E=S.est,d=E.data;
+  if(t.dataset.eosec){const it=d.items.find(x=>x.id===t.dataset.eosec);if(it){const i=d.items.indexOf(it);d.items.splice(i,1);it.sec=t.value;let at=-1;d.items.forEach((x,j)=>{if(x.sec===t.value)at=j});d.items.splice(at+1,0,it);estOpenSet().add(t.value);estOpenSave();estTouch();render()}return}
+  if(t.dataset.eosectpl!=null){const tp=cbById(t.value);if(!tp)return;const D=estFromTpl(tp);D.sections.forEach(s=>{const ns=estAddSection(d,s,itemsOf(D,s.id));estOpenSet().add(ns.id);E.sel={t:'sec',id:ns.id}});estOpenSave();estTouch();render();toast(`Added ${tp.description}`);return}
+  if(t.dataset.eoitemtpl){const tp=cbById(t.value);if(!tp||!cbD(tp).item)return;const src=cbD(tp).item;const it=estAddItem(d,t.dataset.eoitemtpl,{desc:src.desc||tp.description,unit:cbD(tp).unit||src.unit||'',notes:src.notes||''});
+    it.acts=(src.acts||[]).map((a0,j)=>{const a=actFromTpl(a0);a.code=`${it.code}.${(j+1)*10}`;return a});E.sel={t:'item',id:it.id};estOpenSet().add(it.sec);estOpenSave();estTouch();render();focusSoon(`items.${d.items.indexOf(it)}.qty`);return}});
+// Enter moves down a column, like a spreadsheet
+document.addEventListener('keydown',e=>{const t=e.target;if(e.key!=='Enter'||!t.dataset?.grid||t.tagName!=='INPUT'||M&&M.kind!=='cbtpl')return;if(t.dataset.epadd!=null)return;e.preventDefault();
+  const all=[...document.querySelectorAll(`input[data-grid="${t.dataset.grid}"][data-col="${t.dataset.col}"]:not([disabled])`)];const i=all.indexOf(t);const n=all[i+(e.shiftKey?-1:1)];
+  if(n){n.focus();n.select?.()}else if(t.dataset.grid==='sh'){const add=document.querySelector('input[data-grid="sh"][data-col="add"]');add?add.focus():t.blur()}else t.blur()});
+
+/* ---------- Schedule & indirects tab ---------- */
+function estIndView(d,R,ro){const st=d.settings;const D=estDefaultsRaw();const sc=st.sched?schedCalc(st.sched):null;const dis=ro?' disabled':'';const m=d.markup;
+  const schOpts=D.schedules.map(s=>`<option value="${esc(s.id)}"${st.sched&&st.sched.name===s.name?' selected':''}>${esc(s.name)}</option>`).join('');
+  const lines=(d.ind||[]).map((l,i)=>{const x=R.indLines[i]||{};const p=`ind.${i}`;const pct=l.basis==='pct_labor'||l.basis==='pct_direct';
+    return `<tr><td>${epIn(p+'.desc',l.desc,{ph:'Indirect cost',aria:'Description'})}</td><td>${epSel(p+'.basis',l.basis,IND_BASIS,{aria:'Basis'})}</td>
+      <td>${epIn(p+'.rate',l.rate,{n:1,cls:'ind-n',ph:'0',aria:pct?'Percent':'Rate'})}${pct?'<span class="dim small"> %</span>':''}</td>
+      <td class="r num small dim">${pct?(l.basis==='pct_labor'?'of '+money(R.c.labor):'of '+money(R.cost)):x.auto!=null?qtyFmt(+x.auto.toFixed(2)):''}</td>
+      <td>${pct?'':epIn(p+'.qty',l.qty,{n:1,cls:'ind-n',ph:x.auto!=null?fmtN(x.auto,2):'',aria:'Quantity override',title:'Leave blank to use the calculated quantity'})}</td>
+      <td class="r num"><b>${money(x.amt)}</b></td><td>${ro?'':`<button class="rm" data-act="ep-del" data-p="${p}" aria-label="Remove">×</button>`}</td></tr>`}).join('');
+  return `<div class="grid2 ind-grid"><div class="sec"><div class="sec-h"><h2>Work schedule</h2><span>Hours per day and overtime</span></div><div class="panel pad">
+      <div class="fg"><label class="f s2">Schedule<select class="field" data-estsched${dis}>${st.sched?'':'<option value="" selected>Not set — 10 hr days, no overtime</option>'}${schOpts}</select></label>
+      <label class="f">Crews working at once${epIn('settings.crews',st.crews,{n:1,ph:'1',title:'Used to turn total crew days into job duration'})}</label>
+      <label class="f">Job duration (work days)${epIn('settings.durDays',st.durDays,{n:1,ph:fmtN(R.dur.autoDays,1),title:'Leave blank to use the calculated duration'})}</label></div>
+      ${sc?`<div class="sched-week">${DAYS.map((n,i)=>`<div class="${sc.h[i]?'on':''}"><span>${n}</span><b>${sc.h[i]||'—'}</b></div>`).join('')}</div><p class="small" style="margin:8px 0 0">${esc(schedText(st.sched))}</p>`:''}
+      <div class="est-isum"><div><span>Crew days</span><b>${fmtN(R.dur.crewDays,1)}</b></div><div><span>Duration</span><b>${fmtN(R.dur.days,1)} days</b><small>${fmtN(R.dur.weeks,1)} weeks · ${fmtN(R.dur.months,1)} months</small></div><div><span>Overtime premium</span><b>${money(R.ot)}</b><small>in labor cost</small></div></div>
+      <p class="hint">Duration = crew days ÷ crews working at once (type over it if you know the schedule). Schedules and overtime rules are set up on the Settings page.</p></div></div>
+    <div class="sec"><div class="sec-h"><h2>Indirects</h2><span>${money(R.ind)} · ${R.cost?fmtN(R.ind/R.cost*100,1)+'% of direct':''}</span></div><div class="panel pad">
+      <div class="panel scroll ind-t"><table><thead><tr><th>Indirect cost</th><th>Basis</th><th>Rate</th><th class="r">Calc. qty</th><th>Qty override</th><th class="r">Total</th><th></th></tr></thead><tbody>${lines||'<tr><td colspan="7" class="dim small">No indirect costs yet.</td></tr>'}</tbody>
+        <tfoot><tr><td colspan="5"><b>Total indirects</b></td><td class="r num"><b>${money(R.ind)}</b></td><td></td></tr></tfoot></table></div>
+      ${ro?'':`<div class="adders"><button class="btn sm primary" data-act="ind-add">+ Indirect cost</button><button class="btn sm" data-act="ind-defaults">Load company list</button>${isAdmin()?'<button class="btn sm ghost" data-act="mk-tocompany" data-v="ind" title="Use this list, schedule and crew count on every new estimate">Make these the company defaults</button>':''}</div>`}
+      <div class="fg" style="margin-top:12px"><label class="f s2">How indirects get into the price<select class="field" data-ep="markup.spreadInd"${dis}>${[['cost','Spread over every bid item by cost'],['select','Carried only by the items I pick'],['lump','Shown as its own lump-sum line']].map(([k,l])=>`<option value="${k}"${(m.spreadInd||'cost')===k?' selected':''}>${l}</option>`).join('')}</select></label>
+        ${m.spreadInd==='lump'?`<label class="f s2">Lump-sum line name${epIn('markup.gcName',m.gcName,{ph:'General conditions'})}</label>`:''}</div>
+      ${m.spreadInd==='select'?estCarryList(d,R,ro):''}</div></div></div>`}
+function estCarryList(d,R,ro){const carry=d.markup.carry||{};const dis=ro?' disabled':'';const base=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>!o.it.alt);
+  return `<div class="carry"><div class="small" style="font-weight:600;margin:8px 0 6px">Items that carry it ${Object.values(carry).some(Boolean)?'':'<span class="dim">(none picked — spread over everything)</span>'}</div>
+    ${d.sections.map(s=>{const its=base.filter(o=>o.it.sec===s.id);return its.length?`<div class="carry-s"><b class="small">${esc(s.code)} ${esc(s.name)}</b>${its.map(o=>`<label class="check small"><input type="checkbox" data-carry="${o.it.id}"${carry[o.it.id]?' checked':''}${dis}> ${esc(o.it.code)} ${esc(o.it.desc)} <span class="dim">${money(o.x.total)}</span></label>`).join('')}</div>`:''}).join('')}</div>`}
+
+/* ---------- Markup & totals tab ---------- */
+function estSumView(d,R,b,ro){const m=d.markup;const p='markup';const dis=ro?' disabled':'';const tpl=S.est&&S.est.tpl;
+  const line=(l,v,cls,s)=>`<div class="li${cls?' '+cls:''}"><span>${l}${s?` <span class="dim small">${s}</span>`:''}</span><b class="num">${v}</b></div>`;
+  const typeT=`<table class="mk-t"><thead><tr><th>Cost type</th><th class="r">Cost</th><th>Overhead %</th><th>Markup %</th><th class="r">Adds</th></tr></thead><tbody>${MK_TYPES.map(k=>{const cost=k==='ind'?R.ind:k==='material'?R.c.material+R.c.tax:R.c[k];const r=R.rates[k];
+      return `<tr><td>${MK_LABEL[k]}</td><td class="r num small">${money(cost)}</td><td>${epIn(`${p}.byType.${k}.oh`,m.byType?.[k]?.oh,{n:1,cls:'mk-n',ph:'0'})}</td><td>${epIn(`${p}.byType.${k}.mu`,m.byType?.[k]?.mu,{n:1,cls:'mk-n',ph:'0'})}</td><td class="r num small">${money(cost*r.eff)}</td></tr>`}).join('')}</tbody></table>`;
+  const sm=m.spreadMu||'cost';
+  const manual=sm==='manual'?`<div class="panel scroll" style="margin-top:12px"><table class="mk-adj"><thead><tr><th>Item</th><th class="r">Calculated</th><th>Adjust ($)</th><th class="r">Price</th></tr></thead><tbody>
+      ${d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>!o.it.alt).map(o=>`<tr><td>${esc(o.it.code)} ${esc(o.it.desc)}</td><td class="r num small">${money(o.x.total+o.x.ind+o.x.mk+o.x.bond)}</td><td>${(()=>{const pp=`${p}.adj.${o.it.id}`;m.adj=m.adj||{};return `<input class="field mk-n" id="${epId(pp)}" data-ep="${pp}" data-ept="n" inputmode="decimal" value="${esc(m.adj[o.it.id]??'')}" placeholder="0"${dis}>`})()}</td><td class="r num"><b>${money(o.x.price)}</b></td></tr>`).join('')}</tbody>
+      <tfoot><tr><td><b>Out of balance</b></td><td></td><td class="r num ${Math.abs(R.adjSum)>=1?'bad-t':''}"><b>${R.adjSum>0?'+':''}${money(R.adjSum)}</b></td><td class="small dim">${Math.abs(R.adjSum)>=1?'Adjustments should add to $0 to keep the bid total':'Balanced'}</td></tr></tfoot></table></div>`:'';
+  return `<div class="grid2"><div class="sec"><div class="sec-h"><h2>Markup</h2>${ro?'':`<span class="adders" style="margin:0"><button class="btn sm" data-act="mk-defaults">Load company defaults</button>${isAdmin()?'<button class="btn sm ghost" data-act="mk-tocompany" data-v="markup" title="Use this markup and spread setup on every new estimate">Make these the company defaults</button>':''}</span>`}</div><div class="panel pad">
+    <div class="seg mk-mode" style="margin-bottom:12px"><button class="${m.mode!=='type'?'on':''}" data-act="mk-mode" data-v="simple"${dis}>Simple — on bid cost</button><button class="${m.mode==='type'?'on':''}" data-act="mk-mode" data-v="type"${dis}>By cost type</button></div>
+    ${m.mode==='type'?typeT:`<div class="fg est-mk"><label class="f">Overhead %${epIn(p+'.oh',m.oh,{n:1,ph:'0'})}</label><label class="f">Markup / profit %${epIn(p+'.profit',m.profit,{n:1,ph:'0'})}</label></div><p class="hint" style="margin-top:4px">Applied to every bid item’s cost${R.ind?' and the indirects':''}.</p>`}
+    <label class="check small" style="margin-top:10px"><input type="checkbox" data-ep="${p}.compound" data-ept="b"${m.compound!==false?' checked':''}${dis}> Markup is figured on cost + overhead (unchecked: both on cost)</label>
+    <div class="fg est-mk" style="margin-top:12px"><label class="f">Bond %${epIn(p+'.bond',m.bond,{n:1,ph:'0'})}</label><label class="f">Sales tax on materials %${epIn(p+'.tax',m.tax,{n:1,ph:'0'})}</label><label class="f">Retainage %${epIn(p+'.ret',m.ret,{n:1,ph:'0'})}</label></div>
+    <div class="fg" style="margin-top:12px"><label class="f s4">How markup gets into the unit prices<select class="field" data-ep="${p}.spreadMu"${dis}>${[['cost','Each item carries its own share (by cost)'],['select','Carried only by the items I pick'],['manual','Adjust items by hand (unbalanced bid)']].map(([k,l])=>`<option value="${k}"${sm===k?' selected':''}>${l}</option>`).join('')}</select></label></div>
+    ${sm==='select'?estCarryList(d,R,ro):''}${manual}
+    <p class="hint">Sales tax is part of material cost. Bond is on everything above it. Retainage doesn’t change the price — it’s what the GC holds until closeout. Indirects and how they spread are on the Schedule & indirects tab.</p></div>
+    ${ro||tpl?'':`<div class="panel pad" style="margin-top:14px"><b>Send to the bid</b><p class="small dim" style="margin:4px 0 10px">Puts the base bid total into the bid’s proposal amount.</p><div class="adders" style="margin:0"><button class="btn primary sm" data-act="est-push" data-v="amount_with">Base — with site improvements</button><button class="btn sm" data-act="est-push" data-v="amount_without">Base — without</button></div>
+      <p class="hint">Now on the bid: with ${money(num(b.amount_with))} · without ${money(num(b.amount_without))}</p></div>`}</div>
+  <div class="sec"><div class="sec-h"><h2>Totals</h2><span>Base bid</span></div><div class="panel pad est-sum"><div class="list">
+    ${COST_KEYS.filter(k=>R.c[k]).map(k=>line(COST_LABEL[k],money2(R.c[k]),'',k==='labor'&&R.ot?`incl. ${money(R.ot)} overtime`:'')).join('')}${R.c.tax?line('Sales tax',money2(R.c.tax),'',`${fmtN(m.tax,2)}% on taxable materials`):''}
+    ${line('Direct cost',money2(R.cost),'est-sub')}${R.ind?line('Indirects',money2(R.ind),'',`${fmtN(R.dur.weeks,1)} weeks`):''}
+    ${line('Overhead',money2(R.oh))}${line('Markup / profit',money2(R.profit))}${R.bond?line('Bond',money2(R.bond),'',`${fmtN(num(m.bond)||0,2)}%`):''}
+    ${line('Calculated total',money2(R.calcTotal),'est-sub')}${R.gc?line(esc(m.gcName||'General conditions')+' (lump-sum line)',money2(R.gc),'','included above'):''}${Math.abs(R.adj)>=.01?line('Rounding, overrides & adjustments',(R.adj>0?'+':'−')+money2(Math.abs(R.adj))):''}
+    ${line('Bid total',money2(R.total),'est-grand')}${line('Margin',`${money2(R.margin)} · ${fmtN(R.marginPct,1)}%`,'','after direct + indirect cost')}${line('Retainage held',money2(R.ret),'',`${fmtN(num(m.ret)||0,2)}%`)}
+    ${R.alts?line('Alternates (not in base bid)',money2(R.alts)):''}</div></div></div></div>`}
+
+/* ---------- Settings page (admin) ---------- */
+function setDraft(){if(!S.setDraft){const D=estDefaultsRaw();S.setDraft=clone({markup:D.markup,ind:D.ind.map(l=>({...l})),schedules:D.schedules,defSched:D.defSched,crews:D.crews})}return S.setDraft}
+function vSettings(){const x=setDraft();const m=x.markup;const sf=(path,v,o={})=>`<input class="field${o.n?' num':''}${o.cls?' '+o.cls:''}" id="sf-${path.replace(/\./g,'_')}" data-sf2="${path}"${o.n?' data-sfn inputmode="decimal"':''} value="${esc(v??'')}"${o.ph?` placeholder="${esc(o.ph)}"`:''}>`;
+  const sel=(path,v,opts)=>`<select class="field" data-sf2="${path}">${opts.map(([k,l])=>`<option value="${k}"${String(v)===String(k)?' selected':''}>${l}</option>`).join('')}</select>`;
+  const sched=(s,i)=>`<div class="panel pad sched${x.defSched===s.id?' def':''}"><div class="sched-h">${sf(`schedules.${i}.name`,s.name,{cls:'sched-name',ph:'Schedule name'})}
+      <label class="check small"><input type="radio" name="defsched" data-sfdef="${esc(s.id)}"${x.defSched===s.id?' checked':''}> Default for new estimates</label><button class="btn sm ghost" data-act="sf-schdup" data-i="${i}">Duplicate</button><button class="btn sm ghost danger-t" data-act="sf-schrm" data-i="${i}"${x.schedules.length<2?' disabled':''}>Remove</button></div>
+    <div class="sched-days">${DAYS.map((n,j)=>`<label><span>${n}</span>${sf(`schedules.${i}.days.${j}`,s.days[j]||'',{n:1,ph:'0'})}</label>`).join('')}</div>
+    <div class="fg sched-rules"><label class="f">Overtime rule${sel(`schedules.${i}.rule`,s.rule||'weekly',[['weekly','After hours per week'],['daily','After hours per day'],['both','Daily and weekly'],['none','No overtime']])}</label>
+      <label class="f">OT after (hrs/week)${sf(`schedules.${i}.otWeek`,s.otWeek,{n:1,ph:'40'})}</label><label class="f">OT after (hrs/day)${sf(`schedules.${i}.otDay`,s.otDay,{n:1,ph:'8'})}</label><label class="f">OT rate ×${sf(`schedules.${i}.otf`,s.otf,{n:1,ph:'1.5'})}</label>
+      <label class="f">Double time after (hrs/day)${sf(`schedules.${i}.dtDay`,s.dtDay,{n:1,ph:'none'})}</label><label class="f">Double time ×${sf(`schedules.${i}.dtf`,s.dtf,{n:1,ph:'2'})}</label>
+      <label class="check small"><input type="checkbox" data-sfb="schedules.${i}.satOT"${s.satOT?' checked':''}> Saturday is all overtime</label><label class="check small"><input type="checkbox" data-sfb="schedules.${i}.sunDT"${s.sunDT?' checked':''}> Sunday is all double time</label></div>
+    <p class="small sched-sum">${esc(schedText(s))}</p></div>`;
+  const typeT=`<table class="mk-t"><thead><tr><th>Cost type</th><th>Overhead %</th><th>Markup %</th></tr></thead><tbody>${MK_TYPES.map(k=>`<tr><td>${MK_LABEL[k]}</td><td>${sf(`markup.byType.${k}.oh`,m.byType?.[k]?.oh,{n:1,cls:'mk-n',ph:'0'})}</td><td>${sf(`markup.byType.${k}.mu`,m.byType?.[k]?.mu,{n:1,cls:'mk-n',ph:'0'})}</td></tr>`).join('')}</tbody></table>`;
+  return `<div class="head"><div><h1>Settings</h1><p>How bids are built — defaults every new estimate starts with. Each estimate can still change its own.</p></div><div class="tools">${S.setDirty?'<span class="dim small">Unsaved changes</span>':''}<button class="btn" data-act="sf-reset"${S.setDirty?'':' disabled'}>Discard changes</button><button class="btn primary" data-act="sf-save"${S.setDirty?'':' disabled'}>Save settings</button></div></div>
+  <div class="set-grid">
+  <div class="sec"><div class="sec-h"><h2>Markup & overhead</h2><span>Default for new estimates</span></div><div class="panel pad">
+    <div class="seg" style="margin-bottom:12px"><button class="${m.mode!=='type'?'on':''}" data-act="sf-mode" data-v="simple">Simple — on bid cost</button><button class="${m.mode==='type'?'on':''}" data-act="sf-mode" data-v="type">By cost type</button></div>
+    ${m.mode==='type'?typeT:`<div class="fg"><label class="f">Overhead %${sf('markup.oh',m.oh,{n:1})}</label><label class="f">Markup / profit %${sf('markup.profit',m.profit,{n:1})}</label></div>`}
+    <label class="check small" style="margin-top:10px"><input type="checkbox" data-sfb="markup.compound"${m.compound!==false?' checked':''}> Markup is figured on cost + overhead</label>
+    <div class="fg" style="margin-top:12px"><label class="f">Bond %${sf('markup.bond',m.bond,{n:1,ph:'0'})}</label><label class="f">Sales tax %${sf('markup.tax',m.tax,{n:1,ph:'0'})}</label><label class="f">Retainage %${sf('markup.ret',m.ret,{n:1,ph:'0'})}</label></div>
+    <div class="fg" style="margin-top:12px"><label class="f s2">Spread indirects${sel('markup.spreadInd',m.spreadInd||'cost',[['cost','Over every item by cost'],['select','Only items picked on each bid'],['lump','As a lump-sum line']])}</label>
+      <label class="f s2">Spread markup${sel('markup.spreadMu',m.spreadMu||'cost',[['cost','Each item carries its share'],['select','Only items picked on each bid'],['manual','Adjust by hand (unbalanced)']])}</label>
+      ${m.spreadInd==='lump'?`<label class="f s2">Lump-sum line name${sf('markup.gcName',m.gcName,{ph:'General conditions'})}</label>`:''}</div></div></div>
+  <div class="sec"><div class="sec-h"><h2>Indirect costs</h2><span>Starting list on new estimates</span></div><div class="panel pad">
+    <div class="panel scroll"><table><thead><tr><th>Indirect cost</th><th>Basis</th><th>Rate</th><th></th></tr></thead><tbody>${x.ind.map((l,i)=>`<tr><td>${sf(`ind.${i}.desc`,l.desc,{ph:'Description'})}</td><td>${sel(`ind.${i}.basis`,l.basis,IND_BASIS)}</td><td>${sf(`ind.${i}.rate`,l.rate,{n:1,cls:'ind-n',ph:'0'})}</td><td><button class="rm" data-act="sf-indrm" data-i="${i}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table></div>
+    <div class="adders"><button class="btn sm" data-act="sf-indadd">+ Indirect cost</button></div>
+    <div class="fg"><label class="f">Crews working at once (default)${sf('crews',x.crews,{n:1,ph:'2'})}</label></div>
+    <p class="hint">Weekly, monthly and daily costs are multiplied by the job duration; % lines are figured on labor or direct cost; lump sums are fixed. Every estimate can change its own list.</p></div></div>
+  <div class="sec set-wide"><div class="sec-h"><h2>Work schedules & overtime</h2><span>Hours per day drive production; overtime adds the premium to labor</span></div>
+    <div class="sched-list">${x.schedules.map(sched).join('')}</div><div class="adders"><button class="btn sm" data-act="sf-schadd">+ Schedule</button>${SCHED_PRESETS.filter(p=>!x.schedules.some(s=>s.name===p.name)).map(p=>`<button class="btn sm ghost" data-act="sf-preset" data-v="${esc(p.name)}">+ ${esc(p.name)}</button>`).join('')}</div>
+    <p class="hint">Overtime premium = base wage × burden × (OT rate − 1) for the overtime share of hours; fringe isn’t marked up. Estimates keep a copy of their schedule, so changing one here doesn’t move bids already priced — pick it again on the estimate to update.</p></div></div>`}
+async function setSave(){const x=S.setDraft;if(!x)return;const clean={...x,ind:x.ind.filter(l=>String(l.desc||'').trim()).map(({id,qty,...l})=>l),schedules:x.schedules.map(s=>({...s,days:DAYS.map((_,j)=>num(s.days[j])||0)}))};
+  try{await run(sb.from('settings').upsert({key:'est_settings',value:clean}));await loadTable('settings');S.setDraft=null;S.setDirty=false;toast('Settings saved — new estimates will use them');render()}catch(e){toast(errMsg(e))}}
+
+/* ---------- events ---------- */
+FOCUS_ATTRS.push('data-sf2');
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;if(!/^(ind-|mk-|sf-)/.test(a))return;
+  if(a.startsWith('sf-')){const x=setDraft();const dirty=()=>{S.setDirty=true;render()};
+    switch(a){case 'sf-save':setSave();break;case 'sf-reset':S.setDraft=null;S.setDirty=false;render();break;
+      case 'sf-mode':x.markup.mode=t.dataset.v;dirty();break;
+      case 'sf-indadd':x.ind.push({desc:'',basis:'week',rate:0});dirty();break;case 'sf-indrm':x.ind.splice(+t.dataset.i,1);dirty();break;
+      case 'sf-schadd':x.schedules.push({...clone(SCHED_PRESETS[1]),id:newId(),name:'New schedule'});dirty();break;
+      case 'sf-preset':{const p=SCHED_PRESETS.find(s=>s.name===t.dataset.v);if(p){x.schedules.push({...clone(p),id:newId()});dirty()}break}
+      case 'sf-schdup':{const s=clone(x.schedules[+t.dataset.i]);s.id=newId();s.name+=' (copy)';x.schedules.splice(+t.dataset.i+1,0,s);dirty();break}
+      case 'sf-schrm':{const s=x.schedules[+t.dataset.i];if(x.schedules.length<2)break;x.schedules.splice(+t.dataset.i,1);if(x.defSched===s.id)x.defSched=x.schedules[0].id;dirty();break}}return}
+  const E=S.est;if(!E||!E.data||EC().ro)return;const d=E.data;
+  switch(a){case 'ind-add':(d.ind=d.ind||[]).push({id:newId(),desc:'',basis:'week',rate:null,qty:null});estTouch();render();focusSoon(`ind.${d.ind.length-1}.desc`);break;
+    case 'ind-defaults':{const D=estDefaultsRaw();const have=new Set((d.ind||[]).map(l=>normH(l.desc)));D.ind.forEach(l=>{if(!have.has(normH(l.desc)))(d.ind=d.ind||[]).push({...l,id:newId(),qty:null})});estTouch();render();break}
+    case 'mk-mode':d.markup.mode=t.dataset.v;if(t.dataset.v==='type'&&!d.markup.byType)d.markup.byType=clone(estDefaultsRaw().markup.byType);estTouch();render();break;
+    case 'mk-tocompany':{const cur=S.settings.est_settings||{};const D=estDefaultsRaw();const v={...cur};
+      if(t.dataset.v==='markup'){const {carry,adj,...mk}=clone(d.markup);v.markup=mk}
+      else{v.ind=(d.ind||[]).filter(l=>String(l.desc||'').trim()).map(({id,qty,...l})=>l);v.crews=num(d.settings.crews)||D.crews;const sc=d.settings.sched;if(sc){const sch=(cur.schedules||D.schedules).slice();const i=sch.findIndex(z=>z.name===sc.name);const keep={...clone(sc),id:i>=0?sch[i].id:newId()};if(i>=0)sch[i]=keep;else sch.push(keep);v.schedules=sch;v.defSched=keep.id}}
+      run(sb.from('settings').upsert({key:'est_settings',value:v})).then(()=>loadTable('settings')).then(()=>{S.setDraft=null;toast(t.dataset.v==='markup'?'Markup is now the company default for new estimates':'Schedule, crews and indirects are now the company defaults');render()}).catch(err=>toast(errMsg(err)));break}
+    case 'mk-defaults':{const D=estDefaultsRaw().markup;const keep={carry:d.markup.carry,adj:d.markup.adj};d.markup={...clone(D),...keep};estTouch();render();toast('Company markup defaults loaded');break}}});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset.sf2==null||S.view!=='settings'||t.tagName==='SELECT')return;const x=setDraft();const ks=t.dataset.sf2.split('.');let o=x;
+  for(let i=0;i<ks.length-1;i++){o=o[ks[i]]=o[ks[i]]??(isNaN(+ks[i+1])?{}:[])}o[ks[ks.length-1]]=t.dataset.sfn!=null?(t.value.trim()===''?null:num(t.value.replace(/[,$\s]/g,''))):t.value;S.setDirty=true;render()});
+document.addEventListener('change',e=>{const t=e.target;
+  if(S.view==='settings'){const x=setDraft();
+    if(t.dataset.sf2!=null&&t.tagName==='SELECT'){const ks=t.dataset.sf2.split('.');let o=x;for(let i=0;i<ks.length-1;i++)o=o[ks[i]];o[ks[ks.length-1]]=t.value;S.setDirty=true;render();return}
+    if(t.dataset.sfb){const ks=t.dataset.sfb.split('.');let o=x;for(let i=0;i<ks.length-1;i++)o=o[ks[i]];o[ks[ks.length-1]]=t.checked;S.setDirty=true;render();return}
+    if(t.dataset.sfdef){x.defSched=t.dataset.sfdef;S.setDirty=true;render();return}}
+  if(!S.est||!S.est.data||S.view!=='estimate'||EC().ro)return;const d=S.est.data;
+  if(t.dataset.estsched!=null){const s=estDefaultsRaw().schedules.find(z=>z.id===t.value);if(s){d.settings.sched=clone(s);estTouch();render()}return}
+  if(t.dataset.carry){d.markup.carry=d.markup.carry||{};if(t.checked)d.markup.carry[t.dataset.carry]=true;else delete d.markup.carry[t.dataset.carry];estTouch();render();return}});
+window.addEventListener('beforeunload',e=>{if(S.setDirty){e.preventDefault();e.returnValue=''}});
 
 function estBidBlock(b,work){if(b._new||!['admin','estimator','board'].includes(role()))return '';const x=estOf(b.id);
   if(S.estMissing)return `<fieldset><legend>Estimate</legend><p class="hint" style="margin:0">Estimates need a one-time database update (update-14-estimates.sql).</p></fieldset>`;

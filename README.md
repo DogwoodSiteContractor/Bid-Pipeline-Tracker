@@ -38,6 +38,7 @@ supabase/update-12-supersede.sql   one-time update for superseding projects
 supabase/update-13-codebooks.sql   one-time update for estimating codebooks
 supabase/update-14-estimates.sql   one-time update for estimates and activity / bid item templates
 supabase/update-15-quote-lines.sql   one-time update for line-item vendor quotes
+supabase/update-16-estimate-sections.sql   one-time update for master/section templates and starting estimates from the Estimates page
 ```
 
 > **Already set up before these updates?** Run each `supabase/update-*.sql` file you haven't run yet, once, in number order, in the SQL Editor. New installs only need `schema.sql`.
@@ -90,7 +91,7 @@ Open the address, sign in, and you're in as Admin.
 2. In Supabase, go to **Authentication → Users → Add user**, then either:
    - **Send invitation**: they get an email and set their own password.
    - **Create new user**: you set a password and give it to them.
-3. In the app, open **Team & logins** and set each person's role.
+3. In the app, open **Team** (Logins & roles) and set each person's role.
    - Estimators whose email matches an estimator record are linked automatically.
    - Otherwise, pick their record in the "Linked estimator" column, or click **Create record**.
 
@@ -148,8 +149,77 @@ Every bid has an **Estimator log** under Scope takeoff. Estimators on the bid (a
   - You can apply one vendor to a whole supplier price list.
 - **Export to Excel:** writes all four codebooks in the same layout the import reads. You can export, edit prices in Excel, and import the file back.
 
+## Top bar
+**Dashboard · Pipeline · Estimates · Jobs · Contacts · Library · Calculators · Team · Settings.** Related pages share one tab, with sub-tabs inside it:
+- **Contacts:** Clients & GCs, and Vendors & subs.
+- **Library:** Codebooks, and Scopes & templates.
+- **Team:** Logins & roles, and Estimators.
+
+When the bar is too narrow, the last tabs fold into a **More** menu.
+
+## Settings (admins)
+The defaults every new estimate starts with. Each estimate keeps its own copy, so changing a setting never moves a bid that's already priced.
+- **Markup & overhead:**
+  - **Simple:** overhead % and markup % on bid cost.
+  - **By cost type:** separate overhead % and markup % for labor, equipment, material (+ tax), subs, trucking, other and indirects.
+  - Choose whether markup is figured on cost + overhead (compounded) or both on cost.
+  - Bond %, sales tax % and retainage %.
+  - Default spreads for indirects and markup.
+- **Indirect costs:** the starting list of indirects (superintendent, trucks, mobilization, small tools, temporary facilities, insurance…), each priced per week, per month, per work day, per man-hour, as a lump sum, as % of labor or as % of direct cost. Also the default number of crews working at once.
+- **Work schedules & overtime:**
+  - Schedules like 5×8, 5×10, 4×10 and 6×10, with hours for each day of the week.
+  - Overtime after X hours a week and/or a day, at a rate you set (1.5×).
+  - Double time after X hours a day, Saturday as all overtime, Sunday as all double time.
+  - Pick one schedule as the default for new estimates.
+
 ## Estimates
-Open a bid and click **Start estimate** (or **Open estimate**). You can start blank, start with one bid item per scope on the bid, or copy another bid's estimate. Estimators on the bid and admins edit it; everyone else who can see the bid views it. Needs `supabase/update-14-estimates.sql`.
+**Getting started**
+- **Estimates tab:** lists every estimate (project, GC, due date, status, lead, cost, bid total, margin) and the **Master templates**.
+- **+ New estimate:** pick a bid from the pipeline, or type a new project name, GC and due date. The bid record is created for you, with you as lead estimator. Then start from:
+  - a master template,
+  - the bid's scopes, which become sections,
+  - a blank estimate,
+  - or a copy of another estimate.
+- **From a bid:** the **Start estimate / Open estimate** button in the bid window still works.
+- Needs `supabase/update-14-estimates.sql`, plus `update-16-estimate-sections.sql` for templates and new projects.
+
+**Structure:** Sections (scopes) → Bid items → Activities → Costs.
+
+**Build tab (left side):** an outline that works like a spreadsheet.
+- Sections, bid items and activities each expand and collapse (▸ / ▾). **Show Sections / Bid items / Everything** jumps to a level.
+- Type the code, description, quantity and unit right in the grid. **Enter** moves down a column.
+- Right-click a row, or use **⋯**, to add, duplicate, move, delete, make an alternate, or save it as a template.
+- Codes number themselves (400 / 410 / 410.10) and you can type over them. **Renumber** tidies everything.
+
+**Build tab (right side):** shows what you clicked.
+- **Section:** name, notes, totals and its bid items.
+- **Bid item:** quantity, section, unit price override, alternate, totals and its activities.
+- **Activity:** the cost sheet. The crew row comes first, then labor, equipment, materials, subs, trucking and other costs. Type a code or name in the bottom row to add from the codebook.
+- Each block collapses, and **Hide panel** gives the outline the full width.
+
+**Schedule & indirects tab**
+- **Schedule:** pick the work schedule. Its hours per day drive units/day and crew-day production. Its overtime rule adds the overtime premium to labor (base wage × burden × the OT rate above straight time, on the overtime share of hours).
+- **Duration:** crew days ÷ crews working at once. Type over it if you know the schedule.
+- **Indirect lines:** totaled from the duration, or from labor or direct cost. Type over any line's quantity.
+- **Getting indirects into the price:** spread over every bid item by cost, carried only by items you pick, or shown as its own lump-sum line (e.g. "General conditions") on the proposal.
+
+**Markup & totals tab**
+- **Modes:** Simple (overhead + markup on bid cost) or By cost type, with the compounding option, bond, tax and retainage.
+- **Load company defaults** pulls in the Settings page defaults.
+- **Getting markup into unit prices:**
+  - each item carries its own share,
+  - only the items you pick carry it,
+  - or you adjust items by hand for an unbalanced bid. An "out of balance" check shows whether the adjustments still add up to $0.
+
+**Templates**
+- **Save as master template** (admins) saves the whole estimate, including its settings: work schedule, crews at once, markup mode and rates, bond, tax, retainage, the indirect list, both spread choices and which items carry the markup. Every estimate started from it begins with exactly those settings. Only the job duration is recalculated for each job.
+- **Make these the company defaults** (admins), on the Markup and Schedule & indirects tabs, copies an estimate's setup to the Settings page so every new estimate starts that way, with or without a template. **Save as section template** on any section saves one scope.
+- Each time you save, you choose whether to clear the quantities or keep them as "typical".
+- Templates are always priced at the codebook rates on the day an estimate is started from them.
+- Starting from a master template opens **quantity entry**: blank bid items are highlighted so you can punch in your takeoff. **Remove items left blank** drops the ones you don't need.
+- Add a section template to any estimate with **+ Section from template**. Edit templates in the same builder from **Estimates → Master templates**.
+- Estimates made before sections existed are converted automatically: each bid item goes into a section named after its old Scope field, or "General".
+
 - **Bid items** have a quantity and unit and are built from **activities**. Use **Alternate** to price an item but keep it out of the base bid. Enter a **unit price override** to set an item's price yourself.
 - **Activities** have a quantity (blank means the bid item's quantity), a **crew** and a **production rate**: units/hr, units/day, crew hours or crew days. These give crew hours, days and man-hours, and crew $/hr × hours gives the labor and equipment cost.
 - **Costs on an activity:** add labor, equipment or materials from the codebook (type to search), or a custom labor, equipment, material, sub, trucking or other cost.
@@ -172,7 +242,7 @@ Open a bid and click **Start estimate** (or **Open estimate**). You can start bl
   - **Print / save as PDF** prints just the proposal.
   - **Mark sent** records the total, status "Sent" and the date for each GC on the bid, and sets the proposal status to Sent.
   - **Edit library** (admins) holds the standard lists and the letterhead (address, phone, license #).
-- **Templates:** the **Activities** and **Bid items** tabs in Codebooks hold reusable templates, always priced at today's codebook rates. Build them there, or click **→ Codebook** / **Save to codebook** in an estimate (admins). Add them to an estimate from the **From … codebook** lists.
+- **Activity and bid item templates:** the **Activities** and **Bid items** tabs in Codebooks hold reusable templates, always priced at today's codebook rates. Build them there, or click **→ Codebook** / **Save to codebook** in an estimate (admins). Add them to an estimate from the **From … codebook** lists.
 
 ## Calculators
 **Cut / fill from plans:** upload the grading sheet (PDF or image), set the scale by clicking two points a known distance apart, draw the perimeter, then trace the existing and proposed contours (right-click, double-click or Enter ends a line; plus flat pads and spot elevations) and give each an elevation — the next contour's elevation fills in automatically. Calculate gives rough cut, fill, import/export (fill × (1 + shrink), the same as AGTEK’s Comp/Ratio), topsoil strip and truck loads, with a cut/fill map on the plan. Lines are remembered in that browser; re-upload the same plan to see them.
