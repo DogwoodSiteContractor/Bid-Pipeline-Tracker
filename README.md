@@ -365,10 +365,17 @@ The defaults every new estimate starts with. Each estimate keeps its own copy, s
   - Materials can carry a waste % and sales tax.
 - **Prices are copied in when you add them,** so later codebook changes don't move a bid you've already sent. When codebook prices change, **↻ Update prices** pulls in the current ones.
 - **Markup & totals:** sales tax on taxable materials, overhead (on cost), profit (on cost + overhead), bond (on everything above) and retainage (shown for cash flow; it doesn't change the price). Markup is spread into unit prices, rounded to the cent. The rounding and any overrides are shown as their own line. **Send to the bid** puts the base bid total into the bid's proposal amount.
+- **Moving a bid item to another section:** click the **⋯** on the bid item (or right-click it) → **Move to another section**, then pick the section. Or drag the row (grab it anywhere outside the text boxes) onto a section header, or onto another bid item to land just above it. Its activities move with it and it gets the next item number in the new section.
 - **Resources** totals every material, sub, trucking and extra cost, plus crew hours, across the base bid. Use it as your list for quotes.
 - **Autosave:** the estimate saves itself a second after you stop typing. If someone else saved in the meantime, you get a warning and can load their version or keep yours.
 - **Export to Excel:** bid items, full detail and the markup summary.
 - **Quotes:** the Quotes tab is the estimate's quote folder. Needs `supabase/update-15-quote-lines.sql`.
+  - **Folders:** quotes are organized in folders (Aggregates, Water, Sewer, or any name you make up). Each folder holds the estimate lines one group of vendors will price.
+    - **In the codebook:** every material has a **Quote folder** field. Set it once and that material always lands in that folder. Tick several materials and use **Set quote folder…** to do many at once.
+    - **⚙ Generate folders:** sorts every material, sub, trucking and other cost in the estimate into folders. It uses the codebook's quote folder, then the item's category, then the cost type (Subcontractors, Trucking, Materials). Lines already in a folder are left alone, so press it again after adding to the estimate.
+    - **Move…** on any line sends it to another folder or a new one. With **Remember moves in the codebook** ticked, the material goes there on every future estimate.
+    - **Update pricing in estimate:** applies the picked prices from every folder at once. **Apply this folder** does just the one you're on.
+    - Quote prices replace the codebook price on this estimate only, and the "update prices from codebook" button leaves quote-priced lines alone. Tick **Also update codebook prices** to push the quoted price back into the codebook.
   - **Packages:** a package is what you send out for pricing, such as "Pipe & structures", "Stone" or "Erosion control sub". Add the estimate's materials, subs, trucking or rentals to it, then add vendors.
   - **Vendor prices:** each vendor gets a column for unit prices on each line, plus freight / other charges. Tick **Lump sum** for vendors who give one total, and **Tax incl.** when their prices include sales tax.
   - **Comparing:** the low price on each line is outlined. **Complete total** prices any line a vendor skipped at the estimate price, so totals compare fairly.

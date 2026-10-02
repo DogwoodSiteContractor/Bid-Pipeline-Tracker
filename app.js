@@ -4060,6 +4060,7 @@ const CB_FIELDS={
     {k:'description',l:'Description',t:'text',req:1,al:['description','desc','itemdescription','materialdescription','productdescription','material','product','name','itemname']},
     {k:'category',l:'Category',t:'cat',al:['category','class','group','materialgroup','productgroup','productcategory','materialcategory']},
     {k:'data.type',l:'Cost type',t:'sel',opts:CB_MAT_TYPES,al:['costtype','resourcetype','kind','type']},
+    {k:'data.qfolder',l:'Quote folder',t:'text',al:['quotefolder','folder','quotegroup','quotepackage','package','buyoutgroup','quotecategory']},
     {k:'unit',l:'Unit',t:'unit',al:['unit','uom','um','units','unitofmeasure','per','measure']},
     {k:'cost',l:'Unit cost',t:'money',m:1,al:['unitcost','cost','price','unitprice','netprice','each','rate','amount','priceperunit','costperunit','materialcost','yourprice','net']},
     {k:'vendor_id',l:'Vendor',t:'vendor',al:['vendor','supplier','vendorname','suppliername','source','quotedby']},
@@ -4147,7 +4148,7 @@ function vCb(){
   const pd=x=>x.price_date?`<span class="${stale(x)?'cb-stale':''}" title="${stale(x)?'Price is more than 6 months old':''}">${fmtShort(x.price_date)}${String(x.price_date).slice(0,4)!==String(new Date().getFullYear())?', '+String(x.price_date).slice(2,4):''}</span>`:'<span class="dim">—</span>';
   const row=x=>{const d=cbD(x);const inact=x.active===false?' '+pill('Inactive','na'):'';
     const cells={
-      material:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}${d.type&&d.type!=='Material'?` <span class="pill cb-type">${esc(d.type)}</span>`:''}</td><td class="small">${esc(x.category)}</td><td class="small">${esc(x.unit)}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${esc(vendorOf(x.vendor_id)?.company||'')}</td><td class="small">${pd(x)}</td>`,
+      material:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}${d.type&&d.type!=='Material'?` <span class="pill cb-type">${esc(d.type)}</span>`:''}</td><td class="small">${esc(x.category)}${d.qfolder?`<div class="dim cb-qf" title="Quote folder">📁 ${esc(d.qfolder)}</div>`:''}</td><td class="small">${esc(x.unit)}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${esc(vendorOf(x.vendor_id)?.company||'')}</td><td class="small">${pd(x)}</td>`,
       labor:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="r num">${money2(num(d.base))}</td><td class="r num">${num(d.fringe)?money2(d.fringe):'<span class="dim">—</span>'}</td><td class="r num">${num(d.burden)!=null?fmtN(d.burden,1)+'%':'<span class="dim">—</span>'}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${pd(x)}</td>`,
       equipment:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="small">${esc(d.own||'Owned')}</td><td class="r num">${money2(num(d.rate))}</td><td class="r num">${num(d.op)?money2(d.op):'<span class="dim">—</span>'}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${pd(x)}</td>`,
       activity:()=>{const a=d.act||{};const r=tplCalc(x)||{};const pm=PROD_MODES.find(m=>m[0]===(a.mode||'uph'));const kinds=[...new Set((a.res||[]).map(z=>(RES_KINDS.find(k=>k[0]===z.kind)||RES_KINDS[5])[1]))];
@@ -4162,7 +4163,7 @@ function vCb(){
   const bulk=admin&&sel.length?`<div class="cb-bulk"><b>${sel.length} selected</b>
     ${massFields.length?'<button class="btn sm primary" data-act="cb-mass">Mass update prices</button>':''}
     <select class="field sm" data-cbbulk="category"><option value="">Set category…</option>${cbCats(bk).map(x=>`<option>${esc(x)}</option>`).join('')}<option value="__new">New category…</option></select>
-    ${bk==='material'?`<select class="field sm" data-cbbulk="vendor_id"><option value="">Set vendor…</option><option value="__none">No vendor</option>${S.vendors.slice().sort((a,b)=>a.company.localeCompare(b.company)).map(v=>`<option value="${v.id}">${esc(v.company)}</option>`).join('')}</select>`:''}
+    ${bk==='material'?`<select class="field sm" data-cbbulk="data.qfolder"><option value="">Set quote folder…</option>${qFolders().map(x=>`<option>${esc(x)}</option>`).join('')}<option value="__newf">New folder…</option><option value="__none">No folder</option></select><select class="field sm" data-cbbulk="vendor_id"><option value="">Set vendor…</option><option value="__none">No vendor</option>${S.vendors.slice().sort((a,b)=>a.company.localeCompare(b.company)).map(v=>`<option value="${v.id}">${esc(v.company)}</option>`).join('')}</select>`:''}
     <button class="btn sm" data-act="cb-bulk-active" data-v="0">Mark inactive</button><button class="btn sm" data-act="cb-bulk-active" data-v="1">Mark active</button>
     <button class="btn sm danger${c.delArm?' arm':''}" data-act="cb-bulk-del">${c.delArm?`Click again to delete ${sel.length}`:'Delete'}</button><button class="linkbtn" data-act="cb-selclear">Clear</button></div>`:'';
   const tabs=`<div class="seg cb-tabs" role="tablist">${CB_BOOKS.map(([k,l])=>`<button class="${k===bk?'on':''}" data-act="cb-tab" data-v="${k}" role="tab" aria-selected="${k===bk}">${l}<small>${(n=>n+(n===1?' item':' items'))(cbList(k).filter(x=>x.active!==false).length)}</small></button>`).join('')}</div>`;
@@ -4194,6 +4195,7 @@ function cbFieldHtml(f,d,dis){const v=cbGet(d,f.k);const id='cbe-'+f.k.replace('
   if(f.t==='sel')return `<label class="f">${f.l}<select class="field" ${a}>${f.opts.map(o=>`<option${(v||f.opts[0])===o?' selected':''}>${o}</option>`).join('')}</select></label>`;
   if(f.t==='bool')return `<label class="check cb-bool"><input type="checkbox" ${a}${v!==false?' checked':''}> ${f.l}</label>`;
   if(f.t==='vendor')return `<label class="f">${f.l}<select class="field" ${a}><option value="">None</option>${S.vendors.slice().sort((x,y)=>x.company.localeCompare(y.company)).map(o=>`<option value="${o.id}"${v===o.id?' selected':''}>${esc(o.company)}</option>`).join('')}</select></label>`;
+  if(f.k==='data.qfolder')return `<label class="f">${f.l}<input class="field" ${a} list="cb-qfolders" value="${esc(v||'')}" placeholder="e.g. Aggregates" title="Where this item goes when you generate quote folders on an estimate"><datalist id="cb-qfolders">${qFolders().map(o=>`<option value="${esc(o)}">`).join('')}</datalist></label>`;
   if(f.t==='cat')return `<label class="f">${f.l}<input class="field" ${a} list="cb-cats" value="${esc(v||'')}" placeholder="Pick or type"><datalist id="cb-cats">${cbCats(d.book).map(o=>`<option value="${esc(o)}">`).join('')}</datalist></label>`;
   if(f.t==='unit')return `<label class="f">${f.l}<input class="field" ${a} list="cb-units" value="${esc(v||'')}" placeholder="TON, LF, EA…"><datalist id="cb-units">${CB_UNITS.map(o=>`<option value="${o}">`).join('')}</datalist></label>`;
   if(f.t==='date')return `<label class="f">${f.l}<input class="field" type="date" ${a} value="${esc(v||'')}"></label>`;
@@ -4257,7 +4259,7 @@ async function cbDelItem(){if(!M.cbArm){M.cbArm=true;renderModal();return}const 
 /* ---------- bulk actions + mass update ---------- */
 function cbSelIds(){return [...S.cb.sel].filter(id=>cbById(id)?.book===S.cb.book)}
 async function cbBulkSet(k,v){const ids=cbSelIds();if(!ids.length)return;
-  try{await cbUpsert(ids.map(id=>{const r=cbRow(cbById(id));r[k]=v;return r}));await loadTable('codebook');toast(`Updated ${ids.length} item${ids.length===1?'':'s'}`)}catch(e){toast(cbErr(e))}}
+  try{await cbUpsert(ids.map(id=>{const r=cbRow(cbById(id));if(k.startsWith('data.'))r.data={...r.data,[k.slice(5)]:v??''};else r[k]=v;return r}));await loadTable('codebook');toast(`Updated ${ids.length} item${ids.length===1?'':'s'}`)}catch(e){toast(cbErr(e))}}
 async function cbBulkDel(){const c=S.cb;const ids=cbSelIds();if(!ids.length)return;if(!c.delArm){c.delArm=true;render();setTimeout(()=>{if(c.delArm){c.delArm=false;render()}},5000);return}c.delArm=false;
   try{const gone=new Set(ids);const crews=cbList('crew').filter(cr=>!gone.has(cr.id)&&(cbD(cr).members||[]).some(m=>gone.has(m.id)));
     if(crews.length)await cbUpsert(crews.map(cr=>{const r=cbRow(cr);r.data={...r.data,members:(r.data.members||[]).filter(m=>!gone.has(m.id))};return r}));
@@ -4459,7 +4461,7 @@ document.addEventListener('change',e=>{const t=e.target;const c=S.cb;
   if(t.dataset.cbsel){c.delArm=false;t.checked?c.sel.add(t.dataset.cbsel):c.sel.delete(t.dataset.cbsel);render();return}
   if(t.dataset.cbselall!=null){c.delArm=false;const ids=(S.cbShownIds||[]).slice(0,c.limit);ids.forEach(id=>t.checked?c.sel.add(id):c.sel.delete(id));render();return}
   if(t.dataset.cbf){const k=t.dataset.cbf;c[k]=t.type==='checkbox'?t.checked:t.value;c.limit=400;cbSaveUi();render();return}
-  if(t.dataset.cbbulk){let v=t.value;const k=t.dataset.cbbulk;if(!v)return;if(v==='__new'){v=(prompt('New category name')||'').trim();if(!v){render();return}}if(v==='__none')v=null;cbBulkSet(k,v);return}
+  if(t.dataset.cbbulk){let v=t.value;const k=t.dataset.cbbulk;if(!v)return;if(v==='__new'||v==='__newf'){v=(prompt(v==='__newf'?'New quote folder name':'New category name')||'').trim();if(!v){render();return}}if(v==='__none')v=null;cbBulkSet(k,v);return}
   if(M&&(M.kind==='cbitem'||M.kind==='cbtpl')&&t.dataset.cbe&&(t.type==='checkbox'||t.tagName==='SELECT'||t.type==='date')){const k=t.dataset.cbe;cbSet(M.draft,k,t.type==='checkbox'?t.checked:t.value||(k==='vendor_id'?null:''));renderModal();return}
   if(M&&M.kind==='cbitem'&&t.dataset.cbm&&t.tagName==='SELECT'){const [i]=t.dataset.cbm.split('.');M.draft.data.members[+i].id=t.value;renderModal();return}
   if(M&&M.kind==='cbitem'&&t.dataset.cbmadd!=null){if(t.value){const mem=M.draft.data.members=M.draft.data.members||[];const ex=mem.find(m=>m.id===t.value);if(ex)ex.qty=(num(ex.qty)||0)+1;else mem.push({id:t.value,qty:1})}renderModal();return}
@@ -4790,11 +4792,11 @@ function qEdit(id,fn){const base=S.quotes.find(x=>x.id===id);if(!base)return;con
 async function qFlush(id){const c=QP[id];if(!c)return;
   try{await run(sb.from('quotes').update({lines:c.lines,meta:c.meta,amount:c.amount,status:c.status,received_date:c.received_date||null,updated_by:S.session.user.id}).eq('id',id));if(QP[id]===c)delete QP[id];await loadTable('quotes')}
   catch(e){toast(/lines|meta|schema cache|column/i.test(errMsg(e))?'Quote prices need a one-time database update (update-15-quote-lines.sql).':errMsg(e))}}
-async function qAddVendor(pkg,vid){const E=S.est;if(!vid)return;if(qQuotes(E.bidId,pkg).some(q=>q.vendor_id===vid)){toast('That vendor is already in this package.');return}
+async function qAddVendor(pkg,vid){const E=S.est;if(!vid)return;if(qQuotes(E.bidId,pkg).some(q=>q.vendor_id===vid)){toast('That vendor is already in this folder.');return}
   try{await run(sb.from('quotes').insert({id:newId(),bid_id:E.bidId,vendor_id:vid,scope:pkg,status:'Requested',requested_date:todayStr(),lines:[],meta:{},updated_by:S.session.user.id}));await loadTable('quotes');qPkg(E.data,pkg);estTouch();render()}
   catch(e){toast(/lines|meta|column/i.test(errMsg(e))?'Quote prices need a one-time database update (update-15-quote-lines.sql).':errMsg(e))}}
 async function qRemoveVendor(id){try{await run(sb.from('quotes').delete().eq('id',id));delete QP[id];await loadTable('quotes');render()}catch(e){toast(errMsg(e))}}
-function qApply(pkg,toCb){const E=S.est,d=E.data;const C=qCalc(d,pkg,estResIndex(d));const b=byId(S.bids,E.bidId);const byV=new Map();
+function qApply(pkg,toCb,quiet){const E=S.est,d=E.data;const C=qCalc(d,pkg,estResIndex(d));const b=byId(S.bids,E.bidId);const byV=new Map();
   C.rows.forEach((r,i)=>{if(r.missing)return;const pk=C.pick[r.rk];if(!pk||pk==='est')return;const j=C.cols.findIndex(c=>c.q.id===pk);if(j<0)return;const c=C.cols[j];if(!c.lump&&c.cells[i].p==null)return;if(!byV.has(j))byV.set(j,[]);byV.get(j).push(i)});
   let n=0;const cbRows=[];
   byV.forEach((is,j)=>{const c=C.cols[j];const vn=c.v?.company||'Vendor';let up;
@@ -4802,24 +4804,39 @@ function qApply(pkg,toCb){const E=S.est,d=E.data;const C=qCalc(d,pkg,estResIndex
     else{const ext=is.map(i=>c.cells[i].ext||0);const X=ext.reduce((a,x)=>a+x,0);up=is.map((i,k)=>c.cells[i].p+(X>0?c.extra*ext[k]/X/(C.rows[i].q||1):0))}
     is.forEach((i,k)=>{const r=C.rows[i];const price=+up[k].toFixed(4);r.refs.forEach(x=>{x.price=price;x.src={q:c.q.id,v:vn};if(c.meta.taxIncl&&x.kind==='material')x.tax=false});n++;
       if(toCb&&!c.lump&&r.cb){const cb=cbById(r.cb);if(cb&&cb.book==='material'){const y=clone(cb);y.data=cbD(y);const o=num(y.cost),nw=c.cells[i].p;if(o!==nw){y.cost=nw;cbHist(y,'cost',o,nw,'quote',`${vn} quote — ${b?.name||''}`);y.price_date=todayStr();if(c.q.vendor_id)y.vendor_id=c.q.vendor_id;cbRows.push(cbRow(y))}}}})});
-  if(!n){toast(C.rule.mode==='manual'?'Pick a vendor on at least one line first.':'No vendor prices to use yet. Enter the quotes first.');return}
-  estTouch();render();toast(`Applied ${n} quoted price${n===1?'':'s'} to the estimate`);
-  if(cbRows.length)cbUpsert(cbRows).then(()=>loadTable('codebook')).then(()=>toast(`Also updated ${cbRows.length} codebook price${cbRows.length===1?'':'s'}`)).catch(e=>toast(cbErr(e)))}
+  if(!n){if(!quiet)toast(C.rule.mode==='manual'?'Pick a vendor on at least one line first.':'No vendor prices to use yet. Enter the quotes first.');return 0}
+  estTouch();if(!quiet){render();toast(`Applied ${n} quoted price${n===1?'':'s'} to the estimate`)}
+  if(cbRows.length)cbUpsert(cbRows).then(()=>loadTable('codebook')).then(()=>toast(`Also updated ${cbRows.length} codebook price${cbRows.length===1?'':'s'}`)).catch(e=>toast(cbErr(e)));return n}
+
+/* quote folders: where each estimate line goes for pricing */
+const QF_DEFAULT=['Aggregates','Storm drainage','Water','Sewer','Erosion control','Concrete','Asphalt','Trucking','Subcontractors'];
+function qFolders(){const d=S.est&&S.est.data;return [...new Set([...S.codebook.map(x=>cbD(x).qfolder).filter(Boolean),...Object.keys((d&&d.pkgs)||{}),...QF_DEFAULT])].sort((a,b)=>a.localeCompare(b))}
+// the folder a line belongs in: the codebook item's folder, then its category, then by cost type
+function qFolderFor(o){const cb=o.cb&&cbById(o.cb);const f=cb&&String(cbD(cb).qfolder||'').trim();if(f)return f;const c=cb&&String(cb.category||'').trim();if(c)return c;return {sub:'Subcontractors',trucking:'Trucking',material:'Materials',other:'Other'}[o.kind]||'Other'}
+const QF_AUTO=['material','sub','trucking','other'];
+function qUnfiled(d,idx){const inP=new Set(Object.values(d.pkgs||{}).flatMap(P=>P.rows||[]));return [...(idx||estResIndex(d)).values()].filter(o=>QF_AUTO.includes(o.kind)&&!inP.has(o.rk))}
+function qGenerate(d){const L=qUnfiled(d);const made=new Set();L.forEach(o=>{const f=qFolderFor(o);if(!(d.pkgs||{})[f])made.add(f);qPkg(d,f).rows.push(o.rk)});return {lines:L.length,folders:made.size}}
+function qMove(d,rk,from,to,remember){if(!to||to===from)return;const A=qPkg(d,from);A.rows=A.rows.filter(x=>x!==rk);if(A.pick)delete A.pick[rk];const B=qPkg(d,to);if(!B.rows.includes(rk))B.rows.push(rk);if(!A.rows.length&&S.est&&!qQuotes(S.est.bidId,from).length)delete d.pkgs[from];
+  if(remember&&cbEditable()){const cb=cbById(rk);if(cb&&cb.book==='material'&&cbD(cb).qfolder!==to){const r=cbRow(cb);r.data={...r.data,qfolder:to};cbUpsert([r]).then(()=>loadTable('codebook')).catch(e=>toast(cbErr(e)))}}}
 function estQuotesView(d,R,ro){const E=S.est;const b=byId(S.bids,E.bidId);const idx=estResIndex(d,R);
   const names=[...new Set([...S.quotes.filter(q=>q.bid_id===b.id).map(q=>q.scope),...Object.keys(d.pkgs||{})])].filter(Boolean);
   if(!names.includes(E.pkg))E.pkg=names[0]||null;const pk=E.pkg;
   const inPkg=new Map();Object.entries(d.pkgs||{}).forEach(([n,P])=>(P.rows||[]).forEach(rk=>inPkg.set(rk,n)));
   const pkgSugg=[...new Set([...scopeItems(b).map(s=>s.name),...QUOTE_EXTRA])].filter(n=>!names.includes(n));
   const chips=`<div class="qf-pkgs">${names.map(n=>{const qs=qQuotes(b.id,n);const rows=(d.pkgs?.[n]?.rows||[]).length;return `<button class="qf-chip${n===pk?' on':''}" data-act="qf-pkg" data-v="${esc(n)}"><b>${esc(n)}</b><small>${qs.length} vendor${qs.length===1?'':'s'} · ${rows} line${rows===1?'':'s'}</small></button>`}).join('')}
-    ${ro?'':`<span class="qf-new"><input class="field" id="qf-newpkg" list="qf-pkgsugg" placeholder="New package — e.g. Pipe & structures"><datalist id="qf-pkgsugg">${pkgSugg.map(n=>`<option value="${esc(n)}">`).join('')}</datalist><button class="btn sm" data-act="qf-newpkg">Add</button></span>`}</div>`;
-  if(!pk)return chips+`<div class="panel pad empty"><b>No quote packages yet</b>A package is what you send out for pricing — like “Pipe & structures”, “Stone” or “Erosion control sub”. Add one, pick the estimate’s materials or subs that go in it, add the vendors, and enter their prices side by side.</div>`;
+    ${ro?'':`<span class="qf-new"><input class="field" id="qf-newpkg" list="qf-pkgsugg" placeholder="New folder — e.g. Aggregates"><datalist id="qf-pkgsugg">${pkgSugg.map(n=>`<option value="${esc(n)}">`).join('')}</datalist><button class="btn sm" data-act="qf-newpkg">Add</button></span>`}</div>`;
+  const unfiled=qUnfiled(d,idx);
+  const bar=ro?'':`<div class="qf-gen"><div><b>Quote folders</b><span class="small dim"> ${names.length?`${names.length} folder${names.length===1?'':'s'}`:'None yet'}${unfiled.length?` · <b class="warn-t">${unfiled.length} estimate line${unfiled.length===1?'':'s'} not in a folder</b>`:names.length?' · every material and sub is in a folder':''}</span></div>
+    <div class="adders" style="margin:0"><button class="btn sm${unfiled.length?' primary':''}" data-act="qf-generate"${unfiled.length?'':' disabled'} title="Sorts the estimate’s materials, subs and trucking into folders using each codebook item’s quote folder">⚙ Generate folders${unfiled.length?` (${unfiled.length})`:''}</button>
+      <button class="btn sm${names.length&&!unfiled.length?' primary':''}" data-act="qf-applyall"${names.length?'':' disabled'}>Update pricing in estimate</button></div></div>`;
+  if(!pk)return bar+chips+`<div class="panel pad empty"><b>No quote folders yet</b>A folder is what you send out for pricing, like “Aggregates”, “Water” or “Erosion control”. Click <b>Generate folders</b> to sort this estimate’s materials and subs into folders automatically (using each codebook item’s quote folder), or add one by hand. Then add the vendors and enter their prices side by side.</div>`;
   const C=qCalc(d,pk,idx);const dis=ro?' disabled':'';
   const free=[...idx.values()].filter(o=>QF_KINDS.includes(o.kind)&&!inPkg.has(o.rk)).sort((a,c)=>QF_KINDS.indexOf(a.kind)-QF_KINDS.indexOf(c.kind)||c.cost-a.cost);
   const sel=E.qAdd||(E.qAdd=new Set());
-  const addRows=ro?'':`<details class="qf-add"${E.qAddOpen?' open':''}><summary data-act="qf-addtoggle">+ Add estimate lines to this package <span class="dim">(${free.length} not in a package)</span></summary>
+  const addRows=ro?'':`<details class="qf-add"${E.qAddOpen?' open':''}><summary data-act="qf-addtoggle">+ Add estimate lines to this folder <span class="dim">(${free.length} not in a folder)</span></summary>
     ${free.length?`<div class="qf-addq">${QF_KINDS.filter(k=>free.some(o=>o.kind===k)).map(k=>`<button class="btn sm" data-act="qf-addkind" data-k="${k}">All ${COST_LABEL[k].toLowerCase()} (${free.filter(o=>o.kind===k).length})</button>`).join('')}</div>
       <div class="qf-addlist">${free.map(o=>`<label class="check small"><input type="checkbox" data-qfsel="${esc(o.rk)}"${sel.has(o.rk)?' checked':''}> <span class="est-tag k-${o.kind}">${(RES_KINDS.find(k=>k[0]===o.kind)||RES_KINDS[5])[2]}</span> ${esc(o.desc)} <span class="dim">${qtyFmt(o.q)} ${esc(o.unit)} · ${money(o.cost||o.costAll)}</span></label>`).join('')}</div>
-      <button class="btn primary sm" data-act="qf-addrows"${sel.size?'':' disabled'}>Add ${sel.size||''} selected</button>`:'<p class="dim small">Every material, sub, trucking and rental cost in the estimate is already in a package. Add more on the Bid items tab.</p>'}</details>`;
+      <button class="btn primary sm" data-act="qf-addrows"${sel.size?'':' disabled'}>Add ${sel.size||''} selected</button>`:'<p class="dim small">Every material, sub, trucking and rental cost in the estimate is already in a folder. Add more on the Build tab.</p>'}</details>`;
   const vOpts=()=>{const have=new Set(C.cols.map(c=>c.q.vendor_id));const vs=S.vendors.filter(v=>!have.has(v.id)).sort((a,c)=>a.company.localeCompare(c.company));const fit=vs.filter(v=>vendorFits(v,pk));const rest=vs.filter(v=>!vendorFits(v,pk));
     return `<option value="">+ Add a vendor…</option>${fit.length?`<optgroup label="Quote ${esc(pk)}">${fit.map(v=>`<option value="${v.id}">${esc(v.company)}</option>`).join('')}</optgroup>`:''}<optgroup label="${fit.length?'Other vendors':'Vendors'}">${rest.map(v=>`<option value="${v.id}">${esc(v.company)}</option>`).join('')}</optgroup>`};
   const pick=(r)=>C.pick[r.rk]||'est';const RM=C.rule.mode;const ruleV=RM==='vendor'?C.cols.find(c=>c.q.id===C.rule.q):null;
@@ -4828,24 +4845,24 @@ function estQuotesView(d,R,ro){const E=S.est;const b=byId(S.bids,E.bidId);const 
       ${ro?'':`<div class="qf-vbtns"><button class="btn sm${RM==='vendor'&&C.rule.q===c.q.id?' primary':''}" data-act="qf-award" data-q="${c.q.id}">${RM==='vendor'&&C.rule.q===c.q.id?'✓ Using this vendor':'Use this vendor'}</button><button class="btn sm ghost danger-t${E.qArm===c.q.id?' arm':''}" data-act="qf-rmq" data-q="${c.q.id}">${E.qArm===c.q.id?'Remove?':'×'}</button></div>`}</th>`).join('')}
     ${ro?'':`<th class="qf-addv"><select class="field sm" data-qvadd="${esc(pk)}">${vOpts()}</select></th>`}</tr>`;
   const body=C.rows.map((r,i)=>{const pc=pick(r);
-    return `<tr${r.missing?' class="qf-gone"':''}><td class="qf-item"><span class="est-tag k-${r.kind||'other'}">${(RES_KINDS.find(k=>k[0]===r.kind)||RES_KINDS[5])[2]}</span> ${esc(r.desc)}${r.code?` <span class="dim small">${esc(r.code)}</span>`:''}${ro?'':` <button class="rm" data-act="qf-rmrow" data-rk="${esc(r.rk)}" aria-label="Remove from package">×</button>`}</td>
+    return `<tr${r.missing?' class="qf-gone"':''}><td class="qf-item"><span class="est-tag k-${r.kind||'other'}">${(RES_KINDS.find(k=>k[0]===r.kind)||RES_KINDS[5])[2]}</span> ${esc(r.desc)}${r.code?` <span class="dim small">${esc(r.code)}</span>`:''}${ro?'':` <select class="qf-move" data-qmove="${esc(r.rk)}" title="Move to another folder" aria-label="Move to another folder"><option value="">Move…</option>${qFolders().filter(n=>n!==pk).map(n=>`<option>${esc(n)}</option>`).join('')}<option value="__new">New folder…</option></select><button class="rm" data-act="qf-rmrow" data-rk="${esc(r.rk)}" aria-label="Remove from this folder">×</button>`}</td>
       <td class="r num small">${r.missing?'':qtyFmt(r.q)+' '+esc(r.unit)}</td>
       <td class="r qf-estc${pc==='est'?' qf-picked':''}"><label class="qf-cell"><input type="radio" name="qfp-${i}" data-qpick="${esc(r.rk)}" value="est"${pc==='est'?' checked':''}${dis}><span class="num">${r.missing?'':money2(r.price)}</span></label><small class="dim">${r.missing?'':money(r.price*(r.q||0))}</small></td>
       ${C.cols.map((c,j)=>{const cell=c.cells[i];if(c.lump)return `<td class="qf-lumpcell${pc===c.q.id?' qf-picked':''}"><label class="qf-cell"><input type="radio" name="qfp-${i}" data-qpick="${esc(r.rk)}" value="${c.q.id}"${pc===c.q.id?' checked':''}${dis}><span class="dim small">in lump sum</span></label></td>`;
         return `<td class="${pc===c.q.id?'qf-picked':''}${C.low[i]===j?' qf-low':''}${RM==='high'&&C.high[i]===j&&C.cols.length>1?' qf-high':''}"><label class="qf-cell"><input type="radio" name="qfp-${i}" data-qpick="${esc(r.rk)}" value="${c.q.id}"${pc===c.q.id?' checked':''}${dis||cell.p==null?' disabled':''}><input class="field num" id="qp-${c.q.id}-${i}" data-qp="${c.q.id}|${esc(r.rk)}" inputmode="decimal" value="${cell.p??''}" placeholder="—"${dis}${r.missing?' disabled':''}></label><small class="dim">${cell.ext!=null?money(cell.ext):''}</small></td>`}).join('')}${ro?'':'<td></td>'}</tr>`}).join('')
-    ||`<tr><td colspan="${4+C.cols.length}"><div class="empty small">No lines yet — add the estimate’s materials, subs or trucking that go in this package.</div></td></tr>`;
+    ||`<tr><td colspan="${4+C.cols.length}"><div class="empty small">No lines yet — add the estimate’s materials, subs or trucking that go in this folder.</div></td></tr>`;
   const foot=`<tr class="qf-f"><td>Freight / other charges</td><td></td><td></td>${C.cols.map(c=>c.lump?'<td></td>':`<td><input class="field num" id="qx-${c.q.id}" data-qm="${c.q.id}|extra" inputmode="decimal" value="${c.meta.extra??''}" placeholder="0"${dis}></td>`).join('')}${ro?'':'<td></td>'}</tr>
     <tr class="qf-f"><td>Lump sum</td><td></td><td></td>${C.cols.map(c=>c.lump?`<td><input class="field num" id="qa-${c.q.id}" data-qa="${c.q.id}" inputmode="decimal" value="${c.q.amount??''}" placeholder="Total"${dis}></td>`:'<td></td>').join('')}${ro?'':'<td></td>'}</tr>
     <tr class="qf-t"><td><b>Quoted total</b></td><td></td><td class="r num"><b>${money(C.estTotal)}</b></td>${C.cols.map(c=>`<td class="r num"><b>${money(c.total)}</b>${c.missing?`<div class="qf-miss">${c.missing} line${c.missing===1?'':'s'} not quoted</div>`:''}</td>`).join('')}${ro?'':'<td></td>'}</tr>
     <tr class="qf-t"><td>Complete total <span class="dim small">(lines not quoted at the estimate price)</span></td><td></td><td></td>${C.cols.map((c,j)=>`<td class="r num${j===C.lowPkg?' qf-lowpkg':''}">${money(c.complete)}${j===C.lowPkg&&C.cols.length>1?' <span class="pill good">Low</span>':''}</td>`).join('')}${ro?'':'<td></td>'}</tr>`;
-  return chips+`<div class="panel pad qf-panel"><div class="qf-top"><div><h2 class="qf-h">${esc(pk)}</h2><div class="dim small">${C.rows.length} line${C.rows.length===1?'':'s'} · ${C.cols.length} vendor${C.cols.length===1?'':'s'} · estimate ${money(C.estTotal)} · your picks ${money(C.sel)}</div></div>
+  return bar+chips+`<div class="panel pad qf-panel"><div class="qf-top"><div><h2 class="qf-h">${esc(pk)}</h2><div class="dim small">${C.rows.length} line${C.rows.length===1?'':'s'} · ${C.cols.length} vendor${C.cols.length===1?'':'s'} · estimate ${money(C.estTotal)} · your picks ${money(C.sel)}</div></div>
     ${ro?'':`<div class="qf-actions"><label class="qf-rule"><span>Use</span><select class="field sm" data-qrule${C.cols.length?'':' disabled'}><option value="manual"${RM==='manual'?' selected':''}>Prices I pick by hand</option><option value="low"${RM==='low'?' selected':''}>Lowest price on each line</option><option value="high"${RM==='high'?' selected':''}>Highest price on each line</option>${C.cols.length?`<optgroup label="One vendor’s pricing">${C.cols.map(c=>`<option value="v:${c.q.id}"${RM==='vendor'&&C.rule.q===c.q.id?' selected':''}>${esc(c.v?.company||'Removed vendor')}</option>`).join('')}</optgroup>`:''}</select></label>
-      ${RM!=='manual'&&RM!=='vendor'&&names.length>1?`<button class="btn sm ghost" data-act="qf-ruleall" title="Set every package to ${RM==='low'?'lowest':'highest'} price">Use on all packages</button>`:''}<button class="btn primary sm" data-act="qf-apply">Apply to estimate</button>${cbEditable()?`<label class="check small"><input type="checkbox" id="qf-tocb"${E.qToCb?' checked':''} data-qfcb> Also update codebook prices</label>`:''}</div>`}</div>
+      ${RM!=='manual'&&RM!=='vendor'&&names.length>1?`<button class="btn sm ghost" data-act="qf-ruleall" title="Set every folder to ${RM==='low'?'lowest':'highest'} price">Use on all folders</button>`:''}<button class="btn sm" data-act="qf-apply" title="Apply just this folder">Apply this folder</button>${cbEditable()?`<label class="check small"><input type="checkbox" id="qf-tocb"${E.qToCb?' checked':''} data-qfcb> Also update codebook prices</label><label class="check small" title="When you move a line, save that folder on its codebook item so it goes there on every bid"><input type="checkbox" data-qfrem${E.qRemember!==false?' checked':''}> Remember moves in the codebook</label>`:''}</div>`}</div>
     ${RM==='manual'?'':`<div class="qf-rulenote">${RM==='low'?'Using the <b>lowest</b> price on each line':RM==='high'?'Using the <b>highest</b> price on each line':`Using <b>${esc(ruleV?.v?.company||'this vendor')}</b>’s pricing on every line`}. The picks update on their own as prices come in.${C.unquoted?` <b>${C.unquoted} line${C.unquoted===1?'':'s'}</b> ${RM==='vendor'?'they didn’t quote':'nobody quoted'} stay${C.unquoted===1?'s':''} at the estimate price.`:''} Click any dot to go back to picking by hand.</div>`}
     ${addRows}
     <div class="qf-scroll"><table class="qf-grid"><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>
     <p class="hint">Enter each vendor’s unit price; the low price on each line is outlined. Choose what to <b>use</b> at the top: the lowest or highest price on each line, one vendor’s pricing, or click a price’s dot to pick by hand. <b>Apply</b> puts the picked prices into every matching cost in the estimate — freight is spread over that vendor’s lines and a lump sum over its lines by estimate cost. Prices save as you type; quotes with prices switch to Received.</p>
-    ${ro||C.cols.length||C.rows.length?'':`<button class="linkbtn danger-t" data-act="qf-rmpkg">Remove this empty package</button>`}</div>`}
+    ${ro||C.cols.length||C.rows.length?'':`<button class="linkbtn danger-t" data-act="qf-rmpkg">Remove this empty folder</button>`}</div>`}
 
 /* ---------- events ---------- */
 FOCUS_ATTRS.push('data-qp','data-qm','data-qa');
@@ -4861,8 +4878,10 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'qf-rmpkg':delete d.pkgs[E.pkg];E.pkg=null;estTouch();render();break;
     case 'qf-award':qRuleSet(d,E.pkg,{mode:'vendor',q:t.dataset.q});estTouch();render();break;
     case 'qf-low':qRuleSet(d,E.pkg,{mode:'low'});estTouch();render();break;
-    case 'qf-ruleall':{const m=qRule(qPkg(d,E.pkg),[]).mode;if(m==='low'||m==='high'){const names=[...new Set([...S.quotes.filter(q=>q.bid_id===E.bidId).map(q=>q.scope),...Object.keys(d.pkgs||{})])].filter(Boolean);names.forEach(n=>qRuleSet(d,n,{mode:m}));estTouch();render();toast(`Every package now uses the ${m==='low'?'lowest':'highest'} price on each line`)}break}
+    case 'qf-ruleall':{const m=qRule(qPkg(d,E.pkg),[]).mode;if(m==='low'||m==='high'){const names=[...new Set([...S.quotes.filter(q=>q.bid_id===E.bidId).map(q=>q.scope),...Object.keys(d.pkgs||{})])].filter(Boolean);names.forEach(n=>qRuleSet(d,n,{mode:m}));estTouch();render();toast(`Every folder now uses the ${m==='low'?'lowest':'highest'} price on each line`)}break}
     case 'qf-apply':qApply(E.pkg,!!$('#qf-tocb')?.checked);break;
+    case 'qf-generate':{const r=qGenerate(d);if(!E.pkg||!(d.pkgs||{})[E.pkg])E.pkg=Object.keys(d.pkgs||{})[0]||null;estTouch();render();toast(r.lines?`Sorted ${r.lines} line${r.lines===1?'':'s'} into folders${r.folders?` (${r.folders} new folder${r.folders===1?'':'s'})`:''}`:'Everything is already in a folder');break}
+    case 'qf-applyall':{const toCb=!!E.qToCb;let n=0,f=0;Object.keys(d.pkgs||{}).forEach(k=>{const c=qApply(k,toCb,true)||0;if(c){n+=c;f++}});render();toast(n?`Updated ${n} price${n===1?'':'s'} in the estimate from ${f} folder${f===1?'':'s'}`:'No quote prices to use yet. Enter vendor prices and choose which to use in each folder.');break}
     case 'qf-rmq':if(E.qArm!==t.dataset.q){E.qArm=t.dataset.q;render();break}E.qArm=null;qRemoveVendor(t.dataset.q);break;
   }});
 document.addEventListener('input',e=>{const t=e.target;if(!S.est||!S.est.data||S.view!=='estimate')return;
@@ -4871,6 +4890,8 @@ document.addEventListener('input',e=>{const t=e.target;if(!S.est||!S.est.data||S
   if(t.dataset.qm&&t.type!=='checkbox'){const [id,k]=t.dataset.qm.split('|');qEdit(id,c=>{c.meta[k]=t.value===''?null:num(t.value)});render();return}});
 document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data||S.view!=='estimate')return;const E=S.est;
   if(t.dataset.qm&&t.type==='checkbox'){const [id,k]=t.dataset.qm.split('|');qEdit(id,c=>{c.meta[k]=t.checked});render();return}
+  if(t.dataset.qfrem!=null){E.qRemember=t.checked;return}
+  if(t.dataset.qmove){let to=t.value;if(!to)return;if(to==='__new'){to=(prompt('New folder name')||'').trim();if(!to){render();return}}qMove(E.data,t.dataset.qmove,E.pkg,to,E.qRemember!==false);estTouch();render();toast(`Moved to ${to}`);return}
   if(t.dataset.qrule!=null){const v=t.value;qRuleSet(E.data,E.pkg,v.startsWith('v:')?{mode:'vendor',q:v.slice(2)}:{mode:v});estTouch();render();return}
   if(t.dataset.qpick){qRuleSet(E.data,E.pkg,{mode:'manual'});const P=qPkg(E.data,E.pkg);P.pick[t.dataset.qpick]=t.value;estTouch();render();return}
   if(t.dataset.qvadd){qAddVendor(t.dataset.qvadd,t.value);return}
@@ -4993,6 +5014,10 @@ function estNorm(d){d=d&&typeof d==='object'?d:{};const old=!(d.v>=3),hadSched=!
 const secOf=(d,id)=>d.sections.find(s=>s.id===id);
 const itemsOf=(d,secId)=>d.items.filter(i=>i.sec===secId);
 function estNextSecCode(d){const n=(d.sections||[]).map(s=>parseInt(s.code,10)).filter(x=>!isNaN(x));return String(n.length?Math.floor(Math.max(...n)/100)*100+100:100)}
+// move a bid item into another section (at the end, or just above another item)
+function estMoveItem(d,id,secId,beforeId){const i=d.items.findIndex(x=>x.id===id);if(i<0||beforeId===id||!secOf(d,secId))return false;const it=d.items[i];const same=it.sec===secId;if(same&&!beforeId)return false;
+  const old=it.code;if(!same){const nc=estNextItemCode(d,secId);it.code=nc;(it.acts||[]).forEach(a=>{if(old&&String(a.code||'').startsWith(old+'.'))a.code=nc+String(a.code).slice(String(old).length)})}
+  d.items.splice(i,1);it.sec=secId;let at=beforeId?d.items.findIndex(x=>x.id===beforeId):-1;if(at<0){d.items.forEach((x,k)=>{if(x.sec===secId)at=k});at=at<0?d.items.length:at+1}d.items.splice(at,0,it);try{const o=estOpenSet();if(!o.has(secId)){o.add(secId);estOpenSave()}}catch(e){}return true}
 function estNextItemCode(d,secId){const s=secOf(d,secId);const base=parseInt(s?.code,10);const n=itemsOf(d,secId).map(i=>parseInt(i.code,10)).filter(x=>!isNaN(x));
   if(isNaN(base)&&!n.length)return estNextCode(d);return String(Math.max(isNaN(base)?0:base,...n)+10)}
 function estNextActCode(it){const n=(it.acts||[]).map(a=>{const m=/\.(\d+)$/.exec(a.code||'');return m?+m[1]:NaN}).filter(x=>!isNaN(x));return `${it.code||''}.${n.length?Math.max(...n)+10:10}`}
@@ -5167,7 +5192,8 @@ function estCtxMenu(d){const c=S.est&&S.est.ctx;if(!c)return '';const ro=EC().ro
   const it=(op,l,cls)=>`<button class="${cls||''}" data-act="eo-cm" data-op="${op}">${l}</button>`;
   const del=c.arm?it('del','Click again to delete','danger-t arm'):it('del','Delete…','danger-t');
   const items=c.t==='sec'?[it('additem','+ Bid item'),it('dup','Duplicate section'),it('up','Move up'),it('down','Move down'),admin?it('tpl','Save as section template'):'',del]
-    :c.t==='item'?[it('addact','+ Activity'),it('dup','Duplicate'),it('up','Move up'),it('down','Move down'),it('alt',(()=>{const x=d.items.find(i=>i.id===c.id);return x&&x.alt?'Not an alternate':'Make it an alternate'})()),admin?it('tocb','Save to bid item codebook'):'',del]
+    :c.t==='item'&&c.mv?[`<div class="eo-ctx-h">Move to section</div>`,...d.sections.map(s=>{const cur=(d.items.find(i=>i.id===c.id)||{}).sec===s.id;return `<button data-act="eo-mvsec" data-v="${s.id}"${cur?' disabled':''}>${esc((s.code?s.code+' · ':'')+(s.name||'Untitled section'))}${cur?' <span class="dim small">(here now)</span>':''}</button>`}),`<button data-act="eo-mvback">‹ Back</button>`]
+    :c.t==='item'?[it('addact','+ Activity'),it('dup','Duplicate'),it('up','Move up'),it('down','Move down'),d.sections.length>1?`<button data-act="eo-mvopen">Move to another section ›</button>`:'',it('alt',(()=>{const x=d.items.find(i=>i.id===c.id);return x&&x.alt?'Not an alternate':'Make it an alternate'})()),admin?it('tocb','Save to bid item codebook'):'',del]
     :[it('dup','Duplicate'),it('up','Move up'),it('down','Move down'),admin?it('tocb','Save to activity codebook'):'',del];
   return `<div class="eo-ctx" id="eo-ctx" style="left:${Math.min(c.x,window.innerWidth-230)}px;top:${Math.min(c.y,window.innerHeight-300)}px">${items.join('')}</div>`}
 function estFind(d,t,id){if(t==='sec'){const k=d.sections.findIndex(s=>s.id===id);return k<0?null:{k,o:d.sections[k]}}
@@ -5286,6 +5312,9 @@ document.addEventListener('click',e=>{
     case 'eo-menu':{const r=t.getBoundingClientRect();E.ctx={x:r.left-170,y:r.bottom+4,t:t.dataset.t,id:t.dataset.id};render();break}
     case 'eo-cm':{const c=E.ctx;if(!c)break;if(t.dataset.op==='del'){const f=estFind(E.data,c.t,c.id);const big=c.t==='sec'?itemsOf(E.data,c.id).length:c.t==='item'?f?.o.acts.length:f?.o.res.length;if(big&&!c.arm){c.arm=true;render();break}}
       E.ctx=null;estOp(t.dataset.op,c.t,c.id);break}
+    case 'eo-mvopen':if(E.ctx){E.ctx.mv=true;render()}break;
+    case 'eo-mvback':if(E.ctx){E.ctx.mv=false;render()}break;
+    case 'eo-mvsec':{const c=E.ctx;if(!c)break;E.ctx=null;const sec=secOf(E.data,t.dataset.v);if(estMoveItem(E.data,c.id,t.dataset.v)){estTouch();toast(`Moved to ${sec.name||'section'}`)}render();break}
     case 'eo-dropblank':{const d=E.data;const n=d.items.length;d.items=d.items.filter(i=>i.alt||!(i.qty==null||i.qty===''));toast(`Removed ${n-d.items.length} bid item${n-d.items.length===1?'':'s'}`);estTouch();render();break}
     case 'eo-qtydone':E.qtyMode=false;render();break;
     case 'ef-fold':{const s=E.fold||(E.fold=new Set());const k=t.dataset.k;s.has(k)?s.delete(k):s.add(k);render();break}
@@ -5301,6 +5330,17 @@ document.addEventListener('click',e=>{
   }});
 document.addEventListener('contextmenu',e=>{const tr=e.target.closest('tr[data-act=eo-sel]');if(!tr||!S.est||EC().ro)return;if(e.target.tagName==='INPUT'&&e.target.selectionStart!==e.target.selectionEnd)return; // keep the normal copy/paste menu when text is selected
   e.preventDefault();S.est.ctx={x:e.clientX,y:e.clientY,t:tr.dataset.t,id:tr.dataset.id};S.est.sel={t:tr.dataset.t,id:tr.dataset.id};render()});
+// drag a bid item onto a section (or onto another bid item) to move it
+(()=>{let dragId=null;const clear=()=>document.querySelectorAll('.eo-drop,.eo-dragging').forEach(x=>x.classList.remove('eo-drop','eo-dragging'));
+  const ok=()=>S.est&&S.view==='estimate'&&!EC().ro;
+  document.addEventListener('mousedown',e=>{const tr=e.target.closest?.('tr.eo-item[data-act=eo-sel]');if(!tr||!ok())return;tr.draggable=!e.target.closest('input,select,textarea')});
+  document.addEventListener('dragstart',e=>{const tr=e.target.closest?.('tr.eo-item[data-act=eo-sel]');if(!tr||!ok())return;dragId=tr.dataset.id;tr.classList.add('eo-dragging');e.dataTransfer.effectAllowed='move';try{e.dataTransfer.setData('text/plain',dragId)}catch(_){}});
+  const target=e=>dragId&&e.target.closest?.('tr.eo-sec[data-act=eo-sel],tr.eo-item[data-act=eo-sel]');
+  document.addEventListener('dragover',e=>{const tr=target(e);if(!tr||tr.dataset.id===dragId)return;e.preventDefault();e.dataTransfer.dropEffect='move';if(!tr.classList.contains('eo-drop')){document.querySelectorAll('.eo-drop').forEach(x=>x.classList.remove('eo-drop'));tr.classList.add('eo-drop')}});
+  document.addEventListener('drop',e=>{const tr=target(e);if(!tr)return;e.preventDefault();const d=S.est.data,id=dragId;dragId=null;clear();let secId,before=null;
+    if(tr.dataset.t==='sec')secId=tr.dataset.id;else{const o=d.items.find(i=>i.id===tr.dataset.id);if(!o)return;secId=o.sec;before=o.id}
+    const was=(d.items.find(i=>i.id===id)||{}).sec;if(estMoveItem(d,id,secId,before)){S.est.sel={t:'item',id};estTouch();render();if(was!==secId)toast(`Moved to ${secOf(d,secId).name||'section'}`)}});
+  document.addEventListener('dragend',()=>{dragId=null;clear()})})();
 // selecting a row by tabbing into it
 document.addEventListener('focusin',e=>{const tr=e.target.closest?.('tr[data-act=eo-sel]');if(!tr||!S.est||S.view!=='estimate')return;const s=S.est.sel;if(s&&s.id===tr.dataset.id)return;S.est.sel={t:tr.dataset.t,id:tr.dataset.id};setTimeout(render,0)});
 document.addEventListener('input',e=>{const t=e.target;
