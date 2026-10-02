@@ -46,6 +46,7 @@ supabase/update-16-estimate-sections.sql   one-time update for master/section te
 supabase/update-17-accounting.sql          one-time update for the Accounting tab: bookkeeper role, pay apps, account IDs, change orders, cost import keys
 supabase/update-18-team-access.sql         one-time update for Team: executive role, title/phone, per-person access (run after update-17)
 supabase/update-19-help-developer.sql      one-time update for Help feedback and the developer account (run after update-18)
+supabase/update-20-dev-usage.sql           one-time update for the Developer tab's storage and capacity panel (run after update-19)
 ```
 
 > **Already set up before these updates?** Run each `supabase/update-*.sql` file you haven't run yet, once, in number order, in the SQL Editor. New installs only need `schema.sql`.
@@ -160,6 +161,12 @@ One login can be flagged as the developer. That login keeps its normal role and 
   - data problems: orphaned job lines and costs, duplicate or missing job numbers, crews with removed members, estimator logins that aren't linked, people waiting for access.
 
   Problems are listed first with what to do about each. **Copy report** puts the whole result on the clipboard. The last run is remembered on that computer.
+- **Storage & capacity:** how much of your Supabase plan is used. Needs `supabase/update-20-dev-usage.sql`.
+  - Meters for database space, file storage and active logins against the plan's limits (Free, Pro, or custom numbers). They turn amber at 70% and red at 90%.
+  - How fast each is filling and roughly when it would be full, from a snapshot saved each day you open the page.
+  - Every table by size, and the largest uploaded files with the bid they belong to.
+  - The system tests also warn when the database or file storage is getting full.
+  - Data transfer ("egress") can't be measured from inside the app; see the Usage page in Supabase.
 - **App info:** build date, database, row counts and people by role.
 
 ## Accounting (admins, PMs and the bookkeeper)

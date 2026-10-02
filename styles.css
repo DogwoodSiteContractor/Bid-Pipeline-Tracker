@@ -1324,3 +1324,15 @@ fieldset.rb .check{font-weight:600}
 .dt-run .dt-i{background:var(--info-soft);color:var(--info)}.dt-wait{opacity:.5}
 .dt-fix{color:var(--ink-2);margin-top:2px}
 @media (max-width:820px){.help-g{grid-template-columns:1fr}.help-list{position:static;max-height:260px}.fb-d{grid-template-columns:1fr}}
+/* developer: storage & capacity */
+.cap-g{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.cap-h{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;color:var(--ink-2)}
+.cap-h b{font-size:15px;font-variant-numeric:tabular-nums}
+.cap-n{margin:6px 0 10px;font-size:15px}.cap-n b{font-family:"Montserrat",system-ui,sans-serif;font-size:24px}
+.cap-bar{height:10px;border-radius:99px;background:var(--mute-soft);overflow:hidden;margin-bottom:8px}
+.cap-bar span{display:block;height:100%;border-radius:99px;background:var(--accent)}
+.cap-bar span.warn{background:var(--warn)}.cap-bar span.bad{background:var(--bad)}
+.cap-note{color:var(--ink-3);margin-top:4px}
+.cap-in{width:90px;display:inline-block;margin-left:4px}
+.cap-t .cap-tb{width:38%}.cap-tb span{display:block;height:8px;border-radius:99px;background:var(--accent-2,var(--accent))}
+.cap-t td.num{white-space:nowrap}.cap-t td:first-child{width:34%}

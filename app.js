@@ -6456,8 +6456,8 @@ function helpFb(){const L=S.myFb||[];
 function vDev(){if(!isDev())return '<div class="empty">This page is for the developer.</div>';const D=S.dev;const F=(S.feedback||[]).map(f=>({...f,status:fbStatusUi(f.status)}));const nNew=F.filter(f=>f.status==='New').length;
   return `<div class="head"><div><h1>Developer</h1><p>Only you can see this tab. Build ${APP_BUILD}.</p></div><div class="tools"><button class="btn primary" data-act="dev-run">▶ Run tests</button></div></div>
   ${S.tableErr&&S.tableErr.feedback?'<div class="notice">The feedback table isn’t there yet. Run <b>supabase/update-19-help-developer.sql</b> in Supabase.</div>':''}
-  <div class="seg acct-tabs">${[['inbox',`Feedback inbox${nNew?` <small>${nNew} new</small>`:''}`],['tests','System tests'],['info','App info']].map(([k,l])=>`<button class="${D.tab===k?'on':''}" data-act="dev-tab" data-v="${k}">${l}</button>`).join('')}</div>
-  ${D.tab==='tests'?devTests():D.tab==='info'?devInfo():devInbox(F)}`}
+  <div class="seg acct-tabs">${[['inbox',`Feedback inbox${nNew?` <small>${nNew} new</small>`:''}`],['tests','System tests'],['usage','Storage & capacity'],['info','App info']].map(([k,l])=>`<button class="${D.tab===k?'on':''}" data-act="dev-tab" data-v="${k}">${l}</button>`).join('')}</div>
+  ${D.tab==='tests'?devTests():D.tab==='usage'?devUsage():D.tab==='info'?devInfo():devInbox(F)}`}
 const PRI_ORDER={P1:0,P2:1,P3:2,'':3},IMP_ORDER={high:0,normal:1,low:2};
 function devInbox(F){const D=S.dev;const q=(D.q||'').trim().toLowerCase();
   let L=F.filter(f=>(D.status==='open'?FB_OPEN.has(f.status):D.status==='all'?true:f.status===D.status)&&(!D.kind||f.kind===D.kind)&&(!D.area||f.area===D.area)&&(!q||[f.title,f.body,f.created_by_name,f.area,f.dev_notes].join(' ').toLowerCase().includes(q)));
@@ -6531,6 +6531,7 @@ function devTestList(){const tbl=(t,file)=>({g:'Database tables',n:`Table “${t
    data('Estimator logins are linked',()=>{const n=S.profiles.filter(p=>permOf(p,'bids')!=='none'&&permOf(p,'bids_scope')==='mine'&&!S.estimators.some(e=>e.user_id===p.id)).length;return n?T_WARN(`${n} login${n===1?'':'s'} can only see assigned bids but ${n===1?'has':'have'} no estimator record`,'They won’t see any bids. Link them on Team → People & access.'):T_OK('All linked')}),
    data('People waiting for access',()=>{const n=S.profiles.filter(p=>p.role==='pending').length;return n?T_WARN(`${n} login${n===1?' is':'s are'} waiting for a role`):T_OK('None waiting')}),
    data('Pay apps belong to a job',()=>{const n=(S.pay_apps||[]).filter(p=>!jobOf(p.job_id)).length;return n?T_WARN(`${n} pay app${n===1?'':'s'} for a job that’s gone`):T_OK(`${(S.pay_apps||[]).length} pay apps`)}),
+   ...[['Database space',u=>[u.db_bytes,devPlan().db*MB]],['File storage space',u=>[(u.files||{}).bytes||0,devPlan().files*MB]]].map(([n,f])=>({g:'Capacity',n,run:async()=>{const {data,error}=await sb.rpc('dev_usage');if(error)return T_FAIL(error.message,'Run supabase/update-20-dev-usage.sql in Supabase.');const [used,lim]=f(data);const pct=used/lim*100;const d=`${fmtBytes(used)} of ${fmtBytes(lim)} (${fmtN(pct,1)}%) on ${devPlan().label}`;return pct>=90?T_FAIL(d,'Nearly full. Clear out old files or move up a plan before it stops accepting data.'):pct>=70?T_WARN(d,'Getting full. See Developer → Storage & capacity.'):T_OK(d)}})),
    {g:'This browser',n:'Can remember settings',run:async()=>{try{localStorage.setItem('bp-t','1');localStorage.removeItem('bp-t');return T_OK('Yes')}catch(e){return T_WARN('Local storage is blocked','Remembered filters, column mappings and tutorial progress won’t stick in this browser.')}}}]}
 async function devRun(){const tests=devTestList();M={kind:'devtest',tests:tests.map(t=>({g:t.g,n:t.n,s:'wait'})),running:true,at:new Date()};showModal();
   for(let i=0;i<tests.length;i++){if(!M||M.kind!=='devtest')return;M.tests[i].s='run';renderModal();const el=$('#dt-'+i);if(el)el.scrollIntoView({block:'nearest'});const t0=performance.now();
@@ -6594,3 +6595,48 @@ document.addEventListener('change',e=>{const t=e.target;
   if(t.dataset.devf){S.dev[t.dataset.devf]=t.value;render();return}
   if(t.dataset.devg!=null){S.dev.group=t.checked;render();return}
   if(t.dataset.deve&&t.tagName==='SELECT'&&S.dev.edit){S.dev.edit[t.dataset.deve]=t.value;render();return}});
+
+/* ---------- Developer: storage & capacity (needs supabase/update-20-dev-usage.sql) ---------- */
+const DEV_PLANS={free:{label:'Supabase Free',db:500,files:1024,mau:50000},pro:{label:'Supabase Pro',db:8192,files:102400,mau:100000}};
+function devPlan(){const p=S.settings.dev_plan||{};const k=DEV_PLANS[p.plan]?p.plan:p.plan==='custom'?'custom':'free';return k==='custom'?{plan:'custom',label:'Custom',db:num(p.db)||500,files:num(p.files)||1024,mau:num(p.mau)||50000}:{plan:k,...DEV_PLANS[k]}}
+const fmtBytes=b=>b==null||isNaN(b)?'—':b>=1073741824?fmtN(b/1073741824,2)+' GB':b>=1048576?fmtN(b/1048576,1)+' MB':fmtN(b/1024,0)+' KB';
+const MB=1048576;
+async function devUsageLoad(){const D=S.dev;D.usageBusy=true;render();
+  try{const {data,error}=await sb.rpc('dev_usage');if(error)throw error;D.usage=data;D.usageErr='';
+    const log=((S.settings.dev_usage_log||{}).log||[]).slice();const d=todayStr();const row={d,db:data.db_bytes,f:(data.files||{}).bytes||0};const i=log.findIndex(x=>x.d===d);if(i>=0)log[i]=row;else log.push(row);
+    try{await run(sb.from('settings').upsert({key:'dev_usage_log',value:{log:log.slice(-200)}}));await loadTable('settings')}catch(e){}}
+  catch(e){D.usageErr=errMsg(e)}D.usageBusy=false;render()}
+// how fast it's growing, from the daily snapshots
+function devGrowth(key,nowBytes,limitBytes){const log=((S.settings.dev_usage_log||{}).log||[]).filter(x=>x[key]!=null);if(log.length<2)return null;const last=log[log.length-1];
+  const base=log.filter(x=>daysBetween(x.d,last.d)>=7)[0];if(!base)return null;const days=daysBetween(base.d,last.d);const perDay=(last[key]-base[key])/days;
+  return {perMonth:perDay*30,days,monthsLeft:perDay>0?(limitBytes-nowBytes)/perDay/30:null}}
+const daysBetween=(a,b)=>Math.round((parseD(b)-parseD(a))/864e5);
+function devMeter(label,used,limit,o={}){const pct=limit?used/limit*100:0;const cls=pct>=90?'bad':pct>=70?'warn':'';const f=o.count?(v=>Number(v).toLocaleString()):fmtBytes;
+  return `<div class="panel pad cap"><div class="cap-h"><span>${label}</span><b class="${cls?cls+'-t':''}">${fmtN(pct,pct<10?1:0)}%</b></div><div class="cap-n"><b>${f(used)}</b><span class="dim"> of ${f(limit)}</span></div>
+    <div class="cap-bar"><span class="${cls}" style="width:${Math.min(100,Math.max(pct,0.6))}%"></span></div><div class="small dim">${used>limit?`<b class="bad-t">${f(used-limit)} over the limit</b>`:`${f(limit-used)} left`}${o.sub?` · ${o.sub}`:''}</div>${o.note?`<div class="small cap-note">${o.note}</div>`:''}</div>`}
+function devUsage(){const D=S.dev;const P=devPlan();const U=D.usage;
+  const planBar=`<div class="bar dev-bar"><label class="small" style="font-weight:600">Plan</label><select class="field" data-devplan>${[['free','Supabase Free — 500 MB database, 1 GB files'],['pro','Supabase Pro — 8 GB database, 100 GB files'],['custom','Custom limits']].map(([k,l])=>`<option value="${k}"${P.plan===k?' selected':''}>${l}</option>`).join('')}</select>
+    ${P.plan==='custom'?`<label class="small">Database MB <input class="field num cap-in" id="dl-db" data-devlim="db" inputmode="decimal" value="${esc(P.db)}"></label><label class="small">Files MB <input class="field num cap-in" id="dl-files" data-devlim="files" inputmode="decimal" value="${esc(P.files)}"></label><label class="small">Active logins <input class="field num cap-in" id="dl-mau" data-devlim="mau" inputmode="decimal" value="${esc(P.mau)}"></label>`:''}
+    <span style="margin-left:auto" class="small dim">${U?`As of ${new Date(U.at).toLocaleString()}`:''}</span><button class="btn sm" data-act="dev-usage"${D.usageBusy?' disabled':''}>${D.usageBusy?'Checking…':'↻ Refresh'}</button></div>`;
+  if(D.usageErr)return planBar+`<div class="notice">Couldn’t read usage: ${esc(D.usageErr)}<br>If you haven’t yet, run <b>supabase/update-20-dev-usage.sql</b> in Supabase.</div>`;
+  if(!U)return planBar+`<div class="panel"><div class="empty">${D.usageBusy?'Checking the database…':'Click Refresh to check.'}</div></div>`;
+  const F=U.files||{},us=U.users||{};const dbLim=P.db*MB,fLim=P.files*MB;const g=devGrowth('db',U.db_bytes,dbLim),gf=devGrowth('f',F.bytes||0,fLim);
+  const grow=(x,what)=>!x?`Growth for ${what} shows after a week of snapshots (one is saved each day you open this page).`:x.perMonth<=0?`${what[0].toUpperCase()+what.slice(1)} hasn’t grown in the last ${x.days} days.`:`${what[0].toUpperCase()+what.slice(1)}: growing about <b>${fmtBytes(x.perMonth)} a month</b>. At that pace it’s full in about <b>${x.monthsLeft>24?'more than 2 years':x.monthsLeft<1?'under a month':Math.round(x.monthsLeft)+' months'}</b>.`;
+  const T=(U.tables||[]);const tMax=Math.max(1,...T.map(t=>t.bytes));const tSum=T.reduce((s,t)=>s+t.bytes,0);const sys=Math.max(0,U.db_bytes-tSum);
+  return planBar+`<div class="cap-g">${devMeter('Database',U.db_bytes,dbLim,{sub:`${T.length} tables`,note:P.plan==='free'?'On the Free plan the database goes read-only when it’s full.':''})}
+    ${F.error?`<div class="panel pad cap"><div class="cap-h"><span>File storage</span></div><p class="small dim">Couldn’t read file sizes: ${esc(F.error)}</p></div>`:devMeter('File storage',F.bytes||0,fLim,{sub:`${Number(F.count||0).toLocaleString()} files`,note:'Plans, specs, quotes and photos uploaded to bids.'})}
+    ${us.error?'':devMeter('Active logins (last 30 days)',us.active30!=null?us.active30:us.total||0,P.mau,{count:1,sub:`${us.total||0} logins in total`})}</div>
+  <div class="panel pad" style="margin-top:14px"><b>How fast it’s filling</b><p class="small" style="margin:6px 0 0">${grow(g,'the database')}</p><p class="small" style="margin:4px 0 0">${grow(gf,'file storage')}</p></div>
+  <div class="grid2" style="margin-top:14px"><div class="sec"><div class="sec-h"><h2>Tables by size</h2><span>Data and indexes</span></div><div class="panel scroll"><table class="acct-t cap-t"><thead><tr><th>Table</th><th class="r">Size</th><th></th><th class="r">Rows (approx.)</th></tr></thead><tbody>
+    ${T.map(t=>`<tr><td>${esc(t.name)}</td><td class="r num">${fmtBytes(t.bytes)}</td><td class="cap-tb"><span style="width:${Math.max(2,t.bytes/tMax*100)}%"></span></td><td class="r num small dim">${t.rows?Number(t.rows).toLocaleString():'—'}</td></tr>`).join('')}
+    <tr><td class="dim">Database system (logins, storage records, indexes Supabase keeps)</td><td class="r num dim">${fmtBytes(sys)}</td><td></td><td></td></tr></tbody></table></div></div>
+  <div class="sec"><div class="sec-h"><h2>Largest files</h2><span>${fmtBytes(F.bytes||0)} in ${Number(F.count||0).toLocaleString()} files</span></div><div class="panel scroll"><table class="acct-t"><thead><tr><th>File</th><th>Bid</th><th class="r">Size</th></tr></thead><tbody>
+    ${(F.largest||[]).map(f=>{const parts=String(f.name).split('/');const b=byId(S.bids,parts[0]);return `<tr><td style="word-break:break-all">${esc(parts.slice(1).join('/')||f.name)}</td><td class="small">${b?esc(b.name):'<span class="dim">—</span>'}</td><td class="r num">${fmtBytes(f.bytes)}</td></tr>`}).join('')||'<tr><td colspan="3"><div class="empty small">No files uploaded yet.</div></td></tr>'}</tbody></table></div></div></div>
+  <p class="hint">A new, empty Supabase database already uses a little space for its own system tables. <b>Not measured here:</b> data transfer (“egress”, ${P.plan==='pro'?'250':'5'} GB a month on ${esc(P.label)}) can only be seen in Supabase under your organization’s <b>Usage</b> page.${P.plan==='free'?' Free projects are also <b>paused after a week with no activity</b>; regular use keeps it awake.':''} Plan limits are Supabase’s published numbers as of October 2026. Check their pricing page if they change.</p>`}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;if(t.dataset.act==='dev-usage'&&isDev())devUsageLoad();
+  else if(t.dataset.act==='dev-tab'&&t.dataset.v==='usage'&&isDev()&&!S.dev.usage&&!S.dev.usageBusy)devUsageLoad()});
+FOCUS_ATTRS.push('data-devlim');
+function devPlanSave(p){return run(sb.from('settings').upsert({key:'dev_plan',value:p})).then(()=>loadTable('settings')).then(()=>render()).catch(err=>toast(errMsg(err)))}
+document.addEventListener('change',e=>{const t=e.target;if(!isDev())return;
+  if(t.dataset.devplan!=null){const cur=devPlan();devPlanSave({plan:t.value,db:cur.db,files:cur.files,mau:cur.mau});return}
+  if(t.dataset.devlim){const cur=devPlan();const v=num(String(t.value).replace(/[,\s]/g,''));if(v>0)devPlanSave({plan:'custom',db:cur.db,files:cur.files,mau:cur.mau,[t.dataset.devlim]:v})}});
