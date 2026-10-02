@@ -81,6 +81,8 @@ const sb=CONFIGURED?window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAno
 
 /* ---------- company branding (colors + logo from config.js) ---------- */
 const BRAND=CFG.brand||{};
+// the product's name (top bar, sign-in screen, browser tab); set appName in config.js
+const APP_NAME=String(CFG.appName||'Bid Pipeline');try{if(CFG.appName)document.title=APP_NAME}catch(e){}
 (function applyBrand(){
   const hex=/^#?([0-9a-f]{6})$/i.exec(String(BRAND.primary||'').trim());if(!hex)return;
   const n=parseInt(hex[1],16),r=(n>>16&255)/255,g=(n>>8&255)/255,b=(n&255)/255;
@@ -98,7 +100,7 @@ const BRAND=CFG.brand||{};
 })();
 
 /* ---------- state ---------- */
-const TABLES=['bids','quotes','bid_files','bid_log','estimators','clients','vendors','settings','jobs','job_items','job_costs','codebook','pay_apps'];
+const TABLES=['bids','quotes','bid_files','bid_log','estimators','clients','vendors','settings','jobs','job_items','job_costs','codebook','pay_apps','feedback'];
 const S={loading:true,session:null,profile:null,profileFor:null,needPassword:/type=(invite|recovery)/.test(INITIAL_HASH),authView:'login',authMsg:null,
   bids:[],quotes:[],bid_files:[],bid_log:[],tableErr:{},estimators:[],clients:[],vendors:[],profiles:[],settings:{},jobs:[],job_items:[],job_costs:[],codebook:[],pms:[],
   view:'dashboard',dash:'precon',filter:'active',q:{},estF:'',clientF:'',year:new Date().getFullYear()};
@@ -222,6 +224,7 @@ const myName=()=>S.profile?.full_name||myEst()?.name||S.session?.user?.email||''
 /* ---------- data ---------- */
 async function loadTable(t){
   if(t==='pay_apps'&&!can('acct')){S.pay_apps=[];return}
+  if(t==='feedback'&&!isDev()){S.feedback=[];return}
   // page through big tables (Supabase returns at most 1,000 rows per request)
   const page=(from,ord)=>{let q=sb.from(t).select('*');if(ord)q=q.order('id');return q.range(from,from+999)};
   let r=await page(0,false);let data=r.data||[],error=r.error;
@@ -259,7 +262,7 @@ async function afterLogin(){
   }
   S.loading=false;schedule();
 }
-function resetData(){TABLES.forEach(t=>{if(t!=='settings')S[t]=[]});S.est=null;S.estIndex=[];S.estsTab='list';S.settings={};S.profiles=[];S.profile=null;S.profileFor=null;S.view='dashboard';S.dash='precon';if(channel){sb.removeChannel(channel);channel=null}}
+function resetData(){TABLES.forEach(t=>{if(t!=='settings')S[t]=[]});S.myFb=null;S.est=null;S.estIndex=[];S.estsTab='list';S.settings={};S.profiles=[];S.profile=null;S.profileFor=null;S.view='dashboard';S.dash='precon';if(channel){sb.removeChannel(channel);channel=null}}
 function errMsg(e){const m=(e&&(e.message||e.error_description))||'Something went wrong.';
   if(/row-level security|permission denied/i.test(m))return 'You don’t have permission to make that change.';
   if(/Failed to fetch|NetworkError/i.test(m))return 'Can’t reach the server. Check your connection and try again.';
@@ -281,7 +284,7 @@ function renderNow(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
-  const views={teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const views={help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
@@ -296,8 +299,8 @@ const SUBNAV_LABEL={clients:'Clients & GCs',vendors:'Vendors & subs',team:'Peopl
 function subNav(){const g=navGroups().find(x=>x[2].includes(S.view));if(!g)return '';const subs=g[2].filter(v=>SUBNAV_LABEL[v]);if(subs.length<2)return '';
   return `<div class="subnav">${subs.map(v=>`<button class="${S.view===v?'on':''}" data-act="nav" data-v="${v}">${SUBNAV_LABEL[v]}</button>`).join('')}</div>`}
 function renderTop(){
-  const company=S.settings.general?.companyName||CFG.companyName||'Bid Pipeline';
-  $('#top').innerHTML=`<button class="brand" ${isAdmin()?'data-act="company" title="Edit company name"':'tabindex="-1" style="cursor:default"'}>${BRAND.logo?`<img class="brand-logo" src="${esc(BRAND.logo)}" alt="">`:'<span class="stake"></span>'}<span><b>${esc(company)}</b><small>Bid pipeline</small></span></button>
+  const company=S.settings.general?.companyName||CFG.companyName||APP_NAME;
+  $('#top').innerHTML=`<button class="brand" ${isAdmin()?'data-act="company" title="Edit company name"':'tabindex="-1" style="cursor:default"'}>${BRAND.logo?`<img class="brand-logo" src="${esc(BRAND.logo)}" alt="">`:'<span class="stake"></span>'}<span><b>${esc(company)}</b><small>${esc(APP_NAME)}</small></span></button>
   <nav class="nav">${navGroups().map(([k,l,mem])=>`<button class="${mem.includes(S.view)?'on':''}" data-act="nav" data-v="${k}">${l}</button>`).join('')}</nav>
   <div class="nav-more" hidden><button class="nav-morebtn" data-act="nav-more" aria-haspopup="true" aria-expanded="false">More ▾</button><div class="nav-menu" role="menu" hidden></div></div>
   <button class="topsearch" data-act="pal-open" aria-label="Search (Ctrl+K)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><span>Search</span><kbd>Ctrl K</kbd></button>
@@ -316,7 +319,7 @@ document.addEventListener('click',e=>{const mb=e.target.closest('[data-act=nav-m
   if(mb){menu.hidden=!menu.hidden;mb.setAttribute('aria-expanded',String(!menu.hidden));return}if(!menu.hidden)menu.hidden=true});
 
 /* ---------- auth screens ---------- */
-function brandBlock(){return BRAND.loginLogo?`<picture>${BRAND.loginLogoDark?`<source srcset="${esc(BRAND.loginLogoDark)}" media="(prefers-color-scheme: dark)">`:''}<img class="auth-logo" src="${esc(BRAND.loginLogo)}" alt="${esc(CFG.companyName||'')}"></picture>`:`<div class="auth-brand"><span class="stake"></span><div><b>${esc(CFG.companyName||'Bid Pipeline')}</b><small>Bid pipeline</small></div></div>`}
+function brandBlock(){return BRAND.loginLogo?`<picture>${BRAND.loginLogoDark?`<source srcset="${esc(BRAND.loginLogoDark)}" media="(prefers-color-scheme: dark)">`:''}<img class="auth-logo" src="${esc(BRAND.loginLogo)}" alt="${esc(CFG.companyName||'')}"></picture>`:`<div class="auth-brand"><span class="stake"></span><div><b>${esc(CFG.companyName||APP_NAME)}</b><small>${esc(APP_NAME)}</small></div></div>`}
 function msgBlock(){const m=S.authMsg;return m?(m.err?`<div class="err">${esc(m.err)}</div>`:`<div class="okmsg">${esc(m.ok)}</div>`):''}
 function authScreen(){
   let remembered='',rememberOn=true;try{remembered=localStorage.getItem(EMAIL_KEY)||'';rememberOn=localStorage.getItem(REMEMBER_KEY)!=='0'}catch(e){}
@@ -923,8 +926,8 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
-  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck'].includes(M.kind)||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
+  const html={fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest'].includes(M.kind)||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();
@@ -3728,7 +3731,7 @@ document.addEventListener('click',e=>{
     case 'auth-view':S.authView=t.dataset.v;S.authMsg=null;render();break;
     case 'signout':palClose();sb.auth.signOut();break;
     case 'recheck':S.profileFor=null;S.profile=null;render();afterLogin();break;
-    case 'nav':if(S.est&&S.est.dirty)estSave();S.selMode=false;S.sel=new Set();S.view=t.dataset.v;closeModal();render();window.scrollTo(0,0);break;
+    case 'nav':if(S.est&&S.est.dirty)estSave();S.selMode=false;S.sel=new Set();S.prevView=S.view;S.view=t.dataset.v;closeModal();render();window.scrollTo(0,0);break;
     case 'dash':S.dash=t.dataset.v;render();break;
     case 'kpi-filter':S.view='pipeline';S.filter=t.dataset.v;savePv();render();window.scrollTo(0,0);break;
     case 'filter':S.filter=t.dataset.v;savePv();render();break;
@@ -6213,6 +6216,8 @@ function navGroups(){const g=[];
   if(can('contacts'))g.push(['clients','Contacts',['clients','vendors']]);
   if(can('calc'))g.push(['calc','Calculators',['calc']]);
   if(isAdmin())g.push(['team','Team',['team','estimators','teampm','teamoffice','access']]);
+  g.push(['help','Help',['help']]);
+  if(isDev()){const n=(S.feedback||[]).filter(f=>f.status==='New').length;g.push(['dev','Developer'+(n?` (${n})`:''),['dev']])}
   return g}
 
 /* ----- Team: People & access ----- */
@@ -6294,3 +6299,298 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   else if(a==='acc-save')accessSave()});
 document.addEventListener('input',e=>{const t=e.target;if(M&&M.kind==='access'&&t.dataset.accf)M.draft[t.dataset.accf]=t.value});
 document.addEventListener('change',e=>{const t=e.target;if(M&&M.kind==='access'&&t.dataset.accrole!=null){M.draft.role=t.value;Object.keys(M.draft.perms).forEach(k=>{if(M.draft.perms[k]===rolePerm(t.value,k))delete M.draft.perms[k]});renderModal()}});
+
+/* =====================================================================
+   Help tab (tutorials + feedback) for everyone, and the Developer tab
+   (feedback inbox, system tests, app info) for the developer login.
+   Needs supabase/update-19-help-developer.sql.
+   ===================================================================== */
+const APP_BUILD='2026-10-02';
+const isDev=()=>!!(S.profile&&S.profile.is_dev);
+S.help=S.help||{tab:'tut',open:null,q:''};
+S.dev=S.dev||{tab:'inbox',status:'open',kind:'',area:'',q:'',sort:'new',group:false,open:null};
+S.feedback=S.feedback||[];S.myFb=S.myFb||null;
+
+/* ---------- tutorials ---------- */
+// area: which access a person needs to see it (null = everyone, 'team' = admins)
+const TUTS=[
+ {id:'start',area:null,group:'Start here',title:'Getting around',blurb:'The tabs, search, and where things live.',steps:[
+   'The <b>tabs across the top</b> are the parts of the app you have access to. If a tab is missing, your login doesn’t include it. Ask an admin.',
+   'Some tabs have <b>smaller tabs underneath</b> (for example Estimates has Codebooks and Bid settings).',
+   'Press <b>Ctrl + K</b> (or click the magnifier) to search for any bid, job, client, vendor or calculator and jump straight to it.',
+   'Almost everything saves <b>as you go</b>. Where there’s a Save button, an “Unsaved changes” note shows until you click it.',
+   'The app updates live. If a teammate changes something, your screen refreshes on its own.'],
+  tips:['On a phone, tabs that don’t fit move under <b>More</b>.','Stuck or found a problem? Use <b>Send feedback</b> on this Help tab.']},
+ {id:'dash',area:'dash',group:'Bidding',title:'The dashboard',blurb:'What needs attention today.',go:'dashboard',steps:[
+   'The cards at the top count <b>active bids, bids due this week, pending decisions and awards</b>.',
+   '<b>Projects overview</b> lists active bids by due date. Click a row to open the bid. Click a column heading to sort.',
+   '<b>Quotes outstanding</b> shows vendor quotes you asked for that haven’t come in.','<b>Follow-ups needed</b> lists submitted bids with no recent contact with the GC.',
+   'Admins can switch to the <b>Board</b> view for win rate, awards and trends by year.']},
+ {id:'bids',area:'bids',group:'Bidding',title:'Bids and the pipeline',blurb:'Create a bid, track it, and keep its history.',go:'pipeline',steps:[
+   'Open <b>Pipeline</b>. Use the status chips, search and filters to find bids. Switch between list, cards and calendar.',
+   'Click <b>+ New bid</b> (people who manage all bids) and fill in the project, GCs, due date and estimators.',
+   'Inside a bid: add <b>scopes</b> (or apply a template), mark who performs each, and <b>sign off</b> each scope with your initials when its takeoff is done.',
+   'Under <b>Vendor quotes</b>, request quotes by scope, mark them received and attach the quote file.','Upload plans, specs and addenda under <b>Files</b>. Log addenda and revisions so everyone prices the same set.',
+   'Use the <b>Estimator log</b> for site visits, assumptions, RFIs and risks. It carries over to the job for the PM.','Change the <b>status</b> as the bid moves: Estimating → Submitted → Awarded / Not Awarded.'],
+  tips:['If the same project comes back with a new name or details, use <b>↻ Supersede</b> instead of making a new bid. It keeps the history.','Estimators only see bids they’re assigned to.']},
+ {id:'est',area:'estimates',group:'Estimating',title:'Building an estimate',blurb:'Sections, bid items, activities and costs.',go:'estimates',steps:[
+   'Open <b>Estimates</b> and click <b>+ New estimate</b>, or open a bid and go to its estimate. Start blank, from a master template, or copy another estimate.',
+   'An estimate is built in layers: <b>Sections → Bid items → Activities → Costs</b>. The outline is on the left; the sheet for whatever you click is on the right.',
+   'Use <b>Bid item setup</b> to type or paste the bid form quickly: description, quantity, unit. Tab moves across and down.',
+   'On a bid item, add activities by hand or with <b>📖 From codebook</b>. Each activity has a quantity, a crew and a production rate.',
+   'Add costs to an activity: labor, equipment, materials, subs, trucking. Type a code or name, or use <b>Search codebook</b>.',
+   'Watch the cards at the top: direct cost, indirects, markup, bid total and margin update as you type.'],
+  tips:['If you change a bid item’s quantity, the app asks whether to update its activities too.','An amber banner means codebook prices moved since you priced the bid. Click it to bring in today’s prices.']},
+ {id:'prod',area:'estimates',group:'Estimating',title:'Crews and production rates',blurb:'How production drives labor and equipment cost.',go:'estimates',steps:[
+   'Open an activity. Under <b>Crew & production</b>, pick a crew and enter the production rate.',
+   'Choose how the rate is measured: <b>units/hr, hrs/unit, units/shift, units/day, units/week</b>, or a fixed total of <b>crew hours, shifts, days or weeks</b>.',
+   'The line under the rate shows the math, for example “1,000 CY ÷ 250 CY/hr = 4 crew hrs”.',
+   'Crew cost = crew $/hr × those hours. Any cost line set to <b>per crew hr</b> (a laborer or machine added on its own) uses the same hours.',
+   'Cost lines set to <b>per unit</b> or <b>lump</b> don’t change with production.'],
+  tips:['Shift modes have their own shift length. Blank uses the schedule’s hours per day.','The work schedule (5×10s and so on) is on <b>Schedule & indirects</b>. It sets hours per day and the overtime premium.']},
+ {id:'ind',area:'estimates',group:'Estimating',title:'Indirects, markup and totals',blurb:'Overhead, profit, bond, and how they spread.',go:'estimates',steps:[
+   'On <b>Schedule & indirects</b>, pick the work schedule and list the indirect costs (superintendent, mobilization, trucks…). Weekly and monthly costs multiply by the job duration.',
+   'Choose <b>how indirects get into the price</b>: over every bid item, only items with sub work, a self-perform / sub split, only items you pick, or as its own lump-sum line.',
+   'On <b>Markup & totals</b>, choose <b>Simple</b> (one overhead % and markup %) or <b>By cost type</b> (different rates for labor, equipment, materials, subs…).',
+   'Set bond, sales tax on materials and retainage. Set the <b>fuel price</b> for this bid to reprice every machine’s fuel.',
+   'Choose how markup spreads into unit prices, or adjust items by hand for an unbalanced bid.','Click <b>Send to the bid</b> to put the total on the bid record.']},
+ {id:'quotes',area:'estimates',group:'Estimating',title:'Quotes folder and proposals',blurb:'Compare vendor prices and send the proposal.',go:'estimates',steps:[
+   'On the estimate’s <b>Quotes</b> tab, materials and subs are grouped so you can enter each vendor’s price side by side.',
+   'Pick the winning price for each line and <b>apply it to the estimate</b>. You can also push it to the codebook.',
+   'On <b>Proposal</b>, choose which GCs it goes to, edit the intro, inclusions, exclusions and clarifications.','Click <b>Print / PDF</b> to save it, then <b>Mark sent</b> to record the date.']},
+ {id:'cb',area:'codebook',group:'Estimating',title:'Codebooks and the rate builder',blurb:'Your price book: materials, labor, equipment, crews.',go:'cb',steps:[
+   'Open <b>Estimates → Codebooks</b>. Tabs hold materials, labor, equipment, crews, activities and bid items.',
+   '<b>Import from Excel</b> reads any layout: pick the sheet, match your columns to the fields, preview, import.',
+   '<b>Mass update prices</b>: tick items (or filter the list), then raise by %, add an amount, or set a value. Every change goes in the item’s price history.',
+   'For labor and equipment, tick <b>Build this rate</b> to figure it from its costs: wage, taxes, workers comp and benefits for labor; purchase or rental, fuel, repairs for equipment.',
+   'Crews are built from labor and equipment, so a wage or rate change flows into every crew automatically.'],
+  tips:['The company <b>rate sheet</b> (taxes, workers comp classes, fuel price) is under Bid settings. Saving it reprices every built rate.','Only people with Edit access to codebooks can change prices; others can look and export.']},
+ {id:'set',area:'codebook',group:'Estimating',title:'Bid settings and templates',blurb:'Company defaults every new estimate starts with.',go:'settings',need:'edit',steps:[
+   '<b>Estimates → Bid settings</b> holds the default markup, indirect cost list, work schedules and overtime rules, and the rate sheet.',
+   'Every new estimate starts with these. Each estimate can still change its own.','From an estimate you can click <b>Make these the company defaults</b> to save its markup or indirects back here.',
+   '<b>Master templates</b> are whole estimates you can start from. <b>Section templates</b> drop a ready-made section into any estimate.','<b>Scopes & templates</b> is the scope list bids pick from.']},
+ {id:'jobs',area:'jobs',group:'Jobs',title:'Running a job',blurb:'Budgets, cost logs and where the job is heading.',go:'jobs',steps:[
+   'A job starts from an awarded bid (<b>Create job</b>), which brings the budget in from the estimate, or from <b>+ New job</b> / <b>Import budget</b>.',
+   'Each budget line shows budget, cost to date, % complete and projected cost.','Click <b>+ Log costs</b> to enter a day’s labor, equipment, materials and subs, and the <b>quantity installed</b>.',
+   'Quantity installed drives % complete. Log it as often as you can.','The job page projects final cost and profit. Lines turn amber or red when they’re heading over budget.'],
+  tips:['Under 10% complete, the projection uses the budget rate; after that it uses your actual cost per unit.','The estimator’s notes from the bid show on the job’s <b>Estimator notes</b> tab.']},
+ {id:'acct',area:'acct',group:'Accounting',title:'Billing and pay apps',blurb:'Monthly progress billing with retainage.',go:'acct',steps:[
+   'Open <b>Accounting → Billing</b> and pick the job. Click <b>+ New pay app</b>.',
+   'Enter this period’s <b>quantity</b> for unit-price lines or <b>%</b> for lump sums, and any stored materials. <b>Fill from field quantities</b> pulls what the crew logged.',
+   'The summary shows contract to date, completed and stored, retainage, less previous certificates, and <b>current payment due</b>.',
+   '<b>Save</b>, then <b>Mark submitted</b>. Later mark it approved and record the payment.','<b>Print / PDF</b> gives the application with its continuation sheet. <b>Export invoice</b> makes the file for your accounting software.'],
+  tips:['Add extra work with <b>+ Change order</b>. It joins the schedule of values.','Tick <b>Release all retainage</b> on the final pay app.']},
+ {id:'acct2',area:'acct',group:'Accounting',title:'Accounting files: budgets out, costs in',blurb:'Working with your accounting software.',go:'acct',steps:[
+   '<b>Overview (WIP)</b> shows every job’s contract, cost, % complete, earned, billed and over/under billing. Export it for your accountant or bonding company.',
+   '<b>Job budgets</b>: export a job’s budget to load into accounting. Use <b>Columns…</b> to rename headings to what your software expects.',
+   '<b>Import costs</b>: run a job cost detail report in your accounting software, save as Excel or CSV, and choose the file. Match the columns once; the app remembers.',
+   'Rows already imported are skipped, so importing an overlapping report never doubles costs.','<b>Lists & codes</b>: keep each customer’s and vendor’s accounting ID, your cost code list and cost type codes.'],
+  tips:['Cost imports match jobs by <b>job number</b>. Make sure each job has one.']},
+ {id:'contacts',area:'contacts',group:'Everyday',title:'Clients, GCs and vendors',blurb:'Your contact lists.',go:'clients',steps:[
+   '<b>Contacts</b> has two lists: Clients & GCs, and Vendors & subs.','Click a company to see its contacts and history: bids and win rate for clients, quotes and response rate for vendors.',
+   'On a vendor, tick the <b>scopes</b> they supply or perform so they show up when you request quotes for that scope.','People with Edit access can add, change and import from Excel.']},
+ {id:'calc',area:'calc',group:'Everyday',title:'Calculators',blurb:'Takeoff and field math.',go:'calc',steps:[
+   'Open <b>Calculators</b> and pick one: stone and material tonnage, pipe and trench, manholes, cut and fill, and the plan takeoff tools.',
+   'Your last inputs are remembered on your computer.','The cut/fill tool can read an AGTEK export or a surface file.','Admins keep the material weights and pipe library up to date.']},
+ {id:'team',area:'team',group:'Admin',title:'People, roles and access',blurb:'Adding people and deciding what they can open.',go:'team',steps:[
+   'Add the person in Supabase (<b>Authentication → Users → Add user</b>). They appear on <b>Team → People & access</b> as “No access yet”.',
+   'Pick their <b>role</b>. That gives the standard access for the job: admin, executive, estimator, project manager, accounting or board.',
+   'Click <b>Edit access…</b> to fine-tune any area to No access, View or Edit, and to choose all bids or only assigned bids.',
+   'Estimators need an <b>estimator record</b> linked to their login so bids can be assigned to them.','<b>Access chart</b> shows every role’s defaults and who has custom access.']}];
+const tutOk=t=>t.area==null?true:t.area==='team'?isAdmin():can(t.area,t.need==='edit'?'edit':undefined);
+const tutDone=()=>{try{return new Set(JSON.parse(localStorage.getItem('bp-tut-done')||'[]'))}catch(e){return new Set()}};
+function tutToggle(id){const s=tutDone();s.has(id)?s.delete(id):s.add(id);try{localStorage.setItem('bp-tut-done',JSON.stringify([...s]))}catch(e){}}
+
+/* ---------- feedback ---------- */
+const FB_KINDS=[['bug','Something’s broken','bad'],['feature','Idea or request','good'],['question','Question',''],['other','Something else','']];
+const FB_KIND_LABEL={bug:'Bug',feature:'Idea',question:'Question',other:'Other'};
+const FB_AREAS=()=>[...AREAS.map(a=>a[1]),'Team & logins','Help','Something else'];
+const FB_STATUS=['New','Reviewing','Planned','In progress','Done','Won’t do','Duplicate'];
+const FB_OPEN=new Set(['New','Reviewing','Planned','In progress']);
+const FB_ST_CLS={New:'hot',Reviewing:'warn',Planned:'',['In progress']:'warn',Done:'good'};
+const fbStatusDb=s=>s==='Won’t do'?"Won't do":s;const fbStatusUi=s=>s==="Won't do"?'Won’t do':s;
+const VIEW_AREA={dashboard:'Dashboard',pipeline:'Bids & pipeline',estimates:'Estimates',estimate:'Estimates',cb:'Codebooks & bid settings',settings:'Codebooks & bid settings',scopes:'Codebooks & bid settings',jobs:'Jobs',job:'Jobs',acct:'Accounting',clients:'Contacts',vendors:'Contacts',calc:'Calculators',team:'Team & logins',estimators:'Team & logins',teampm:'Team & logins',teamoffice:'Team & logins',access:'Team & logins',help:'Help'};
+async function loadMyFb(){try{const {data,error}=await sb.rpc('my_feedback');if(error)throw error;S.myFb=(data||[]).map(f=>({...f,status:fbStatusUi(f.status)}));S.fbMissing=false}catch(e){S.myFb=[];S.fbMissing=true}schedule()}
+function fbOpen(kind){const from=S.prevView&&S.prevView!=='help'?S.prevView:S.view;M={kind:'fb',draft:{kind:kind||'bug',area:VIEW_AREA[from]||'Something else',title:'',body:'',importance:'normal'},from};showModal();setTimeout(()=>$('#fb-title')?.focus(),0)}
+function fbModal(){const d=M.draft;const ph={bug:'What were you doing? What happened? What did you expect to happen?',feature:'What would you like it to do? What problem would it solve for you?',question:'What are you trying to do?',other:'Tell us what’s on your mind.'}[d.kind];
+  return mhead('Send feedback','It goes straight to the developer. You’ll see the status and any reply on the Help tab.')+`<div class="mbody">
+  <div class="seg fb-kind">${FB_KINDS.map(([k,l])=>`<button class="${d.kind===k?'on':''}" data-act="fb-kind" data-v="${k}">${l}</button>`).join('')}</div>
+  <div class="fg" style="margin-top:12px"><label class="f s2">${d.kind==='bug'?'What went wrong? (one line)':d.kind==='feature'?'Your idea (one line)':'Subject'}<input class="field" id="fb-title" data-fb="title" value="${esc(d.title)}" maxlength="140"></label>
+    <label class="f">Part of the app<select class="field" data-fb="area">${FB_AREAS().map(a=>`<option${d.area===a?' selected':''}>${esc(a)}</option>`).join('')}</select></label>
+    <label class="f">${d.kind==='bug'?'How bad is it?':'How much does it matter?'}<select class="field" data-fb="importance">${[['low',d.kind==='bug'?'Minor annoyance':'Nice to have'],['normal',d.kind==='bug'?'Gets in the way':'Would help'],['high',d.kind==='bug'?'I can’t do my work':'Really need it']].map(([k,l])=>`<option value="${k}"${d.importance===k?' selected':''}>${l}</option>`).join('')}</select></label>
+    <label class="f s4">Details<textarea class="field" id="fb-body" data-fb="body" rows="6" placeholder="${esc(ph)}">${esc(d.body)}</textarea></label></div>
+  <p class="hint">The page you were on, your browser and screen size are included automatically to help track problems down.</p></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="fb-send"${M.busy?' disabled':''}>${M.busy?'Sending…':'Send'}</button></div></div>`}
+async function fbSend(){const d=M.draft;if(!String(d.title).trim()){toast('Add a one-line summary.');$('#fb-title')?.focus();return}M.busy=true;renderModal();
+  const ctx={view:M.from||'',build:APP_BUILD,ua:navigator.userAgent,screen:`${window.innerWidth}×${window.innerHeight}`,at:new Date().toISOString(),bid:S.view==='estimate'&&S.est?S.est.bidId||'':'',job:M.from==='job'?S.jobId||'':''};
+  try{await run(sb.from('feedback').insert({id:newId(),created_by:S.session.user.id,created_by_name:myName(),created_by_role:role(),kind:d.kind,area:d.area,title:String(d.title).trim(),body:String(d.body).trim(),importance:d.importance,context:ctx}));
+    closeModal();toast('Thanks — your feedback was sent');S.help.tab='fb';await loadMyFb();if(isDev())await loadTable('feedback');render()}
+  catch(e){M.busy=false;renderModal();toast(/feedback|does not exist|schema cache/i.test(errMsg(e))?'Feedback isn’t set up yet. An admin needs to run supabase/update-19-help-developer.sql.':errMsg(e))}}
+
+/* ---------- Help page ---------- */
+function vHelp(){const H=S.help;if(S.myFb===null){S.myFb=[];loadMyFb()}
+  const openFb=(S.myFb||[]).filter(f=>FB_OPEN.has(f.status)).length;
+  const head=`<div class="head"><div><h1>Help</h1><p>How to use each part of the app, and a direct line to the developer.</p></div><div class="tools"><button class="btn primary" data-act="fb-open">Send feedback</button></div></div>
+  <div class="seg acct-tabs"><button class="${H.tab==='tut'?'on':''}" data-act="help-tab" data-v="tut">Tutorials</button><button class="${H.tab==='fb'?'on':''}" data-act="help-tab" data-v="fb">My feedback${openFb?` <small>${openFb} open</small>`:''}</button></div>`;
+  if(H.tab==='fb')return head+helpFb();
+  const done=tutDone();const q=(H.q||'').trim().toLowerCase();const list=TUTS.filter(tutOk).filter(t=>!q||(t.title+' '+t.blurb+' '+t.steps.join(' ')+(t.tips||[]).join(' ')).toLowerCase().includes(q));
+  const cur=list.find(t=>t.id===H.open)||list[0];const groups=[...new Set(list.map(t=>t.group))];
+  return head+`<div class="help-g"><div class="panel help-list"><input class="field search" id="q-help" data-helpq placeholder="Search the tutorials" value="${esc(H.q||'')}">
+    ${groups.map(g=>`<div class="help-grp">${esc(g)}</div>${list.filter(t=>t.group===g).map(t=>`<button class="${cur&&cur.id===t.id?'on':''}" data-act="help-open" data-id="${t.id}"><span class="help-ck${done.has(t.id)?' on':''}">${done.has(t.id)?'✓':''}</span><span><b>${esc(t.title)}</b><small>${esc(t.blurb)}</small></span></button>`).join('')}`).join('')||'<div class="empty small">No tutorials match that search.</div>'}
+    <p class="small dim help-prog">${list.filter(t=>done.has(t.id)).length} of ${list.length} done</p></div>
+  <div class="panel pad help-body">${cur?`<div class="help-h"><div><div class="small dim">${esc(cur.group)}</div><h2>${esc(cur.title)}</h2><p class="dim" style="margin:2px 0 0">${esc(cur.blurb)}</p></div>${cur.go&&navGroups().some(g=>g[2].includes(cur.go))?`<button class="btn" data-act="help-go" data-v="${cur.go}">Open this page →</button>`:''}</div>
+    <ol class="help-steps">${cur.steps.map(s=>`<li>${s}</li>`).join('')}</ol>
+    ${(cur.tips||[]).length?`<div class="help-tips"><b>Good to know</b><ul>${cur.tips.map(s=>`<li>${s}</li>`).join('')}</ul></div>`:''}
+    <div class="help-foot"><label class="check"><input type="checkbox" data-tutdone="${cur.id}"${done.has(cur.id)?' checked':''}> I’ve got this one</label><span class="small dim">Something unclear or missing? <button class="linkish" data-act="fb-open" data-v="question">Ask a question</button></span></div>`:'<div class="empty">Pick a tutorial.</div>'}</div></div>`}
+function helpFb(){const L=S.myFb||[];
+  return `${S.fbMissing?'<div class="notice">Feedback isn’t set up yet. An admin needs to run <b>supabase/update-19-help-developer.sql</b> in Supabase.</div>':''}
+  <div class="panel pad help-fbintro"><div><b>Found a bug or have an idea?</b><p class="small dim" style="margin:2px 0 0">Tell the developer. Bugs get fixed faster when you say what you were doing and what happened.</p></div>
+    <div class="adders" style="margin:0"><button class="btn" data-act="fb-open" data-v="bug">Report a bug</button><button class="btn" data-act="fb-open" data-v="feature">Suggest an idea</button><button class="btn" data-act="fb-open" data-v="question">Ask a question</button></div></div>
+  <div class="sec"><div class="sec-h"><h2>What you’ve sent</h2><span>${L.length} item${L.length===1?'':'s'}</span></div>
+  ${L.map(f=>`<div class="panel pad fb-card"><div class="fb-top"><span>${pill(FB_KIND_LABEL[f.kind]||f.kind,f.kind==='bug'?'bad':f.kind==='feature'?'good':'')} <b>${esc(f.title)}</b></span><span>${pill(f.status,FB_ST_CLS[f.status]||'')}</span></div>
+    <div class="small dim">${esc(f.area)} · sent ${fmtShort(String(f.created_at).slice(0,10))}</div>${f.body?`<p class="fb-body">${esc(f.body)}</p>`:''}
+    ${f.reply?`<div class="fb-reply"><b>Reply from the developer</b>${f.replied_at?` <span class="small dim">${fmtShort(String(f.replied_at).slice(0,10))}</span>`:''}<p>${esc(f.reply)}</p></div>`:''}
+    ${f.status==='New'?`<button class="btn sm ghost" data-act="fb-withdraw" data-id="${f.id}">Withdraw</button>`:''}</div>`).join('')||'<div class="panel"><div class="empty">Nothing yet. Anything you send shows up here with its status and any reply.</div></div>'}</div>`}
+
+/* ---------- Developer page ---------- */
+function vDev(){if(!isDev())return '<div class="empty">This page is for the developer.</div>';const D=S.dev;const F=(S.feedback||[]).map(f=>({...f,status:fbStatusUi(f.status)}));const nNew=F.filter(f=>f.status==='New').length;
+  return `<div class="head"><div><h1>Developer</h1><p>Only you can see this tab. Build ${APP_BUILD}.</p></div><div class="tools"><button class="btn primary" data-act="dev-run">▶ Run tests</button></div></div>
+  ${S.tableErr&&S.tableErr.feedback?'<div class="notice">The feedback table isn’t there yet. Run <b>supabase/update-19-help-developer.sql</b> in Supabase.</div>':''}
+  <div class="seg acct-tabs">${[['inbox',`Feedback inbox${nNew?` <small>${nNew} new</small>`:''}`],['tests','System tests'],['info','App info']].map(([k,l])=>`<button class="${D.tab===k?'on':''}" data-act="dev-tab" data-v="${k}">${l}</button>`).join('')}</div>
+  ${D.tab==='tests'?devTests():D.tab==='info'?devInfo():devInbox(F)}`}
+const PRI_ORDER={P1:0,P2:1,P3:2,'':3},IMP_ORDER={high:0,normal:1,low:2};
+function devInbox(F){const D=S.dev;const q=(D.q||'').trim().toLowerCase();
+  let L=F.filter(f=>(D.status==='open'?FB_OPEN.has(f.status):D.status==='all'?true:f.status===D.status)&&(!D.kind||f.kind===D.kind)&&(!D.area||f.area===D.area)&&(!q||[f.title,f.body,f.created_by_name,f.area,f.dev_notes].join(' ').toLowerCase().includes(q)));
+  L.sort(D.sort==='pri'?(a,b)=>PRI_ORDER[a.priority||'']-PRI_ORDER[b.priority||'']||IMP_ORDER[a.importance]-IMP_ORDER[b.importance]||String(b.created_at).localeCompare(String(a.created_at)):(a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
+  const cnt=f=>F.filter(f).length;const areas=[...new Set(F.map(f=>f.area).filter(Boolean))].sort();
+  const row=f=>`<tr class="click${D.open===f.id?' on':''}${f.status==='New'?' fb-new':''}" data-act="dev-open" data-id="${f.id}"><td>${f.priority?pill(f.priority,f.priority==='P1'?'bad':f.priority==='P2'?'warn':''):'<span class="dim">—</span>'}</td><td>${pill(FB_KIND_LABEL[f.kind]||f.kind,f.kind==='bug'?'bad':f.kind==='feature'?'good':'')}</td>
+    <td><b>${esc(f.title)}</b>${f.reply?' <span class="small dim" title="Replied">↩</span>':''}${f.dev_notes?' <span class="small dim" title="Has notes">✎</span>':''}</td><td class="small">${esc(f.area)}</td><td class="small">${esc(f.created_by_name||'')}<div class="dim">${esc(ROLE_LABEL[f.created_by_role]||f.created_by_role||'')}</div></td>
+    <td class="small">${f.importance==='high'?'<b class="bad-t">High</b>':f.importance==='low'?'<span class="dim">Low</span>':'Normal'}</td><td class="small nowrap">${fmtShort(String(f.created_at).slice(0,10))}</td><td>${pill(f.status,FB_ST_CLS[f.status]||'')}</td></tr>${D.open===f.id?`<tr class="fb-detail"><td colspan="8">${devDetail(f)}</td></tr>`:''}`;
+  const body=D.group?[...new Set(L.map(f=>f.area||'(no area)'))].sort().map(a=>`<tr class="pay-sub"><td colspan="8">${esc(a)} · ${L.filter(f=>(f.area||'(no area)')===a).length}</td></tr>${L.filter(f=>(f.area||'(no area)')===a).map(row).join('')}`).join(''):L.map(row).join('');
+  return `<div class="statline acct-stats"><div><b class="${cnt(f=>f.status==='New')?'bad-t':''}">${cnt(f=>f.status==='New')}</b>New</div><div><b>${cnt(f=>f.kind==='bug'&&FB_OPEN.has(f.status))}</b>Open bugs</div><div><b>${cnt(f=>f.kind==='feature'&&FB_OPEN.has(f.status))}</b>Open ideas</div><div><b>${cnt(f=>f.status==='In progress')}</b>In progress</div><div><b>${cnt(f=>f.status==='Done')}</b>Done</div><div><b>${F.length}</b>Total</div></div>
+  <div class="bar dev-bar"><input class="field search" id="q-dev" data-devq placeholder="Search feedback" value="${esc(D.q||'')}">
+    <select class="field" data-devf="status">${[['open','Open'],['all','Everything'],...FB_STATUS.map(s=>[s,s])].map(([k,l])=>`<option value="${esc(k)}"${D.status===k?' selected':''}>${esc(l)}</option>`).join('')}</select>
+    <select class="field" data-devf="kind"><option value="">All types</option>${Object.entries(FB_KIND_LABEL).map(([k,l])=>`<option value="${k}"${D.kind===k?' selected':''}>${l}s</option>`).join('')}</select>
+    <select class="field" data-devf="area"><option value="">All areas</option>${areas.map(a=>`<option${D.area===a?' selected':''}>${esc(a)}</option>`).join('')}</select>
+    <select class="field" data-devf="sort"><option value="new"${D.sort==='new'?' selected':''}>Newest first</option><option value="pri"${D.sort==='pri'?' selected':''}>By priority</option></select>
+    <label class="check small"><input type="checkbox" data-devg${D.group?' checked':''}> Group by area</label><button class="btn sm" data-act="dev-csv"${F.length?'':' disabled'}>Export</button></div>
+  <div class="panel scroll"><table class="acct-t dev-t"><thead><tr><th>Priority</th><th>Type</th><th>Summary</th><th>Area</th><th>From</th><th>Matters</th><th>Sent</th><th>Status</th></tr></thead><tbody>
+  ${body||`<tr><td colspan="8"><div class="empty">${F.length?'Nothing matches those filters.':'No feedback yet. It shows up here as soon as someone sends it from the Help tab.'}</div></td></tr>`}</tbody></table></div>`}
+function devDetail(f){const E=S.dev.edit&&S.dev.edit.id===f.id?S.dev.edit:(S.dev.edit={id:f.id,status:f.status,priority:f.priority||'',dev_notes:f.dev_notes||'',reply:f.reply||''});const c=f.context||{};
+  const dirty=E.status!==f.status||E.priority!==(f.priority||'')||E.dev_notes!==(f.dev_notes||'')||E.reply!==(f.reply||'');
+  return `<div class="fb-d"><div><p class="fb-body">${esc(f.body)||'<span class="dim">No details given.</span>'}</p>
+    <div class="small dim fb-ctx">Page: <b>${esc(c.view||'—')}</b> · Screen: ${esc(c.screen||'—')} · Build: ${esc(c.build||'—')}${c.bid?' · Bid '+esc(String(c.bid).slice(0,8)):''}${c.job?' · Job '+esc(String(c.job).slice(0,8)):''}<br>${esc(c.ua||'')}<br>${esc(f.created_by_name||'')} · ${new Date(f.created_at).toLocaleString()}</div></div>
+  <div><div class="fg"><label class="f">Status<select class="field" data-deve="status">${FB_STATUS.map(s=>`<option${E.status===s?' selected':''}>${esc(s)}</option>`).join('')}</select></label>
+      <label class="f">Priority<select class="field" data-deve="priority">${[['','None'],['P1','P1 — now'],['P2','P2 — soon'],['P3','P3 — later']].map(([k,l])=>`<option value="${k}"${E.priority===k?' selected':''}>${l}</option>`).join('')}</select></label>
+      <label class="f s2">Private notes (only you see these)<textarea class="field" id="dev-notes" data-deve="dev_notes" rows="2">${esc(E.dev_notes)}</textarea></label>
+      <label class="f s2">Reply to ${esc(f.created_by_name||'them')} (they see this on their Help tab)<textarea class="field" id="dev-reply" data-deve="reply" rows="2">${esc(E.reply)}</textarea></label></div>
+    <div class="adders"><button class="btn sm primary" data-act="dev-save" data-id="${f.id}"${dirty?'':' disabled'}>Save</button><button class="btn sm ghost" data-act="dev-quick" data-id="${f.id}" data-v="Planned">Plan it</button><button class="btn sm ghost" data-act="dev-quick" data-id="${f.id}" data-v="Done">Mark done</button><button class="btn sm ghost danger-t" data-act="dev-del" data-id="${f.id}">Delete</button></div></div></div>`}
+async function devSave(id,patch){const f=byId(S.feedback,id);if(!f)return;const E=patch||S.dev.edit;const row={status:fbStatusDb(E.status),priority:E.priority??f.priority??'',dev_notes:E.dev_notes??f.dev_notes??'',reply:E.reply??f.reply??''};
+  if(row.reply!==(f.reply||''))row.replied_at=row.reply?new Date().toISOString():null;
+  try{await run(sb.from('feedback').update(row).eq('id',id));await loadTable('feedback');S.dev.edit=null;toast('Saved');render()}catch(e){toast(errMsg(e))}}
+
+/* ----- system tests ----- */
+const near=(a,b,t)=>Math.abs(a-b)<=(t||0.01);
+const T_OK=(d)=>({s:'pass',d}),T_WARN=(d,fix)=>({s:'warn',d,fix}),T_FAIL=(d,fix)=>({s:'fail',d,fix});
+function devTestList(){const tbl=(t,file)=>({g:'Database tables',n:`Table “${t}”`,run:async()=>{const {error}=await sb.from(t).select('*').limit(1);return error?T_FAIL(error.message||'Can’t read it',`Run supabase/${file} in Supabase.`):T_OK('Readable')}});
+  const col=(t,c,file)=>({g:'Database columns',n:`${t}: ${c}`,run:async()=>{const {error}=await sb.from(t).select(c).limit(1);return error?T_FAIL(error.message||'Missing',`Run supabase/${file} in Supabase.`):T_OK('Present')}});
+  const math=(n,fn)=>({g:'Calculations',n,run:async()=>{const r=fn();return r===true?T_OK('Correct'):T_FAIL(String(r),'The math in app.js doesn’t give the expected answer. Re-upload the latest app.js; if it still fails, send this report to whoever maintains the code.')}});
+  const data=(n,fn)=>({g:'Data check',n,run:async()=>fn()});
+  const ctx0={hpd:10,days:5,ot:0,sc:null,tax:0,fuel:null};
+  return [
+   {g:'Connection',n:'Reach the database',run:async()=>{const t0=performance.now();const {error}=await sb.from('settings').select('key').limit(1);const ms=Math.round(performance.now()-t0);return error?T_FAIL(error.message,'Check the Supabase URL and key in config.js, and that the project isn’t paused.'):ms>2500?T_WARN(`Slow: ${ms} ms`,'Could be your connection, or the Supabase project waking up.'):T_OK(`${ms} ms`)}},
+   {g:'Connection',n:'Signed in with a profile',run:async()=>S.session&&S.profile&&S.profile.id?T_OK(`${S.profile.email||''} · ${ROLE_LABEL[role()]}`):T_FAIL('No profile loaded','Sign out and back in.')},
+   {g:'Connection',n:'Live updates',run:async()=>{const st=typeof channel!=='undefined'&&channel?channel.state:'';return st==='joined'?T_OK('Connected'):T_WARN(`Channel is “${st||'not started'}”`,'Screens still work but won’t refresh on their own. Check Realtime is enabled for the tables in Supabase (Database → Replication).')}},
+   {g:'Connection',n:'File storage',run:async()=>{try{const r=await sb.storage.from('bid-files').list('',{limit:1});return r.error?T_FAIL(r.error.message,'The bid-files bucket is created by schema.sql.'):T_OK('bid-files bucket answers')}catch(e){return T_FAIL(errMsg(e))}}},
+   {g:'Connection',n:'Excel library loads',run:async()=>{try{await loadXLSX();return T_OK('Loaded')}catch(e){return T_FAIL(errMsg(e),'Imports and exports need this. Check the internet connection or content blockers.')}}},
+   {g:'Connection',n:'Save and delete a test record',run:async()=>{const k='dev_selftest';const a=await sb.from('settings').upsert({key:k,value:{at:new Date().toISOString()}});if(a.error)return T_FAIL(a.error.message,'Admins should be able to write settings. Check the security rules ran.');const b=await sb.from('settings').delete().eq('key',k);return b.error?T_WARN('Saved, but couldn’t delete the test row: '+b.error.message):T_OK('Wrote and removed a test row')}},
+   ...[['bids','schema.sql'],['quotes','schema.sql'],['bid_files','schema.sql'],['estimators','schema.sql'],['clients','schema.sql'],['vendors','schema.sql'],['settings','schema.sql'],['profiles','schema.sql'],['jobs','update-9-jobs.sql'],['job_items','update-9-jobs.sql'],['job_costs','update-9-jobs.sql'],['bid_log','update-11-estimator-log.sql'],['codebook','update-13-codebooks.sql'],['estimates','update-14-estimates.sql'],['pay_apps','update-17-accounting.sql'],['feedback','update-19-help-developer.sql']].map(([t,f])=>tbl(t,f)),
+   col('quotes','lines,meta','update-15-quote-lines.sql'),col('clients','acct_id','update-17-accounting.sql'),col('job_items','bid_price,change_order','update-17-accounting.sql'),col('job_costs','import_key','update-17-accounting.sql'),col('profiles','title,phone,perms','update-18-team-access.sql'),col('profiles','is_dev','update-19-help-developer.sql'),
+   {g:'Security functions',n:'Access levels (perm)',run:async()=>{const {data,error}=await sb.rpc('perm',{a:'bids'});return error?T_FAIL(error.message,'Run supabase/update-18-team-access.sql.'):data==='edit'?T_OK('Admin has Edit on bids'):T_WARN(`perm('bids') returned “${data}”`,'Expected “edit” for an admin login.')}},
+   {g:'Security functions',n:'PM directory',run:async()=>{const {data,error}=await sb.rpc('pm_directory');return error?T_FAIL(error.message,'Run supabase/update-9-jobs.sql and later updates.'):T_OK(`${(data||[]).length} people`)}},
+   {g:'Security functions',n:'My feedback',run:async()=>{const {error}=await sb.rpc('my_feedback');return error?T_FAIL(error.message,'Run supabase/update-19-help-developer.sql.'):T_OK('Answers')}},
+   {g:'Security functions',n:'App and database access rules match',run:async()=>{const bad=[];for(const [a] of AREAS){const {data,error}=await sb.rpc('perm',{a});if(error)return T_FAIL(error.message,'Run supabase/update-18-team-access.sql.');if(data!==perm(a))bad.push(`${a}: app ${perm(a)}, database ${data}`)}return bad.length?T_FAIL(bad.join('; '),'ROLE_ACCESS in app.js and role_perm() in the database are out of step.'):T_OK('Same for every area')}},
+   math('Overtime: 5×10s gives a 10% labor premium',()=>{const c=schedCalc({days:[10,10,10,10,10,0,0],rule:'weekly',otWeek:40,otDay:8,otf:1.5});return near(c.mult,0.1,1e-6)&&c.ot===10||`got ${c.mult}`}),
+   math('Production: 1,000 CY at 250 CY/hr is 4 crew hours, $200 of labor',()=>{const r=actCalc({qty:null,mode:'uph',prod:250,res:[{kind:'labor',basis:'hour',factor:1,price:50,otp:0}]},1000,ctx0);return near(r.hrs,4)&&near(r.c.labor,200)||`hrs ${r.hrs}, labor ${r.c.labor}`}),
+   math('Production: 2 shifts of 8 hours is 16 crew hours',()=>{const r=actCalc({qty:null,mode:'shifts',prod:2,shift:8,res:[]},100,ctx0);return near(r.hrs,16)||`hrs ${r.hrs}`}),
+   math('Markup: $1,000 at 10% + 10% compounded is $1,210',()=>{const d={v:3,settings:{hpd:10,crews:1,durDays:null},markup:{mode:'simple',oh:10,profit:10,compound:true,bond:0,tax:0,ret:5,spreadInd:'cost',spreadMu:'cost'},ind:[],sections:[{id:'s'}],items:[{id:'i',sec:'s',code:'1',desc:'x',qty:1,unit:'LS',acts:[{id:'a',qty:null,mode:'hrs',prod:0,res:[{id:'r',kind:'material',basis:'total',factor:1,price:1000}]}]}]};const R=estCalc(d);return near(R.total,1210)||`got ${R.total}`}),
+   math('Indirects: 80/20 self-perform / sub split',()=>{const mk=(id,kind,price)=>({id,sec:'s',code:id,desc:id,qty:1,unit:'LS',acts:[{id:'a'+id,qty:null,mode:'hrs',prod:0,res:[{id:'r'+id,kind,basis:'total',factor:1,price}]}]});const d={v:3,settings:{hpd:10,crews:1,durDays:null},markup:{mode:'simple',oh:0,profit:0,compound:true,bond:0,tax:0,ret:0,spreadInd:'split',indSelf:80,spreadMu:'cost'},ind:[{id:'x',desc:'x',basis:'ls',rate:3000,qty:null}],sections:[{id:'s'}],items:[mk('1','material',10000),mk('2','sub',5000)]};const R=estCalc(d);return near(R.items[0].ind,2400)&&near(R.items[1].ind,600)||`got ${R.items.map(x=>x.ind).join(' / ')}`}),
+   math('Rate builder: $30 laborer loads to $46.09/hr',()=>{const Rt=ratesOf({paidHrs:2080,ptoHpd:8,pto:{hol:6,vac:5,sick:3},taxes:[{pct:6.2,cap:184500},{pct:1.45},{pct:0.6,cap:7000},{pct:2.7,cap:9500},{pct:1.5}],wc:[{id:'x',rate:5.8}],ben:[{amt:9600},{amt:1200}],pk:[]});const r=rbLabor({base:30,rb:{on:true,wc:'x',add:[{amt:4}]}},Rt);return near(r.total,46.087,0.002)||`got ${r.total}`}),
+   math('Rate builder: owned excavator is $105.38/hr',()=>{const Rt=ratesOf({fuel:{diesel:3.85,gas:3.25},eq:{int:6,ins:2,ptax:1,stor:1,lube:15}});const r=rbEquip({rb:{on:true,mode:'own',price:300000,salv:25,life:5,hpy:1400,rep:50,ft:'diesel',gal:8,wear:3}},Rt);return near(r.total,105.3843,0.002)||`got ${r.total}`}),
+   math('Billing: 400 of 1,000 CY on a $16,900 line is $6,760',()=>{const v=payLineAmt({id:'x',quantity:1000},{lines:{x:{qty:400}}},16900);return near(v,6760)||`got ${v}`}),
+   math('Job budget: $100 cost at 10% + 10% is $121',()=>{const b=itemBudget({labor:100,equipment:0,materials:0,subcontract:0,other:0,overhead_pct:10,markup_pct:10});return near(b.price,121)||`got ${b.price}`}),
+   math('Units: “ls” becomes LS, “each” becomes EA',()=>normUnit('ls')==='LS'&&normUnit('each')==='EA'||`got ${normUnit('ls')}, ${normUnit('each')}`),
+   math('Look-alike check: 15" RCP matches 15 in RCP, not 18 in',()=>simScore('15" RCP storm','15 in rcp storm')>=SIM_MIN&&simScore('15" RCP','18" RCP')<SIM_MIN||`scores ${simScore('15" RCP storm','15 in rcp storm').toFixed(2)} / ${simScore('15" RCP','18" RCP').toFixed(2)}`),
+   data('Job lines all belong to a job',()=>{const n=S.job_items.filter(i=>!jobOf(i.job_id)).length;return n?T_WARN(`${n} line${n===1?'':'s'} point to a job that’s gone`):T_OK(`${S.job_items.length} lines`)}),
+   data('Job costs all belong to a job and a line',()=>{const a=S.job_costs.filter(c=>!jobOf(c.job_id)).length;const b=S.job_costs.filter(c=>c.item_id&&!byId(S.job_items,c.item_id)).length;const u=S.job_costs.filter(c=>!c.item_id&&c.type!=='Production').length;return a||b?T_WARN(`${a} without a job, ${b} pointing to a missing line`):u?T_WARN(`${u} cost row${u===1?'':'s'} posted to a job without a line`,'Usually imports with a cost code that isn’t on the job. Fine, but they don’t count toward any line.'):T_OK(`${S.job_costs.length} rows`)}),
+   data('Job numbers',()=>{const act=S.jobs.filter(j=>!j.archived_at);const none=act.filter(j=>!String(j.job_number||'').trim()).length;const seen={};let dup=0;act.forEach(j=>{const k=codeKey(j.job_number);if(!k)return;seen[k]=(seen[k]||0)+1;if(seen[k]===2)dup++});return dup?T_FAIL(`${dup} job number${dup===1?' is':'s are'} used more than once`,'Cost imports match by job number, so duplicates send costs to the wrong job.'):none?T_WARN(`${none} job${none===1?' has':'s have'} no job number`,'Accounting imports and exports need one.'):T_OK(`${act.length} jobs`)}),
+   data('Bids point to real estimators and clients',()=>{const e=S.bids.filter(b=>b.lead_estimator_id&&!byId(S.estimators,b.lead_estimator_id)).length;const c=S.bids.filter(b=>(b.client_ids||[]).some(id=>!byId(S.clients,id))).length;return e||c?T_WARN(`${e} with a missing lead estimator, ${c} with a missing client`):T_OK(`${S.bids.length} bids`)}),
+   data('Estimates belong to a bid',()=>{const n=(S.estIndex||[]).filter(e=>!byId(S.bids,e.bid_id)).length;return n?T_WARN(`${n} estimate${n===1?'':'s'} whose bid is gone or archived`):T_OK(`${(S.estIndex||[]).length} estimates`)}),
+   data('Crews use labor and equipment that still exist',()=>{const bad=cbList('crew').filter(c=>cbCrew(c).missing).length;return bad?T_WARN(`${bad} crew${bad===1?' has':'s have'} a removed member`,'Open the crew in the codebook and fix or remove the member.'):T_OK(`${cbList('crew').length} crews`)}),
+   data('Codebook codes are unique',()=>{let dup=0;CB_BOOKS.forEach(([bk])=>{const seen={};cbList(bk).forEach(x=>{const k=String(x.code||'').trim().toLowerCase();if(!k)return;seen[k]=(seen[k]||0)+1;if(seen[k]===2)dup++})});return dup?T_WARN(`${dup} code${dup===1?' is':'s are'} used twice in the same codebook`):T_OK(`${S.codebook.length} items`)}),
+   data('Estimator logins are linked',()=>{const n=S.profiles.filter(p=>permOf(p,'bids')!=='none'&&permOf(p,'bids_scope')==='mine'&&!S.estimators.some(e=>e.user_id===p.id)).length;return n?T_WARN(`${n} login${n===1?'':'s'} can only see assigned bids but ${n===1?'has':'have'} no estimator record`,'They won’t see any bids. Link them on Team → People & access.'):T_OK('All linked')}),
+   data('People waiting for access',()=>{const n=S.profiles.filter(p=>p.role==='pending').length;return n?T_WARN(`${n} login${n===1?' is':'s are'} waiting for a role`):T_OK('None waiting')}),
+   data('Pay apps belong to a job',()=>{const n=(S.pay_apps||[]).filter(p=>!jobOf(p.job_id)).length;return n?T_WARN(`${n} pay app${n===1?'':'s'} for a job that’s gone`):T_OK(`${(S.pay_apps||[]).length} pay apps`)}),
+   {g:'This browser',n:'Can remember settings',run:async()=>{try{localStorage.setItem('bp-t','1');localStorage.removeItem('bp-t');return T_OK('Yes')}catch(e){return T_WARN('Local storage is blocked','Remembered filters, column mappings and tutorial progress won’t stick in this browser.')}}}]}
+async function devRun(){const tests=devTestList();M={kind:'devtest',tests:tests.map(t=>({g:t.g,n:t.n,s:'wait'})),running:true,at:new Date()};showModal();
+  for(let i=0;i<tests.length;i++){if(!M||M.kind!=='devtest')return;M.tests[i].s='run';renderModal();const el=$('#dt-'+i);if(el)el.scrollIntoView({block:'nearest'});const t0=performance.now();
+    let r;try{r=await Promise.race([tests[i].run(),new Promise(res=>setTimeout(()=>res(T_FAIL('Timed out after 15 seconds','No answer from the database.')),15000))])}catch(e){r=T_FAIL(errMsg(e)||String(e))}
+    if(!M||M.kind!=='devtest')return;Object.assign(M.tests[i],r,{ms:Math.round(performance.now()-t0)})}
+  M.running=false;setTimeout(()=>{const mb=$('#modal .mbody');if(mb)mb.scrollTop=0},0);const sum=devSum(M.tests);S.dev.last={at:M.at.toISOString(),...sum,tests:M.tests};try{localStorage.setItem('bp-dev-health',JSON.stringify(S.dev.last))}catch(e){}renderModal();render()}
+const devSum=T=>({pass:T.filter(t=>t.s==='pass').length,warn:T.filter(t=>t.s==='warn').length,fail:T.filter(t=>t.s==='fail').length,total:T.length});
+const DT_ICON={pass:'✓',warn:'!',fail:'✕',run:'…',wait:'·'};
+function devTestRows(T){const groups=[...new Set(T.map(t=>t.g))];return groups.map(g=>`<div class="dt-g">${esc(g)}</div>${T.map((t,i)=>t.g===g?`<div class="dt-r dt-${t.s}" id="dt-${i}"><span class="dt-i">${DT_ICON[t.s]}</span><div><b>${esc(t.n)}</b>${t.d?`<span class="small dim"> — ${esc(t.d)}</span>`:''}${t.fix&&t.s!=='pass'?`<div class="small dt-fix">${esc(t.fix)}</div>`:''}</div>${t.ms!=null?`<span class="small dim">${t.ms} ms</span>`:''}</div>`:'').join('')}`).join('')}
+function devTestModal(){const T=M.tests;const done=T.filter(t=>!['wait','run'].includes(t.s)).length;const s=devSum(T);
+  return mhead(M.running?'Running tests…':s.fail?'Tests finished — problems found':s.warn?'Tests finished — a few things to look at':'Tests finished — all good',`${done} of ${T.length} checked`)+`<div class="mbody">
+  <div class="dt-bar"><span style="width:${Math.round(done/T.length*100)}%" class="${s.fail?'bad':s.warn?'warn':''}"></span></div>
+  <div class="statline"><div><b class="good-t">${s.pass}</b>Passed</div><div><b class="${s.warn?'warn-t':''}">${s.warn}</b>Warnings</div><div><b class="${s.fail?'bad-t':''}">${s.fail}</b>Failed</div></div>
+  ${!M.running&&(s.warn||s.fail)?`<div class="dt-attn"><div class="dt-g">Needs attention</div>${T.filter(t=>t.s==='fail'||t.s==='warn').sort((x,y)=>(x.s==='fail'?0:1)-(y.s==='fail'?0:1)).map(t=>`<div class="dt-r dt-${t.s}"><span class="dt-i">${DT_ICON[t.s]}</span><div><b>${esc(t.n)}</b>${t.d?`<span class="small dim"> — ${esc(t.d)}</span>`:''}${t.fix?`<div class="small dt-fix">${esc(t.fix)}</div>`:''}</div><span></span></div>`).join('')}</div>`:''}
+  <div class="dt-list">${devTestRows(T)}</div></div>
+  <div class="mfoot"><div>${M.running?'':'<button class="btn" data-act="dev-copy">Copy report</button>'}</div><div class="r">${M.running?'<button class="btn" data-act="close">Stop</button>':'<button class="btn" data-act="dev-run">Run again</button><button class="btn primary" data-act="close">Done</button>'}</div></div>`}
+function devReport(L){return `${APP_NAME} system tests — ${new Date(L.at).toLocaleString()} — build ${APP_BUILD}\n${L.pass} passed, ${L.warn} warnings, ${L.fail} failed\n\n`+L.tests.map(t=>`[${t.s.toUpperCase()}] ${t.g} / ${t.n}${t.d?' — '+t.d:''}${t.fix&&t.s!=='pass'?'\n       → '+t.fix:''}`).join('\n')}
+function devLast(){if(S.dev.last)return S.dev.last;try{S.dev.last=JSON.parse(localStorage.getItem('bp-dev-health')||'null')}catch(e){}return S.dev.last}
+function devTests(){const L=devLast();
+  return `<div class="panel pad dev-run"><div><b>Run the system tests</b><p class="small dim" style="margin:2px 0 0">Checks the connection, every database table and update, the security functions, the estimating and billing math, and looks for data problems. Takes a few seconds and changes nothing (it writes and removes one test row).</p></div><button class="btn primary" data-act="dev-run">▶ Run tests</button></div>
+  ${L?`<div class="sec"><div class="sec-h"><h2>Last run</h2><span>${new Date(L.at).toLocaleString()} · on this computer</span></div>
+    <div class="statline"><div><b class="good-t">${L.pass}</b>Passed</div><div><b class="${L.warn?'warn-t':''}">${L.warn}</b>Warnings</div><div><b class="${L.fail?'bad-t':''}">${L.fail}</b>Failed</div><div><button class="btn sm" data-act="dev-copy">Copy report</button></div></div>
+    <div class="panel pad dt-list">${devTestRows(L.tests.filter(t=>t.s!=='pass')).trim()||'<p class="small" style="margin:0">Everything passed.</p>'}</div>
+    <details class="panel pad" style="margin-top:10px"><summary><b>All ${L.total} checks</b></summary><div class="dt-list">${devTestRows(L.tests)}</div></details></div>`:'<div class="panel"><div class="empty">No test run yet on this computer.</div></div>'}`}
+function devInfo(){const host=(()=>{try{return new URL(CFG.supabaseUrl).host}catch(e){return '—'}})();const rows=[['Bids',S.bids.length],['Estimates',(S.estIndex||[]).length],['Jobs',S.jobs.length],['Job lines',S.job_items.length],['Job cost rows',S.job_costs.length],['Pay apps',(S.pay_apps||[]).length],['Codebook items',S.codebook.length],['Clients',S.clients.length],['Vendors',S.vendors.length],['Quotes',S.quotes.length],['Files',S.bid_files.length],['Log notes',S.bid_log.length],['Feedback',(S.feedback||[]).length]];
+  const byRole=ROLE_ORDER.map(r=>[ROLE_LABEL[r],S.profiles.filter(p=>p.role===r).length]).filter(x=>x[1]);
+  return `<div class="grid2"><div class="panel pad"><b>App</b><div class="list" style="margin-top:6px">${[['Name',esc(APP_NAME)],['Build',APP_BUILD],['Company',esc(S.settings.general?.companyName||CFG.companyName||'')],['Database',esc(host)],['Signed in as',esc(S.profile.email||'')],['Last data refresh',S.lastLoaded?S.lastLoaded.toLocaleTimeString():'—'],['Browser',esc(navigator.userAgent.replace(/^Mozilla\/5\.0 /,'').slice(0,70))],['Screen',`${window.innerWidth}×${window.innerHeight}`]].map(([l,v])=>`<div class="li small"><span>${l}</span><b>${v}</b></div>`).join('')}</div></div>
+  <div class="panel pad"><b>People</b><div class="list" style="margin-top:6px">${byRole.map(([l,n])=>`<div class="li small"><span>${esc(l)}</span><b>${n}</b></div>`).join('')}<div class="li small"><span>Custom access</span><b>${S.profiles.filter(p=>customCount(p)).length}</b></div><div class="li small"><span>Developers</span><b>${S.profiles.filter(p=>p.is_dev).length}</b></div></div></div></div>
+  <div class="sec"><div class="sec-h"><h2>What’s in the database</h2><span>Rows loaded for your login</span></div><div class="statline dev-counts">${rows.map(([l,n])=>`<div><b>${Number(n).toLocaleString()}</b>${l}</div>`).join('')}</div></div>
+  <p class="hint">Developer access is the <b>is_dev</b> flag on a login. It can only be turned on in Supabase’s SQL Editor: <code>update public.profiles set is_dev = true where email = '…';</code></p>`}
+
+/* ---------- events ---------- */
+FOCUS_ATTRS.push('data-fb','data-helpq','data-devq','data-deve');
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;if(!/^(help-|fb-|dev-)/.test(a))return;
+  switch(a){
+    case 'help-tab':S.help.tab=t.dataset.v;if(t.dataset.v==='fb')loadMyFb();render();break;
+    case 'help-open':S.help.open=t.dataset.id;render();break;
+    case 'help-go':S.prevView=S.view;S.view=t.dataset.v;render();window.scrollTo(0,0);break;
+    case 'fb-open':fbOpen(t.dataset.v);break;
+    case 'fb-kind':M.draft.kind=t.dataset.v;renderModal();break;
+    case 'fb-send':if(!M.busy)fbSend();break;
+    case 'fb-withdraw':sb.rpc('withdraw_feedback',{p_id:t.dataset.id}).then(r=>{if(r.error)throw r.error;toast(r.data?'Withdrawn':'It’s already being looked at, so it can’t be withdrawn');return loadMyFb()}).then(()=>{if(isDev())loadTable('feedback')}).catch(err=>toast(errMsg(err)));break;
+    case 'dev-tab':S.dev.tab=t.dataset.v;render();break;
+    case 'dev-open':if(e.target.closest('.fb-detail'))break;S.dev.open=S.dev.open===t.dataset.id?null:t.dataset.id;S.dev.edit=null;render();break;
+    case 'dev-save':devSave(t.dataset.id);break;
+    case 'dev-quick':devSave(t.dataset.id,{...(S.dev.edit||{}),status:t.dataset.v});break;
+    case 'dev-del':if(confirm('Delete this feedback for good?'))run(sb.from('feedback').delete().eq('id',t.dataset.id)).then(()=>loadTable('feedback')).then(()=>{S.dev.open=null;render()}).catch(err=>toast(errMsg(err)));break;
+    case 'dev-run':if(isDev())devRun();break;
+    case 'dev-copy':{const L=M&&M.kind==='devtest'?{at:M.at,...devSum(M.tests),tests:M.tests}:devLast();if(!L)break;const txt=devReport(L);(navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast('Report copied')).catch(()=>{window.prompt('Copy the report:',txt)});break}
+    case 'dev-csv':{const q=v=>{const s=String(v??'');return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`:s};const rows=[['Sent','Type','Status','Priority','Area','Summary','Details','From','Role','Matters','Page','Notes','Reply'],...(S.feedback||[]).map(f=>[String(f.created_at).slice(0,10),FB_KIND_LABEL[f.kind]||f.kind,f.status,f.priority,f.area,f.title,f.body,f.created_by_name,f.created_by_role,f.importance,(f.context||{}).view||'',f.dev_notes,f.reply])];
+      const blob=new Blob([rows.map(r=>r.map(q).join(',')).join('\r\n')],{type:'text/csv'});const el=document.createElement('a');el.href=URL.createObjectURL(blob);el.download=`feedback-${todayStr()}.csv`;document.body.appendChild(el);el.click();el.remove();break}
+  }});
+document.addEventListener('input',e=>{const t=e.target;
+  if(M&&M.kind==='fb'&&t.dataset.fb&&t.tagName!=='SELECT'){M.draft[t.dataset.fb]=t.value;return}
+  if(t.dataset.helpq!=null){S.help.q=t.value;render();return}
+  if(t.dataset.devq!=null){S.dev.q=t.value;render();return}
+  if(t.dataset.deve&&t.tagName==='TEXTAREA'&&S.dev.edit){S.dev.edit[t.dataset.deve]=t.value;const b=document.querySelector('[data-act=dev-save]');if(b)b.disabled=false;return}});
+document.addEventListener('change',e=>{const t=e.target;
+  if(M&&M.kind==='fb'&&t.dataset.fb&&t.tagName==='SELECT'){M.draft[t.dataset.fb]=t.value;return}
+  if(t.dataset.tutdone){tutToggle(t.dataset.tutdone);render();return}
+  if(t.dataset.devf){S.dev[t.dataset.devf]=t.value;render();return}
+  if(t.dataset.devg!=null){S.dev.group=t.checked;render();return}
+  if(t.dataset.deve&&t.tagName==='SELECT'&&S.dev.edit){S.dev.edit[t.dataset.deve]=t.value;render();return}});

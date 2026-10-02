@@ -45,6 +45,7 @@ supabase/update-15-quote-lines.sql   one-time update for line-item vendor quotes
 supabase/update-16-estimate-sections.sql   one-time update for master/section templates and starting estimates from the Estimates page
 supabase/update-17-accounting.sql          one-time update for the Accounting tab: bookkeeper role, pay apps, account IDs, change orders, cost import keys
 supabase/update-18-team-access.sql         one-time update for Team: executive role, title/phone, per-person access (run after update-17)
+supabase/update-19-help-developer.sql      one-time update for Help feedback and the developer account (run after update-18)
 ```
 
 > **Already set up before these updates?** Run each `supabase/update-*.sql` file you haven't run yet, once, in number order, in the SQL Editor. New installs only need `schema.sql`.
@@ -141,6 +142,26 @@ When the same project comes back under a new name or with new details, open the 
 ## Estimator log
 Every bid has an **Estimator log** under Scope takeoff. Estimators on the bid (and admins) add dated notes — site visits, takeoff notes, assumptions, clarifications, questions/RFIs, risks, pricing, calls — for the whole project or one scope, with photos or files attached. Notes save right away. You can edit, pin or delete your own notes; admins can manage any. Each scope row shows how many notes it has. When an awarded bid becomes a job, the notes show up read-only on the job's **Estimator notes** tab for the PM. Needs `supabase/update-11-estimator-log.sql`.
 
+## Help and feedback (everyone)
+The **Help** tab is there for every login. Needs `supabase/update-19-help-developer.sql` for feedback.
+- **Tutorials:** step-by-step guides for each part of the app. People only see guides for the areas they can open. They can search, tick guides off as they learn them, and jump straight to the page a guide is about.
+- **Send feedback:** report a bug, suggest an idea or ask a question. It records which page they were on, their browser and screen size.
+- **My feedback:** everything a person has sent, with its status and the developer's reply. They can withdraw an item while it's still New.
+
+## Developer tab (developer login only)
+One login can be flagged as the developer. That login keeps its normal role and gets a **Developer** tab nobody else sees.
+- **Turning it on:** in Supabase's SQL Editor run `update public.profiles set is_dev = true where email = 'you@yourcompany.com';`. The app can't set this flag, and the database blocks admins from giving it to themselves.
+- **Feedback inbox:** everything people send, with counts of new items, open bugs and open ideas. Filter by status, type and area, search, sort by priority, or group by area. Open an item to set its status and priority (P1–P3), keep private notes, and write a reply the sender sees. Export to CSV.
+- **System tests:** **Run tests** opens a window and steps through about 50 checks:
+  - the connection, live updates, file storage and a save/delete test;
+  - every database table and each update's columns, naming the SQL file to run if one is missing;
+  - the security functions, including that the app's access rules match the database's;
+  - the estimating, rate builder, billing and job math against known answers;
+  - data problems: orphaned job lines and costs, duplicate or missing job numbers, crews with removed members, estimator logins that aren't linked, people waiting for access.
+
+  Problems are listed first with what to do about each. **Copy report** puts the whole result on the clipboard. The last run is remembered on that computer.
+- **App info:** build date, database, row counts and people by role.
+
 ## Accounting (admins, PMs and the bookkeeper)
 Connects the app to any accounting software with Excel or CSV files: budgets go out, actual costs come in, and pay apps become invoices. Needs `supabase/update-17-accounting.sql`.
 - **Bookkeeper login:** give someone the **Accounting / bookkeeper** role on Team. They see only the Accounting tab. They can read jobs, import costs, bill, and keep account IDs, but can't change bids, estimates or budgets.
@@ -183,7 +204,7 @@ Connects the app to any accounting software with Excel or CSV files: budgets go 
 - **Export to Excel:** writes all four codebooks in the same layout the import reads. You can export, edit prices in Excel, and import the file back.
 
 ## Top bar
-**Dashboard · Pipeline · Estimates · Jobs · Accounting · Contacts · Calculators · Team.** Related pages share one tab, with sub-tabs inside it:
+**Dashboard · Pipeline · Estimates · Jobs · Accounting · Contacts · Calculators · Team · Help** (plus **Developer** for the developer login). Related pages share one tab, with sub-tabs inside it:
 - **Contacts:** Clients & GCs, and Vendors & subs.
 - **Estimates:** Estimates, Master templates, Codebooks, Scopes & templates (admins) and Bid settings (admins).
 - **Team:** People & access, Estimators, Project managers, Accounting & executives, and the Access chart.
