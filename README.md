@@ -42,6 +42,7 @@ supabase/update-12-supersede.sql   one-time update for superseding projects
 supabase/update-13-codebooks.sql   one-time update for estimating codebooks
 supabase/update-14-estimates.sql   one-time update for estimates and activity / bid item templates
 supabase/update-15-quote-lines.sql   one-time update for line-item vendor quotes
+supabase/update-22-estimate-revisions.sql   saved copies of estimates (revisions)
 supabase/update-16-estimate-sections.sql   one-time update for master/section templates and starting estimates from the Estimates page
 supabase/update-17-accounting.sql          one-time update for the Accounting tab: bookkeeper role, pay apps, account IDs, change orders, cost import keys
 supabase/update-18-team-access.sql         one-time update for Team: executive role, title/phone, per-person access (run after update-17)
@@ -365,6 +366,10 @@ The defaults every new estimate starts with. Each estimate keeps its own copy, s
   - Materials can carry a waste % and sales tax.
 - **Prices are copied in when you add them,** so later codebook changes don't move a bid you've already sent. When codebook prices change, **↻ Update prices** pulls in the current ones.
 - **Markup & totals:** sales tax on taxable materials, overhead (on cost), profit (on cost + overhead), bond (on everything above) and retainage (shown for cash flow; it doesn't change the price). Markup is spread into unit prices, rounded to the cent. The rounding and any overrides are shown as their own line. **Send to the bid** puts the base bid total into the bid's proposal amount.
+- **Revisions:** when plans change (prelim set → stamped set), click **Revise** on the Estimates list or **Revisions** inside the estimate. Name the copy being kept ("Original — prelim plans") and the new revision ("Stamped plans"). The app keeps a locked copy of the estimate as it is, and you keep working on the same estimate as Revision 1, 2, … with the same vendor quotes. Needs `supabase/update-22-estimate-revisions.sql`.
+  - **Saved copies** are read-only. Open one to look at it or export it to Excel, then **Back to the working estimate**.
+  - **Make this the working estimate** brings a saved copy back. The estimate it replaces is kept as a copy first, so nothing is lost.
+- **Deleting an estimate:** admins get a **Delete** button on the Estimates list. It removes the estimate and its saved copies after you type DELETE. The bid, its files and its vendor quotes stay.
 - **Moving a bid item to another section:** click the **⋯** on the bid item (or right-click it) → **Move to another section**, then pick the section. Or drag the row (grab it anywhere outside the text boxes) onto a section header, or onto another bid item to land just above it. Its activities move with it and it gets the next item number in the new section.
 - **Resources** totals every material, sub, trucking and extra cost, plus crew hours, across the base bid. Use it as your list for quotes.
 - **Autosave:** the estimate saves itself a second after you stop typing. If someone else saved in the meantime, you get a warning and can load their version or keep yours.

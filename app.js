@@ -932,7 +932,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={dirt:dirtModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  const html={dirt:dirtModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt'].includes(M.kind)||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -4494,7 +4494,7 @@ const PROD_RATE=new Set(['uph','hpu','ups','upd','upw']);const PROD_SHIFT=new Se
 const prodLabel=(k,unit)=>{const m=PROD_MODES.find(x=>x[0]===k)||PROD_MODES[0];return m[1].replace('units',unit||'units').replace('unit',unit||'unit')};
 const BASIS=[['unit','per unit'],['hour','per crew hr'],['total','total']];
 const r2=n=>Math.round((+n||0)*100)/100;
-S.est=null;S.estIndex=[];S.estMissing=false;
+S.est=null;S.estIndex=[];S.estMissing=false;S.estVers=[];S.estVersMissing=false;
 function estNextCode(d){const n=(d.items||[]).map(i=>parseInt(i.code,10)).filter(x=>!isNaN(x));return String(n.length?Math.max(...n)+10:10)}
 function estNewItem(d,o={}){return {id:newId(),code:estNextCode(d),desc:'',qty:1,unit:'LS',group:'',alt:false,override:null,notes:'',acts:[],...o}}
 function estNewAct(o={}){return {id:newId(),code:'',desc:'',qty:null,unit:'',mode:'uph',prod:null,crew:null,res:[],...o}}
@@ -4616,10 +4616,57 @@ function estApplyStale(list){list.forEach(s=>{if(s.crew){s.a.crew={...s.a.crew,.
 function actFromTpl(src){const a=clone(src);a.id=newId();a.qty=null;a.res=(a.res||[]).map(r=>({...r,id:newId()}));estApplyStale(estStale({act:a}));return a}
 
 /* ---------- loading / saving ---------- */
-const estCanEdit=()=>{if(S.est&&S.est.tpl)return cbEditable();const b=byId(S.bids,S.est?.bidId);return !!b&&canWork(b)&&can('estimates','edit')};
+const estCanEdit=()=>{if(S.est&&S.est.ver)return false;if(S.est&&S.est.tpl)return cbEditable();const b=byId(S.bids,S.est?.bidId);return !!b&&canWork(b)&&can('estimates','edit')};
 async function loadEstIndex(){if(!sb||!['admin','estimator','board'].includes(role()))return;
   const {data,error}=await sb.from('estimates').select('id,bid_id,version,total_cost,total_price,updated_at,updated_by_name');
-  if(error){S.estMissing=/estimates|does not exist|schema cache/i.test(error.message||'');return}S.estMissing=false;S.estIndex=data||[];schedule()}
+  if(error){S.estMissing=/estimates|does not exist|schema cache/i.test(error.message||'');return}S.estMissing=false;S.estIndex=data||[];loadEstVers();schedule()}
+/* ---------- revisions: kept copies of an estimate ---------- */
+async function loadEstVers(){if(!sb)return;const {data,error}=await sb.from('estimate_versions').select('id,bid_id,label,note,rev,total_cost,total_price,created_at,created_by_name');
+  if(error){S.estVersMissing=true;S.estVers=[];return}S.estVersMissing=false;S.estVers=data||[];schedule()}
+const estVersOf=bidId=>(S.estVers||[]).filter(v=>v.bid_id===bidId).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
+const estRevNo=d=>(d&&d.rev&&+d.rev.n)||0;
+const estRevName=d=>estRevNo(d)?`Revision ${estRevNo(d)}${d.rev.label?' — '+d.rev.label:''}`:'Original';
+const VERS_SQL='Revisions need a one-time database update (update-22-estimate-revisions.sql).';
+function estRevOpen(bidId){const E=S.est;const d=E&&E.bidId===bidId?E.data:null;M={kind:'estrev',bidId,keep:d?estRevName(d):'Original',next:'',note:''};showModal()}
+function estRevModal(){const x=M;const b=byId(S.bids,x.bidId)||{};const E=S.est;const d=E&&E.bidId===x.bidId&&!E.ver?E.data:null;const vs=estVersOf(x.bidId);const edit=!!d&&estCanEdit();
+  return mhead('Revisions',b.name||'')+`<div class="mbody">
+    ${S.estVersMissing?`<div class="notice">${VERS_SQL}</div>`:''}
+    ${edit?`<fieldset><legend>Start a new revision</legend><p class="small" style="margin:0 0 10px">Keeps a locked copy of the estimate exactly as it is right now, then lets you keep working — on the same estimate, with the same quotes — as the next revision. Use it when plans change (prelim set → stamped set) and you want the number you already submitted on record.</p>
+      <div class="fg"><label class="f s2">Name for the copy being kept<input class="field" id="rev-keep" data-estrev="keep" value="${esc(x.keep)}" placeholder="e.g. Original — prelim plans"></label>
+      <label class="f s2">Name for the new revision<input class="field" id="rev-next" data-estrev="next" value="${esc(x.next)}" placeholder="e.g. Stamped plans"></label>
+      <label class="f s4">Note <span class="dim">(optional)</span><input class="field" id="rev-note" data-estrev="note" value="${esc(x.note)}" placeholder="What changed, plan date, addenda…"></label></div>
+      <div style="margin-top:10px"><button class="btn primary" data-act="estrev-start"${x.busy?' disabled':''}>Keep a copy &amp; start Revision ${estRevNo(d)+1}</button></div></fieldset>`:''}
+    <fieldset><legend>Saved copies (${vs.length})</legend>
+      ${d?`<div class="rev-row cur"><div><b>${esc(estRevName(d))}</b> ${pill('Working estimate','good')}<div class="small dim">${d.rev&&d.rev.started?'started '+fmtShort(d.rev.started):'the one you edit'}</div></div><div class="r num"><b>${money(estCalc(d).total)}</b></div><div></div></div>`:''}
+      ${vs.map(v=>`<div class="rev-row"><div><b>${esc(v.label||'Saved copy')}</b>${v.note?`<div class="small">${esc(v.note)}</div>`:''}<div class="small dim">kept ${fmtShort(String(v.created_at).slice(0,10))}${v.created_by_name?' by '+esc(v.created_by_name):''}</div></div><div class="r num"><b>${money(v.total_price)}</b><div class="small dim">cost ${money(v.total_cost)}</div></div>
+        <div class="rev-btns"><button class="btn sm" data-act="estrev-view" data-id="${v.id}">Open</button>${isAdmin()?`<button class="btn sm danger${x.arm===v.id?' arm':''}" data-act="estrev-del" data-id="${v.id}">${x.arm===v.id?'Click again':'Delete'}</button>`:''}</div></div>`).join('')||(d?'':'<p class="small dim">No saved copies yet.</p>')}
+      ${vs.length?'<p class="hint">Saved copies are read-only. Open one to look at it, export it, or bring it back as the working estimate.</p>':''}</fieldset></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Close</button></div></div>`}
+async function estSnapshot(bidId,d,label,note){const R=estCalc(d);await run(sb.from('estimate_versions').insert({id:newId(),bid_id:bidId,label:String(label||'').trim()||estRevName(d),note:String(note||'').trim(),rev:estRevNo(d),data:d,total_cost:r2(R.cost),total_price:r2(R.total),created_by_name:myName()}))}
+async function estRevStart(){const x=M,E=S.est;if(!E||E.bidId!==x.bidId||!E.data||E.ver||!estCanEdit()||x.busy)return;x.busy=true;renderModal();
+  try{if(E.dirty)await estSave();if(E.conflict)throw new Error('Someone else changed this estimate. Reload it first.');
+    await estSnapshot(E.bidId,E.data,x.keep,x.note);const n=estRevNo(E.data)+1;E.data.rev={n,label:String(x.next||'').trim(),started:todayStr()};estTouch();await estSave();await loadEstVers();closeModal();render();toast(`Copy kept. You’re now working on Revision ${n}.`)}
+  catch(e){x.busy=false;renderModal();toast(/estimate_versions|does not exist|schema cache/i.test(errMsg(e))?VERS_SQL:errMsg(e))}}
+async function estRevView(id){const meta=(S.estVers||[]).find(v=>v.id===id);if(!meta)return;const bidId=meta.bid_id;
+  try{if(S.est&&S.est.bidId===bidId&&S.est.dirty)await estSave();const rows=await run(sb.from('estimate_versions').select('*').eq('id',id));const v=rows&&rows[0];if(!v)throw new Error('That copy is gone.');
+    closeModal();S.view='estimate';S.estBid=bidId;S.est={bidId,row:{id:null,version:0,updated_at:v.created_at,updated_by_name:v.created_by_name},data:estNorm(v.data),sel:null,tab:'build',dirty:false,ver:{id:v.id,label:v.label||'Saved copy',at:v.created_at,by:v.created_by_name}};render();window.scrollTo(0,0)}
+  catch(e){toast(errMsg(e))}}
+async function estRevRestore(){const E=S.est;if(!E||!E.ver)return;const b=byId(S.bids,E.bidId);if(!(b&&canWork(b)&&can('estimates','edit')))return;
+  try{const rows=await run(sb.from('estimates').select('*').eq('bid_id',E.bidId));const live=rows&&rows[0];const d=clone(E.data);
+    if(live){const ld=estNorm(live.data);await estSnapshot(E.bidId,ld,estRevName(ld)+' (before bringing back “'+E.ver.label+'”)','');d.rev={n:estRevNo(ld)+1,label:'From '+E.ver.label,started:todayStr()};if(!d.pkgs||!Object.keys(d.pkgs).length)d.pkgs=ld.pkgs;
+      const R=estCalc(d);await run(sb.from('estimates').update({data:d,version:live.version+1,total_cost:r2(R.cost),total_price:r2(R.total),updated_by_name:myName()}).eq('id',live.id))}
+    else{const R=estCalc(d);await run(sb.from('estimates').insert({id:newId(),bid_id:E.bidId,data:d,total_cost:r2(R.cost),total_price:r2(R.total),updated_by_name:myName()}))}
+    await loadEstIndex();await estOpen(E.bidId);toast('That copy is now the working estimate. The one it replaced was kept as a copy.')}
+  catch(e){toast(errMsg(e))}}
+function estDelModal(){const x=M;const b=byId(S.bids,x.bidId)||{};const n=estVersOf(x.bidId).length;const e=estOf(x.bidId)||{};
+  return mhead('Delete estimate',b.name||'')+`<div class="mbody"><p>This deletes the estimate for <b>${esc(b.name||'this bid')}</b> (${money(e.total_price)})${n?` and its <b>${n} saved cop${n===1?'y':'ies'}</b>`:''}. It can’t be undone.</p>
+    <p class="small dim">The bid itself, its files and its vendor quotes stay. If you only want to rework the numbers and keep this version on record, use <b>Revise</b> instead.</p>
+    <label class="f">Type <b>DELETE</b> to confirm<input class="field" id="estdel-ok" data-estdel value="${esc(x.ok||'')}" autocomplete="off"></label></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn danger" data-act="estdel-go"${String(x.ok||'').trim().toUpperCase()==='DELETE'&&!x.busy?'':' disabled'}>Delete estimate</button></div></div>`}
+async function estDelGo(){const x=M;if(String(x.ok||'').trim().toUpperCase()!=='DELETE'||x.busy)return;x.busy=true;
+  try{if(!S.estVersMissing)await run(sb.from('estimate_versions').delete().eq('bid_id',x.bidId));await run(sb.from('estimates').delete().eq('bid_id',x.bidId));const left=await run(sb.from('estimates').select('id').eq('bid_id',x.bidId));
+    if(left&&left.length)throw new Error('Only an admin can delete an estimate.');if(S.est&&S.est.bidId===x.bidId)S.est=null;await loadEstIndex();closeModal();render();toast('Estimate deleted')}
+  catch(e){x.busy=false;renderModal();toast(errMsg(e))}}
 const estOf=bidId=>S.estIndex.find(e=>e.bid_id===bidId);
 function estTouch(){const E=S.est;if(!E||!E.row)return;E.dirty=true;E.saveErr=null;clearTimeout(E._t);E._t=setTimeout(estSave,1200)}
 function estStatusText(){const E=S.est;if(!E||!E.row)return '';if(E.conflict)return '<b class="bad-t">Not saved — someone else changed this estimate</b>';if(E.saveErr)return `<b class="bad-t">Not saved: ${esc(E.saveErr)}</b> <button class="linkbtn" data-act="est-retry">Try again</button>`;
@@ -5083,8 +5130,9 @@ function vEstimate(){const E=S.est;const tpl=!!(E&&E.tpl);const b=tpl?null:byId(
   const kpi=(l,v,s,c)=>`<div class="est-kpi${c?' '+c:''}"><span>${l}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
   const body=E.tab==='setup'?estSetupView(d,R,ro):E.tab==='ind'?estIndView(d,R,ro):E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='sum'?estSumView(d,R,b||{},ro):estBuildView(d,R,ro);
   const title=tpl?`<input class="field est-tplname" id="est-tplname" data-tplname value="${esc(E.tplName||'')}" placeholder="Template name"${ro?' disabled':''}>`:`<h1>${esc(b.name)}</h1>`;
-  return `<div class="head est-headrow"><div>${back}${title}<p class="small"><b>${tpl?(E.tplBook==='section'?'Section template':'Master template'):'Estimate'}</b> · <span id="est-status">${estStatusText()}</span></p></div>
-    <div class="tools">${stale.length&&!ro?`<button class="btn" data-act="est-stale" title="Codebook prices changed since they were added">↻ Update ${stale.length} price${stale.length===1?'':'s'}</button>`:''}${tpl?'':'<button class="btn" data-act="est-export">Export to Excel</button>'}${!tpl&&cbEditable()?'<button class="btn" data-act="est-savetpl" data-v="estimate">Save as master template</button>':''}</div></div>
+  return `<div class="head est-headrow"><div>${back}${title}<p class="small"><b>${tpl?(E.tplBook==='section'?'Section template':'Master template'):'Estimate'}</b>${tpl?'':` · <button class="linkbtn" data-act="est-revs" title="Saved copies and revisions">${esc(E.ver?E.ver.label:estRevName(d))}</button>`} · <span id="est-status">${estStatusText()}</span></p></div>
+    <div class="tools">${stale.length&&!ro?`<button class="btn" data-act="est-stale" title="Codebook prices changed since they were added">↻ Update ${stale.length} price${stale.length===1?'':'s'}</button>`:''}${tpl?'':`<button class="btn" data-act="est-revs">Revisions${estVersOf(E.bidId).length?` (${estVersOf(E.bidId).length})`:''}</button><button class="btn" data-act="est-export">Export to Excel</button>`}${!tpl&&cbEditable()?'<button class="btn" data-act="est-savetpl" data-v="estimate">Save as master template</button>':''}</div></div>
+  ${E.ver?`<div class="notice est-verbar"><span>You’re looking at a saved copy: <b>${esc(E.ver.label)}</b>, kept ${fmtShort(String(E.ver.at).slice(0,10))}${E.ver.by?' by '+esc(E.ver.by):''}. It’s read-only.</span> <button class="btn sm primary" data-act="est-verback">Back to the working estimate</button>${b&&canWork(b)&&can('estimates','edit')?` <button class="btn sm${E.armR?' danger':''}" data-act="est-verrestore">${E.armR?'Click again — the current working estimate is kept as a copy':'Make this the working estimate'}</button>`:''}</div>`:''}
   ${E.conflict?`<div class="err est-conflict"><b>Someone else saved this estimate while you were working.</b> Your last changes haven’t been saved. <button class="btn sm" data-act="est-reload">Load their version</button> <button class="btn sm danger" data-act="est-keep">Keep mine (overwrite theirs)</button></div>`:''}
   ${ro&&!E.conflict?`<div class="notice">View only — ${tpl?'only admins change templates':'you’re not on this bid’s estimating team'}.</div>`:''}
   ${tpl?'<div class="notice est-tplnote">This is a template. It’s priced at today’s codebook rates; quantities here are “typical”. Estimates started from it get their own copy.</div>':''}
@@ -5264,10 +5312,10 @@ function vEstimates(){const tab=S.estsTab||'list';const canNew=can('bids','edit'
   if(q)list=list.filter(o=>[o.b.name,o.b.location,clientsLine(o.b,5),estName(o.b.lead_estimator_id)].join(' ').toLowerCase().includes(q));
   list.sort((a,c)=>String(a.b.due_date||'9').localeCompare(String(c.b.due_date||'9'))||String(c.x.updated_at).localeCompare(String(a.x.updated_at)));
   return head+tabs+`<div class="bar"><input id="q-ests" class="field search" data-q="ests" placeholder="Search projects, GCs, estimators" value="${esc(S.q.ests||'')}"><select class="field" data-estsf><option value="active"${f==='active'?' selected':''}>Active bids</option><option value="won"${f==='won'?' selected':''}>Awarded</option><option value="all"${f==='all'?' selected':''}>All</option></select></div>
-  <div class="panel scroll"><table><thead><tr><th>Project</th><th>GC / client</th><th>Due</th><th>Status</th><th>Lead</th><th class="r">Cost</th><th class="r">Bid total</th><th class="r">Margin</th><th>Updated</th></tr></thead><tbody>
-  ${list.map(({x,b})=>`<tr class="click" data-act="ests-open" data-id="${b.id}"><td class="proj">${esc(b.name)}${b.location?`<div class="dim small">${esc(b.location)}</div>`:''}</td><td class="small">${clientsLine(b,2)}</td><td class="small">${dueCell(b)}</td><td>${pill(b.status,BID_CLS[b.status])}</td><td>${b.lead_estimator_id?avatar(b.lead_estimator_id):'<span class="dim">—</span>'}</td>
-    <td class="r num">${money(x.total_cost)}</td><td class="r num"><b>${money(x.total_price)}</b></td><td class="r num">${num(x.total_price)?fmtN((x.total_price-x.total_cost)/x.total_price*100,1)+'%':'—'}</td><td class="small dim">${x.updated_at?fmtShort(String(x.updated_at).slice(0,10)):''}${x.updated_by_name?`<br>${esc(x.updated_by_name)}`:''}</td></tr>`).join('')
-    ||`<tr><td colspan="9"><div class="empty"><b>No estimates ${q||f!=='all'?'match':'yet'}</b>${canNew?'Click <b>+ New estimate</b> to start one.':''}</div></td></tr>`}</tbody></table></div>`}
+  <div class="panel scroll"><table><thead><tr><th>Project</th><th>GC / client</th><th>Due</th><th>Status</th><th>Lead</th><th class="r">Cost</th><th class="r">Bid total</th><th class="r">Margin</th><th>Updated</th><th></th></tr></thead><tbody>
+  ${list.map(({x,b})=>`<tr class="click" data-act="ests-open" data-id="${b.id}"><td class="proj">${esc(b.name)}${estVersOf(b.id).length?` <span class="pill" title="Saved copies of earlier versions">${estVersOf(b.id).length} saved cop${estVersOf(b.id).length===1?'y':'ies'}</span>`:''}${b.location?`<div class="dim small">${esc(b.location)}</div>`:''}</td><td class="small">${clientsLine(b,2)}</td><td class="small">${dueCell(b)}</td><td>${pill(b.status,BID_CLS[b.status])}</td><td>${b.lead_estimator_id?avatar(b.lead_estimator_id):'<span class="dim">—</span>'}</td>
+    <td class="r num">${money(x.total_cost)}</td><td class="r num"><b>${money(x.total_price)}</b></td><td class="r num">${num(x.total_price)?fmtN((x.total_price-x.total_cost)/x.total_price*100,1)+'%':'—'}</td><td class="small dim">${x.updated_at?fmtShort(String(x.updated_at).slice(0,10)):''}${x.updated_by_name?`<br>${esc(x.updated_by_name)}`:''}</td><td class="ests-acts">${canWork(b)&&can('estimates','edit')?`<button class="btn sm" data-act="ests-revise" data-id="${b.id}" title="Keep a copy of this estimate and start a revision">Revise</button>`:''}${isAdmin()?`<button class="btn sm ghost danger-t" data-act="ests-del" data-id="${b.id}" title="Delete this estimate">Delete</button>`:''}</td></tr>`).join('')
+    ||`<tr><td colspan="10"><div class="empty"><b>No estimates ${q||f!=='all'?'match':'yet'}</b>${canNew?'Click <b>+ New estimate</b> to start one.':''}</div></td></tr>`}</tbody></table></div>`}
 function tplSettingsText(e){const m=e.markup||{};const s=e.settings||{};const bits=[];if(s.sched)bits.push(s.sched.name);
   bits.push(m.mode==='type'?'markup by cost type':`${fmtN(num(m.oh)||0,1)}% OH / ${fmtN(num(m.profit)||0,1)}% MU`);if(num(m.bond))bits.push(`${fmtN(m.bond,2)}% bond`);
   if((e.ind||[]).length)bits.push(`${e.ind.length} indirect${e.ind.length===1?'':'s'}`);if(m.spreadInd==='lump')bits.push('GC line');else if(m.spreadInd==='sub')bits.push('indirects on sub items');else if(m.spreadInd==='split')bits.push('indirects split self/sub');else if(m.spreadInd==='select'||m.spreadMu==='select')bits.push('picked items carry');else if(m.spreadMu==='manual')bits.push('unbalanced');return esc(bits.join(' · '))}
@@ -5301,11 +5349,11 @@ async function estNewTpl(book){const name=book==='section'?'New section template
   catch(e){toast(/codebook_book_check|check constraint/i.test(errMsg(e))?'Templates need a one-time database update (update-16-estimate-sections.sql).':cbErr(e))}}
 
 /* ---------- events ---------- */
-FOCUS_ATTRS.push('data-esttpl','data-estnew');
+FOCUS_ATTRS.push('data-esttpl','data-estnew','data-estrev','data-estdel');
 document.addEventListener('click',e=>{
   if(S.est&&S.est.ctx&&!e.target.closest('#eo-ctx')&&!e.target.closest('[data-act=eo-menu]')){S.est.ctx=null;if(S.view==='estimate')render()}
   const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;
-  if(!/^(eo-|ef-|ests-|estnew-|esttpl-)/.test(a)&&a!=='est-savetpl')return;const E=S.est;
+  if(!/^(eo-|ef-|ests-|estnew-|esttpl-|estrev-|estdel-|est-revs$|est-ver)/.test(a)&&a!=='est-savetpl')return;const E=S.est;
   switch(a){
     case 'eo-sel':case 'eo-pick':if(!E)break;if(E.sel&&E.sel.id===t.dataset.id&&a==='eo-sel')break;E.sel={t:t.dataset.t,id:t.dataset.id};
       if(a==='eo-pick'){const f=estFind(E.data,t.dataset.t,t.dataset.id);const o=estOpenSet();if(f&&f.o.sec)o.add(f.o.sec);if(f&&f.it){o.add(f.it.sec);o.add(f.it.id)}estOpenSave()}render();break;
@@ -5326,6 +5374,15 @@ document.addEventListener('click',e=>{
     case 'ef-fold':{const s=E.fold||(E.fold=new Set());const k=t.dataset.k;s.has(k)?s.delete(k):s.add(k);render();break}
     case 'est-savetpl':estTplStart(t.dataset.v,t.dataset.id);break;
     case 'esttpl-save':estTplSave();break;
+    case 'est-revs':estRevOpen(S.est.bidId);break;
+    case 'ests-revise':{const id=t.dataset.id;estOpen(id,'estimates').then(()=>{if(S.est&&S.est.bidId===id&&S.est.data)estRevOpen(id)});break}
+    case 'ests-del':M={kind:'estdel',bidId:t.dataset.id,ok:''};showModal();setTimeout(()=>$('#estdel-ok')?.focus(),0);break;
+    case 'estdel-go':estDelGo();break;
+    case 'estrev-start':estRevStart();break;
+    case 'estrev-view':estRevView(t.dataset.id);break;
+    case 'estrev-del':{if(M.arm!==t.dataset.id){M.arm=t.dataset.id;renderModal();break}const id=t.dataset.id;M.arm=null;run(sb.from('estimate_versions').delete().eq('id',id)).then(()=>loadEstVers()).then(()=>{renderModal();render()}).catch(e=>toast(errMsg(e)));break}
+    case 'est-verback':estOpen(S.est.bidId);break;
+    case 'est-verrestore':{if(!S.est.ver)break;if(!S.est.armR){S.est.armR=true;render();break}estRevRestore();break}
     case 'ests-tab':{const v=t.dataset.v;if(v==='set')S.view='settings';else if(v==='cb'||v==='scopes')S.view=v;else{S.estsTab=v;S.view='estimates'}render();window.scrollTo(0,0);break}
     case 'ests-open':estOpen(t.dataset.id,'estimates');break;
     case 'ests-opentpl':S.estFrom='estimates';estOpenTpl(t.dataset.id);break;
@@ -5352,6 +5409,8 @@ document.addEventListener('focusin',e=>{const tr=e.target.closest?.('tr[data-act
 document.addEventListener('input',e=>{const t=e.target;
   if(t.dataset.tplname!=null&&S.est&&S.est.tpl){S.est.tplName=t.value;estTouch();return}
   if(M&&M.kind==='esttpl'&&t.dataset.esttpl&&t.type!=='radio'){M[t.dataset.esttpl]=t.value;return}
+  if(M&&M.kind==='estrev'&&t.dataset.estrev){M[t.dataset.estrev]=t.value;return}
+  if(M&&M.kind==='estdel'&&t.dataset.estdel!=null){const was=String(M.ok||'').trim().toUpperCase()==='DELETE';M.ok=t.value;if(was!==(String(M.ok).trim().toUpperCase()==='DELETE'))renderModal();return}
   if(M&&M.kind==='estnew'&&t.dataset.estnew&&t.tagName==='INPUT'&&t.type!=='radio'){M[t.dataset.estnew]=t.value;return}});
 document.addEventListener('change',e=>{const t=e.target;
   if(M&&M.kind==='esttpl'&&t.dataset.esttpl==='qty'){M.qty=t.value;renderModal();return}
