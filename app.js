@@ -4752,8 +4752,11 @@ document.addEventListener('change',e=>{const t=e.target;const ec=EC();if(!ec.roo
 const QF_KINDS=['material','sub','trucking','equipment','other'];
 const rkOf=r=>r.cb||('c:'+r.kind+'|'+normH(r.desc)+'|'+String(r.unit||'').toLowerCase());
 function estResIndex(d,R){R=R||estCalc(d);const m=new Map();
-  d.items.forEach((it,i)=>it.acts.forEach((a,j)=>a.res.forEach((r,n)=>{const k=rkOf(r);const rr=R.items[i].acts[j].res[n];let o=m.get(k);
-    if(!o)m.set(k,o={rk:k,kind:r.kind,code:r.code||'',desc:r.desc||'(no description)',unit:r.unit||(r.basis==='hour'?'HR':''),cb:r.cb||null,qty:0,qtyAll:0,cost:0,costAll:0,refs:[]});
+  // a codebook line that was retyped into something else (say a copied stone line renamed to 8" DIP) is its own line, not more of the original
+  const vkey=r=>normH(r.desc)+'|'+String(r.unit||'').toLowerCase();const prim=new Map();
+  d.items.forEach(it=>it.acts.forEach(a=>a.res.forEach(r=>{if(!r.cb)return;const x=cbById(r.cb);const v=vkey(r);const p=prim.get(r.cb);const match=!!x&&normH(x.description)===normH(r.desc);if(!p||(match&&!p.match))prim.set(r.cb,{v,match})})));
+  d.items.forEach((it,i)=>it.acts.forEach((a,j)=>a.res.forEach((r,n)=>{const variant=!!r.cb&&normH(r.desc)!==prim.get(r.cb).v.split('|')[0];const k=variant?r.cb+'~'+vkey(r):rkOf(r);const rr=R.items[i].acts[j].res[n];let o=m.get(k);
+    if(!o)m.set(k,o={rk:k,kind:r.kind,code:r.code||'',desc:r.desc||'(no description)',unit:r.unit||(r.basis==='hour'?'HR':''),cb:variant?null:r.cb||null,hint:r.cb||null,qty:0,qtyAll:0,cost:0,costAll:0,refs:[]});
     o.refs.push(r);o.qtyAll+=rr.qty;o.costAll+=rr.cost;if(!it.alt){o.qty+=rr.qty;o.cost+=rr.cost}})));
   m.forEach(o=>{o.q=o.qty||o.qtyAll;o.price=o.qtyAll?o.costAll/o.qtyAll:(num(o.refs[0].price)||0)});return m}
 // quote edits wait here until they're saved, so a refresh doesn't wipe what's being typed
@@ -4812,7 +4815,7 @@ function qApply(pkg,toCb,quiet){const E=S.est,d=E.data;const C=qCalc(d,pkg,estRe
 const QF_DEFAULT=['Aggregates','Storm drainage','Water','Sewer','Erosion control','Concrete','Asphalt','Trucking','Subcontractors'];
 function qFolders(){const d=S.est&&S.est.data;return [...new Set([...S.codebook.map(x=>cbD(x).qfolder).filter(Boolean),...Object.keys((d&&d.pkgs)||{}),...QF_DEFAULT])].sort((a,b)=>a.localeCompare(b))}
 // the folder a line belongs in: the codebook item's folder, then its category, then by cost type
-function qFolderFor(o){const cb=o.cb&&cbById(o.cb);const f=cb&&String(cbD(cb).qfolder||'').trim();if(f)return f;const c=cb&&String(cb.category||'').trim();if(c)return c;return {sub:'Subcontractors',trucking:'Trucking',material:'Materials',other:'Other'}[o.kind]||'Other'}
+function qFolderFor(o){const cb=(o.cb||o.hint)&&cbById(o.cb||o.hint);const f=cb&&String(cbD(cb).qfolder||'').trim();if(f)return f;const c=cb&&String(cb.category||'').trim();if(c)return c;return {sub:'Subcontractors',trucking:'Trucking',material:'Materials',other:'Other'}[o.kind]||'Other'}
 const QF_AUTO=['material','sub','trucking','other'];
 function qUnfiled(d,idx){const inP=new Set(Object.values(d.pkgs||{}).flatMap(P=>P.rows||[]));return [...(idx||estResIndex(d)).values()].filter(o=>QF_AUTO.includes(o.kind)&&!inP.has(o.rk))}
 function qGenerate(d){const L=qUnfiled(d);const made=new Set();L.forEach(o=>{const f=qFolderFor(o);if(!(d.pkgs||{})[f])made.add(f);qPkg(d,f).rows.push(o.rk)});return {lines:L.length,folders:made.size}}
@@ -4826,9 +4829,11 @@ function estQuotesView(d,R,ro){const E=S.est;const b=byId(S.bids,E.bidId);const 
   const chips=`<div class="qf-pkgs">${names.map(n=>{const qs=qQuotes(b.id,n);const rows=(d.pkgs?.[n]?.rows||[]).length;return `<button class="qf-chip${n===pk?' on':''}" data-act="qf-pkg" data-v="${esc(n)}"><b>${esc(n)}</b><small>${qs.length} vendor${qs.length===1?'':'s'} · ${rows} line${rows===1?'':'s'}</small></button>`}).join('')}
     ${ro?'':`<span class="qf-new"><input class="field" id="qf-newpkg" list="qf-pkgsugg" placeholder="New folder — e.g. Aggregates"><datalist id="qf-pkgsugg">${pkgSugg.map(n=>`<option value="${esc(n)}">`).join('')}</datalist><button class="btn sm" data-act="qf-newpkg">Add</button></span>`}</div>`;
   const unfiled=qUnfiled(d,idx);
+  const allL=[...idx.values()].filter(o=>QF_AUTO.includes(o.kind)).sort((a,c)=>a.desc.localeCompare(c.desc));
+  const where=allL.length?`<details class="qf-where"><summary>Where is each line? (${allL.length})</summary><div class="qf-wherelist">${allL.map(o=>{const f=inPkg.get(o.rk);return `<div><span class="est-tag k-${o.kind}">${(RES_KINDS.find(k=>k[0]===o.kind)||RES_KINDS[5])[2]}</span> ${esc(o.desc)} <span class="dim small">${fmtN(o.q,1)} ${esc(o.unit)}</span> → ${f?`<button class="linkbtn" data-act="qf-goto" data-v="${esc(f)}">${esc(f)}</button>`:'<b class="warn-t">not in a folder</b>'}</div>`}).join('')}</div></details>`:'';
   const bar=ro?'':`<div class="qf-gen"><div><b>Quote folders</b><span class="small dim"> ${names.length?`${names.length} folder${names.length===1?'':'s'}`:'None yet'}${unfiled.length?` · <b class="warn-t">${unfiled.length} estimate line${unfiled.length===1?'':'s'} not in a folder</b>`:names.length?' · every material and sub is in a folder':''}</span></div>
     <div class="adders" style="margin:0"><button class="btn sm${unfiled.length?' primary':''}" data-act="qf-generate"${unfiled.length?'':' disabled'} title="Sorts the estimate’s materials, subs and trucking into folders using each codebook item’s quote folder">⚙ Generate folders${unfiled.length?` (${unfiled.length})`:''}</button>
-      <button class="btn sm${names.length&&!unfiled.length?' primary':''}" data-act="qf-applyall"${names.length?'':' disabled'}>Update pricing in estimate</button></div></div>`;
+      <button class="btn sm${names.length&&!unfiled.length?' primary':''}" data-act="qf-applyall"${names.length?'':' disabled'}>Update pricing in estimate</button></div>${where}</div>`;
   if(!pk)return bar+chips+`<div class="panel pad empty"><b>No quote folders yet</b>A folder is what you send out for pricing, like “Aggregates”, “Water” or “Erosion control”. Click <b>Generate folders</b> to sort this estimate’s materials and subs into folders automatically (using each codebook item’s quote folder), or add one by hand. Then add the vendors and enter their prices side by side.</div>`;
   const C=qCalc(d,pk,idx);const dis=ro?' disabled':'';
   const free=[...idx.values()].filter(o=>QF_KINDS.includes(o.kind)&&!inPkg.has(o.rk)).sort((a,c)=>QF_KINDS.indexOf(a.kind)-QF_KINDS.indexOf(c.kind)||c.cost-a.cost);
@@ -4880,6 +4885,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'qf-low':qRuleSet(d,E.pkg,{mode:'low'});estTouch();render();break;
     case 'qf-ruleall':{const m=qRule(qPkg(d,E.pkg),[]).mode;if(m==='low'||m==='high'){const names=[...new Set([...S.quotes.filter(q=>q.bid_id===E.bidId).map(q=>q.scope),...Object.keys(d.pkgs||{})])].filter(Boolean);names.forEach(n=>qRuleSet(d,n,{mode:m}));estTouch();render();toast(`Every folder now uses the ${m==='low'?'lowest':'highest'} price on each line`)}break}
     case 'qf-apply':qApply(E.pkg,!!$('#qf-tocb')?.checked);break;
+    case 'qf-goto':E.pkg=t.dataset.v;render();break;
     case 'qf-generate':{const r=qGenerate(d);if(!E.pkg||!(d.pkgs||{})[E.pkg])E.pkg=Object.keys(d.pkgs||{})[0]||null;estTouch();render();toast(r.lines?`Sorted ${r.lines} line${r.lines===1?'':'s'} into folders${r.folders?` (${r.folders} new folder${r.folders===1?'':'s'})`:''}`:'Everything is already in a folder');break}
     case 'qf-applyall':{const toCb=!!E.qToCb;let n=0,f=0;Object.keys(d.pkgs||{}).forEach(k=>{const c=qApply(k,toCb,true)||0;if(c){n+=c;f++}});render();toast(n?`Updated ${n} price${n===1?'':'s'} in the estimate from ${f} folder${f===1?'':'s'}`:'No quote prices to use yet. Enter vendor prices and choose which to use in each folder.');break}
     case 'qf-rmq':if(E.qArm!==t.dataset.q){E.qArm=t.dataset.q;render();break}E.qArm=null;qRemoveVendor(t.dataset.q);break;

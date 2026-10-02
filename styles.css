@@ -1447,3 +1447,11 @@ fieldset.rb .check{font-weight:600}
 tr.eo-dragging{opacity:.45}
 tr.eo-drop>td{box-shadow:inset 0 2px 0 var(--accent);background:var(--surface-2)}
 tr.eo-sec.eo-drop>td{box-shadow:inset 0 0 0 2px var(--accent)}
+
+.qf-where{flex-basis:100%;font-size:13px}
+.qf-where summary{cursor:pointer;color:var(--ink-3)}
+.qf-wherelist{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:4px 16px;margin-top:8px}
+.linkbtn{border:0;background:none;padding:0;color:var(--accent);font-weight:600;cursor:pointer;text-decoration:underline}
+/* readable dropdown list in dark mode */
+.qf-move{background:var(--surface);color:var(--ink);max-width:110px;font-size:12px;padding:3px 6px;opacity:.8}
+.qf-move option{background:var(--surface);color:var(--ink)}
