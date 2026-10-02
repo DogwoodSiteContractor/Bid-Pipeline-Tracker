@@ -100,7 +100,7 @@ const APP_NAME=String(CFG.appName||'Bid Pipeline');try{if(CFG.appName)document.t
 })();
 
 /* ---------- state ---------- */
-const TABLES=['bids','quotes','bid_files','bid_log','estimators','clients','vendors','settings','jobs','job_items','job_costs','codebook','pay_apps','feedback'];
+const TABLES=['bids','quotes','bid_files','bid_log','estimators','clients','vendors','settings','jobs','job_items','job_costs','codebook','pay_apps','feedback','fun_stats'];
 const S={loading:true,session:null,profile:null,profileFor:null,needPassword:/type=(invite|recovery)/.test(INITIAL_HASH),authView:'login',authMsg:null,
   bids:[],quotes:[],bid_files:[],bid_log:[],tableErr:{},estimators:[],clients:[],vendors:[],profiles:[],settings:{},jobs:[],job_items:[],job_costs:[],codebook:[],pms:[],
   view:'dashboard',dash:'precon',filter:'active',q:{},estF:'',clientF:'',year:new Date().getFullYear()};
@@ -262,7 +262,7 @@ async function afterLogin(){
   }
   S.loading=false;schedule();
 }
-function resetData(){TABLES.forEach(t=>{if(t!=='settings')S[t]=[]});S.myFb=null;S.est=null;S.estIndex=[];S.estsTab='list';S.settings={};S.profiles=[];S.profile=null;S.profileFor=null;S.view='dashboard';S.dash='precon';if(channel){sb.removeChannel(channel);channel=null}}
+function resetData(){TABLES.forEach(t=>{if(t!=='settings')S[t]=[]});S.myFb=null;S.crew=null;S.trophy=null;if(S.fun){S.fun.loaded=false;S.fun.draft=null}S.est=null;S.estIndex=[];S.estsTab='list';S.settings={};S.profiles=[];S.profile=null;S.profileFor=null;S.view='dashboard';S.dash='precon';if(channel){sb.removeChannel(channel);channel=null}}
 function errMsg(e){const m=(e&&(e.message||e.error_description))||'Something went wrong.';
   if(/row-level security|permission denied/i.test(m))return 'You don’t have permission to make that change.';
   if(/Failed to fetch|NetworkError/i.test(m))return 'Can’t reach the server. Check your connection and try again.';
@@ -277,14 +277,14 @@ function render(){
 function renderNow(){
   const main=$('#main');const top=$('#topwrap');
   if(!CONFIGURED){top.hidden=true;main.innerHTML=setupScreen();return}
-  if(S.loading){top.hidden=true;main.innerHTML=`<div class="auth"><div class="spin" aria-label="Loading"></div></div>`;return}
+  if(S.loading){top.hidden=true;main.innerHTML=`<div class="auth">${dozerLoader('Loading')}</div>`;return}
   if(!S.session){top.hidden=true;main.innerHTML=authScreen();return}
   if(S.needPassword){top.hidden=true;main.innerHTML=setPasswordScreen();return}
-  if(!S.profile){top.hidden=true;main.innerHTML=`<div class="auth"><div class="spin" aria-label="Loading"></div></div>`;return}
+  if(!S.profile){top.hidden=true;main.innerHTML=`<div class="auth">${dozerLoader('Loading')}</div>`;return}
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
-  const views={help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const views={fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
@@ -304,7 +304,7 @@ function renderTop(){
   <nav class="nav">${navGroups().map(([k,l,mem])=>`<button class="${mem.includes(S.view)?'on':''}" data-act="nav" data-v="${k}">${l}</button>`).join('')}</nav>
   <div class="nav-more" hidden><button class="nav-morebtn" data-act="nav-more" aria-haspopup="true" aria-expanded="false">More ▾</button><div class="nav-menu" role="menu" hidden></div></div>
   <button class="topsearch" data-act="pal-open" aria-label="Search (Ctrl+K)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><span>Search</span><kbd>Ctrl K</kbd></button>
-  <div class="userbox"><span>${esc(myName())}<br><span class="rolepill">${ROLE_LABEL[role()]}</span></span>
+  <div class="userbox"><button class="me-av" data-act="fun-me" title="My profile">${funAv(crewOf(myId()),30)}</button><span>${esc(myName())}<br><span class="rolepill">${ROLE_LABEL[role()]}</span></span>
   ${can('bids','edit')&&bidsAll()?'<button class="btn primary" data-act="new-bid">+ New bid</button>':''}<button class="btn sm" data-act="signout">Sign out</button></div>`;
   navFit();
 }
@@ -926,8 +926,8 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
-  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest'].includes(M.kind)||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
+  const html={dirt:dirtModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt'].includes(M.kind)||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();
@@ -5024,7 +5024,7 @@ async function estSave(){const E=S.est;if(!E||!E.row||!E.dirty||E.saving||E.conf
 function vEstimate(){const E=S.est;const tpl=!!(E&&E.tpl);const b=tpl?null:byId(S.bids,S.estBid);
   if(!tpl&&!b)return `<div class="empty"><b>That bid isn’t available.</b><button class="btn" data-act="nav" data-v="estimates">Back to estimates</button></div>`;
   const back=`<button class="linkbtn est-back" data-act="est-back">← ${tpl?'Templates':S.estFrom==='estimates'?'Estimates':'Back to bid'}</button>`;
-  if(!E||E.loading)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="auth"><div class="spin"></div></div>`;
+  if(!E||E.loading)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="auth">${dozerLoader('Opening the estimate')}</div>`;
   if(E.err==='missing'||S.estMissing)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="notice"><b>One setup step:</b> run <b>update-14-estimates.sql</b> in Supabase (SQL Editor → New query → paste → Run), then refresh.</div>`;
   if(E.err)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="err">${esc(E.err)}</div>`;
   if(!E.row)return estStartView(b,back);
@@ -6216,6 +6216,7 @@ function navGroups(){const g=[];
   if(can('contacts'))g.push(['clients','Contacts',['clients','vendors']]);
   if(can('calc'))g.push(['calc','Calculators',['calc']]);
   if(isAdmin())g.push(['team','Team',['team','estimators','teampm','teamoffice','access']]);
+  g.push(['fun','Break room',['fun']]);
   g.push(['help','Help',['help']]);
   if(isDev()){const n=(S.feedback||[]).filter(f=>f.status==='New').length;g.push(['dev','Developer'+(n?` (${n})`:''),['dev']])}
   return g}
@@ -6392,6 +6393,11 @@ const TUTS=[
  {id:'calc',area:'calc',group:'Everyday',title:'Calculators',blurb:'Takeoff and field math.',go:'calc',steps:[
    'Open <b>Calculators</b> and pick one: stone and material tonnage, pipe and trench, manholes, cut and fill, and the plan takeoff tools.',
    'Your last inputs are remembered on your computer.','The cut/fill tool can read an AGTEK export or a surface file.','Admins keep the material weights and pipe library up to date.']},
+ {id:'fun',area:null,group:'Everyday',title:'The break room',blurb:'Your profile, trophies and a few games.',go:'fun',steps:[
+   'Open <b>Break room</b>, or click your avatar in the top-right corner.','<b>My profile</b>: pick a hard hat color, an avatar, a tagline and a few facts. The crew sees it on <b>The crew</b> tab.',
+   '<b>Trophy room</b>: your shelf fills up from real work (bids won, scopes signed off, jobs run, feedback that got fixed) and from the games. Look at anyone’s shelf, or the company case.',
+   '<b>Games</b>: a daily trivia question, Guess the quantity, and Pipe Dream, each with office high scores.'],
+  tips:['Each trophy has bronze, silver and gold. Click one to see what the next tier takes.','Rumor has it there’s a fourth game.']},
  {id:'team',area:'team',group:'Admin',title:'People, roles and access',blurb:'Adding people and deciding what they can open.',go:'team',steps:[
    'Add the person in Supabase (<b>Authentication → Users → Add user</b>). They appear on <b>Team → People & access</b> as “No access yet”.',
    'Pick their <b>role</b>. That gives the standard access for the job: admin, executive, estimator, project manager, accounting or board.',
@@ -6504,10 +6510,11 @@ function devTestList(){const tbl=(t,file)=>({g:'Database tables',n:`Table “${t
    {g:'Connection',n:'File storage',run:async()=>{try{const r=await sb.storage.from('bid-files').list('',{limit:1});return r.error?T_FAIL(r.error.message,'The bid-files bucket is created by schema.sql.'):T_OK('bid-files bucket answers')}catch(e){return T_FAIL(errMsg(e))}}},
    {g:'Connection',n:'Excel library loads',run:async()=>{try{await loadXLSX();return T_OK('Loaded')}catch(e){return T_FAIL(errMsg(e),'Imports and exports need this. Check the internet connection or content blockers.')}}},
    {g:'Connection',n:'Save and delete a test record',run:async()=>{const k='dev_selftest';const a=await sb.from('settings').upsert({key:k,value:{at:new Date().toISOString()}});if(a.error)return T_FAIL(a.error.message,'Admins should be able to write settings. Check the security rules ran.');const b=await sb.from('settings').delete().eq('key',k);return b.error?T_WARN('Saved, but couldn’t delete the test row: '+b.error.message):T_OK('Wrote and removed a test row')}},
-   ...[['bids','schema.sql'],['quotes','schema.sql'],['bid_files','schema.sql'],['estimators','schema.sql'],['clients','schema.sql'],['vendors','schema.sql'],['settings','schema.sql'],['profiles','schema.sql'],['jobs','update-9-jobs.sql'],['job_items','update-9-jobs.sql'],['job_costs','update-9-jobs.sql'],['bid_log','update-11-estimator-log.sql'],['codebook','update-13-codebooks.sql'],['estimates','update-14-estimates.sql'],['pay_apps','update-17-accounting.sql'],['feedback','update-19-help-developer.sql']].map(([t,f])=>tbl(t,f)),
-   col('quotes','lines,meta','update-15-quote-lines.sql'),col('clients','acct_id','update-17-accounting.sql'),col('job_items','bid_price,change_order','update-17-accounting.sql'),col('job_costs','import_key','update-17-accounting.sql'),col('profiles','title,phone,perms','update-18-team-access.sql'),col('profiles','is_dev','update-19-help-developer.sql'),
+   ...[['bids','schema.sql'],['quotes','schema.sql'],['bid_files','schema.sql'],['estimators','schema.sql'],['clients','schema.sql'],['vendors','schema.sql'],['settings','schema.sql'],['profiles','schema.sql'],['jobs','update-9-jobs.sql'],['job_items','update-9-jobs.sql'],['job_costs','update-9-jobs.sql'],['bid_log','update-11-estimator-log.sql'],['codebook','update-13-codebooks.sql'],['estimates','update-14-estimates.sql'],['pay_apps','update-17-accounting.sql'],['feedback','update-19-help-developer.sql'],['fun_stats','update-21-break-room.sql']].map(([t,f])=>tbl(t,f)),
+   col('quotes','lines,meta','update-15-quote-lines.sql'),col('clients','acct_id','update-17-accounting.sql'),col('job_items','bid_price,change_order','update-17-accounting.sql'),col('job_costs','import_key','update-17-accounting.sql'),col('profiles','title,phone,perms','update-18-team-access.sql'),col('profiles','is_dev','update-19-help-developer.sql'),col('profiles','profile','update-21-break-room.sql'),
    {g:'Security functions',n:'Access levels (perm)',run:async()=>{const {data,error}=await sb.rpc('perm',{a:'bids'});return error?T_FAIL(error.message,'Run supabase/update-18-team-access.sql.'):data==='edit'?T_OK('Admin has Edit on bids'):T_WARN(`perm('bids') returned “${data}”`,'Expected “edit” for an admin login.')}},
    {g:'Security functions',n:'PM directory',run:async()=>{const {data,error}=await sb.rpc('pm_directory');return error?T_FAIL(error.message,'Run supabase/update-9-jobs.sql and later updates.'):T_OK(`${(data||[]).length} people`)}},
+   {g:'Security functions',n:'Trophy stats and crew directory',run:async()=>{const a=await sb.rpc('trophy_stats');const b=await sb.rpc('crew_directory');return a.error||b.error?T_FAIL((a.error||b.error).message,'Run supabase/update-21-break-room.sql.'):T_OK(`${(b.data||[]).length} people`)}},
    {g:'Security functions',n:'My feedback',run:async()=>{const {error}=await sb.rpc('my_feedback');return error?T_FAIL(error.message,'Run supabase/update-19-help-developer.sql.'):T_OK('Answers')}},
    {g:'Security functions',n:'App and database access rules match',run:async()=>{const bad=[];for(const [a] of AREAS){const {data,error}=await sb.rpc('perm',{a});if(error)return T_FAIL(error.message,'Run supabase/update-18-team-access.sql.');if(data!==perm(a))bad.push(`${a}: app ${perm(a)}, database ${data}`)}return bad.length?T_FAIL(bad.join('; '),'ROLE_ACCESS in app.js and role_perm() in the database are out of step.'):T_OK('Same for every area')}},
    math('Overtime: 5×10s gives a 10% labor premium',()=>{const c=schedCalc({days:[10,10,10,10,10,0,0],rule:'weekly',otWeek:40,otDay:8,otf:1.5});return near(c.mult,0.1,1e-6)&&c.ot===10||`got ${c.mult}`}),
@@ -6640,3 +6647,371 @@ function devPlanSave(p){return run(sb.from('settings').upsert({key:'dev_plan',va
 document.addEventListener('change',e=>{const t=e.target;if(!isDev())return;
   if(t.dataset.devplan!=null){const cur=devPlan();devPlanSave({plan:t.value,db:cur.db,files:cur.files,mau:cur.mau});return}
   if(t.dataset.devlim){const cur=devPlan();const v=num(String(t.value).replace(/[,\s]/g,''));if(v>0)devPlanSave({plan:'custom',db:cur.db,files:cur.files,mau:cur.mau,[t.dataset.devlim]:v})}});
+
+/* =====================================================================
+   Break room: profiles, trophy room, games (Pipe Dream, Guess the
+   quantity, Daily trivia) and the hidden Dirt Mover (type "dig").
+   Needs supabase/update-21-break-room.sql.
+   ===================================================================== */
+S.fun=S.fun||{tab:'trophy',who:null,game:null};S.fun_stats=S.fun_stats||[];S.crew=S.crew||null;S.trophy=S.trophy||null;
+
+/* ---------- dozer loading screen ---------- */
+function dozerLoader(label){return `<div class="dozer" role="status" aria-label="${esc(label||'Loading')}"><div class="dozer-lane"><div class="dozer-rig"><svg viewBox="0 0 120 60" width="96" height="48" aria-hidden="true">
+  <rect x="34" y="14" width="26" height="20" rx="3" fill="var(--top)"/><rect x="38" y="17" width="12" height="10" rx="1.5" fill="#BFE0F5"/>
+  <rect x="24" y="26" width="58" height="16" rx="3" fill="#E3B341"/><rect x="62" y="18" width="6" height="10" fill="#555"/>
+  <rect x="18" y="40" width="70" height="14" rx="7" fill="#33383A"/><g fill="#8A9094" class="dozer-wheels"><circle cx="27" cy="47" r="4"/><circle cx="41" cy="47" r="4"/><circle cx="55" cy="47" r="4"/><circle cx="69" cy="47" r="4"/><circle cx="81" cy="47" r="4"/></g>
+  <path d="M82 34 L100 30 L100 54 L94 54 Z" fill="#C99A2E"/><rect x="98" y="24" width="5" height="31" rx="2" fill="#555"/>
+  <path d="M103 55 q8 -22 17 0 z" fill="#7A5A3C"/></svg></div></div><div class="dozer-ground"></div><p>${esc(label||'Loading')}…</p></div>`}
+
+/* ---------- people, avatars ---------- */
+const HAT_COLORS=['#F4C430','#FFFFFF','#E4572E','#2F6DA8','#3E8E5A','#F28C28','#8E5BB5','#2B2B2B','#EC6FA9'];
+const BG_COLORS=['#E3EEE6','#DCE7F4','#FAEDD2','#F7DEDA','#EDE3F6','#E2E6EA','#FFF3B8','#D9F0EE'];
+const AV_EMOJI=['👷','🚜','🏗️','🚛','🚧','⛏️','🔧','📐','🧱','🪨','🌳','🐶','🐻','🦅','🐗','🎣','🏈','⚾','🏎️','🎸','☕','🍩','🌮','🔥','⚡','🌵','🧢','😎'];
+const MACHINES=['Excavator','Dozer','Wheel loader','Motor grader','Scraper (pan)','Roller','Skid steer','Off-road truck','Dump truck','Pipe laser','My pickup'];
+const myId=()=>S.session?.user?.id;
+function crewList(){if(S.crew&&S.crew.length)return S.crew;const p=S.profile;return p?[{id:p.id,full_name:myName(),title:p.title||'',role:p.role,profile:p.profile||{},joined:String(p.created_at||'').slice(0,10)}]:[]}
+const crewOf=id=>crewList().find(c=>c.id===id)||(id===myId()&&S.profile?{id,full_name:myName(),title:S.profile.title||'',role:S.profile.role,profile:S.profile.profile||{}}:null);
+function funAv(c,size){size=size||40;const pr=(c&&c.profile)||{};const hat=pr.hat||HAT_COLORS[0];const bg=pr.bg||BG_COLORS[0];const em=pr.emoji||'';const nm=(c&&c.full_name)||'?';
+  return `<span class="fav" style="width:${size}px;height:${size}px;background:${esc(bg)};font-size:${Math.round(size*(em?0.5:0.36))}px" title="${esc(nm)}">${em?esc(em):esc(initials(nm))}
+    <svg class="fav-hat" viewBox="0 0 40 22" width="${Math.round(size*0.86)}" height="${Math.round(size*0.47)}" aria-hidden="true"><path d="M5 17 C5 6 13 2 20 2 C27 2 35 6 35 17 Z" fill="${esc(hat)}" stroke="rgba(0,0,0,.35)" stroke-width="1.2"/><rect x="1" y="16" width="38" height="4.5" rx="2.2" fill="${esc(hat)}" stroke="rgba(0,0,0,.35)" stroke-width="1.2"/><path d="M20 2 V16" stroke="rgba(0,0,0,.18)" stroke-width="2"/></svg></span>`}
+async function funLoad(force){if(S.fun.loading)return;if(S.crew&&S.trophy&&!force)return;S.fun.loading=true;
+  try{const [a,b]=await Promise.all([sb.rpc('crew_directory'),sb.rpc('trophy_stats')]);if(a.error||b.error)throw a.error||b.error;S.crew=a.data||[];S.trophy=b.data||[];S.fun.missing=false}
+  catch(e){S.crew=S.crew||[];S.trophy=S.trophy||[];S.fun.missing=true}S.fun.loading=false;S.fun.loaded=true;schedule()}
+const funStat=(uid,key)=>(S.fun_stats||[]).find(x=>x.user_id===uid&&x.key===key);
+async function funSave(key,value,data,mode){const me=myId();const cur=funStat(me,key);const v=mode==='set'?value:Math.max(num(cur?.value)||0,value);const row={user_id:me,key,value:v,data:{...(cur?.data||{}),...(data||{})},updated_at:new Date().toISOString()};
+  const i=(S.fun_stats||[]).findIndex(x=>x.user_id===me&&x.key===key);if(i>=0)S.fun_stats[i]=row;else (S.fun_stats=S.fun_stats||[]).push(row);
+  try{await run(sb.from('fun_stats').upsert(row,{onConflict:'user_id,key'}))}catch(e){S.fun.missing=true}}
+function funBoard(key,o={}){const rows=(S.fun_stats||[]).filter(x=>x.key===key&&(o.f?o.f(x):num(x.value)>0)).map(x=>({x,v:o.v?o.v(x):num(x.value),c:crewOf(x.user_id)})).filter(r=>r.c&&r.v>0).sort((a,b)=>b.v-a.v).slice(0,o.n||5);
+  return rows.length?`<ol class="fun-board">${rows.map((r,i)=>`<li class="${r.x.user_id===myId()?'me':''}"><span class="fb-rank">${['🥇','🥈','🥉'][i]||i+1}</span>${funAv(r.c,24)}<span class="fb-name">${esc(r.c.full_name)}</span><b>${o.fmt?o.fmt(r.v,r.x):Number(r.v).toLocaleString()}</b></li>`).join('')}</ol>`:`<p class="small dim" style="margin:6px 0 0">${o.empty||'No scores yet. Be the first.'}</p>`}
+
+/* ---------- trophies ---------- */
+const TIERS=['bronze','silver','gold'];
+const TROPHIES=[
+ {id:'wins',shape:'cup',icon:'🏆',names:['First Win','Hat Trick','Closer'],tiers:[1,3,15],what:'bids won',v:s=>s.wins},
+ {id:'value',shape:'cup',icon:'💰',names:['Million Dollar Club','Five Million','Ten Million'],tiers:[1e6,5e6,1e7],what:'in work won',fmt:v=>moneyK(v),v:s=>s.won_value},
+ {id:'big',shape:'shield',icon:'🐟',names:['Big Fish','Whale','Leviathan'],tiers:[5e5,1e6,5e6],what:'biggest single win',fmt:v=>moneyK(v),v:s=>s.biggest_win},
+ {id:'submitted',shape:'medal',icon:'📬',names:['Out the Door','Regular','Bid Machine'],tiers:[5,25,100],what:'bids submitted',v:s=>s.submitted},
+ {id:'signoffs',shape:'medal',icon:'✍️',names:['Sign Here','Takeoff Pro','Scope Master'],tiers:[10,50,200],what:'scopes signed off',v:s=>s.signoffs},
+ {id:'estimates',shape:'plaque',icon:'✏️',names:['Sharp Pencil','Number Cruncher','Chief Estimator'],tiers:[1,10,40],what:'estimates built',v:s=>s.estimates},
+ {id:'notes',shape:'plaque',icon:'📓',names:['Field Notes','Site Scout','Historian'],tiers:[5,25,100],what:'estimator log notes',v:s=>s.notes},
+ {id:'jobs',shape:'shield',icon:'👷',names:['Job Boss','Juggler','Operations Chief'],tiers:[1,5,15],what:'jobs managed',v:s=>s.jobs},
+ {id:'done',shape:'cup',icon:'🏁',names:['Closed Out','Finisher','Closeout King'],tiers:[1,5,15],what:'jobs completed',v:s=>s.jobs_done},
+ {id:'costs',shape:'medal',icon:'🧾',names:['Logbook','Cost Tracker','Every Penny'],tiers:[25,250,1500],what:'costs logged',v:s=>s.cost_entries},
+ {id:'prod',shape:'medal',icon:'📏',names:['Yardage','Production Tracker','Quantity Hawk'],tiers:[10,100,500],what:'quantities logged',v:s=>s.production},
+ {id:'billing',shape:'plaque',icon:'💵',names:['Paid in Full','Biller','Cash Flow Captain'],tiers:[1,12,40],what:'pay apps sent',v:s=>s.pay_apps},
+ {id:'bugs',shape:'star',icon:'🐛',names:['Bug Hunter','Exterminator','Quality Control'],tiers:[1,5,15],what:'bugs you reported that got fixed',v:s=>s.bugs_fixed},
+ {id:'ideas',shape:'star',icon:'💡',names:['Bright Idea','Idea Machine','Product Visionary'],tiers:[1,3,10],what:'ideas of yours that got built',v:s=>s.ideas_built},
+ {id:'tenure',shape:'shield',icon:'📅',names:['First Month','One Year In','Old Hand'],tiers:[30,365,1095],what:'days on the app',v:s=>s.days},
+ {id:'dirt',shape:'cup',icon:'🚜',names:['Operator','Master Operator','Dirt Legend'],tiers:[80,200,400],what:'best Dirt Mover score',secret:true,v:(s,f)=>f('dirt')},
+ {id:'clean',shape:'star',icon:'☎️',names:['Call Before You Dig'],tiers:[1],what:'Dirt Mover game with no utility strikes',secret:true,v:(s,f,d)=>d('dirt').clean?1:0},
+ {id:'pipe',shape:'medal',icon:'🌧️',names:['Pipe Layer','Storm Chaser','Rainmaker'],tiers:[2,4,7],what:'Pipe Dream levels cleared in one run',v:(s,f,d)=>num(d('pipe').level)||0},
+ {id:'guess',shape:'shield',icon:'👁️',names:['Good Eye','Eagle Eye','Human AGTEK'],tiers:[300,400,470],what:'best Guess the quantity score (out of 500)',v:(s,f)=>f('guess')},
+ {id:'trivia',shape:'plaque',icon:'🎓',names:['Quick Study','Know-It-All','Professor'],tiers:[5,25,100],what:'trivia questions right',v:(s,f)=>f('trivia')},
+ {id:'streak',shape:'star',icon:'🔥',names:['On a Roll','Hot Streak','Unstoppable'],tiers:[3,10,30],what:'trivia days in a row',v:(s,f,d)=>num(d('trivia').best)||0},
+ {id:'profile',shape:'star',icon:'😎',names:['Looking Sharp'],tiers:[1],what:'profile filled in',v:(s,f,d,c)=>c&&c.profile&&c.profile.emoji&&c.profile.tagline?1:0}];
+const COMPANY_TROPHIES=[
+ {id:'c-wins',shape:'cup',icon:'🏆',names:['10 Wins','50 Wins','100 Wins'],tiers:[10,50,100],what:'bids won as a company',v:s=>s.wins},
+ {id:'c-value',shape:'cup',icon:'💰',names:['$5M Won','$25M Won','$100M Won'],tiers:[5e6,25e6,1e8],what:'in work won',fmt:v=>moneyK(v),v:s=>s.won_value},
+ {id:'c-big',shape:'shield',icon:'🐋',names:['$1M Job','$5M Job','$10M Job'],tiers:[1e6,5e6,1e7],what:'largest job won',fmt:v=>moneyK(v),v:s=>s.biggest_win},
+ {id:'c-year',shape:'medal',icon:'📈',names:['5 This Year','15 This Year','30 This Year'],tiers:[5,15,30],what:'wins this year',v:s=>s.wins_year},
+ {id:'c-bids',shape:'plaque',icon:'📬',names:['100 Bids','500 Bids','1,000 Bids'],tiers:[100,500,1000],what:'bids tracked',v:s=>s.bids},
+ {id:'c-jobs',shape:'cup',icon:'🏁',names:['5 Jobs Done','25 Jobs Done','100 Jobs Done'],tiers:[5,25,100],what:'jobs completed',v:s=>s.jobs_done},
+ {id:'c-est',shape:'plaque',icon:'✏️',names:['25 Estimates','100 Estimates','500 Estimates'],tiers:[25,100,500],what:'estimates built',v:s=>s.estimates},
+ {id:'c-crew',shape:'shield',icon:'🤝',names:['Crew of 5','Crew of 15','Crew of 40'],tiers:[5,15,40],what:'people on the app',v:s=>s.people},
+ {id:'c-bugs',shape:'star',icon:'🛠️',names:['10 Fixes','50 Fixes','100 Fixes'],tiers:[10,50,100],what:'bugs reported and fixed',v:s=>s.bugs_fixed},
+ {id:'c-book',shape:'medal',icon:'📚',names:['500 Prices','2,500 Prices','10,000 Prices'],tiers:[500,2500,10000],what:'items in the codebooks',v:s=>s.codebook}];
+function trophyState(uid){const company=uid==='company';const row=(S.trophy||[]).find(r=>company?r.user_id==null:r.user_id===uid);const s=(row&&row.stats)||{};const f=k=>num(funStat(uid,k)?.value)||0,d=k=>funStat(uid,k)?.data||{};const c=company?null:crewOf(uid);
+  return (company?COMPANY_TROPHIES:TROPHIES).map(t=>{const v=num(t.v(s,f,d,c))||0;let tier=-1;t.tiers.forEach((n,i)=>{if(v>=n)tier=i});const next=t.tiers[tier+1];
+    return {t,v,tier,name:t.names[Math.max(0,tier)],next,nextName:t.names[tier+1],pct:next?Math.min(1,v/next):1,max:tier===t.tiers.length-1}})}
+const T_COL={bronze:['#C98A4B','#8F5A26'],silver:['#D5DCE2','#8B96A0'],gold:['#F6D365','#C7921E'],none:['#D9DCD6','#B4B9B1']};
+function trophySvg(shape,tier,icon,size){const [a,b]=T_COL[tier]||T_COL.none;const off=!T_COL[tier];const id='g'+shape+(tier||'n');size=size||84;
+  const def=`<defs><linearGradient id="${id}" x1="0" x2="1" y1="0" y2="1"><stop offset="0" stop-color="${a}"/><stop offset="1" stop-color="${b}"/></linearGradient></defs>`;const fill=`fill="url(#${id})" stroke="${b}" stroke-width="1.5"`;
+  const body={cup:`<path d="M26 12 H74 V30 C74 48 62 58 50 58 C38 58 26 48 26 30 Z" ${fill}/><path d="M26 18 H14 C14 34 20 40 30 42 M74 18 H86 C86 34 80 40 70 42" fill="none" stroke="${b}" stroke-width="5" stroke-linecap="round"/><rect x="45" y="58" width="10" height="14" ${fill}/><rect x="32" y="72" width="36" height="8" rx="2" ${fill}/><rect x="26" y="80" width="48" height="10" rx="2" fill="#4A3526"/>`,
+    medal:`<path d="M34 6 L50 40 L66 6 L56 6 L50 20 L44 6 Z" fill="${off?'#C5C9C2':'#B33A3A'}"/><circle cx="50" cy="58" r="28" ${fill}/><circle cx="50" cy="58" r="21" fill="none" stroke="${b}" stroke-width="1.5" opacity=".7"/>`,
+    star:`<path d="M50 6 L61 34 L91 36 L68 55 L76 85 L50 68 L24 85 L32 55 L9 36 L39 34 Z" ${fill} stroke-linejoin="round"/><rect x="34" y="84" width="32" height="8" rx="2" fill="#4A3526"/>`,
+    shield:`<path d="M50 6 L84 16 V44 C84 66 68 82 50 90 C32 82 16 66 16 44 V16 Z" ${fill}/><path d="M50 14 L76 22 V44 C76 61 64 74 50 81 C36 74 24 61 24 44 V22 Z" fill="none" stroke="${b}" stroke-width="1.5" opacity=".7"/>`,
+    plaque:`<rect x="14" y="14" width="72" height="70" rx="6" fill="#5B3F2B"/><rect x="22" y="22" width="56" height="54" rx="3" ${fill}/><circle cx="20" cy="20" r="2" fill="#2E2018"/><circle cx="80" cy="20" r="2" fill="#2E2018"/><circle cx="20" cy="78" r="2" fill="#2E2018"/><circle cx="80" cy="78" r="2" fill="#2E2018"/>`}[shape]||'';
+  const cy={cup:36,medal:60,star:52,shield:48,plaque:50}[shape]||50;
+  return `<svg viewBox="0 0 100 96" width="${size}" height="${Math.round(size*0.96)}" class="trophy-svg${off?' off':''}" aria-hidden="true">${def}${body}<text x="50" y="${cy}" text-anchor="middle" dominant-baseline="central" font-size="${shape==='cup'?22:24}">${off?'?':icon}</text></svg>`}
+function trophyCard(x,i){const tier=x.tier>=0?TIERS[Math.min(x.tier,2)+(x.t.tiers.length===1?2:0)]:null;const hidden=x.t.secret&&x.tier<0;const f=x.t.fmt||(v=>Number(Math.floor(v)).toLocaleString());
+  return `<button class="trophy${x.tier<0?' off':''}${S.fun.pick===x.t.id?' on':''}" data-act="fun-trophy" data-id="${x.t.id}" title="${hidden?'A secret trophy':esc(x.name)}">${trophySvg(x.t.shape,tier,x.t.icon)}<span class="trophy-plate">${hidden?'???':esc(x.name)}</span></button>`}
+function trophyDetail(x){if(!x)return '';const f=x.t.fmt||(v=>Number(Math.floor(v)).toLocaleString());const hidden=x.t.secret&&x.tier<0;const tier=x.tier>=0?TIERS[Math.min(x.tier,2)+(x.t.tiers.length===1?2:0)]:null;
+  return `<div class="trophy-d">${trophySvg(x.t.shape,tier,x.t.icon,64)}<div><b>${hidden?'Secret trophy':esc(x.tier>=0?x.name:x.t.names[0])}</b>${tier?` <span class="pill t-${tier}">${tier[0].toUpperCase()+tier.slice(1)}</span>`:' <span class="pill">Not earned yet</span>'}
+    <div class="small">${hidden?'There’s something hidden in this app. Keep digging.':`${f(x.v)} ${esc(x.t.what)}`}</div>
+    ${hidden?'':x.max?'<div class="small dim">Top tier reached.</div>':`<div class="trophy-prog"><span style="width:${Math.round(x.pct*100)}%"></span></div><div class="small dim">Next: <b>${esc(x.nextName)}</b> at ${f(x.next)}</div>`}</div></div>`}
+function funTrophy(){const F=S.fun;const who=F.who||myId();const company=who==='company';const L=trophyState(who);const earned=L.filter(x=>x.tier>=0);const c=company?null:crewOf(who);
+  const shelves=[];const per=6;const sorted=L.slice().sort((a,b)=>(b.tier>=0)-(a.tier>=0)||b.tier-a.tier);for(let i=0;i<sorted.length;i+=per)shelves.push(sorted.slice(i,i+per));
+  const pick=L.find(x=>x.t.id===F.pick)||earned[0]||L[0];
+  return `<div class="bar fun-bar"><label class="small" style="font-weight:600">Whose shelf</label><select class="field" data-funwho><option value="${myId()}"${who===myId()?' selected':''}>Mine</option><option value="company"${company?' selected':''}>🏢 The company case</option>${crewList().filter(p=>p.id!==myId()).map(p=>`<option value="${p.id}"${who===p.id?' selected':''}>${esc(p.full_name)}</option>`).join('')}</select>
+    <span class="small dim">${earned.length} of ${L.length} earned${earned.length?` · ${earned.filter(x=>x.max).length} at top tier`:''}</span><button class="btn sm ghost" data-act="fun-refresh" style="margin-left:auto">↻ Refresh</button></div>
+  <div class="troom"><div class="troom-sign">${company?`<b>${esc(S.settings.general?.companyName||CFG.companyName||'Company')}</b><span>Trophy case</span>`:`${funAv(c,44)}<b>${esc(c?c.full_name:'')}</b><span>${esc((c&&c.profile&&c.profile.tagline)||(c&&c.title)||'Trophy shelf')}</span>`}</div>
+    ${shelves.map(sh=>`<div class="shelf"><div class="shelf-row">${sh.map(trophyCard).join('')}</div><div class="shelf-board"></div></div>`).join('')}</div>
+  <div class="panel pad" style="margin-top:14px">${trophyDetail(pick)}</div>
+  <p class="hint">Trophies come from real work in the app (bids won, scopes signed off, jobs run, feedback that got fixed) and from the Break room games. Each has bronze, silver and gold. Grey ones aren’t earned yet. Click any trophy to see what it takes.</p>`}
+
+/* ---------- profile ---------- */
+function funProfileCard(c,o={}){if(!c)return '';const pr=c.profile||{};const L=trophyState(c.id).filter(x=>x.tier>=0).sort((a,b)=>b.tier-a.tier);
+  const facts=[['📍',pr.hometown],['🛠️',pr.since?`In the trade since ${pr.since}`:''],['🚜',pr.machine?`Favorite machine: ${pr.machine}`:''],['☕',pr.coffee?`Order: ${pr.coffee}`:''],['🦸',pr.power?`Job-site superpower: ${pr.power}`:'']].filter(x=>x[1]);
+  return `<div class="pcard"><div class="pcard-top" style="background:${esc(pr.bg||BG_COLORS[0])}">${funAv(c,o.big?96:72)}</div><div class="pcard-b"><h2>${esc(c.full_name)}</h2><div class="small dim">${esc([c.title,ROLE_LABEL[c.role]].filter(Boolean).join(' · '))}</div>
+    ${pr.tagline?`<p class="pcard-tag">“${esc(pr.tagline)}”</p>`:''}${pr.about?`<p class="small" style="white-space:pre-wrap">${esc(pr.about)}</p>`:''}
+    ${facts.length?`<ul class="pcard-facts">${facts.map(([i,t])=>`<li><span>${i}</span>${esc(t)}</li>`).join('')}</ul>`:''}
+    <div class="pcard-t">${L.slice(0,6).map(x=>`<span title="${esc(x.name)}">${trophySvg(x.t.shape,TIERS[Math.min(x.tier,2)+(x.t.tiers.length===1?2:0)],x.t.icon,34)}</span>`).join('')||'<span class="small dim">No trophies yet</span>'}${L.length>6?`<span class="small dim">+${L.length-6}</span>`:''}</div>
+    ${o.link?`<button class="btn sm" data-act="fun-shelf" data-id="${c.id}">See their shelf</button>`:''}</div></div>`}
+function funProfile(){const F=S.fun;const me=crewOf(myId())||{id:myId(),full_name:myName(),profile:{}};if(!F.draft)F.draft={full_name:S.profile.full_name||'',title:S.profile.title||'',phone:S.profile.phone||'',profile:clone(S.profile.profile||{})};const d=F.draft;const pr=d.profile;
+  const dirty=JSON.stringify(d)!==JSON.stringify({full_name:S.profile.full_name||'',title:S.profile.title||'',phone:S.profile.phone||'',profile:S.profile.profile||{}});
+  const inp=(k,l,ph,max)=>`<label class="f">${l}<input class="field" id="pf-${k}" data-pf="${k}" value="${esc(k in d&&k!=='profile'?d[k]:pr[k]||'')}" placeholder="${esc(ph||'')}" maxlength="${max||60}"></label>`;
+  const sw=(k,list,cur)=>`<div class="swatches">${list.map(c=>`<button class="${(cur||list[0])===c?'on':''}" style="background:${c}" data-act="pf-set" data-k="${k}" data-v="${c}" aria-label="${c}"></button>`).join('')}</div>`;
+  return `<div class="grid2 pf-grid"><div class="panel pad"><div class="sec-h" style="margin-top:0"><h2>My profile</h2><span>${dirty?'Unsaved changes':'What the crew sees'}</span></div>
+    <div class="fg">${inp('full_name','Name','','80')}${inp('title','Title / position','e.g. Senior estimator','80')}${inp('phone','Phone','','40')}${inp('hometown','Hometown','')}</div>
+    <div class="fg"><label class="f s4">Tagline<input class="field" id="pf-tagline" data-pf="tagline" value="${esc(pr.tagline||'')}" placeholder="e.g. Measure twice, dig once" maxlength="80"></label>
+      <label class="f s4">About me<textarea class="field" id="pf-about" data-pf="about" rows="3" maxlength="400" placeholder="A few lines about you">${esc(pr.about||'')}</textarea></label></div>
+    <div class="fg">${inp('since','In the trade since (year)','2008','4')}<label class="f">Favorite machine<select class="field" data-pf="machine"><option value="">Pick one…</option>${MACHINES.map(m=>`<option${pr.machine===m?' selected':''}>${m}</option>`).join('')}</select></label>${inp('coffee','Coffee order','Black, no room')}${inp('power','Job-site superpower','Finds the missing addendum')}</div>
+    <div class="pf-pick"><div><div class="small" style="font-weight:600;margin-bottom:6px">Hard hat</div>${sw('hat',HAT_COLORS,pr.hat)}</div><div><div class="small" style="font-weight:600;margin-bottom:6px">Background</div>${sw('bg',BG_COLORS,pr.bg)}</div></div>
+    <div class="small" style="font-weight:600;margin:12px 0 6px">Avatar</div><div class="emoji-grid"><button class="${!pr.emoji?'on':''}" data-act="pf-set" data-k="emoji" data-v="">${esc(initials(d.full_name||myName()))}</button>${AV_EMOJI.map(e=>`<button class="${pr.emoji===e?'on':''}" data-act="pf-set" data-k="emoji" data-v="${e}">${e}</button>`).join('')}</div>
+    <div class="adders" style="margin-top:14px"><button class="btn primary" data-act="pf-save"${dirty?'':' disabled'}>Save profile</button>${dirty?'<button class="btn ghost" data-act="pf-reset">Undo changes</button>':''}</div></div>
+  <div><div class="small dim" style="margin-bottom:6px">Preview</div>${funProfileCard({...me,full_name:d.full_name||myName(),title:d.title,profile:pr},{big:1})}</div></div>`}
+async function pfSave(){const d=S.fun.draft;try{const {error}=await sb.rpc('update_my_profile',{p_name:String(d.full_name||'').trim(),p_title:String(d.title||'').trim(),p_phone:String(d.phone||'').trim(),p_profile:d.profile});if(error)throw error;
+    Object.assign(S.profile,{full_name:String(d.full_name||'').trim(),title:d.title,phone:d.phone,profile:clone(d.profile)});S.fun.draft=null;await funLoad(true);if(isAdmin())loadProfiles();toast('Profile saved');render()}
+  catch(e){toast(/update_my_profile|does not exist|schema cache/i.test(errMsg(e))?'Profiles aren’t set up yet. An admin needs to run supabase/update-21-break-room.sql.':errMsg(e))}}
+function funCrew(){const L=crewList();return `<div class="crew-g">${L.map(c=>funProfileCard(c,{link:1})).join('')}</div>${L.length<2?'<p class="hint">Teammates show up here once they have a login.</p>':''}`}
+
+/* ---------- small helpers for games ---------- */
+function rng32(seed){let a=seed>>>0;return ()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return ((t^t>>>14)>>>0)/4294967296}}
+const dayNum=()=>Math.floor(parseD(todayStr()).getTime()/864e5);
+const strSeed=s=>{let h=2166136261;for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,16777619)}return h>>>0};
+
+/* ---------- Daily trivia ---------- */
+const TRIVIA=[
+ {q:'How many cubic feet are in one cubic yard?',a:['9','18','27','36'],c:2,x:'3 ft × 3 ft × 3 ft = 27 cubic feet.'},
+ {q:'How many square feet are in an acre?',a:['40,000','43,560','45,360','52,800'],c:1,x:'An acre is 43,560 square feet.'},
+ {q:'What number do you call before you dig in the U.S.?',a:['311','411','811','911'],c:2,x:'811 gets utilities located and marked before excavation.'},
+ {q:'Red paint or flags on the ground mark which utility?',a:['Gas','Electric','Water','Sewer'],c:1,x:'Red is electric power lines, cables and conduit.'},
+ {q:'Yellow utility markings mean…',a:['Gas, oil or steam','Communications','Potable water','Survey marks'],c:0,x:'Yellow is gas, oil, steam and petroleum.'},
+ {q:'Blue utility markings mean…',a:['Sewer','Reclaimed water','Potable water','Electric'],c:2,x:'Blue is drinking water.'},
+ {q:'Green utility markings mean…',a:['Sewer and drain lines','Gas','Communications','Proposed excavation'],c:0,x:'Green is sewers and drain lines.'},
+ {q:'Orange utility markings mean…',a:['Electric','Communications (phone, cable, fiber)','Water','Gas'],c:1,x:'Orange is communication, alarm and signal lines.'},
+ {q:'White paint on the ground usually marks…',a:['Abandoned lines','The proposed excavation area','Irrigation','Property corners'],c:1,x:'White outlines where you plan to dig, so locators know what to mark.'},
+ {q:'Under OSHA, a trench needs a protective system (sloping, shoring or a trench box) at what depth, unless it’s in stable rock?',a:['3 feet','4 feet','5 feet','8 feet'],c:2,x:'5 feet or deeper. At 20 feet, the system must be designed by an engineer.'},
+ {q:'A ladder or other way out is required in trenches how deep?',a:['3 feet or more','4 feet or more','5 feet or more','6 feet or more'],c:1,x:'4 feet or deeper, with an exit within 25 feet of every worker.'},
+ {q:'How far back from the edge of a trench must the spoil pile be kept?',a:['1 foot','2 feet','4 feet','6 feet'],c:1,x:'At least 2 feet, so it can’t fall back in.'},
+ {q:'What’s the steepest slope OSHA allows for Type C soil?',a:['¾ : 1','1 : 1','1½ : 1','2 : 1'],c:2,x:'Type C (the weakest) is 1½ horizontal to 1 vertical, about 34°.'},
+ {q:'A 1% slope drops how far over 100 feet?',a:['1 inch','1 foot','10 feet','0.1 foot'],c:1,x:'1% = 1 foot of fall per 100 feet.'},
+ {q:'A pipe laid at 2% over 250 feet falls how much?',a:['2.5 feet','5 feet','0.5 foot','12.5 feet'],c:1,x:'250 × 0.02 = 5 feet.'},
+ {q:'Station 12+50 is how far from station 0+00?',a:['125 feet','1,250 feet','12,500 feet','1,205 feet'],c:1,x:'Each full station is 100 feet: 12 × 100 + 50 = 1,250.'},
+ {q:'What is the “invert” of a pipe?',a:['The top outside','The lowest point of the inside','The joint','The bedding'],c:1,x:'Invert elevation is the inside bottom, where the water flows.'},
+ {q:'RCP stands for…',a:['Rigid Corrugated Plastic','Reinforced Concrete Pipe','Rolled Clay Pipe','Ribbed Composite Pipe'],c:1,x:'Reinforced concrete pipe, the storm drain standard.'},
+ {q:'HDPE stands for…',a:['High-Density Polyethylene','Heavy-Duty Pipe Extrusion','High-Durability Plastic Element','Hot-Dipped Polymer Edge'],c:0,x:'High-density polyethylene, common for corrugated storm pipe.'},
+ {q:'When soil is dug up and loaded, its volume gets bigger. That’s called…',a:['Shrink','Swell','Bulking loss','Heave'],c:1,x:'Swell. Bank yards become more loose yards in the truck.'},
+ {q:'Which is the smallest for the same dirt?',a:['Bank cubic yards','Loose cubic yards','Compacted cubic yards','They’re all equal'],c:2,x:'Compacted is usually smallest, loose is largest, bank is in between.'},
+ {q:'A Proctor test tells you a soil’s…',a:['Bearing capacity','Maximum dry density and best moisture for compaction','Permeability','Plasticity index'],c:1,x:'It’s the benchmark that “95% compaction” is measured against.'},
+ {q:'Which roller works best on clay?',a:['Smooth drum','Sheepsfoot (padfoot)','Pneumatic only','Plate compactor'],c:1,x:'The feet knead cohesive soils. Smooth vibratory drums suit sand and gravel.'},
+ {q:'What’s a “proof roll”?',a:['A density test with a nuclear gauge','Driving a loaded truck over subgrade to find soft spots','Rolling asphalt a final time','A survey check'],c:1,x:'Soft spots show up as pumping or rutting under the loaded wheels.'},
+ {q:'On site, what’s a “pan”?',a:['A motor grader','A scraper','A skid steer','A compactor'],c:1,x:'A scraper cuts, hauls and spreads dirt in one machine.'},
+ {q:'Roughly how much does a cubic yard of concrete weigh?',a:['2,000 lb','3,000 lb','4,000 lb','6,000 lb'],c:2,x:'About 150 lb per cubic foot × 27 ≈ 4,000 lb.'},
+ {q:'How much does a gallon of water weigh?',a:['6.2 lb','7.5 lb','8.34 lb','10 lb'],c:2,x:'8.34 pounds. A cubic foot of water is 62.4 lb.'},
+ {q:'How many gallons are in a cubic foot of water?',a:['5.6','7.48','8.34','10'],c:1,x:'About 7.48 gallons.'},
+ {q:'Asphalt runs about how many pounds per square yard for each inch of thickness?',a:['55','80','110','150'],c:2,x:'The usual rule of thumb is 110 lb per SY per inch.'},
+ {q:'#57 stone is about what size?',a:['Dust to ⅜ inch','About ¾ inch','2 to 3 inches','6 inches and up'],c:1,x:'Roughly ¾-inch clean stone, a go-to for bedding and drainage.'},
+ {q:'SWPPP stands for…',a:['Site Work Plan & Permit Package','Stormwater Pollution Prevention Plan','Soil & Water Protection Procedure','Standard Water Pipe Placement Plan'],c:1,x:'The plan for keeping sediment and pollutants out of stormwater.'},
+ {q:'A construction stormwater permit is generally required once you disturb how much land?',a:['¼ acre','1 acre','5 acres','10 acres'],c:1,x:'One acre or more of land disturbance under the federal NPDES program.'},
+ {q:'What does silt fence do?',a:['Marks the property line','Holds back sediment in sheet runoff','Stops erosion on steep cuts','Keeps wildlife out'],c:1,x:'It ponds sheet flow so sediment settles. It isn’t meant for concentrated flow.'},
+ {q:'What’s a benchmark?',a:['The low bid','A point of known elevation','The finished floor','A grade stake'],c:1,x:'Surveyors and grade checkers work elevations off it.'},
+ {q:'“Borrow” is…',a:['Topsoil saved for later','Fill brought in from off site','Rock too big to place','A rented machine'],c:1,x:'Material imported from a borrow pit when the site doesn’t balance.'},
+ {q:'On a cut/fill map, “cut” means…',a:['Dirt has to be added','Dirt has to be removed','No change','Rock'],c:1,x:'Existing ground is above design grade, so it gets cut down.'},
+ {q:'A CAT 320 excavator weighs about…',a:['3.2 tons','20 metric tons','32 metric tons','50 tons'],c:1,x:'The “20” is the size class: roughly 20 metric tons.'},
+ {q:'Compaction specs are most often written as…',a:['A number of passes','A percent of Proctor density','PSI','Inches of settlement'],c:1,x:'For example, “95% of standard Proctor”.'},
+ {q:'What does a geotextile fabric under stone mainly do?',a:['Adds strength to the stone','Separates stone from the soil below','Speeds drainage only','Stops frost'],c:1,x:'It keeps the stone from pumping down into soft subgrade.'},
+ {q:'How many square feet does a cubic yard of stone cover at 3 inches deep?',a:['54','81','108','162'],c:2,x:'27 cubic feet ÷ 0.25 ft = 108 square feet.'},
+ {q:'Purple pipe and markings mean…',a:['Sewer force main','Reclaimed water or irrigation','Fuel','Fiber'],c:1,x:'Purple is reclaimed water, irrigation and slurry lines.'},
+ {q:'Pink markings on a job site are…',a:['Temporary survey marks','Gas','Abandoned utilities','Fire lines'],c:0,x:'Pink is temporary survey marking.'}];
+function triviaBank(){const extra=((S.settings.fun_trivia||{}).list||[]).filter(q=>q&&q.q&&Array.isArray(q.a)&&q.a.filter(Boolean).length>=2);return [...TRIVIA,...extra]}
+function triviaToday(){const B=triviaBank();const n=dayNum();const order=B.map((q,i)=>i);const r=rng32(1234567+Math.floor(n/B.length));for(let i=order.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[order[i],order[j]]=[order[j],order[i]]}return B[order[n%B.length]]}
+function funTrivia(){const st=funStat(myId(),'trivia');const d=st?.data||{};const today=todayStr();const done=d.last===today;const Q=triviaToday();
+  return `<div class="grid2"><div class="panel pad trivia"><div class="sec-h" style="margin-top:0"><h2>Daily trivia</h2><span>${fmtShort(today)} · one question a day</span></div>
+    <p class="trivia-q">${esc(Q.q)}</p><div class="trivia-a">${Q.a.map((a,i)=>a?`<button class="${done?(i===Q.c?'right':i===d.pick?'wrong':''):''}" data-act="trivia-pick" data-i="${i}"${done?' disabled':''}>${esc(a)}</button>`:'').join('')}</div>
+    ${done?`<div class="trivia-x ${d.lastOk?'ok':'no'}"><b>${d.lastOk?'Correct!':'Not this time.'}</b> ${esc(Q.x||'')}<div class="small dim" style="margin-top:4px">Come back tomorrow for the next one.</div></div>`:'<p class="small dim">Pick an answer. You get one shot.</p>'}
+    <div class="statline" style="margin-top:14px"><div><b>${num(d.streak)||0}</b>Day streak 🔥</div><div><b>${num(d.best)||0}</b>Best streak</div><div><b>${num(st?.value)||0}</b>Right</div><div><b>${num(d.total)||0}</b>Answered</div></div>
+    ${isAdmin()?`<button class="btn sm ghost" data-act="trivia-edit">Add your own questions (company history, inside jokes)…</button>`:''}</div>
+  <div class="panel pad"><b>Trivia leaders</b>${funBoard('trivia',{fmt:(v,x)=>`${v} right · 🔥 ${num(x.data.streak)||0}`})}<b style="display:block;margin-top:14px">Longest streaks</b>${funBoard('trivia',{v:x=>num(x.data.best)||0,fmt:v=>`${v} days`})}</div></div>`}
+async function triviaPick(i){const st=funStat(myId(),'trivia');const d=st?.data||{};const today=todayStr();if(d.last===today)return;const Q=triviaToday();const ok=i===Q.c;
+  const y=(()=>{const t=parseD(today);t.setDate(t.getDate()-1);return `${t.getFullYear()}-${pad(t.getMonth()+1)}-${pad(t.getDate())}`})();const streak=ok?(d.last===y&&d.lastOk?(num(d.streak)||0)+1:1):0;
+  await funSave('trivia',(num(st?.value)||0)+(ok?1:0),{last:today,lastOk:ok,pick:i,streak,best:Math.max(num(d.best)||0,streak),total:(num(d.total)||0)+1},'set');render()}
+function triviaModal(){const L=M.list;return mhead('Your own trivia questions','They’re mixed in with the built-in ones. Everyone gets the same question each day.')+`<div class="mbody">
+  ${L.map((q,i)=>`<fieldset><legend>Question ${i+1}</legend><div class="fg"><label class="f s4">Question<input class="field" data-tq="${i}.q" value="${esc(q.q||'')}" placeholder="e.g. What year was the company founded?"></label>
+    ${[0,1,2,3].map(j=>`<label class="f s2">Answer ${j+1}<span class="trivia-ed"><input type="radio" name="tqc${i}" data-tqc="${i}" value="${j}"${num(q.c)===j?' checked':''} title="Correct answer"><input class="field" data-tq="${i}.a.${j}" value="${esc((q.a||[])[j]||'')}"></span></label>`).join('')}
+    <label class="f s4">Fun fact shown after answering<input class="field" data-tq="${i}.x" value="${esc(q.x||'')}"></label></div><button class="btn sm ghost danger-t" data-act="trivia-rm" data-i="${i}">Remove</button></fieldset>`).join('')||'<div class="empty small">No custom questions yet.</div>'}
+  <button class="btn sm" data-act="trivia-add">+ Question</button><p class="hint">Tick the circle next to the correct answer.</p></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="trivia-save">Save questions</button></div></div>`}
+
+/* ---------- Guess the quantity ---------- */
+function guessRounds(seed){const r=rng32(seed);const ri=(a,b,step)=>{step=step||1;return a+Math.floor(r()*(Math.floor((b-a)/step)+1))*step};const out=[];const kinds=['trench','pile','pad','windrow','pond'];
+  for(let i=kinds.length-1;i>0;i--){const j=Math.floor(r()*(i+1));[kinds[i],kinds[j]]=[kinds[j],kinds[i]]}
+  kinds.forEach(k=>{if(k==='trench'){const L=ri(80,600,20),W=ri(2,6),D=ri(3,12);out.push({k,L,W,D,ans:L*W*D/27,title:'Trench excavation',dims:`${L} ft long × ${W} ft wide × ${D} ft deep`,how:`${L} × ${W} × ${D} ÷ 27`})}
+    else if(k==='pile'){const Dm=ri(20,80,5),H=ri(6,24,2);out.push({k,Dm,H,ans:Math.PI*(Dm/2)**2*H/3/27,title:'Cone stockpile',dims:`${Dm} ft across the base × ${H} ft tall`,how:`π × ${Dm/2}² × ${H} ÷ 3 ÷ 27 (a cone is ⅓ of a cylinder)`})}
+    else if(k==='pad'){const L=ri(40,240,10),W=ri(30,160,10),T=ri(4,12,2);out.push({k,L,W,T,ans:L*W*(T/12)/27,title:'Stone base under a pad',dims:`${L} ft × ${W} ft, ${T} inches thick`,how:`${L} × ${W} × ${T}/12 ÷ 27`})}
+    else if(k==='windrow'){const L=ri(60,400,20),W=ri(10,30,2),H=ri(4,12);out.push({k,L,W,H,ans:0.5*W*H*L/27,title:'Windrow of topsoil',dims:`${L} ft long, ${W} ft wide at the base, ${H} ft tall`,how:`½ × ${W} × ${H} × ${L} ÷ 27 (a triangle cross-section)`})}
+    else{const L=ri(60,200,10),W=ri(40,120,10),D=ri(4,10),s=3;const l2=Math.max(6,L-2*s*D),w2=Math.max(6,W-2*s*D);const A1=L*W,A2=l2*w2;out.push({k,L,W,D,l2,w2,ans:D/3*(A1+A2+Math.sqrt(A1*A2))/27,title:'Detention pond',dims:`${L} × ${W} ft at the top, ${l2} × ${w2} ft at the bottom, ${D} ft deep`,how:`depth ÷ 3 × (top area + bottom area + √(top × bottom)) ÷ 27`})}});
+  return out}
+function guessSketch(q){const dim=(x1,y1,x2,y2,t,o={})=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="gs-dim"/><text x="${(x1+x2)/2+(o.dx||0)}" y="${(y1+y2)/2+(o.dy||0)}" class="gs-t" text-anchor="middle">${t}</text>`;
+  const sky='<rect x="0" y="0" width="360" height="200" class="gs-sky"/>';
+  const body={trench:`<rect x="0" y="70" width="360" height="130" class="gs-soil"/><path d="M60 70 L110 40 L330 40 L280 70 Z" class="gs-grass"/><path d="M100 70 L130 52 L300 52 L270 70 Z" class="gs-hole"/><path d="M100 70 L270 70 L270 150 L100 150 Z" class="gs-hole2"/>${dim(100,164,270,164,q.L+' ft',{dy:14})}${dim(282,70,282,150,q.D+' ft',{dx:26,dy:4})}${dim(272,61,302,43,q.W+' ft',{dx:22,dy:-2})}`,
+    pile:`<rect x="0" y="150" width="360" height="50" class="gs-grass"/><ellipse cx="180" cy="152" rx="120" ry="16" class="gs-dirt2"/><path d="M60 152 L180 40 L300 152 Z" class="gs-dirt"/>${dim(60,178,300,178,q.Dm+' ft',{dy:14})}${dim(318,40,318,152,q.H+' ft',{dx:24,dy:4})}`,
+    pad:`<rect x="0" y="120" width="360" height="80" class="gs-grass"/><path d="M40 120 L130 70 L330 70 L240 120 Z" class="gs-stone"/><path d="M40 120 L240 120 L240 134 L40 134 Z" class="gs-stone2"/><path d="M240 120 L330 70 L330 84 L240 134 Z" class="gs-stone3"/>${dim(40,150,240,150,q.L+' ft',{dy:14})}${dim(252,140,340,91,q.W+' ft',{dx:26,dy:10})}<text x="150" y="100" class="gs-t" text-anchor="middle">${q.T} in thick</text>`,
+    windrow:`<rect x="0" y="140" width="360" height="60" class="gs-grass"/><path d="M40 150 L80 90 L120 150 Z" class="gs-dirt"/><path d="M80 90 L290 60 L330 118 L120 150 Z" class="gs-dirt2"/>${dim(40,166,120,166,q.W+' ft',{dy:14})}${dim(26,90,26,150,q.H+' ft',{dx:-4,dy:-36})}${dim(130,162,336,130,q.L+' ft',{dy:20})}`,
+    pond:`<rect x="0" y="60" width="360" height="140" class="gs-grass"/><path d="M40 70 L320 70 L290 150 L70 150 Z" class="gs-hole"/><path d="M95 104 L265 104 L255 132 L105 132 Z" class="gs-water"/>${dim(40,58,320,58,q.L+' × '+q.W+' ft top',{dy:-6})}<text x="180" y="122" class="gs-t" text-anchor="middle">${q.l2} × ${q.w2} ft bottom</text>${dim(332,70,332,150,q.D+' ft',{dx:16,dy:4})}`}[q.k];
+  return `<svg viewBox="0 0 360 200" class="gs" role="img" aria-label="${esc(q.title)}">${sky}${body}</svg>`}
+function guessScore(ans,g){if(!(g>0))return 0;const err=Math.abs(g-ans)/ans*100;return Math.max(0,Math.round(100-err*2))}
+function funGuess(){const G=S.fun.guess;const st=funStat(myId(),'guess');const d=st?.data||{};const today=todayStr();
+  const side=`<div class="panel pad"><b>Today’s scores</b>${funBoard('guess',{f:x=>x.data.day===today,v:x=>num(x.data.today)||0,fmt:v=>`${v} / 500`,empty:'Nobody’s played today’s set yet.'})}<b style="display:block;margin-top:14px">All-time best</b>${funBoard('guess',{fmt:v=>`${v} / 500`})}</div>`;
+  if(!G)return `<div class="grid2"><div class="panel pad"><div class="sec-h" style="margin-top:0"><h2>Guess the quantity</h2><span>5 sketches · everyone gets the same set each day</span></div>
+    <p>You get a sketch with its dimensions and <b>30 seconds</b> to guess the cubic yards. No calculator: that’s the game. The closer you are, the more points (100 for dead on, minus 2 for every 1% off).</p>
+    ${d.day===today?`<p class="small">Your score today: <b>${num(d.today)||0} / 500</b>. Playing again is practice; only your first run counts for today’s board.</p>`:''}
+    <div class="adders"><button class="btn primary" data-act="guess-start">${d.day===today?'Practice again':'Start today’s set'}</button></div></div>${side}</div>`;
+  if(G.done){const tot=G.res.reduce((s,r)=>s+r.pts,0);return `<div class="grid2"><div class="panel pad"><div class="sec-h" style="margin-top:0"><h2>${tot>=450?'Human AGTEK!':tot>=350?'Sharp eye.':tot>=200?'Not bad.':'Bring a calculator next time.'}</h2><span>${tot} / 500${G.practice?' · practice':''}</span></div>
+    <table class="acct-t"><thead><tr><th>Sketch</th><th class="r">Your guess</th><th class="r">Actual</th><th class="r">Off by</th><th class="r">Points</th></tr></thead><tbody>${G.res.map((r,i)=>`<tr><td>${esc(G.q[i].title)}<div class="small dim">${esc(G.q[i].how)}</div></td><td class="r num">${r.g?qtyFmt(r.g):'—'}</td><td class="r num">${qtyFmt(Math.round(G.q[i].ans))} CY</td><td class="r num">${r.g?fmtN(Math.abs(r.g-G.q[i].ans)/G.q[i].ans*100,0)+'%':'—'}</td><td class="r num"><b>${r.pts}</b></td></tr>`).join('')}</tbody></table>
+    <div class="adders" style="margin-top:12px"><button class="btn primary" data-act="guess-start">Play again (practice)</button><button class="btn" data-act="guess-quit">Back</button></div></div>${side}</div>`}
+  const q=G.q[G.i];const last=G.show;
+  return `<div class="grid2"><div class="panel pad guess"><div class="sec-h" style="margin-top:0"><h2>${G.i+1} of 5 · ${esc(q.title)}</h2><span>Score ${G.res.reduce((s,r)=>s+r.pts,0)}</span></div>
+    ${guessSketch(q)}<p class="guess-dims">${esc(q.dims)}</p>
+    ${last?`<div class="trivia-x ${last.pts>=70?'ok':'no'}"><b>${qtyFmt(Math.round(q.ans))} CY.</b> ${last.g?`You said ${qtyFmt(last.g)} (${fmtN(Math.abs(last.g-q.ans)/q.ans*100,0)}% off)`:'Out of time'} — <b>${last.pts} points</b>.<div class="small dim" style="margin-top:4px">${esc(q.how)}</div></div><div class="adders"><button class="btn primary" id="guess-next" data-act="guess-next">${G.i<4?'Next sketch →':'See the results'}</button></div>`
+    :`<div class="guess-in"><input class="field num" id="guess-val" data-guess inputmode="decimal" placeholder="Cubic yards" autocomplete="off"><span>CY</span><button class="btn primary" data-act="guess-go">Lock it in</button></div><div class="dt-bar"><span id="guess-bar" style="width:100%"></span></div>`}</div>${side}</div>`}
+function guessStart(){const st=funStat(myId(),'guess');const practice=(st?.data||{}).day===todayStr();const seed=practice?Math.floor(Math.random()*1e9):strSeed('guess'+todayStr());S.fun.guess={q:guessRounds(seed),i:0,res:[],practice};guessTick();render();setTimeout(()=>$('#guess-val')?.focus(),30)}
+function guessTick(){const G=S.fun.guess;clearInterval(S.fun.gt);if(!G||G.done||G.show)return;G.t0=Date.now();S.fun.gt=setInterval(()=>{const G2=S.fun.guess;if(!G2||G2!==G||G.show||S.view!=='fun'){clearInterval(S.fun.gt);return}const left=30-(Date.now()-G.t0)/1000;const b=$('#guess-bar');if(b){b.style.width=Math.max(0,left/30*100)+'%';b.className=left<8?'bad':left<15?'warn':''}if(left<=0){clearInterval(S.fun.gt);guessGo(true)}},200)}
+function guessGo(timeout){const G=S.fun.guess;if(!G||G.show||G.done)return;clearInterval(S.fun.gt);const g=timeout?0:num(String($('#guess-val')?.value||'').replace(/[,\s]/g,''))||0;const pts=guessScore(G.q[G.i].ans,g);G.show={g,pts};G.res.push({g,pts});render();setTimeout(()=>$('#guess-next')?.focus(),30)}
+async function guessNext(){const G=S.fun.guess;if(!G)return;G.show=null;if(G.i<4){G.i++;guessTick();render();setTimeout(()=>$('#guess-val')?.focus(),30);return}G.done=true;const tot=G.res.reduce((s,r)=>s+r.pts,0);const st=funStat(myId(),'guess');
+  await funSave('guess',tot,G.practice?{plays:(num(st?.data?.plays)||0)+1}:{day:todayStr(),today:tot,plays:(num(st?.data?.plays)||0)+1});render()}
+
+/* ---------- Pipe Dream ---------- */
+const PIPE_BASE={s:[0,2],e:[0,1],x:[0,1,2,3]};const DR=[-1,0,1,0],DC=[0,1,0,-1];
+const pipeOpen=c=>PIPE_BASE[c.t].map(d=>(d+c.r)%4);
+function pipeNew(lvl){const w=Math.min(8,4+lvl),h=Math.min(6,3+Math.ceil(lvl/2));const r=Math.random;const cells=Array.from({length:h},()=>Array.from({length:w},()=>null));
+  let row=Math.floor(r()*h),col=0,inDir=3;const src=row;const seen=new Set([row+','+col]);
+  for(;;){const opts=[];if(col===w-1)opts.push(1,1);else opts.push(1,1,1);[0,2].forEach(dv=>{const nr=row+DR[dv];if(nr>=0&&nr<h&&!seen.has(nr+','+col)&&dv!==inDir)opts.push(dv)});
+    const out=opts[Math.floor(r()*opts.length)];const want=[inDir,out].sort().join();const t=(inDir+2)%4===out?'s':'e';let rot=0;for(let k=0;k<4;k++){if(PIPE_BASE[t].map(d=>(d+k)%4).sort().join()===want){rot=k;break}}
+    cells[row][col]={t,r:rot,sol:rot};if(out===1&&col===w-1)break;row+=DR[out];col+=DC[out];inDir=(out+2)%4;seen.add(row+','+col)}
+  const outRow=row;for(let i=0;i<h;i++)for(let j=0;j<w;j++){if(!cells[i][j]){const x=r();cells[i][j]={t:x<0.55?'e':x<0.9?'s':'x',r:Math.floor(r()*4)}}else cells[i][j].r=Math.floor(r()*4)}
+  const P={lvl,w,h,cells,src,out:outRow,time:Math.max(20,50-lvl*4),moves:0};if(pipeFlow(P).won)cells[src][0].r=(cells[src][0].r+1)%4;return P}
+function pipeFlow(P){const wet=new Set();let won=false;const st=P.cells[P.src][0];if(!pipeOpen(st).includes(3))return {wet,won};const q=[[P.src,0]];wet.add(P.src+',0');
+  while(q.length){const [r,c]=q.shift();pipeOpen(P.cells[r][c]).forEach(d=>{const nr=r+DR[d],nc=c+DC[d];if(r===P.out&&c===P.w-1&&d===1){won=true;return}if(nr<0||nc<0||nr>=P.h||nc>=P.w)return;const k=nr+','+nc;if(wet.has(k))return;if(pipeOpen(P.cells[nr][nc]).includes((d+2)%4)){wet.add(k);q.push([nr,nc])}})}return {wet,won}}
+function pipeSvg(c,wet){const col=wet?'#3D8FD1':'#8A939B',edge=wet?'#2A6FA8':'#5E666D';const seg={s:'<path d="M20 0 V40" />',e:'<path d="M20 0 V14 Q20 20 26 20 H40" />',x:'<path d="M20 0 V40 M0 20 H40" />'}[c.t];
+  return `<svg viewBox="0 0 40 40" style="transform:rotate(${c.r*90}deg)" aria-hidden="true"><g fill="none" stroke="${edge}" stroke-width="15" stroke-linecap="butt">${seg}</g><g fill="none" stroke="${col}" stroke-width="10" stroke-linecap="butt">${seg}</g></svg>`}
+function funPipe(){const P=S.fun.pipe;const st=funStat(myId(),'pipe');
+  const side=`<div class="panel pad"><b>Pipe Dream high scores</b>${funBoard('pipe',{fmt:(v,x)=>`${Number(v).toLocaleString()} · level ${num(x.data.level)||1}`})}<p class="hint">Click a piece to turn it. Connect the manhole on the left to the outfall on the right before the storm hits. Grey pipes are dry; blue ones have water.</p></div>`;
+  if(!P)return `<div class="grid2"><div class="panel pad"><div class="sec-h" style="margin-top:0"><h2>Pipe Dream</h2><span>Beat the rain</span></div><p>The storm’s coming and the line isn’t connected. Turn the pipe pieces to run water from the <b>manhole</b> to the <b>outfall</b>. Each level is bigger and the clock is shorter.</p>
+    ${st?`<p class="small">Your best: <b>${Number(st.value).toLocaleString()}</b> points, level ${num(st.data.level)||1}.</p>`:''}<div class="adders"><button class="btn primary" data-act="pipe-start">Start laying pipe</button></div></div>${side}</div>`;
+  const F=pipeFlow(P);
+  return `<div class="grid2"><div class="panel pad pipeg"><div class="sec-h" style="margin-top:0"><h2>Level ${P.lvl}</h2><span>Score ${Number(P.score||0).toLocaleString()}</span></div>
+    <div class="pipe-sky ${P.over?'storm':''}"><span class="pipe-cloud" id="pipe-cloud">⛈️</span><div class="dt-bar"><span id="pipe-bar" style="width:100%"></span></div></div>
+    <div class="pipe-wrap"><div class="pipe-end" style="grid-row:${P.src+1}">🕳️<small>manhole</small></div>
+      <div class="pipe-grid" style="grid-template-columns:repeat(${P.w},1fr);grid-column:2;grid-row:1 / span ${P.h}">${P.cells.map((row,r)=>row.map((c,ci)=>`<button class="pipe-c${F.wet.has(r+','+ci)?' wet':''}" data-act="pipe-turn" data-r="${r}" data-c="${ci}"${P.over||P.won?' disabled':''} aria-label="Pipe piece">${pipeSvg(c,F.wet.has(r+','+ci))}</button>`).join('')).join('')}</div>
+      <div class="pipe-end" style="grid-column:3;grid-row:${P.out+1}">🌊<small>outfall</small></div></div>
+    ${P.won?`<div class="trivia-x ok"><b>Connected!</b> +${P.gain} points with ${P.left} seconds to spare.</div><div class="adders"><button class="btn primary" data-act="pipe-next">Next level →</button></div>`:P.over?`<div class="trivia-x no"><b>The storm hit.</b> You cleared ${P.lvl-1} level${P.lvl===2?'':'s'} for ${Number(P.score||0).toLocaleString()} points.</div><div class="adders"><button class="btn primary" data-act="pipe-start">Try again</button><button class="btn" data-act="pipe-quit">Back</button></div>`:''}</div>${side}</div>`}
+function pipeTick(){clearInterval(S.fun.pt);const P=S.fun.pipe;if(!P||P.over||P.won)return;P.t0=Date.now();S.fun.pt=setInterval(()=>{const Q=S.fun.pipe;if(Q!==P||P.over||P.won||S.view!=='fun'||S.fun.tab!=='games'){clearInterval(S.fun.pt);return}const left=P.time-(Date.now()-P.t0)/1000;const b=$('#pipe-bar'),c=$('#pipe-cloud');if(b){b.style.width=Math.max(0,left/P.time*100)+'%';b.className=left<8?'bad':left<15?'warn':''}if(c)c.style.left=(100-Math.max(0,left/P.time*100))*0.9+'%';
+    if(left<=0){clearInterval(S.fun.pt);P.over=true;funSave('pipe',P.score||0,{level:Math.max(num(funStat(myId(),'pipe')?.data?.level)||0,P.lvl-1)}).then(()=>render());render()}},200)}
+function pipeStart(lvl,score){S.fun.pipe=pipeNew(lvl||1);S.fun.pipe.score=score||0;render();pipeTick()}
+function pipeTurn(r,c){const P=S.fun.pipe;if(!P||P.over||P.won)return;P.cells[r][c].r=(P.cells[r][c].r+1)%4;P.moves++;if(pipeFlow(P).won){clearInterval(S.fun.pt);P.won=true;P.left=Math.max(0,Math.round(P.time-(Date.now()-P.t0)/1000));P.gain=100*P.lvl+P.left*5;P.score+=P.gain;funSave('pipe',P.score,{level:Math.max(num(funStat(myId(),'pipe')?.data?.level)||0,P.lvl)})}
+  const keep=$('#pipe-bar')?.style.width;render();const b=$('#pipe-bar');if(b&&keep)b.style.width=keep}
+
+/* ---------- Dirt Mover (hidden: type "dig") ---------- */
+const DM={W:720,H:360,G:250,cols:[80,122,164,206,248,290],pivot:[400,214],truck:[500,640],lay:24};
+function dirtNewCut(g){g.cols=DM.cols.map(()=>3);const c=Math.floor(Math.random()*6);g.util={col:c,at:1+Math.floor(Math.random()*3),color:['#E4572E','#F4C430','#2F6DA8'][Math.floor(Math.random()*3)]}}
+function dirtOpen(){M={kind:'dirt'};showModal();try{localStorage.setItem('bp-dig-found','1')}catch(e){}setTimeout(dirtInit,30)}
+function dirtModal(){const st=funStat(myId(),'dirt');return mhead('Dirt Mover','You found it. Load trucks, mind the utilities.')+`<div class="mbody dirt-b"><canvas id="dirt-cv" width="${DM.W}" height="${DM.H}" tabindex="0"></canvas>
+  <div class="dirt-ctl"><button class="btn" data-dirt="left" aria-label="Swing left">◀</button><button class="btn primary" data-dirt="act">DIG / DUMP</button><button class="btn" data-dirt="right" aria-label="Swing right">▶</button></div>
+  <p class="small dim" style="text-align:center;margin:8px 0 0">← → swing · Space digs and dumps · 4 buckets fill a truck · don’t dig the layer with the line in it${st?` · your best: <b>${num(st.value)}</b>`:''}</p>
+  <div class="dirt-board"><b>Office high scores</b>${funBoard('dirt',{fmt:(v,x)=>`${v}${x.data.clean?' ☎️':''}`})}</div></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">I should get back to work</button></div></div>`}
+function dirtInit(){const cv=$('#dirt-cv');if(!cv)return;const g=S.fun.dirt={x:DM.pivot[0]-62,keys:{},carry:false,anim:null,score:0,loads:0,strikes:0,time:60,over:false,started:false,truck:{x:DM.W+60,load:0,state:'in'},flash:0,msg:'',msgT:0,last:performance.now()};dirtNewCut(g);cv.focus();
+  const loop=now=>{if(!M||M.kind!=='dirt'||S.fun.dirt!==g)return;const dt=Math.min(0.05,(now-g.last)/1000);g.last=now;dirtStep(g,dt);dirtDraw(g,cv.getContext('2d'));requestAnimationFrame(loop)};requestAnimationFrame(loop)}
+function dirtAct(g){if(g.over){dirtInit();return}if(!g.started){g.started=true;return}if(g.anim)return;const ci=DM.cols.findIndex(cx=>Math.abs(cx-g.x)<=20);const overTruck=g.x>=DM.truck[0]+8&&g.x<=DM.truck[1]-8;
+  if(!g.carry){if(ci>=0&&g.cols[ci]>0)g.anim={type:'dig',t:0,col:ci};else{g.msg=ci>=0?'Nothing left here':'Nothing to dig here';g.msgT=1}}
+  else if(overTruck&&g.truck.state==='wait')g.anim={type:'dump',t:0};else{g.carry=false;g.msg='Spilled it';g.msgT=1}}
+function dirtStep(g,dt){if(g.msgT>0)g.msgT-=dt;if(g.flash>0)g.flash-=dt;const T=g.truck;
+  if(T.state==='in'){T.x-=260*dt;if(T.x<=DM.truck[0]){T.x=DM.truck[0];T.state='wait'}}else if(T.state==='out'){T.x+=320*dt;if(T.x>DM.W+80){T.x=DM.W+60;T.load=0;T.state='in'}}
+  if(g.over||!g.started)return;g.time-=dt;if(g.time<=0){g.time=0;g.over=true;funSave('dirt',g.score,{loads:Math.max(num(funStat(myId(),'dirt')?.data?.loads)||0,g.loads),plays:(num(funStat(myId(),'dirt')?.data?.plays)||0)+1,...(g.strikes===0&&g.score>=80?{clean:true}:{})}).then(()=>{if(M&&M.kind==='dirt'){const b=$('.dirt-board');if(b)b.innerHTML='<b>Office high scores</b>'+funBoard('dirt',{fmt:(v,x)=>`${v}${x.data.clean?' ☎️':''}`})}});return}
+  if(g.anim){g.anim.t+=dt;const a=g.anim;if(a.type==='dig'&&a.t>=0.42){const before=g.cols[a.col];const scoop=4-before;if(g.util.col===a.col&&scoop===g.util.at){g.strikes++;g.time=Math.max(0,g.time-6);g.flash=0.5;g.msg='UTILITY STRIKE!  −6 sec';g.msgT=1.6;const open=g.cols.map((d,i)=>d>0&&i!==a.col?i:-1).filter(i=>i>=0);g.cols[a.col]=0;if(open.length){const c=open[Math.floor(Math.random()*open.length)];g.util={...g.util,col:c,at:(4-g.cols[c])+Math.floor(Math.random()*g.cols[c])}}else g.util={...g.util,col:-1}}
+        else{g.cols[a.col]--;g.carry=true}g.anim=null;
+        const left=g.cols.some((d,i)=>d>0&&!(g.util.col===i&&(4-d)===g.util.at));if(!left&&!g.carry){dirtNewCut(g);g.time+=8;g.msg='New cut!  +8 sec';g.msgT=1.4}}
+    else if(a.type==='dump'&&a.t>=0.3){g.carry=false;g.anim=null;T.load++;g.score+=10;if(T.load>=4){T.state='out';g.loads++;g.score+=20;g.msg='Truck loaded!  +20';g.msgT=1.2}
+      const left=g.cols.some((d,i)=>d>0&&!(g.util.col===i&&(4-d)===g.util.at));if(!left){dirtNewCut(g);g.time+=8;g.msg='New cut!  +8 sec';g.msgT=1.4}}
+    return}
+  const v=(g.keys.right?1:0)-(g.keys.left?1:0);g.x=Math.max(60,Math.min(DM.truck[1]-10,g.x+v*300*dt))}
+function dirtDraw(g,c){const {W,H,G}=DM;const dark=matchMedia('(prefers-color-scheme: dark)').matches;c.clearRect(0,0,W,H);
+  const sky=c.createLinearGradient(0,0,0,G);sky.addColorStop(0,dark?'#16222E':'#BFE3F7');sky.addColorStop(1,dark?'#2A3B48':'#EAF6FC');c.fillStyle=sky;c.fillRect(0,0,W,G);
+  c.fillStyle=dark?'#DDD6A8':'#FFD75E';c.beginPath();c.arc(640,54,22,0,7);c.fill();
+  c.fillStyle='#6E8F4E';c.fillRect(0,G-6,W,6);c.fillStyle='#7A5A3C';c.fillRect(0,G,W,H-G);c.fillStyle='#6B4E33';c.fillRect(0,G+78,W,H-G-78);
+  // the cut: columns of dirt, three layers
+  c.fillStyle='#3B2A1C';c.fillRect(DM.cols[0]-22,G,DM.cols[5]-DM.cols[0]+44,DM.lay*3+4);
+  DM.cols.forEach((cx,i)=>{for(let l=0;l<3;l++){const present=l>=3-g.cols[i];if(!present)continue;c.fillStyle=['#9A7350','#8A6544','#7B583A'][l];c.fillRect(cx-19,G+l*DM.lay,38,DM.lay-2)}
+    if(g.util.col===i){const y=G+(g.util.at-1)*DM.lay+DM.lay/2-1;c.strokeStyle=g.util.color;c.lineWidth=6;c.setLineDash([9,5]);c.beginPath();c.moveTo(cx-19,y);c.lineTo(cx+19,y);c.stroke();c.setLineDash([]);
+      c.strokeStyle='#444';c.lineWidth=2;c.beginPath();c.moveTo(cx,G-6);c.lineTo(cx,G-30);c.stroke();c.fillStyle=g.util.color;c.beginPath();c.moveTo(cx,G-30);c.lineTo(cx+14,G-25);c.lineTo(cx,G-20);c.fill()}});
+  // truck
+  const T=g.truck;const tx=T.x;c.fillStyle='#33383A';c.beginPath();c.arc(tx+28,G-8,11,0,7);c.arc(tx+112,G-8,11,0,7);c.fill();c.fillStyle='#C8452E';c.fillRect(tx+118,G-52,34,38);c.fillStyle='#BFE0F5';c.fillRect(tx+126,G-46,18,14);
+  c.fillStyle='#5A6268';c.fillRect(tx,G-58,116,44);c.fillStyle='#8A6544';const fh=T.load*8;if(fh){c.beginPath();c.moveTo(tx+6,G-58);c.quadraticCurveTo(tx+58,G-58-fh*1.7,tx+110,G-58);c.fill()}
+  // excavator
+  const [px,py]=DM.pivot;c.fillStyle='#33383A';c.fillRect(px-46,G-16,92,16);c.fillStyle='#55595C';for(let i=0;i<5;i++){c.beginPath();c.arc(px-36+i*18,G-8,5,0,7);c.fill()}
+  c.fillStyle='#E3B341';c.fillRect(px-34,G-44,68,28);c.fillStyle=dark?'#1F2A33':'#2C3E50';c.fillRect(px-2,G-70,32,30);c.fillStyle='#BFE0F5';c.fillRect(px+3,G-65,22,16);
+  let by=G-62;if(g.anim){const a=g.anim;const k=a.type==='dig'?Math.sin(Math.min(1,a.t/0.42)*Math.PI):Math.sin(Math.min(1,a.t/0.3)*Math.PI);const ci=a.col;const target=a.type==='dig'?G+(4-g.cols[ci]-1)*DM.lay+8:G-72;by=by+(target-by)*k}
+  const bx=g.x;const mx=(px+bx)/2,my=Math.min(py,by)-78;c.strokeStyle='#C99A2E';c.lineWidth=11;c.lineCap='round';c.lineJoin='round';c.beginPath();c.moveTo(px-8,py-18);c.lineTo(mx,my);c.lineTo(bx,by-10);c.stroke();
+  c.fillStyle='#55595C';c.beginPath();c.moveTo(bx-15,by-12);c.lineTo(bx+15,by-12);c.lineTo(bx+10,by+10);c.lineTo(bx-12,by+10);c.closePath();c.fill();if(g.carry){c.fillStyle='#8A6544';c.beginPath();c.moveTo(bx-13,by-12);c.quadraticCurveTo(bx,by-28,bx+13,by-12);c.fill()}
+  // HUD
+  c.fillStyle=dark?'#E5E8E3':'#1B211E';c.font='700 15px Montserrat, system-ui, sans-serif';c.textAlign='left';c.fillText(`Score ${g.score}`,14,24);c.fillText(`Trucks ${g.loads}`,120,24);if(g.strikes)c.fillText(`Strikes ${g.strikes}`,220,24);
+  c.textAlign='right';c.fillStyle=g.time<10?'#BF3A2B':(dark?'#E5E8E3':'#1B211E');c.fillText(`${Math.ceil(g.time)} s`,W-90,24);c.textAlign='center';
+  if(g.msgT>0){c.font='700 20px Montserrat, system-ui, sans-serif';c.fillStyle=/STRIKE/.test(g.msg)?'#BF3A2B':(dark?'#fff':'#1B211E');c.fillText(g.msg,W/2-40,70)}
+  if(g.flash>0){c.fillStyle=`rgba(191,58,43,${g.flash*0.7})`;c.fillRect(0,0,W,H)}
+  if(!g.started||g.over){c.fillStyle='rgba(0,0,0,.55)';c.fillRect(0,0,W,H);c.fillStyle='#fff';c.font='700 28px Montserrat, system-ui, sans-serif';c.fillText(g.over?`Time! ${g.score} points`:'Dirt Mover',W/2,H/2-26);c.font='500 15px Barlow, system-ui, sans-serif';
+    c.fillText(g.over?`${g.loads} truck${g.loads===1?'':'s'} loaded${g.strikes?` · ${g.strikes} utility strike${g.strikes===1?'':'s'}`:' · no strikes ☎️'}`:'Dig from the cut, swing right, dump in the truck. 60 seconds.',W/2,H/2+4);c.fillText(g.over?'Press Space to go again':'Press Space or tap DIG to start',W/2,H/2+32)}}
+// the secret word
+let digBuf='';
+document.addEventListener('keydown',e=>{const t=e.target;const typing=t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable);
+  if(M&&M.kind==='dirt'&&S.fun.dirt){const g=S.fun.dirt;if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A'){g.keys.left=true;e.preventDefault()}else if(e.key==='ArrowRight'||e.key==='d'||e.key==='D'){g.keys.right=true;e.preventDefault()}else if(e.key===' '||e.key==='ArrowDown'||e.key==='Enter'){e.preventDefault();if(!e.repeat)dirtAct(g)}return}
+  if(typing||M||e.ctrlKey||e.metaKey||e.altKey||!S.session||role()==='pending'||e.key.length!==1)return;digBuf=(digBuf+e.key.toLowerCase()).slice(-3);if(digBuf==='dig'){digBuf='';dirtOpen()}});
+document.addEventListener('keyup',e=>{const g=S.fun.dirt;if(!g)return;if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A')g.keys.left=false;if(e.key==='ArrowRight'||e.key==='d'||e.key==='D')g.keys.right=false});
+['pointerdown','pointerup','pointerleave','pointercancel'].forEach(ev=>document.addEventListener(ev,e=>{const b=e.target.closest&&e.target.closest('[data-dirt]');const g=S.fun.dirt;if(!b||!g)return;const k=b.dataset.dirt;if(k==='act'){if(ev==='pointerdown')dirtAct(g)}else g.keys[k]=ev==='pointerdown'}));
+
+/* ---------- the page ---------- */
+function funGames(){const F=S.fun;if(F.game==='pipe')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funPipe();if(F.game==='guess')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funGuess();if(F.game==='trivia')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funTrivia();
+  const me=myId();const found=!!funStat(me,'dirt')||(()=>{try{return localStorage.getItem('bp-dig-found')==='1'}catch(e){return false}})();const tv=funStat(me,'trivia')?.data||{};
+  const card=(k,icon,name,blurb,best,cta)=>`<div class="panel pad gcard"><div class="gcard-i">${icon}</div><h2>${name}</h2><p class="small">${blurb}</p><div class="small dim">${best}</div><button class="btn primary" data-act="${k==='dirt'?'fun-dig':'fun-game'}" data-v="${k}">${cta}</button></div>`;
+  return `<div class="gcards">${card('trivia','🎓','Daily trivia','One site-work question a day. Keep the streak alive.',tv.last===todayStr()?`Done for today · 🔥 ${num(tv.streak)||0}`:'Today’s question is waiting',tv.last===todayStr()?'See today’s answer':'Answer today’s question')}
+    ${card('guess','👁️','Guess the quantity','Five sketches, 30 seconds each, no calculator. How good is your eye?',`Your best: ${num(funStat(me,'guess')?.value)||0} / 500`,'Play')}
+    ${card('pipe','🌧️','Pipe Dream','Turn the pieces to connect the manhole to the outfall before the storm.',`Your best: ${Number(num(funStat(me,'pipe')?.value)||0).toLocaleString()}`,'Play')}
+    ${found?card('dirt','🚜','Dirt Mover','The secret one. Load trucks, don’t hit the line.',`Your best: ${num(funStat(me,'dirt')?.value)||0}`,'Play'):`<div class="panel pad gcard locked"><div class="gcard-i">🔒</div><h2>???</h2><p class="small">There’s a fourth game hidden somewhere in this app. Site-work folks know the first thing you do on any job.</p><div class="small dim">No hints at the trophy room either.</div></div>`}</div>`}
+function vFun(){const F=S.fun;if(!F.loaded&&!F.loading)funLoad();
+  const tabs=[['trophy','🏆 Trophy room'],['games','🎮 Games'],['crew','👥 The crew'],['profile','🪪 My profile']];const body={trophy:funTrophy,games:funGames,crew:funCrew,profile:funProfile}[F.tab]||funTrophy;
+  return `<div class="head"><div><h1>Break room</h1><p>Trophies, games and your profile. Take five.</p></div><div class="tools"><button class="me-chip" data-act="fun-tab" data-v="profile">${funAv(crewOf(myId()),34)}<span>${esc(myName())}</span></button></div></div>
+  ${F.missing?'<div class="notice">The Break room needs the database update: run <b>supabase/update-21-break-room.sql</b> in Supabase. Until then scores and profiles won’t save.</div>':''}
+  <div class="seg acct-tabs">${tabs.map(([k,l])=>`<button class="${F.tab===k?'on':''}" data-act="fun-tab" data-v="${k}">${l}</button>`).join('')}</div>${F.loading&&!S.crew?dozerLoader('Opening the break room'):body()}`}
+
+/* ---------- events ---------- */
+FOCUS_ATTRS.push('data-pf','data-guess','data-tq');
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;const F=S.fun;
+  if(!/^(fun-|pf-|trivia-|guess-|pipe-)/.test(a))return;
+  switch(a){
+    case 'fun-me':S.prevView=S.view;S.view='fun';F.tab='profile';render();window.scrollTo(0,0);break;
+    case 'fun-tab':F.tab=t.dataset.v;if(F.tab!=='games'){clearInterval(F.pt);clearInterval(F.gt)}render();break;
+    case 'fun-refresh':funLoad(true).then(()=>loadTable('fun_stats')).then(()=>toast('Shelves dusted'));break;
+    case 'fun-trophy':F.pick=t.dataset.id;render();break;
+    case 'fun-shelf':F.who=t.dataset.id;F.tab='trophy';F.pick=null;render();window.scrollTo(0,0);break;
+    case 'fun-game':clearInterval(F.pt);clearInterval(F.gt);F.game=t.dataset.v||null;F.pipe=null;F.guess=null;render();break;
+    case 'fun-dig':dirtOpen();break;
+    case 'pf-set':F.draft.profile[t.dataset.k]=t.dataset.v;render();break;
+    case 'pf-save':pfSave();break;
+    case 'pf-reset':F.draft=null;render();break;
+    case 'trivia-pick':triviaPick(+t.dataset.i);break;
+    case 'trivia-edit':M={kind:'trivia',list:clone((S.settings.fun_trivia||{}).list||[])};showModal();break;
+    case 'trivia-add':M.list.push({q:'',a:['','','',''],c:0,x:''});renderModal();break;
+    case 'trivia-rm':M.list.splice(+t.dataset.i,1);renderModal();break;
+    case 'trivia-save':run(sb.from('settings').upsert({key:'fun_trivia',value:{list:M.list.filter(q=>String(q.q||'').trim()&&(q.a||[]).filter(x=>String(x||'').trim()).length>=2)}})).then(()=>loadTable('settings')).then(()=>{closeModal();toast('Questions saved');render()}).catch(err=>toast(errMsg(err)));break;
+    case 'guess-start':guessStart();break;case 'guess-go':guessGo();break;case 'guess-next':guessNext();break;case 'guess-quit':F.guess=null;render();break;
+    case 'pipe-start':pipeStart(1,0);break;case 'pipe-next':pipeStart(F.pipe.lvl+1,F.pipe.score);break;case 'pipe-quit':F.pipe=null;render();break;
+    case 'pipe-turn':pipeTurn(+t.dataset.r,+t.dataset.c);break;
+  }});
+document.addEventListener('input',e=>{const t=e.target;
+  if(t.dataset.pf&&S.view==='fun'&&S.fun.draft&&t.tagName!=='SELECT'){const k=t.dataset.pf;if(['full_name','title','phone'].includes(k))S.fun.draft[k]=t.value;else S.fun.draft.profile[k]=t.value;render();return}
+  if(M&&M.kind==='trivia'&&t.dataset.tq){epSet(M.list,t.dataset.tq,t.value);return}});
+document.addEventListener('change',e=>{const t=e.target;
+  if(t.dataset.funwho!=null){S.fun.who=t.value;S.fun.pick=null;render();return}
+  if(t.dataset.pf&&t.tagName==='SELECT'&&S.fun.draft){S.fun.draft.profile[t.dataset.pf]=t.value;render();return}
+  if(M&&M.kind==='trivia'&&t.dataset.tqc!=null){M.list[+t.dataset.tqc].c=+t.value;return}});
+document.addEventListener('keydown',e=>{if(e.key!=='Enter')return;const t=e.target;if(t&&t.dataset&&t.dataset.guess!=null){e.preventDefault();guessGo()}});

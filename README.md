@@ -47,6 +47,7 @@ supabase/update-17-accounting.sql          one-time update for the Accounting ta
 supabase/update-18-team-access.sql         one-time update for Team: executive role, title/phone, per-person access (run after update-17)
 supabase/update-19-help-developer.sql      one-time update for Help feedback and the developer account (run after update-18)
 supabase/update-20-dev-usage.sql           one-time update for the Developer tab's storage and capacity panel (run after update-19)
+supabase/update-21-break-room.sql          one-time update for the Break room: profiles, trophies, game scores (run after update-20)
 ```
 
 > **Already set up before these updates?** Run each `supabase/update-*.sql` file you haven't run yet, once, in number order, in the SQL Editor. New installs only need `schema.sql`.
@@ -143,6 +144,21 @@ When the same project comes back under a new name or with new details, open the 
 ## Estimator log
 Every bid has an **Estimator log** under Scope takeoff. Estimators on the bid (and admins) add dated notes — site visits, takeoff notes, assumptions, clarifications, questions/RFIs, risks, pricing, calls — for the whole project or one scope, with photos or files attached. Notes save right away. You can edit, pin or delete your own notes; admins can manage any. Each scope row shows how many notes it has. When an awarded bid becomes a job, the notes show up read-only on the job's **Estimator notes** tab for the PM. Needs `supabase/update-11-estimator-log.sql`.
 
+## Break room (everyone)
+A tab for morale: profiles, trophies and a few site-work games. Needs `supabase/update-21-break-room.sql`.
+- **My profile:** each person picks a hard hat color, an avatar, a background, a tagline and a few facts (hometown, years in the trade, favorite machine, coffee order). They can also fix their own name, title and phone. Their avatar shows in the top bar. People can never change their own role or access.
+- **The crew:** everyone's profile card, with a link to their trophy shelf.
+- **Trophy room:** a wall of shelves. Each trophy has bronze, silver and gold tiers, and grey ones aren't earned yet. Click one to see what the next tier takes. View your own shelf, anyone else's, or the **company case**.
+  - Work trophies come from real activity: bids won, dollars won, biggest win, bids submitted, scopes signed off, estimates built, log notes, jobs managed and completed, costs and quantities logged, pay apps sent, bugs reported that got fixed, ideas that got built, and time on the app.
+  - Game trophies come from the Break room games. A couple are secret.
+  - The database only shares counts, so the room works for everyone without exposing bids people can't see.
+- **Games,** each with an office high-score board:
+  - **Daily trivia:** one site-work question a day, the same for everyone, with streaks. Admins can add their own questions (company history, inside jokes).
+  - **Guess the quantity:** five sketches with dimensions, 30 seconds each, no calculator. Everyone gets the same set each day; replays are practice.
+  - **Pipe Dream:** turn pipe pieces to connect the manhole to the outfall before the storm. Levels get bigger and faster.
+  - **Dirt Mover:** hidden. Type **dig** anywhere in the app (not in a text box) to open it. Swing the excavator, load trucks, and don't dig the layer with the utility line in it. Once someone finds it, it shows on their Games page.
+- **Loading screen:** a small bulldozer pushing dirt replaces the spinner.
+
 ## Help and feedback (everyone)
 The **Help** tab is there for every login. Needs `supabase/update-19-help-developer.sql` for feedback.
 - **Tutorials:** step-by-step guides for each part of the app. People only see guides for the areas they can open. They can search, tick guides off as they learn them, and jump straight to the page a guide is about.
@@ -211,7 +227,7 @@ Connects the app to any accounting software with Excel or CSV files: budgets go 
 - **Export to Excel:** writes all four codebooks in the same layout the import reads. You can export, edit prices in Excel, and import the file back.
 
 ## Top bar
-**Dashboard · Pipeline · Estimates · Jobs · Accounting · Contacts · Calculators · Team · Help** (plus **Developer** for the developer login). Related pages share one tab, with sub-tabs inside it:
+**Dashboard · Pipeline · Estimates · Jobs · Accounting · Contacts · Calculators · Team · Break room · Help** (plus **Developer** for the developer login). Related pages share one tab, with sub-tabs inside it:
 - **Contacts:** Clients & GCs, and Vendors & subs.
 - **Estimates:** Estimates, Master templates, Codebooks, Scopes & templates (admins) and Bid settings (admins).
 - **Team:** People & access, Estimators, Project managers, Accounting & executives, and the Access chart.
