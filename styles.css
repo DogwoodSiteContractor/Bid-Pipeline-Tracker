@@ -1455,3 +1455,7 @@ tr.eo-sec.eo-drop>td{box-shadow:inset 0 0 0 2px var(--accent)}
 /* readable dropdown list in dark mode */
 .qf-move{background:var(--surface);color:var(--ink);max-width:110px;font-size:12px;padding:3px 6px;opacity:.8}
 .qf-move option{background:var(--surface);color:var(--ink)}
+/* vendor columns: totals sit directly under that vendor's price boxes, with a divider between vendors */
+.qf-grid td.qf-vt{text-align:left;padding-left:31px}
+.qf-grid tr.qf-f td:nth-child(n+4) .field{margin-left:21px;width:100px}
+.qf-grid th:nth-child(n+4),.qf-grid td:nth-child(n+4){border-left:1px solid var(--line)}
