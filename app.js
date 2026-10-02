@@ -932,7 +932,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={dirt:dirtModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  const html={dirt:dirtModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt'].includes(M.kind)||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -4619,7 +4619,7 @@ function actFromTpl(src){const a=clone(src);a.id=newId();a.qty=null;a.res=(a.res
 const estCanEdit=()=>{if(S.est&&S.est.ver)return false;if(S.est&&S.est.tpl)return cbEditable();const b=byId(S.bids,S.est?.bidId);return !!b&&canWork(b)&&can('estimates','edit')};
 async function loadEstIndex(){if(!sb||!['admin','estimator','board'].includes(role()))return;
   const {data,error}=await sb.from('estimates').select('id,bid_id,version,total_cost,total_price,updated_at,updated_by_name');
-  if(error){S.estMissing=/estimates|does not exist|schema cache/i.test(error.message||'');return}S.estMissing=false;S.estIndex=data||[];loadEstVers();schedule()}
+  if(error){S.estMissing=/estimates|does not exist|schema cache/i.test(error.message||'');return}S.estMissing=false;S.estIndex=data||[];loadEstVers();loadPropTpls();schedule()}
 /* ---------- revisions: kept copies of an estimate ---------- */
 async function loadEstVers(){if(!sb)return;const {data,error}=await sb.from('estimate_versions').select('id,bid_id,label,note,rev,total_cost,total_price,created_at,created_by_name');
   if(error){S.estVersMissing=true;S.estVers=[];return}S.estVersMissing=false;S.estVers=data||[];schedule()}
@@ -5012,6 +5012,7 @@ function estPropView(d,R,b,ro){const P=propData();const L=propLib();const dis=ro
   return `<div class="pr-grid"><div class="pr-form">
     <div class="panel pad"><div class="pr-actions"><button class="btn primary" data-act="pr-print">Print / save as PDF</button>${ro?'':`<button class="btn" data-act="pr-sent"${P.to.length?'':' disabled title="Pick who it goes to first"'}>Mark sent${P.to.length?` to ${P.to.length} GC${P.to.length===1?'':'s'}`:''}</button>`}${can('codebook','edit')?'<button class="btn" data-act="pr-lib">Edit library</button>':''}</div>
       ${sentTo.length?`<p class="hint">Sent to ${sentTo.map(id=>esc(clientName(id))+(propOf(b,id).sent_date?' ('+fmtShort(propOf(b,id).sent_date)+')':'')).join(', ')}.</p>`:''}</div>
+    ${ptPanel(ro)}
     <div class="panel pad"><h3 class="pr-h">To</h3>${(b.client_ids||[]).length?`<div class="pr-chks">${b.client_ids.map(id=>`<label class="check small"><input type="checkbox" data-prto value="${id}"${P.to.includes(id)?' checked':''}${dis}> ${esc(clientName(id))}${(b.client_contacts||{})[id]?` <span class="dim">· ${esc(b.client_contacts[id])}</span>`:''}</label>`).join('')}</div>`:'<p class="dim small">Add GCs to the bid first.</p>'}
       <div class="fg pr-fg"><label class="f">Date${pin('date',{date:1})}</label><label class="f">Valid for (days)${pin('valid',{n:1})}</label></div></div>
     <div class="panel pad"><h3 class="pr-h">Pricing</h3><div class="radio pr-fmt">${[['unit','Unit prices — every bid item'],['scope','Lump sum by scope'],['total','One lump sum']].map(([k,l])=>`<label><input type="radio" name="prfmt" data-prf value="${k}"${P.format===k?' checked':''}${dis}> ${l}</label>`).join('')}</div>
@@ -7139,3 +7140,163 @@ document.addEventListener('change',e=>{const t=e.target;
   if(t.dataset.pf&&t.tagName==='SELECT'&&S.fun.draft){S.fun.draft.profile[t.dataset.pf]=t.value;render();return}
   if(M&&M.kind==='trivia'&&t.dataset.tqc!=null){M.list[+t.dataset.tqc].c=+t.value;return}});
 document.addEventListener('keydown',e=>{if(e.key!=='Enter')return;const t=e.target;if(t&&t.dataset&&t.dataset.guess!=null){e.preventDefault();guessGo()}});
+
+/* =====================================================================
+   Proposal templates: fill your own Word / Excel file
+   The file is kept in the database; {{fields}} typed into it are replaced
+   with this estimate's numbers and wording. The built-in proposal is separate.
+   ===================================================================== */
+S.propTpls=[];S.propTplMissing=false;S.ptSel='';
+const JSZIP_SRC=['https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js','https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'];
+let JSZIPP=null;
+function loadJSZip(){return JSZIPP||(JSZIPP=new Promise((res,rej)=>{if(window.JSZip)return res(window.JSZip);
+  const tryAt=i=>{if(i>=JSZIP_SRC.length){JSZIPP=null;return rej(new Error('Couldn’t load the file tools. Check your connection and try again.'))}
+    const sc=document.createElement('script');sc.src=JSZIP_SRC[i];sc.onload=()=>window.JSZip?res(window.JSZip):tryAt(i+1);sc.onerror=()=>{sc.remove();tryAt(i+1)};document.head.appendChild(sc)};tryAt(0)}))}
+const PT_SQL='Your own proposal templates need a one-time database update (update-23-proposal-templates.sql).';
+const PT_MIME={docx:'application/vnd.openxmlformats-officedocument.wordprocessingml.document',xlsx:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'};
+async function loadPropTpls(){if(!sb)return;const {data,error}=await sb.from('proposal_templates').select('id,name,kind,filename,size,updated_at,created_by_name');
+  if(error){S.propTplMissing=true;S.propTpls=[];return}S.propTplMissing=false;S.propTpls=(data||[]).sort((a,b)=>String(a.name).localeCompare(String(b.name)));schedule()}
+const PT_FIELDS=[['Project',[['project','Project name'],['location','Project location'],['date','Proposal date'],['bid_date','Bid date'],['revision','Estimate revision name'],['estimator','Lead estimator']]],
+  ['Who it goes to',[['client','First GC / client picked under “To”'],['clients','All of them, separated by commas'],['attn','Contact at the first GC']]],
+  ['Your company',[['company','Company name'],['letterhead','Letterhead lines from the proposal library'],['signed_by','Signed by'],['title','Signer’s title']]],
+  ['Wording',[['intro','Intro'],['basis','Basis of the proposal'],['inclusions','Inclusions, one per line'],['exclusions','Exclusions, one per line'],['clarifications','Clarifications, one per line'],['terms','Terms'],['valid_days','Days the price is good for']]],
+  ['Totals',[['total','Total base bid'],['alt_total','All alternates added up']]],
+  ['Bid items — put these in one table row; the row repeats for every bid item',[['item.code','Item number'],['item.desc','Description'],['item.qty','Quantity'],['item.unit','Unit'],['item.unit_price','Unit price'],['item.amount','Extension'],['item.section','Section it’s in']]],
+  ['Scopes — one row repeats for every section',[['scope.name','Section name'],['scope.total','Section total']]],
+  ['Alternates — one row repeats for every alternate',[['alt.code','Item number'],['alt.desc','Description'],['alt.qty','Quantity'],['alt.unit','Unit'],['alt.unit_price','Unit price'],['alt.amount','Amount']]]];
+function ptData(){const E=S.est,d=E.data,b=byId(S.bids,E.bidId)||{};const R=estCalc(d);const P=propData();const L=propLib();
+  const to=P.to.map(id=>byId(S.clients,id)).filter(Boolean);const m=v=>({n:r2(num(v)||0),t:money2(num(v)||0)});const T=v=>({t:String(v==null?'':v)});
+  const lines=(arr,x)=>[...arr,...propLines(x)].join('\n');const dt=v=>v?fmtDate(v):'';
+  const row=(o,sec)=>({code:T(o.it.code),desc:T(o.it.desc),qty:{n:num(o.it.qty)||0,t:qtyFmt(num(o.it.qty)||0)},unit:T(o.it.unit),unit_price:o.x.q?m(o.x.unitPrice):T(''),amount:m(o.x.price),section:T(sec!=null?sec:(secOf(d,o.it.sec)||{}).name)});
+  const PR=propRows(d,R,{...P,format:'unit'});const alts=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>o.it.alt);
+  return {items:PR.groups.flatMap(g=>g.items.map(o=>row(o,g.name))),scopes:PR.groups.map(g=>({name:T(g.name),total:m(g.total)})),alts:alts.map(o=>row(o)),
+    f:{project:T(b.name),location:T(b.location),date:T(dt(P.date)),bid_date:T(dt(b.due_date)),revision:T(estRevName(d)),estimator:T(b.lead_estimator_id?estName(b.lead_estimator_id):''),
+      client:T(to[0]?.company),clients:T(to.map(c=>c.company).join(', ')),attn:T(to[0]?(b.client_contacts||{})[to[0].id]:''),
+      company:T(S.settings.general?.companyName||CFG.companyName),letterhead:T(propLines(L.letterhead).join('\n')),signed_by:T(P.sign),title:T(P.title),
+      intro:T(P.intro),basis:T(P.basis),inclusions:T(lines(P.incl,P.inclX)),exclusions:T(lines(P.excl,P.exclX)),clarifications:T(lines(P.clar,P.clarX)),terms:T(P.terms),valid_days:{n:num(P.valid)||0,t:String(P.valid||'')},
+      total:m(PR.total),alt_total:m(alts.reduce((s,o)=>s+o.x.price,0))}}}
+const PT_RE=/\{\{([^{}]+)\}\}/g;const PT_GROUP=/\{\{\s*(item|scope|alt)\s*\./i;const PT_LIST={item:'items',scope:'scopes',alt:'alts'};
+function ptVal(key,ctx,D){const k=String(key).trim().toLowerCase().replace(/\s+/g,'_');const p=k.split('.');
+  if(p.length===2&&PT_LIST[p[0]]){const o=ctx&&ctx[p[0]];if(!o)return PT_LIST[p[0]]&&Object.prototype.hasOwnProperty.call((D[PT_LIST[p[0]]][0]||{code:1,desc:1,qty:1,unit:1,unit_price:1,amount:1,section:1,name:1,total:1}),p[1])?{t:''}:null;return Object.prototype.hasOwnProperty.call(o,p[1])?o[p[1]]:null}
+  return Object.prototype.hasOwnProperty.call(D.f,k)?D.f[k]:null}
+const ptStr=(s,ctx,D,unk)=>String(s).replace(PT_RE,(m0,k)=>{const v=ptVal(k,ctx,D);if(v==null){unk.add(k.trim());return m0}return v.t});
+const XML_HEAD='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+const ptSer=doc=>XML_HEAD+new XMLSerializer().serializeToString(doc).replace(/^\s*<\?xml[^>]*\?>\s*/,'');
+const ptParse=xml=>{const doc=new DOMParser().parseFromString(xml,'application/xml');if(doc.getElementsByTagName('parsererror').length)throw new Error('That file has a part the app can’t read.');return doc};
+/* ---- Word ---- */
+const W_NS='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+function ptFillPara(p,ctx,D,unk){const doc=p.ownerDocument;let guard=0,from=0;
+  while(guard++<400){const ts=[...p.getElementsByTagNameNS(W_NS,'t')];const joined=ts.map(t=>t.textContent).join('');const re=/\{\{([^{}]+)\}\}/g;re.lastIndex=from;const mt=re.exec(joined);if(!mt)break;
+    const v=ptVal(mt[1],ctx,D);if(v==null){unk.add(mt[1].trim());from=mt.index+mt[0].length;continue}
+    const s=mt.index,e=s+mt[0].length;let pos=0,si=-1,so=0,ei=-1,eo=0;ts.forEach((t,i)=>{const len=t.textContent.length;if(si<0&&s<pos+len){si=i;so=s-pos}if(ei<0&&e<=pos+len){ei=i;eo=e-pos}pos+=len});if(si<0||ei<0)break;
+    const before=ts[si].textContent.slice(0,so),after=ts[ei].textContent.slice(eo);const L=String(v.t).split('\n');const keep=t=>t.setAttributeNS('http://www.w3.org/XML/1998/namespace','xml:space','preserve');
+    for(let i=si+1;i<=ei;i++){ts[i].textContent=i===ei?after:'';keep(ts[i])}
+    ts[si].textContent=before+L[0]+(L.length===1&&si===ei?after:'');keep(ts[si]);
+    if(L.length>1){let ref=ts[si];for(let k=1;k<L.length;k++){const br=doc.createElementNS(W_NS,'w:br');const nt=doc.createElementNS(W_NS,'w:t');keep(nt);nt.textContent=L[k]+(k===L.length-1&&si===ei?after:'');ref.parentNode.insertBefore(br,ref.nextSibling);br.parentNode.insertBefore(nt,br.nextSibling);ref=nt}}
+    from=s+L.join('').length}}
+function ptFillDocXml(xml,D,unk){const doc=ptParse(xml);const tx=n=>[...n.getElementsByTagNameNS(W_NS,'t')].map(t=>t.textContent).join('');
+  const paras=(n,ctx)=>{(n.localName==='p'?[n]:[...n.getElementsByTagNameNS(W_NS,'p')]).forEach(p=>ptFillPara(p,ctx,D,unk))};
+  const repeat=tag=>[...doc.getElementsByTagNameNS(W_NS,tag)].forEach(el=>{if(!el.parentNode||el.getElementsByTagNameNS(W_NS,'tr').length)return;const g=PT_GROUP.exec(tx(el));if(!g)return;const key=g[1].toLowerCase();
+    D[PT_LIST[key]].forEach(o=>{const c=el.cloneNode(true);paras(c,{[key]:o});el.parentNode.insertBefore(c,el)});el.parentNode.removeChild(el)});
+  repeat('tr');repeat('p');paras(doc.documentElement,{});return ptSer(doc)}
+/* ---- Excel ---- */
+const X_NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+const ptRef=r=>{const m=/^(\$?[A-Z]+\$?)(\d+)$/.exec(r);return m?[m[1],+m[2]]:null};
+// move the row numbers in a formula when rows are added under row `at`; a range that ends on that row grows with it
+function ptShiftF(f,at,off){return String(f).replace(/(\$?[A-Z]{1,3}\$?)(\d+)(?![\d(A-Za-z_])/g,(m0,col,row,idx,str)=>{const pc=str[idx-1]||'';if(/[A-Za-z0-9_.!']/.test(pc))return m0;const n=+row;if(n>at||(n===at&&pc===':'))return col+(n+off);return m0})}
+const ptRowF=(f,at,to)=>String(f).replace(/(\$?[A-Z]{1,3})(\d+)(?![\d(A-Za-z_])/g,(m0,col,row,idx,str)=>{const pc=str[idx-1]||'';if(/[A-Za-z0-9_.!']/.test(pc))return m0;return +row===at?col+to:m0});
+function ptFillSheet(xml,sst,D,unk){const doc=ptParse(xml);const sd=doc.getElementsByTagNameNS(X_NS,'sheetData')[0];if(!sd)return xml;
+  const kids=(n,name)=>[...n.childNodes].filter(c=>c.nodeType===1&&c.localName===name);
+  const text=c=>{const t=c.getAttribute('t');if(t==='s'){const v=kids(c,'v')[0];return v?sst[+v.textContent]??'':''}if(t==='inlineStr')return [...c.getElementsByTagNameNS(X_NS,'t')].map(x=>x.textContent).join('');return null};
+  const fill=(c,ctx)=>{const s=text(c);if(s==null||s.indexOf('{{')<0)return;const one=/^\s*\{\{([^{}]+)\}\}\s*$/.exec(s);const v=one?ptVal(one[1],ctx,D):null;
+    while(c.firstChild)c.removeChild(c.firstChild);
+    if(v&&v.n!=null&&isFinite(v.n)){c.removeAttribute('t');const e=doc.createElementNS(X_NS,'v');e.textContent=String(v.n);c.appendChild(e);return}
+    c.setAttribute('t','inlineStr');const is=doc.createElementNS(X_NS,'is');const t=doc.createElementNS(X_NS,'t');t.setAttributeNS('http://www.w3.org/XML/1998/namespace','xml:space','preserve');t.textContent=ptStr(s,ctx,D,unk);is.appendChild(t);c.appendChild(is)};
+  const setRow=(row,n)=>{row.setAttribute('r',n);kids(row,'c').forEach(c=>{const p=ptRef(c.getAttribute('r')||'');if(p)c.setAttribute('r',p[0]+n)})};
+  const mc=doc.getElementsByTagNameNS(X_NS,'mergeCells')[0];
+  const rows=kids(sd,'row');
+  for(let i=rows.length-1;i>=0;i--){const row=rows[i];const g=PT_GROUP.exec(kids(row,'c').map(c=>text(c)||'').join('\u0001'));if(!g)continue;const key=g[1].toLowerCase();const list=D[PT_LIST[key]];const at=+row.getAttribute('r');const N=list.length,off=N-1;
+    if(off){kids(sd,'row').forEach(r=>{const n=+r.getAttribute('r');if(n>at)setRow(r,n+off)});
+      [...doc.getElementsByTagNameNS(X_NS,'f')].forEach(f=>{if(f.parentNode.parentNode!==row&&f.textContent)f.textContent=ptShiftF(f.textContent,at,off)})}
+    if(mc)kids(mc,'mergeCell').forEach(mg=>{const [a,z]=String(mg.getAttribute('ref')).split(':').map(ptRef);if(!a||!z)return;
+      if(a[1]===at&&z[1]===at){for(let k=1;k<N;k++){const c=mg.cloneNode(true);c.setAttribute('ref',a[0]+(at+k)+':'+z[0]+(at+k));mc.appendChild(c)}if(!N)mc.removeChild(mg)}
+      else if(a[1]>at)mg.setAttribute('ref',a[0]+(a[1]+off)+':'+z[0]+(z[1]+off));else if(z[1]>at)mg.setAttribute('ref',a[0]+a[1]+':'+z[0]+(z[1]+off))});
+    list.forEach((o,k)=>{const c=row.cloneNode(true);setRow(c,at+k);[...c.getElementsByTagNameNS(X_NS,'f')].forEach(f=>{if(f.textContent)f.textContent=ptRowF(f.textContent,at,at+k)});
+      kids(c,'c').forEach(x=>{if(kids(x,'f').length){kids(x,'v').forEach(v=>x.removeChild(v))}else fill(x,{[key]:o})});sd.insertBefore(c,row)});
+    sd.removeChild(row)}
+  if(mc){const n=kids(mc,'mergeCell').length;if(n)mc.setAttribute('count',n);else mc.parentNode.removeChild(mc)}
+  kids(sd,'row').forEach(r=>kids(r,'c').forEach(c=>fill(c,{})));
+  const dim=doc.getElementsByTagNameNS(X_NS,'dimension')[0];const last=kids(sd,'row').pop();if(dim&&last){const p=String(dim.getAttribute('ref')).split(':');const z=ptRef(p[1]||'');if(z&&+last.getAttribute('r')>z[1])dim.setAttribute('ref',p[0]+':'+z[0]+last.getAttribute('r'))}
+  return ptSer(doc)}
+async function ptFillZip(zip,kind,D){const unk=new Set();const rd=async p=>zip.file(p)?await zip.file(p).async('string'):null;
+  if(kind==='docx'){const parts=Object.keys(zip.files).filter(p=>/^word\/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$/.test(p));if(!parts.includes('word/document.xml'))throw new Error('That doesn’t look like a Word (.docx) file.');
+    for(const p of parts)zip.file(p,ptFillDocXml(await rd(p),D,unk))}
+  else{if(!zip.file('xl/workbook.xml'))throw new Error('That doesn’t look like an Excel (.xlsx) file.');
+    let sst=[];const ss=await rd('xl/sharedStrings.xml');if(ss){const doc=ptParse(ss);sst=[...doc.getElementsByTagNameNS(X_NS,'si')].map(si=>[...si.getElementsByTagNameNS(X_NS,'t')].filter(t=>t.parentNode.localName!=='rPh').map(t=>t.textContent).join(''))}
+    for(const p of Object.keys(zip.files).filter(p=>/^xl\/worksheets\/[^/]+\.xml$/.test(p)))zip.file(p,ptFillSheet(await rd(p),sst,D,unk));
+    // formulas moved: drop Excel's stale calculation order and have it recalculate on open
+    if(zip.file('xl/calcChain.xml')){zip.remove('xl/calcChain.xml');const ct=await rd('[Content_Types].xml');if(ct)zip.file('[Content_Types].xml',ct.replace(/<Override[^>]*calcChain[^>]*\/>/,''));const rl=await rd('xl/_rels/workbook.xml.rels');if(rl)zip.file('xl/_rels/workbook.xml.rels',rl.replace(/<Relationship[^>]*calcChain[^>]*\/>/,''))}
+    let wb=await rd('xl/workbook.xml');if(/<calcPr\b/.test(wb))wb=wb.replace(/<calcPr\b(?![^>]*fullCalcOnLoad)/,'<calcPr fullCalcOnLoad="1"');else wb=/<\/definedNames>/.test(wb)?wb.replace('</definedNames>','</definedNames><calcPr fullCalcOnLoad="1"/>'):wb.replace('</sheets>','</sheets><calcPr fullCalcOnLoad="1"/>');zip.file('xl/workbook.xml',wb)}
+  return [...unk]}
+const ptB64=buf=>{const u=new Uint8Array(buf);let s='';for(let i=0;i<u.length;i+=0x8000)s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000));return btoa(s)};
+const ptBytes=b64=>{const s=atob(b64);const u=new Uint8Array(s.length);for(let i=0;i<s.length;i++)u[i]=s.charCodeAt(i);return u};
+function ptSave(blob,name){const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),4000)}
+async function ptFetch(id){const rows=await run(sb.from('proposal_templates').select('*').eq('id',id));const t=rows&&rows[0];if(!t||!t.file)throw new Error('That template is gone.');return t}
+async function ptFill(id){const E=S.est;if(!E||!E.data||!id)return;const b=byId(S.bids,E.bidId)||{};toast('Filling your template…');
+  try{const [JSZip,t]=await Promise.all([loadJSZip(),ptFetch(id)]);const zip=await JSZip.loadAsync(ptBytes(t.file));const unk=await ptFillZip(zip,t.kind,ptData());
+    const blob=await zip.generateAsync({type:'blob',mimeType:PT_MIME[t.kind],compression:'DEFLATE'});const safe=String(b.name||'Proposal').replace(/[\\/:*?"<>|]+/g,' ').trim();ptSave(blob,`Proposal - ${safe}.${t.kind}`);
+    toast(unk.length?`Downloaded. ${unk.length} field${unk.length===1?'':'s'} in the template ${unk.length===1?'isn’t one':'aren’t ones'} the app knows: ${unk.slice(0,4).map(x=>'{{'+x+'}}').join(', ')}${unk.length>4?'…':''}`:'Proposal downloaded')}
+  catch(e){toast(/proposal_templates|does not exist|schema cache/i.test(errMsg(e))?PT_SQL:errMsg(e))}}
+async function ptUpload(file){if(!file||!isAdmin())return;const ext=(/\.([a-z0-9]+)$/i.exec(file.name)||[])[1]?.toLowerCase();
+  if(ext!=='docx'&&ext!=='xlsx'){toast(ext==='doc'||ext==='xls'?'Save it as .docx or .xlsx first (File → Save As), then upload that.':'Upload a Word (.docx) or Excel (.xlsx) file.');return}
+  if(file.size>4*1024*1024){toast('That file is over 4 MB. Shrink the logo or pictures in it and try again.');return}
+  try{const buf=await file.arrayBuffer();const JSZip=await loadJSZip();const zip=await JSZip.loadAsync(buf);if(!zip.file(ext==='docx'?'word/document.xml':'xl/workbook.xml'))throw new Error(`That doesn’t look like a real .${ext} file.`);
+    let found=0;for(const p of Object.keys(zip.files).filter(p=>/^(word\/(document|header\d*|footer\d*)\.xml|xl\/(sharedStrings|worksheets\/[^/]+)\.xml)$/.test(p))){const x=(await zip.file(p).async('string')).replace(/<[^>]+>/g,'');found+=(x.match(PT_RE)||[]).length}
+    await run(sb.from('proposal_templates').insert({id:newId(),name:file.name.replace(/\.[^.]+$/,''),kind:ext,filename:file.name,size:file.size,file:ptB64(buf),created_by_name:myName()}));await loadPropTpls();if(M&&M.kind==='pt')renderModal();render();
+    toast(found?`Template added — ${found} field${found===1?'':'s'} found in it`:'Template added, but it has no {{fields}} in it yet. See the field list.')}
+  catch(e){toast(/proposal_templates|does not exist|schema cache/i.test(errMsg(e))?PT_SQL:errMsg(e))}}
+async function ptStarter(kind){try{const JSZip=await loadJSZip();const zip=new JSZip();const x=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    zip.file('_rels/.rels',XML_HEAD+`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="${kind==='docx'?'word/document.xml':'xl/workbook.xml'}"/></Relationships>`);
+    if(kind==='docx'){const p=(t,b)=>`<w:p><w:r>${b?'<w:rPr><w:b/></w:rPr>':''}<w:t xml:space="preserve">${x(t)}</w:t></w:r></w:p>`;const tc=(t,w)=>`<w:tc><w:tcPr><w:tcW w:w="${w}" w:type="dxa"/></w:tcPr>${p(t)}</w:tc>`;const tr=c=>`<w:tr>${c.map(([t,w])=>tc(t,w)).join('')}</w:tr>`;
+      const bd='<w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblBorders><w:top w:val="single" w:sz="4" w:color="999999"/><w:bottom w:val="single" w:sz="4" w:color="999999"/><w:insideH w:val="single" w:sz="4" w:color="CCCCCC"/></w:tblBorders></w:tblPr>';
+      const W=[900,4200,1000,800,1300,1500];
+      zip.file('[Content_Types].xml',XML_HEAD+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+      zip.file('word/document.xml',XML_HEAD+`<w:document xmlns:w="${W_NS}"><w:body>${p('{{company}}',1)}${p('{{letterhead}}')}${p('')}${p('PROPOSAL',1)}${p('Date: {{date}}')}${p('To: {{client}}   Attn: {{attn}}')}${p('Project: {{project}} — {{location}}')}${p('')}${p('{{intro}}')}${p('Basis: {{basis}}')}${p('')}
+        <w:tbl>${bd}${tr(['Item','Description','Qty','Unit','Unit price','Amount'].map((t,i)=>[t,W[i]]))}${tr(['{{item.code}}','{{item.desc}}','{{item.qty}}','{{item.unit}}','{{item.unit_price}}','{{item.amount}}'].map((t,i)=>[t,W[i]]))}${tr(['','Total base bid','','','','{{total}}'].map((t,i)=>[t,W[i]]))}</w:tbl>
+        ${p('')}${p('Alternates',1)}<w:tbl>${bd}${tr([['{{alt.code}}',900],['{{alt.desc}}',6000],['{{alt.amount}}',2800]])}</w:tbl>${p('')}${p('Inclusions',1)}${p('{{inclusions}}')}${p('Exclusions',1)}${p('{{exclusions}}')}${p('Clarifications',1)}${p('{{clarifications}}')}${p('')}${p('{{terms}} This proposal is valid for {{valid_days}} days.')}${p('')}${p('{{signed_by}}')}${p('{{title}}')}
+        <w:sectPr><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1080" w:right="1080" w:bottom="1080" w:left="1080" w:header="720" w:footer="720" w:gutter="0"/></w:sectPr></w:body></w:document>`)}
+    else{const col=i=>String.fromCharCode(65+i);const row=(n,c)=>`<row r="${n}">${c.map((t,i)=>t===''?'':String(t).startsWith('=')?`<c r="${col(i)}${n}"><f>${x(String(t).slice(1))}</f></c>`:`<c r="${col(i)}${n}" t="inlineStr"><is><t xml:space="preserve">${x(t)}</t></is></c>`).join('')}</row>`;
+      zip.file('[Content_Types].xml',XML_HEAD+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
+      zip.file('xl/workbook.xml',XML_HEAD+`<workbook xmlns="${X_NS}" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Proposal" sheetId="1" r:id="rId1"/></sheets></workbook>`);
+      zip.file('xl/_rels/workbook.xml.rels',XML_HEAD+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>');
+      zip.file('xl/worksheets/sheet1.xml',XML_HEAD+`<worksheet xmlns="${X_NS}"><cols><col min="1" max="1" width="10" customWidth="1"/><col min="2" max="2" width="46" customWidth="1"/><col min="3" max="6" width="14" customWidth="1"/></cols><sheetData>${[row(1,['{{company}}']),row(2,['PROPOSAL']),row(3,['Project','{{project}}']),row(4,['Location','{{location}}']),row(5,['To','{{client}}']),row(6,['Date','{{date}}']),
+        row(8,['Item','Description','Qty','Unit','Unit price','Amount']),row(9,['{{item.code}}','{{item.desc}}','{{item.qty}}','{{item.unit}}','{{item.unit_price}}','=C9*E9']),row(10,['','Total base bid','','','','{{total}}']),row(12,['Inclusions','{{inclusions}}']),row(13,['Exclusions','{{exclusions}}']),row(14,['Signed','{{signed_by}}, {{title}}'])].join('')}</sheetData></worksheet>`)}
+    ptSave(await zip.generateAsync({type:'blob',mimeType:PT_MIME[kind],compression:'DEFLATE'}),`Proposal starter template.${kind}`)}catch(e){toast(errMsg(e))}}
+function ptPanel(ro){const ts=S.propTpls||[];if(!ts.some(t=>t.id===S.ptSel))S.ptSel=ts[0]?.id||'';
+  return `<div class="panel pad"><h3 class="pr-h">Your own Word / Excel template</h3>
+    ${S.propTplMissing?`<p class="hint">${PT_SQL}</p>`:ts.length?`<div class="pt-row"><select class="field" id="pt-sel" data-ptsel aria-label="Template">${ts.map(t=>`<option value="${t.id}"${t.id===S.ptSel?' selected':''}>${esc(t.name)} (${t.kind==='docx'?'Word':'Excel'})</option>`).join('')}</select><button class="btn primary" data-act="pt-fill">Fill &amp; download</button></div>`
+      :`<p class="small dim" style="margin:0 0 8px">No company templates yet.${isAdmin()?' Upload your Word or Excel proposal and the app fills it in for each bid.':' An admin can upload your Word or Excel proposal.'}</p>`}
+    <div class="pr-actions" style="margin-top:8px">${isAdmin()?'<button class="btn sm" data-act="pt-open">Manage templates</button>':''}<button class="btn sm ghost" data-act="pt-open">Field list</button></div>
+    <p class="hint">Fills your file with this estimate’s project, GC, bid items, prices and wording. The built-in proposal on the right stays as it is — use either one.</p></div>`}
+function ptModal(){const ts=S.propTpls||[];const adm=isAdmin();
+  return mhead('Proposal templates','Your own Word and Excel files, filled in by the app')+`<div class="mbody">
+    ${S.propTplMissing?`<div class="notice">${PT_SQL}</div>`:''}
+    <fieldset><legend>Company templates (${ts.length})</legend>
+      ${ts.map(t=>`<div class="rev-row"><div><b>${esc(t.name)}</b> ${pill(t.kind==='docx'?'Word':'Excel')}<div class="small dim">${esc(t.filename||'')} · ${fmtN((t.size||0)/1024,0)} KB${t.updated_at?' · '+fmtShort(String(t.updated_at).slice(0,10)):''}${t.created_by_name?' · '+esc(t.created_by_name):''}</div></div><div></div>
+        <div class="rev-btns"><button class="btn sm" data-act="pt-dl" data-id="${t.id}">Download</button>${adm?`<button class="btn sm" data-act="pt-rename" data-id="${t.id}">Rename</button><button class="btn sm danger${M.arm===t.id?' arm':''}" data-act="pt-del" data-id="${t.id}">${M.arm===t.id?'Click again':'Delete'}</button>`:''}</div></div>`).join('')||'<p class="small dim">None yet.</p>'}
+      ${adm?`<div class="pt-up"><label class="btn primary">Upload a .docx or .xlsx<input type="file" accept=".docx,.xlsx" data-ptup hidden></label><button class="btn" data-act="pt-starter" data-v="docx">Download a Word starter</button><button class="btn" data-act="pt-starter" data-v="xlsx">Download an Excel starter</button></div>`:''}</fieldset>
+    <fieldset><legend>How to build one</legend><ol class="pt-how"><li>Open your proposal in Word or Excel (or start from a starter file).</li><li>Wherever the app should fill something in, type the field name in double curly braces, like <code>{{project}}</code> or <code>{{total}}</code>. Keep your own fonts, logo and layout.</li>
+      <li>For the list of bid items, make <b>one</b> table row with the <code>{{item.…}}</code> fields. The app repeats that row for every bid item. Same for <code>{{scope.…}}</code> and <code>{{alt.…}}</code>.</li><li>Save as .docx or .xlsx and upload it here. To change a template, upload the new file and delete the old one.</li></ol>
+      <p class="hint">Excel: a cell holding only a number field (like <code>{{item.amount}}</code>) becomes a real number, so your own number formats and formulas work. Formulas in the repeated row are copied down, and a SUM range that ends on that row grows with it.</p></fieldset>
+    <fieldset><legend>Field list</legend>${PT_FIELDS.map(([h,fs])=>`<div class="pt-fh">${esc(h)}</div><div class="pt-fields">${fs.map(([k,l])=>`<div><code>{{${k}}}</code><span>${esc(l)}</span></div>`).join('')}</div>`).join('')}</fieldset></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Close</button></div></div>`}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;if(!a.startsWith('pt-'))return;
+  switch(a){
+    case 'pt-fill':ptFill($('#pt-sel')?.value||S.ptSel);break;
+    case 'pt-open':M={kind:'pt'};showModal();loadJSZip().catch(()=>{});break;
+    case 'pt-starter':ptStarter(t.dataset.v);break;
+    case 'pt-dl':(async()=>{try{const x=await ptFetch(t.dataset.id);ptSave(new Blob([ptBytes(x.file)],{type:PT_MIME[x.kind]}),x.filename||x.name+'.'+x.kind)}catch(er){toast(errMsg(er))}})();break;
+    case 'pt-rename':{const x=S.propTpls.find(p=>p.id===t.dataset.id);if(!x||!isAdmin())break;const n=(prompt('Template name',x.name)||'').trim();if(!n||n===x.name)break;run(sb.from('proposal_templates').update({name:n}).eq('id',x.id)).then(loadPropTpls).then(()=>{renderModal();render()}).catch(er=>toast(errMsg(er)));break}
+    case 'pt-del':{if(!isAdmin())break;if(M.arm!==t.dataset.id){M.arm=t.dataset.id;renderModal();break}M.arm=null;run(sb.from('proposal_templates').delete().eq('id',t.dataset.id)).then(loadPropTpls).then(()=>{renderModal();render()}).catch(er=>toast(errMsg(er)));break}
+  }});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset.ptsel!=null){S.ptSel=t.value;return}if(t.dataset.ptup!=null){const f=t.files&&t.files[0];t.value='';ptUpload(f)}});
