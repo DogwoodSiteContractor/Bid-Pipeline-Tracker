@@ -4866,7 +4866,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'qf-rmq':if(E.qArm!==t.dataset.q){E.qArm=t.dataset.q;render();break}E.qArm=null;qRemoveVendor(t.dataset.q);break;
   }});
 document.addEventListener('input',e=>{const t=e.target;if(!S.est||!S.est.data||S.view!=='estimate')return;
-  if(t.dataset.qp){const [id,rk]=t.dataset.qp.split('|');qEdit(id,c=>{const l=c.lines.find(x=>x.rk===rk);const v=t.value===''?null:num(t.value);if(l)l.price=v;else c.lines.push({rk,price:v})});render();return}
+  if(t.dataset.qp){const cut=t.dataset.qp.indexOf('|');const id=t.dataset.qp.slice(0,cut),rk=t.dataset.qp.slice(cut+1);qEdit(id,c=>{c.lines=c.lines.filter(x=>!/^c:[a-z]+$/.test(String(x.rk)));const l=c.lines.find(x=>x.rk===rk);const v=t.value===''?null:num(t.value);if(l)l.price=v;else c.lines.push({rk,price:v})});render();return}
   if(t.dataset.qa){qEdit(t.dataset.qa,c=>{c.amount=t.value===''?null:num(t.value)});render();return}
   if(t.dataset.qm&&t.type!=='checkbox'){const [id,k]=t.dataset.qm.split('|');qEdit(id,c=>{c.meta[k]=t.value===''?null:num(t.value)});render();return}});
 document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data||S.view!=='estimate')return;const E=S.est;
