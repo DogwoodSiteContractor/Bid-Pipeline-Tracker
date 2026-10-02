@@ -1427,3 +1427,8 @@ fieldset.rb .check{font-weight:600}
 .dirt-ctl{display:flex;gap:10px;justify-content:center;margin-top:10px}.dirt-ctl .btn{min-width:70px;touch-action:none;user-select:none}
 .dirt-board{max-width:420px;margin:14px auto 0;text-align:left}
 @media (max-width:720px){.shelf-row{grid-template-columns:repeat(3,minmax(0,1fr))}.trivia-a{grid-template-columns:1fr}.pipe-wrap{grid-template-columns:40px 1fr 40px}}
+/* quotes: pricing rule */
+.qf-rule{display:inline-flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
+.qf-rule .field{width:auto;min-width:230px}
+.qf-rulenote{background:var(--accent-soft);border-radius:8px;padding:8px 12px;font-size:13px;margin:10px 0}
+.qf-grid td.qf-high .field{border-color:var(--warn);box-shadow:0 0 0 1px var(--warn)}

@@ -372,7 +372,12 @@ The defaults every new estimate starts with. Each estimate keeps its own copy, s
   - **Packages:** a package is what you send out for pricing, such as "Pipe & structures", "Stone" or "Erosion control sub". Add the estimate's materials, subs, trucking or rentals to it, then add vendors.
   - **Vendor prices:** each vendor gets a column for unit prices on each line, plus freight / other charges. Tick **Lump sum** for vendors who give one total, and **Tax incl.** when their prices include sales tax.
   - **Comparing:** the low price on each line is outlined. **Complete total** prices any line a vendor skipped at the estimate price, so totals compare fairly.
-  - **Picking:** pick a price per line, **Award all** to one vendor, or **Pick the low price on every line**.
+  - **Picking:** each package has a **Use** rule:
+    - **Lowest price on each line** or **Highest price on each line**, across every vendor who quoted that line.
+    - **One vendor's pricing** on every line (also the **Use this vendor** button on their column).
+    - **Prices I pick by hand:** click the dot next to any price. Clicking a dot while a rule is on switches to by-hand and keeps what the rule had chosen.
+    - Rules stay live: when a new price comes in, the picks update by themselves. Lines nobody quoted (or the chosen vendor skipped) stay at the estimate price.
+    - **Use on all packages** sets every package to lowest or highest in one click.
   - **Apply picks to estimate:** puts the prices into every matching cost and tags them "Quote · Vendor". Freight is spread over that vendor's lines, and a lump sum is spread over its lines by estimate cost. Admins can also update the codebook prices, which are recorded in price history.
   - **Saving:** prices save as you type, and a quote with prices switches to Received. Quote totals show on the bid's quote list too.
 - **Proposal:** the Proposal tab builds the proposal from the estimate. A live preview is on the right.

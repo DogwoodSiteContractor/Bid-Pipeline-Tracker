@@ -292,6 +292,8 @@ function renderNow(){
   keep.forEach(([id,top])=>{const e=id&&document.getElementById(id);if(e)e.scrollTop=top});
   if(fid){const n=document.getElementById(fid);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});try{n.setSelectionRange(pos,pe??pos)}catch(e){}if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();if(S.view==='calc'&&$('#tk-canvas'))tkMount();
+  // the page content can add a scrollbar after the top bar was fitted, so fit it again once laid out
+  requestAnimationFrame(()=>{const nav=$('#top .nav');if(nav&&nav.scrollWidth>nav.clientWidth+1)navFit()});
 }
 // top-bar tabs; related pages share a tab and get small sub-tabs inside it
 function navItems(){return navGroups().map(g=>[g[0],g[1]])}
@@ -307,6 +309,8 @@ function renderTop(){
   <div class="userbox"><button class="me-av" data-act="fun-me" title="My profile">${funAv(crewOf(myId()),30)}</button><span>${esc(myName())}<br><span class="rolepill">${ROLE_LABEL[role()]}</span></span>
   ${can('bids','edit')&&bidsAll()?'<button class="btn primary" data-act="new-bid">+ New bid</button>':''}<button class="btn sm" data-act="signout">Sign out</button></div>`;
   navFit();
+  // the logo takes up room once it loads, so fit the tabs again then
+  const lg=$('#top .brand-logo');if(lg&&!lg.complete)lg.addEventListener('load',navFit,{once:true});
 }
 
 // When the top bar is too narrow, tuck the last nav items into a “More” menu instead of cutting them off
@@ -315,6 +319,8 @@ function navFit(){const nav=$('#top .nav'),more=$('#top .nav-more');if(!nav||!mo
   more.hidden=false;const tucked=[];for(let i=btns.length-1;i>0&&nav.scrollWidth>nav.clientWidth+1;i--){if(btns[i].classList.contains('on'))continue;btns[i].hidden=true;tucked.unshift(btns[i])}
   menu.innerHTML=tucked.map(b=>`<button role="menuitem" data-act="nav" data-v="${b.dataset.v}">${b.textContent}</button>`).join('');more.querySelector('.nav-morebtn').classList.toggle('on',false)}
 window.addEventListener('resize',()=>{clearTimeout(navFit._t);navFit._t=setTimeout(navFit,80)});
+// the bar also gets narrower when a page grows a scrollbar, which doesn't fire a resize
+try{if(window.ResizeObserver){let w0=0;new ResizeObserver(en=>{const w=Math.round(en[0].contentRect.width);if(w===w0)return;w0=w;clearTimeout(navFit._t);navFit._t=setTimeout(navFit,60)}).observe(document.documentElement)}}catch(e){}
 document.addEventListener('click',e=>{const mb=e.target.closest('[data-act=nav-more]');const menu=$('#top .nav-menu');if(!menu)return;
   if(mb){menu.hidden=!menu.hidden;mb.setAttribute('aria-expanded',String(!menu.hidden));return}if(!menu.hidden)menu.hidden=true});
 
@@ -4761,12 +4767,21 @@ function qCalc(d,pkg,idx){const P=(d.pkgs||{})[pkg]||{rows:[],pick:{}};
     const extra=lump?0:num(meta.extra)||0;const total=lump?(num(q.amount)||0):quoted+extra;
     return {q,meta,lump,cells,quoted,missing:lump?0:missing,extra,total,complete:lump?total:total+filled,v:vendorOf(q.vendor_id)}});
   const low=rows.map((r,i)=>{let b=null;cols.forEach((c,j)=>{const p=c.cells[i].p;if(!c.lump&&p!=null&&(b==null||p<cols[b].cells[i].p))b=j});return b});
+  const high=rows.map((r,i)=>{let b=null;cols.forEach((c,j)=>{const p=c.cells[i].p;if(!c.lump&&p!=null&&(b==null||p>cols[b].cells[i].p))b=j});return b});
   const lowPkg=cols.length?cols.reduce((b,c,j)=>c.total>0&&(b<0||c.complete<cols[b].complete)?j:b,-1):-1;
   const estTotal=rows.reduce((s,r)=>s+(r.missing?0:r.price*(r.q||0)),0);
+  // pricing rule: lowest or highest on each line, or one vendor; otherwise the picks made by hand
+  const rule=qRule(P,cols);let pick=P.pick||{};let unquoted=0;
+  if(rule.mode==='low'||rule.mode==='high'){pick={};rows.forEach((r,i)=>{const j=(rule.mode==='low'?low:high)[i];pick[r.rk]=j==null?'est':cols[j].q.id;if(j==null&&!r.missing)unquoted++})}
+  else if(rule.mode==='vendor'){const j=cols.findIndex(c=>c.q.id===rule.q);const c=cols[j];pick={};rows.forEach((r,i)=>{const ok=c&&(c.lump||c.cells[i].p!=null);pick[r.rk]=ok?c.q.id:'est';if(!ok&&!r.missing)unquoted++})}
   // what the picks add up to
-  const used=new Set();let sel=0;rows.forEach((r,i)=>{if(r.missing)return;const pk=P.pick?.[r.rk];const j=pk&&pk!=='est'?cols.findIndex(c=>c.q.id===pk):-1;
+  const used=new Set();let sel=0;rows.forEach((r,i)=>{if(r.missing)return;const pk=pick[r.rk];const j=pk&&pk!=='est'?cols.findIndex(c=>c.q.id===pk):-1;
     if(j<0){sel+=r.price*(r.q||0);return}const c=cols[j];if(c.lump){if(!used.has(j)){used.add(j);sel+=c.total}return}if(c.cells[i].p==null){sel+=r.price*(r.q||0);return}if(!used.has(j)){used.add(j);sel+=c.extra}sel+=c.cells[i].ext});
-  return {P,rows,cols,low,lowPkg,estTotal,sel}}
+  return {P,rows,cols,low,high,lowPkg,estTotal,sel,pick,rule,unquoted}}
+// a package's pricing rule; a vendor rule falls back to picking by hand if that vendor is gone
+function qRule(P,cols){const r=P&&P.rule;if(!r||!r.mode||r.mode==='manual')return {mode:'manual'};if(r.mode==='vendor')return cols.some(c=>c.q.id===r.q)?{mode:'vendor',q:r.q}:{mode:'manual'};return r.mode==='high'?{mode:'high'}:{mode:'low'}}
+// switching to picking by hand keeps whatever the rule had chosen
+function qRuleSet(d,pkg,rule){const P=qPkg(d,pkg);if(!rule||rule.mode==='manual'){const C=qCalc(d,pkg,estResIndex(d));P.pick={...C.pick};P.rule={mode:'manual'}}else P.rule=rule}
 function qEdit(id,fn){const base=S.quotes.find(x=>x.id===id);if(!base)return;const q=qGet(base);
   const c={lines:clone(q.lines||[]),meta:{...(q.meta||{})},amount:q.amount??null,status:q.status,received_date:q.received_date||null};fn(c);
   if(['Requested','Not requested','No response'].includes(c.status)&&((c.lines||[]).some(l=>num(l.price)!=null)||(c.meta.lump&&num(c.amount)!=null))){c.status='Received';c.received_date=c.received_date||todayStr()}
@@ -4780,14 +4795,14 @@ async function qAddVendor(pkg,vid){const E=S.est;if(!vid)return;if(qQuotes(E.bid
   catch(e){toast(/lines|meta|column/i.test(errMsg(e))?'Quote prices need a one-time database update (update-15-quote-lines.sql).':errMsg(e))}}
 async function qRemoveVendor(id){try{await run(sb.from('quotes').delete().eq('id',id));delete QP[id];await loadTable('quotes');render()}catch(e){toast(errMsg(e))}}
 function qApply(pkg,toCb){const E=S.est,d=E.data;const C=qCalc(d,pkg,estResIndex(d));const b=byId(S.bids,E.bidId);const byV=new Map();
-  C.rows.forEach((r,i)=>{if(r.missing)return;const pk=C.P.pick?.[r.rk];if(!pk||pk==='est')return;const j=C.cols.findIndex(c=>c.q.id===pk);if(j<0)return;const c=C.cols[j];if(!c.lump&&c.cells[i].p==null)return;if(!byV.has(j))byV.set(j,[]);byV.get(j).push(i)});
+  C.rows.forEach((r,i)=>{if(r.missing)return;const pk=C.pick[r.rk];if(!pk||pk==='est')return;const j=C.cols.findIndex(c=>c.q.id===pk);if(j<0)return;const c=C.cols[j];if(!c.lump&&c.cells[i].p==null)return;if(!byV.has(j))byV.set(j,[]);byV.get(j).push(i)});
   let n=0;const cbRows=[];
   byV.forEach((is,j)=>{const c=C.cols[j];const vn=c.v?.company||'Vendor';let up;
     if(c.lump){let w=is.map(i=>C.rows[i].price*(C.rows[i].q||0));if(!(w.reduce((a,x)=>a+x,0)>0))w=is.map(i=>C.rows[i].q||1);const W=w.reduce((a,x)=>a+x,0);up=is.map((i,k)=>c.total*w[k]/W/(C.rows[i].q||1))}
     else{const ext=is.map(i=>c.cells[i].ext||0);const X=ext.reduce((a,x)=>a+x,0);up=is.map((i,k)=>c.cells[i].p+(X>0?c.extra*ext[k]/X/(C.rows[i].q||1):0))}
     is.forEach((i,k)=>{const r=C.rows[i];const price=+up[k].toFixed(4);r.refs.forEach(x=>{x.price=price;x.src={q:c.q.id,v:vn};if(c.meta.taxIncl&&x.kind==='material')x.tax=false});n++;
       if(toCb&&!c.lump&&r.cb){const cb=cbById(r.cb);if(cb&&cb.book==='material'){const y=clone(cb);y.data=cbD(y);const o=num(y.cost),nw=c.cells[i].p;if(o!==nw){y.cost=nw;cbHist(y,'cost',o,nw,'quote',`${vn} quote — ${b?.name||''}`);y.price_date=todayStr();if(c.q.vendor_id)y.vendor_id=c.q.vendor_id;cbRows.push(cbRow(y))}}}})});
-  if(!n){toast('Pick a vendor on at least one line first.');return}
+  if(!n){toast(C.rule.mode==='manual'?'Pick a vendor on at least one line first.':'No vendor prices to use yet. Enter the quotes first.');return}
   estTouch();render();toast(`Applied ${n} quoted price${n===1?'':'s'} to the estimate`);
   if(cbRows.length)cbUpsert(cbRows).then(()=>loadTable('codebook')).then(()=>toast(`Also updated ${cbRows.length} codebook price${cbRows.length===1?'':'s'}`)).catch(e=>toast(cbErr(e)))}
 function estQuotesView(d,R,ro){const E=S.est;const b=byId(S.bids,E.bidId);const idx=estResIndex(d,R);
@@ -4807,27 +4822,29 @@ function estQuotesView(d,R,ro){const E=S.est;const b=byId(S.bids,E.bidId);const 
       <button class="btn primary sm" data-act="qf-addrows"${sel.size?'':' disabled'}>Add ${sel.size||''} selected</button>`:'<p class="dim small">Every material, sub, trucking and rental cost in the estimate is already in a package. Add more on the Bid items tab.</p>'}</details>`;
   const vOpts=()=>{const have=new Set(C.cols.map(c=>c.q.vendor_id));const vs=S.vendors.filter(v=>!have.has(v.id)).sort((a,c)=>a.company.localeCompare(c.company));const fit=vs.filter(v=>vendorFits(v,pk));const rest=vs.filter(v=>!vendorFits(v,pk));
     return `<option value="">+ Add a vendor…</option>${fit.length?`<optgroup label="Quote ${esc(pk)}">${fit.map(v=>`<option value="${v.id}">${esc(v.company)}</option>`).join('')}</optgroup>`:''}<optgroup label="${fit.length?'Other vendors':'Vendors'}">${rest.map(v=>`<option value="${v.id}">${esc(v.company)}</option>`).join('')}</optgroup>`};
-  const pick=(r)=>C.P.pick?.[r.rk]||'est';
+  const pick=(r)=>C.pick[r.rk]||'est';const RM=C.rule.mode;const ruleV=RM==='vendor'?C.cols.find(c=>c.q.id===C.rule.q):null;
   const head=`<tr><th class="qf-item">Line</th><th class="r">Est. qty</th><th class="r qf-estc">Estimate</th>${C.cols.map((c,j)=>`<th class="qf-v${j===C.lowPkg?' qf-lowpkg':''}"><div class="qf-vh"><b>${esc(c.v?.company||'Removed vendor')}</b>${pill(c.q.status,QUOTE_CLS[c.q.status])}</div>
       <div class="qf-vopts"><label class="check"><input type="checkbox" data-qm="${c.q.id}|lump"${c.lump?' checked':''}${dis}> Lump sum</label><label class="check"><input type="checkbox" data-qm="${c.q.id}|taxIncl"${c.meta.taxIncl?' checked':''}${dis}> Tax incl.</label></div>
-      ${ro?'':`<div class="qf-vbtns"><button class="btn sm" data-act="qf-award" data-q="${c.q.id}">Award all</button><button class="btn sm ghost danger-t${E.qArm===c.q.id?' arm':''}" data-act="qf-rmq" data-q="${c.q.id}">${E.qArm===c.q.id?'Remove?':'×'}</button></div>`}</th>`).join('')}
+      ${ro?'':`<div class="qf-vbtns"><button class="btn sm${RM==='vendor'&&C.rule.q===c.q.id?' primary':''}" data-act="qf-award" data-q="${c.q.id}">${RM==='vendor'&&C.rule.q===c.q.id?'✓ Using this vendor':'Use this vendor'}</button><button class="btn sm ghost danger-t${E.qArm===c.q.id?' arm':''}" data-act="qf-rmq" data-q="${c.q.id}">${E.qArm===c.q.id?'Remove?':'×'}</button></div>`}</th>`).join('')}
     ${ro?'':`<th class="qf-addv"><select class="field sm" data-qvadd="${esc(pk)}">${vOpts()}</select></th>`}</tr>`;
   const body=C.rows.map((r,i)=>{const pc=pick(r);
     return `<tr${r.missing?' class="qf-gone"':''}><td class="qf-item"><span class="est-tag k-${r.kind||'other'}">${(RES_KINDS.find(k=>k[0]===r.kind)||RES_KINDS[5])[2]}</span> ${esc(r.desc)}${r.code?` <span class="dim small">${esc(r.code)}</span>`:''}${ro?'':` <button class="rm" data-act="qf-rmrow" data-rk="${esc(r.rk)}" aria-label="Remove from package">×</button>`}</td>
       <td class="r num small">${r.missing?'':qtyFmt(r.q)+' '+esc(r.unit)}</td>
       <td class="r qf-estc${pc==='est'?' qf-picked':''}"><label class="qf-cell"><input type="radio" name="qfp-${i}" data-qpick="${esc(r.rk)}" value="est"${pc==='est'?' checked':''}${dis}><span class="num">${r.missing?'':money2(r.price)}</span></label><small class="dim">${r.missing?'':money(r.price*(r.q||0))}</small></td>
       ${C.cols.map((c,j)=>{const cell=c.cells[i];if(c.lump)return `<td class="qf-lumpcell${pc===c.q.id?' qf-picked':''}"><label class="qf-cell"><input type="radio" name="qfp-${i}" data-qpick="${esc(r.rk)}" value="${c.q.id}"${pc===c.q.id?' checked':''}${dis}><span class="dim small">in lump sum</span></label></td>`;
-        return `<td class="${pc===c.q.id?'qf-picked':''}${C.low[i]===j?' qf-low':''}"><label class="qf-cell"><input type="radio" name="qfp-${i}" data-qpick="${esc(r.rk)}" value="${c.q.id}"${pc===c.q.id?' checked':''}${dis||cell.p==null?' disabled':''}><input class="field num" id="qp-${c.q.id}-${i}" data-qp="${c.q.id}|${esc(r.rk)}" inputmode="decimal" value="${cell.p??''}" placeholder="—"${dis}${r.missing?' disabled':''}></label><small class="dim">${cell.ext!=null?money(cell.ext):''}</small></td>`}).join('')}${ro?'':'<td></td>'}</tr>`}).join('')
+        return `<td class="${pc===c.q.id?'qf-picked':''}${C.low[i]===j?' qf-low':''}${RM==='high'&&C.high[i]===j&&C.cols.length>1?' qf-high':''}"><label class="qf-cell"><input type="radio" name="qfp-${i}" data-qpick="${esc(r.rk)}" value="${c.q.id}"${pc===c.q.id?' checked':''}${dis||cell.p==null?' disabled':''}><input class="field num" id="qp-${c.q.id}-${i}" data-qp="${c.q.id}|${esc(r.rk)}" inputmode="decimal" value="${cell.p??''}" placeholder="—"${dis}${r.missing?' disabled':''}></label><small class="dim">${cell.ext!=null?money(cell.ext):''}</small></td>`}).join('')}${ro?'':'<td></td>'}</tr>`}).join('')
     ||`<tr><td colspan="${4+C.cols.length}"><div class="empty small">No lines yet — add the estimate’s materials, subs or trucking that go in this package.</div></td></tr>`;
   const foot=`<tr class="qf-f"><td>Freight / other charges</td><td></td><td></td>${C.cols.map(c=>c.lump?'<td></td>':`<td><input class="field num" id="qx-${c.q.id}" data-qm="${c.q.id}|extra" inputmode="decimal" value="${c.meta.extra??''}" placeholder="0"${dis}></td>`).join('')}${ro?'':'<td></td>'}</tr>
     <tr class="qf-f"><td>Lump sum</td><td></td><td></td>${C.cols.map(c=>c.lump?`<td><input class="field num" id="qa-${c.q.id}" data-qa="${c.q.id}" inputmode="decimal" value="${c.q.amount??''}" placeholder="Total"${dis}></td>`:'<td></td>').join('')}${ro?'':'<td></td>'}</tr>
     <tr class="qf-t"><td><b>Quoted total</b></td><td></td><td class="r num"><b>${money(C.estTotal)}</b></td>${C.cols.map(c=>`<td class="r num"><b>${money(c.total)}</b>${c.missing?`<div class="qf-miss">${c.missing} line${c.missing===1?'':'s'} not quoted</div>`:''}</td>`).join('')}${ro?'':'<td></td>'}</tr>
     <tr class="qf-t"><td>Complete total <span class="dim small">(lines not quoted at the estimate price)</span></td><td></td><td></td>${C.cols.map((c,j)=>`<td class="r num${j===C.lowPkg?' qf-lowpkg':''}">${money(c.complete)}${j===C.lowPkg&&C.cols.length>1?' <span class="pill good">Low</span>':''}</td>`).join('')}${ro?'':'<td></td>'}</tr>`;
   return chips+`<div class="panel pad qf-panel"><div class="qf-top"><div><h2 class="qf-h">${esc(pk)}</h2><div class="dim small">${C.rows.length} line${C.rows.length===1?'':'s'} · ${C.cols.length} vendor${C.cols.length===1?'':'s'} · estimate ${money(C.estTotal)} · your picks ${money(C.sel)}</div></div>
-    ${ro?'':`<div class="qf-actions"><button class="btn sm" data-act="qf-low"${C.cols.length?'':' disabled'}>Pick the low price on every line</button><button class="btn primary sm" data-act="qf-apply">Apply picks to estimate</button>${cbEditable()?`<label class="check small"><input type="checkbox" id="qf-tocb"${E.qToCb?' checked':''} data-qfcb> Also update codebook prices</label>`:''}</div>`}</div>
+    ${ro?'':`<div class="qf-actions"><label class="qf-rule"><span>Use</span><select class="field sm" data-qrule${C.cols.length?'':' disabled'}><option value="manual"${RM==='manual'?' selected':''}>Prices I pick by hand</option><option value="low"${RM==='low'?' selected':''}>Lowest price on each line</option><option value="high"${RM==='high'?' selected':''}>Highest price on each line</option>${C.cols.length?`<optgroup label="One vendor’s pricing">${C.cols.map(c=>`<option value="v:${c.q.id}"${RM==='vendor'&&C.rule.q===c.q.id?' selected':''}>${esc(c.v?.company||'Removed vendor')}</option>`).join('')}</optgroup>`:''}</select></label>
+      ${RM!=='manual'&&RM!=='vendor'&&names.length>1?`<button class="btn sm ghost" data-act="qf-ruleall" title="Set every package to ${RM==='low'?'lowest':'highest'} price">Use on all packages</button>`:''}<button class="btn primary sm" data-act="qf-apply">Apply to estimate</button>${cbEditable()?`<label class="check small"><input type="checkbox" id="qf-tocb"${E.qToCb?' checked':''} data-qfcb> Also update codebook prices</label>`:''}</div>`}</div>
+    ${RM==='manual'?'':`<div class="qf-rulenote">${RM==='low'?'Using the <b>lowest</b> price on each line':RM==='high'?'Using the <b>highest</b> price on each line':`Using <b>${esc(ruleV?.v?.company||'this vendor')}</b>’s pricing on every line`}. The picks update on their own as prices come in.${C.unquoted?` <b>${C.unquoted} line${C.unquoted===1?'':'s'}</b> ${RM==='vendor'?'they didn’t quote':'nobody quoted'} stay${C.unquoted===1?'s':''} at the estimate price.`:''} Click any dot to go back to picking by hand.</div>`}
     ${addRows}
     <div class="qf-scroll"><table class="qf-grid"><thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>
-    <p class="hint">Enter each vendor’s unit price; the low price on each line is outlined. Click a price’s dot to pick it, or <b>Award all</b> to one vendor. <b>Apply</b> puts the picked prices into every matching cost in the estimate — freight is spread over that vendor’s lines and a lump sum over its lines by estimate cost. Prices save as you type; quotes with prices switch to Received.</p>
+    <p class="hint">Enter each vendor’s unit price; the low price on each line is outlined. Choose what to <b>use</b> at the top: the lowest or highest price on each line, one vendor’s pricing, or click a price’s dot to pick by hand. <b>Apply</b> puts the picked prices into every matching cost in the estimate — freight is spread over that vendor’s lines and a lump sum over its lines by estimate cost. Prices save as you type; quotes with prices switch to Received.</p>
     ${ro||C.cols.length||C.rows.length?'':`<button class="linkbtn danger-t" data-act="qf-rmpkg">Remove this empty package</button>`}</div>`}
 
 /* ---------- events ---------- */
@@ -4842,9 +4859,9 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'qf-addrows':{const P=qPkg(d,E.pkg);(E.qAdd||new Set()).forEach(rk=>{Object.values(d.pkgs).forEach(Q=>{Q.rows=(Q.rows||[]).filter(x=>x!==rk)});P.rows.push(rk)});E.qAdd=new Set();E.qAddOpen=false;estTouch();render();break}
     case 'qf-rmrow':{const P=qPkg(d,E.pkg);P.rows=P.rows.filter(x=>x!==t.dataset.rk);if(P.pick)delete P.pick[t.dataset.rk];estTouch();render();break}
     case 'qf-rmpkg':delete d.pkgs[E.pkg];E.pkg=null;estTouch();render();break;
-    case 'qf-award':{const P=qPkg(d,E.pkg);const C=qCalc(d,E.pkg,estResIndex(d));const j=C.cols.findIndex(c=>c.q.id===t.dataset.q);const c=C.cols[j];P.pick=P.pick||{};
-      C.rows.forEach((r,i)=>{if(c.lump||c.cells[i].p!=null)P.pick[r.rk]=c.q.id});estTouch();render();break}
-    case 'qf-low':{const P=qPkg(d,E.pkg);const C=qCalc(d,E.pkg,estResIndex(d));P.pick=P.pick||{};C.rows.forEach((r,i)=>{const j=C.low[i];P.pick[r.rk]=j==null?'est':C.cols[j].q.id});estTouch();render();break}
+    case 'qf-award':qRuleSet(d,E.pkg,{mode:'vendor',q:t.dataset.q});estTouch();render();break;
+    case 'qf-low':qRuleSet(d,E.pkg,{mode:'low'});estTouch();render();break;
+    case 'qf-ruleall':{const m=qRule(qPkg(d,E.pkg),[]).mode;if(m==='low'||m==='high'){const names=[...new Set([...S.quotes.filter(q=>q.bid_id===E.bidId).map(q=>q.scope),...Object.keys(d.pkgs||{})])].filter(Boolean);names.forEach(n=>qRuleSet(d,n,{mode:m}));estTouch();render();toast(`Every package now uses the ${m==='low'?'lowest':'highest'} price on each line`)}break}
     case 'qf-apply':qApply(E.pkg,!!$('#qf-tocb')?.checked);break;
     case 'qf-rmq':if(E.qArm!==t.dataset.q){E.qArm=t.dataset.q;render();break}E.qArm=null;qRemoveVendor(t.dataset.q);break;
   }});
@@ -4854,7 +4871,8 @@ document.addEventListener('input',e=>{const t=e.target;if(!S.est||!S.est.data||S
   if(t.dataset.qm&&t.type!=='checkbox'){const [id,k]=t.dataset.qm.split('|');qEdit(id,c=>{c.meta[k]=t.value===''?null:num(t.value)});render();return}});
 document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data||S.view!=='estimate')return;const E=S.est;
   if(t.dataset.qm&&t.type==='checkbox'){const [id,k]=t.dataset.qm.split('|');qEdit(id,c=>{c.meta[k]=t.checked});render();return}
-  if(t.dataset.qpick){const P=qPkg(E.data,E.pkg);P.pick=P.pick||{};P.pick[t.dataset.qpick]=t.value;estTouch();render();return}
+  if(t.dataset.qrule!=null){const v=t.value;qRuleSet(E.data,E.pkg,v.startsWith('v:')?{mode:'vendor',q:v.slice(2)}:{mode:v});estTouch();render();return}
+  if(t.dataset.qpick){qRuleSet(E.data,E.pkg,{mode:'manual'});const P=qPkg(E.data,E.pkg);P.pick[t.dataset.qpick]=t.value;estTouch();render();return}
   if(t.dataset.qvadd){qAddVendor(t.dataset.qvadd,t.value);return}
   if(t.dataset.qfsel){const s=E.qAdd||(E.qAdd=new Set());t.checked?s.add(t.dataset.qfsel):s.delete(t.dataset.qfsel);render();return}
   if(t.dataset.qfcb!=null){E.qToCb=t.checked;return}});
