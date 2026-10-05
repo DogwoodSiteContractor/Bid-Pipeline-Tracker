@@ -256,7 +256,7 @@ async function afterLogin(){
     await Promise.all(TABLES.map(loadTable));
     await loadProfiles();
     await loadPms();
-    await loadEstIndex();loadBidReqs();loadCOs();
+    await loadEstIndex();loadBidReqs();loadCOs();loadAcctInfo();
     if(channel)sb.removeChannel(channel);
     channel=sb.channel('bid-pipeline').on('postgres_changes',{event:'*',schema:'public'},p=>{if(TABLES.includes(p.table))debounceLoad(p.table);if(p.table==='estimates')estRemote(p)}).subscribe();
   }
@@ -933,7 +933,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={dirt:dirtModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  const html={dirt:dirtModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt'].includes(M.kind)||M.kind==='cx'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -6387,6 +6387,7 @@ function teamHead(title,sub,tools){return `<div class="head"><div><h1>${title}</
 function vTeam(){const me=S.session.user.id;const f=S.teamRole||'';const all=S.profiles.slice().sort((a,b)=>ROLE_ORDER.indexOf(a.role)-ROLE_ORDER.indexOf(b.role)||personName(a).localeCompare(personName(b)));
   const list=all.filter(p=>!f||p.role===f);const waiting=all.filter(p=>p.role==='pending').length;
   return teamHead('People & access',`${S.profiles.length} login${S.profiles.length===1?'':'s'} · everyone who uses the app, whatever their job`)+`
+  ${isAdmin()?'<div class="bar"><span style="flex:1"></span><button class="btn primary" data-act="ua-new">+ Add a person</button></div>':''}
   ${waiting?`<div class="notice"><b>${waiting} ${waiting===1?'person is':'people are'} waiting for access.</b> Pick a role for them below. They can't see anything until you do.</div>`:''}
   <div class="seg team-f">${[['','Everyone'],...ROLE_ORDER.map(r=>[r,ROLES.find(x=>x[0]===r)?.[1]||r])].filter(([k])=>!k||all.some(p=>p.role===k)).map(([k,l])=>`<button class="${f===k?'on':''}" data-act="team-f" data-v="${k}">${esc(l)}${k?` <small>${all.filter(p=>p.role===k).length}</small>`:''}</button>`).join('')}</div>
   <div class="panel scroll"><table class="team-t"><thead><tr><th>Person</th><th>Role</th><th>Can open</th><th>Estimator record</th><th></th></tr></thead><tbody>
@@ -6444,7 +6445,7 @@ function accessModal(){const d=M.draft;const admin=d.role==='admin';const self=d
       <td><div class="seg acc-seg">${opt(a,'','Role default',LVL_LABEL[def])}${opt(a,'none','No access')}${opt(a,'view','View')}${opt(a,'edit','Edit')}</div></td><td class="c">${lvlPill(eff)}</td></tr>`}).join('')}
       <tr class="${d.perms.bids_scope?'custom':''}"><td><b>Which bids</b><div class="small dim">Assigned = bids where they're the lead or a supporting estimator. “See all, work on assigned” lets them open every bid read-only and ask to join one.</div></td>
       <td><div class="seg acc-seg">${opt('bids_scope','','Role default',SCOPE_LABEL[rolePerm(d.role,'bids_scope')])}${opt('bids_scope','mine','Assigned only')}${opt('bids_scope','view','See all, work on assigned')}${opt('bids_scope','all','All bids')}</div></td><td class="c small">${SCOPE_LABEL[permOf(d,'bids_scope')]||'Assigned only'}</td></tr></tbody></table>
-    ${Object.values(d.perms).some(Boolean)&&!admin?'<button class="btn sm ghost" data-act="acc-reset">Reset to role defaults</button>':''}</fieldset></div>
+    ${Object.values(d.perms).some(Boolean)&&!admin?'<button class="btn sm ghost" data-act="acc-reset">Reset to role defaults</button>':''}</fieldset>${acctBox(d)}</div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="acc-save">Save</button></div></div>`}
 async function accessSave(){const d=M.draft;const perms={};Object.entries(d.perms).forEach(([a,v])=>{if(v)perms[a]=v});
   const row={full_name:String(d.full_name||'').trim(),title:String(d.title||'').trim(),phone:String(d.phone||'').trim(),perms};if(d.id!==S.session.user.id)row.role=d.role;
@@ -7515,3 +7516,60 @@ document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='cx')ret
   if(t.dataset.cxl){const [i,k]=t.dataset.cxl.split('.');const l=d.lines[+i];if(!l)return;
     if(k==='kind'){l.kind=t.value;renderModal();return}
     if(k==='desc'){const x=S.codebook.find(o=>['material','labor','equipment'].includes(o.book)&&o.description===t.value);if(x){l.kind=x.book==='material'?resKindOf(x):x.book;if(!l.unit)l.unit=x.book==='material'?(x.unit||''):'HR';if(l.price==null&&cbCost(x)!=null)l.price=+cbCost(x).toFixed(2);renderModal()}}}});
+
+/* =====================================================================
+   Accounts: admins create and manage logins from the Team page.
+   No secret key lives in the app. A new login is made through the normal
+   sign-up path on a throwaway connection (so the admin stays signed in),
+   then database functions that only admins can run finish the job.
+   ===================================================================== */
+S.acctInfo=null;
+const ACCT_SQL='Managing accounts from the app needs a one-time database update (update-26-accounts.sql).';
+const acctErr=e=>{const m=errMsg(e);return /admin_|function .* does not exist|schema cache|PGRST202/i.test(m)?ACCT_SQL:/signups? (are )?(not allowed|disabled)/i.test(m)?'New sign-ups are switched off in Supabase. Turn on “Allow new users to sign up” (Authentication → Sign In / Providers), then try again. New people still can’t see anything until you give them a role.':/already registered|already been registered|user_already_exists/i.test(m)?'There’s already a login with that email.':/rate limit/i.test(m)?'Too many new accounts in a short time. Wait a few minutes and try again.':m};
+function tempPassword(){const A='ABCDEFGHJKMNPQRSTUVWXYZ',a='abcdefghijkmnpqrstuvwxyz',n='23456789';const r=new Uint32Array(12);crypto.getRandomValues(r);const pick=(s,i)=>s[r[i]%s.length];
+  return pick(A,0)+pick(a,1)+pick(a,2)+pick(a,3)+pick(n,4)+pick(n,5)+pick(A,6)+pick(a,7)+pick(a,8)+pick(n,9)+pick(n,10)+pick(A,11)}
+async function loadAcctInfo(){if(!sb||!isAdmin())return;const {data,error}=await sb.rpc('admin_user_list');if(error){S.acctInfo=null;return}S.acctInfo=new Map((data||[]).map(u=>[u.id,u]));schedule();if(M&&M.kind==='access')renderModal()}
+function userAddModal(){const x=M;const done=x.done;
+  if(done)return mhead('Account created',done.email)+`<div class="mbody"><div class="notice"><b>${esc(done.name||done.email)}</b> can sign in now as <b>${esc(ROLE_LABEL[done.role]||done.role)}</b>.</div>
+    <fieldset><legend>Give them these</legend><div class="ua-cred"><div><span>Website</span><b>${esc(location.origin+location.pathname)}</b></div><div><span>Email</span><b>${esc(done.email)}</b></div><div><span>Temporary password</span><b class="ua-pw">${esc(done.pw)}</b></div></div>
+      <div class="adders"><button class="btn sm" data-act="ua-copy">Copy to clipboard</button></div><p class="hint">This password isn’t shown again. Ask them to change it after signing in (profile menu, or “Forgot password” on the sign-in page).</p></fieldset></div>
+    <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="ua-again">Add another</button><button class="btn primary" data-act="close">Done</button></div></div>`;
+  return mhead('Add a person','Creates their login and sets what they can open')+`<div class="mbody"><div class="fg">
+    <label class="f s2">Name<input class="field" id="ua-name" data-ua="name" value="${esc(x.name)}" placeholder="First and last name"></label><label class="f s2">Email<input class="field" id="ua-email" data-ua="email" type="email" value="${esc(x.email)}" placeholder="name@company.com" autocomplete="off"></label>
+    <label class="f s2">Role<select class="field" data-ua="role">${ROLE_ORDER.filter(r=>r!=='pending').map(r=>`<option value="${r}"${x.role===r?' selected':''}>${esc(ROLE_LABEL[r]||r)}</option>`).join('')}</select></label><label class="f s2">Title <span class="dim">(optional)</span><input class="field" id="ua-title" data-ua="title" value="${esc(x.title)}"></label>
+    <label class="f s2">Temporary password<input class="field" id="ua-pw" data-ua="pw" value="${esc(x.pw)}" autocomplete="off"></label><div class="f s2" style="justify-content:flex-end"><button class="btn sm" data-act="ua-gen">Make a new one</button></div></div>
+    <p class="hint">${esc(ROLE_ABOUT[x.role]||'')}</p>${x.role==='estimator'?'<p class="hint">Estimators also need an estimator record linked to their login before bids can be assigned to them (Team → Estimators).</p>':''}</div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="ua-create"${x.busy?' disabled':''}>${x.busy?'Creating…':'Create account'}</button></div></div>`}
+async function userCreate(){const x=M;if(!isAdmin()||x.busy)return;const email=String(x.email||'').trim().toLowerCase(),name=String(x.name||'').trim(),pw=String(x.pw||'');
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){toast('Enter their email address.');return}if(!name){toast('Enter their name.');return}if(pw.length<8){toast('The password needs at least 8 characters.');return}
+  if(S.profiles.some(p=>String(p.email||'').toLowerCase()===email)){toast('There’s already a login with that email.');return}
+  x.busy=true;renderModal();
+  try{const tmp=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAnonKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'bp-new-account'}});
+    const {data,error}=await tmp.auth.signUp({email,password:pw,options:{data:{full_name:name}}});if(error)throw error;const u=data&&data.user;if(!u||!u.id||(Array.isArray(u.identities)&&!u.identities.length))throw new Error('There’s already a login with that email.');
+    try{await tmp.auth.signOut()}catch(e){}
+    await run(sb.rpc('admin_finish_user',{p_id:u.id,p_name:name,p_role:x.role,p_title:String(x.title||'').trim()}));await Promise.all([loadProfiles(),loadAcctInfo()]);
+    M={kind:'useradd',done:{email,name,role:x.role,pw}};renderModal();render()}
+  catch(e){x.busy=false;renderModal();toast(acctErr(e))}}
+function acctBox(d){if(!isAdmin())return '';const self=d.id===S.session.user.id;const u=S.acctInfo&&S.acctInfo.get(d.id);const off=u&&u.banned;const x=M;
+  return `<fieldset><legend>Login</legend>${S.acctInfo?`<p class="small" style="margin:0 0 8px">${esc(d.email||'')} · ${off?'<b class="bad-t">Deactivated</b>':u&&!u.confirmed?'<b class="warn-t">Email not confirmed</b>':'Active'}${u&&u.last_sign_in_at?' · last signed in '+fmtShort(String(u.last_sign_in_at).slice(0,10)):u?' · has never signed in':''}</p>`:`<p class="hint">${ACCT_SQL}</p>`}
+    <div class="adders" style="margin:0"><button class="btn sm" data-act="ua-reset">Email a password reset link</button><button class="btn sm" data-act="ua-setpw">Set a temporary password</button>${u&&!u.confirmed?'<button class="btn sm" data-act="ua-confirm">Confirm their email</button>':''}
+      ${self||d.is_dev?'':`<button class="btn sm" data-act="ua-active" data-v="${off?1:0}">${off?'Reactivate':'Deactivate'}</button><button class="btn sm danger${x.armDel?' arm':''}" data-act="ua-del">${x.armDel?'Click again — this can’t be undone':'Delete account'}</button>`}</div>
+    ${x.newPw?`<div class="notice" style="margin-top:10px">New temporary password: <b class="ua-pw">${esc(x.newPw)}</b> — it isn’t shown again.</div>`:''}
+    ${self||d.is_dev?'':'<p class="hint">Deactivate blocks sign-in and removes their access but keeps the account and everything they did. Delete removes the login for good; their bids, notes and history stay.</p>'}</fieldset>`}
+FOCUS_ATTRS.push('data-ua');
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;if(!a.startsWith('ua-')||!isAdmin())return;const d=M&&M.kind==='access'?M.draft:null;
+  const after=()=>Promise.all([loadProfiles(),loadAcctInfo()]).then(()=>{render()});
+  switch(a){
+    case 'ua-new':case 'ua-again':M={kind:'useradd',name:'',email:'',role:'estimator',title:'',pw:tempPassword()};showModal();setTimeout(()=>$('#ua-name')?.focus(),0);break;
+    case 'ua-gen':M.pw=tempPassword();renderModal();break;
+    case 'ua-create':userCreate();break;
+    case 'ua-copy':{const x=M.done;const txt=`${APP_NAME||'Bid pipeline'}\n${location.origin+location.pathname}\nEmail: ${x.email}\nTemporary password: ${x.pw}`;(navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast('Copied')).catch(()=>toast('Couldn’t copy — select the text and copy it by hand.'));break}
+    case 'ua-reset':if(d)sb.auth.resetPasswordForEmail(d.email,{redirectTo:location.origin+location.pathname}).then(({error})=>toast(error?acctErr(error):`Reset link sent to ${d.email}`));break;
+    case 'ua-setpw':{if(!d)break;const pw=prompt('Temporary password (at least 8 characters)',tempPassword());if(pw===null)break;if(String(pw).length<8){toast('The password needs at least 8 characters.');break}
+      run(sb.rpc('admin_set_password',{p_id:d.id,p_password:String(pw)})).then(()=>{M.newPw=String(pw);renderModal();toast('Password changed')}).catch(er=>toast(acctErr(er)));break}
+    case 'ua-confirm':if(d)run(sb.rpc('admin_finish_user',{p_id:d.id,p_name:null,p_role:null,p_title:null})).then(after).then(()=>toast('Email confirmed')).catch(er=>toast(acctErr(er)));break;
+    case 'ua-active':{if(!d)break;const on=t.dataset.v==='1';run(sb.rpc('admin_set_active',{p_id:d.id,p_active:on})).then(after).then(()=>{const p=S.profiles.find(x=>x.id===d.id);if(p&&M&&M.kind==='access'){M.draft.role=p.role;renderModal()}toast(on?'Reactivated — now pick their role and save':'Deactivated. They can’t sign in.')}).catch(er=>toast(acctErr(er)));break}
+    case 'ua-del':{if(!d)break;if(!M.armDel){M.armDel=true;renderModal();break}run(sb.rpc('admin_delete_user',{p_id:d.id})).then(()=>{closeModal();return after()}).then(()=>toast('Account deleted')).catch(er=>{M.armDel=false;renderModal();toast(acctErr(er))});break}
+  }});
+document.addEventListener('input',e=>{const t=e.target;if(M&&M.kind==='useradd'&&t.dataset.ua&&t.tagName!=='SELECT')M[t.dataset.ua]=t.value});
+document.addEventListener('change',e=>{const t=e.target;if(M&&M.kind==='useradd'&&t.dataset.ua&&t.tagName==='SELECT'){M[t.dataset.ua]=t.value;renderModal()}});
