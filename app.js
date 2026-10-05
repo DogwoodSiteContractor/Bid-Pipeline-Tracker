@@ -1038,7 +1038,7 @@ function bidModal(){
     <label class="f s2">Lead estimator<select class="field" data-bf="lead_estimator_id"${admin?'':' disabled'}><option value="">Unassigned</option>${ests.map(e=>`<option value="${e.id}"${b.lead_estimator_id===e.id?' selected':''}>${esc(e.name)}${e.title?' — '+esc(e.title):''}</option>`).join('')}</select></label>
     <div class="f s2" style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:500;color:var(--ink-2)">Supporting estimators
       <div class="tagrow">${b.support_estimator_ids.map(id=>`<span class="tag">${avatar(id,20)} ${esc(estName(id)||'Removed')}${admin?`<button class="rm" data-act="rm-support" data-id="${id}" aria-label="Remove">×</button>`:'&nbsp;'}</span>`).join('')||(admin?'':'<span class="dim">None</span>')}
-      ${admin?`<select class="field" data-act="add-support" style="width:auto"><option value="">+ Add</option>${ests.filter(e=>e.id!==b.lead_estimator_id&&!b.support_estimator_ids.includes(e.id)).map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')}</select>`:''}</div></div>
+      ${admin?`<select class="field" data-act="add-support" style="width:auto"><option value="">+ Add</option>${(()=>{const left=ests.filter(e=>e.active!==false&&e.id!==b.lead_estimator_id&&!b.support_estimator_ids.includes(e.id));return (left.length>1?`<option value="__all">Entire team (all ${left.length} other estimators)</option>`:'')+left.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')})()}</select>${b.support_estimator_ids.length>1?'<button class="linkbtn" data-act="clear-support" style="font-size:12.5px">Remove all</button>':''}`:''}</div></div>
   </div>${admin&&!S.estimators.length?'<p class="hint">No estimators on file yet. Add them in the Estimators tab.</p>':''}</fieldset>
 
 
@@ -3880,6 +3880,7 @@ document.addEventListener('click',e=>{
     case 'close':closeModal();break;
     case 'save':saveModal();break;
     case 'del':deleteModal();break;
+    case 'clear-support':M.draft.support_estimator_ids=[];renderModal();break;
     case 'rm-support':M.draft.support_estimator_ids=M.draft.support_estimator_ids.filter(x=>x!==t.dataset.id);renderModal();break;
     case 'rm-client':{const id=t.dataset.id;M.draft.client_ids=M.draft.client_ids.filter(x=>x!==id);delete M.draft.client_contacts[id];delete M.draft.client_proposals[id];if(M.draft.awarded_client_id===id)M.draft.awarded_client_id='';renderModal();break}
     case 'award':awardClient(t.dataset.id);break;
@@ -4019,7 +4020,7 @@ document.addEventListener('change',e=>{
   if(t.dataset.prole){setRole(t.dataset.prole,t.value);return}
   if(t.dataset.plink!=null){linkEstimator(t.dataset.plink,t.value);return}
   if(t.dataset.pname){setProfileName(t.dataset.pname,t.value.trim());return}
-  if(M&&t.dataset.bf){if(t.dataset.bf==='status'||t.dataset.bf==='lead_estimator_id')renderModal();return}
+  if(M&&t.dataset.bf){if(t.dataset.bf==='lead_estimator_id'&&M.kind==='bid'&&Array.isArray(M.draft.support_estimator_ids))M.draft.support_estimator_ids=M.draft.support_estimator_ids.filter(x=>x!==M.draft.lead_estimator_id);if(t.dataset.bf==='status'||t.dataset.bf==='lead_estimator_id')renderModal();return}
   if(M&&t.dataset.sf&&t.dataset.sf.endsWith('.perform')){renderModal();return}
   if(M&&t.dataset.cp&&t.dataset.cp.endsWith('.status')){const id=t.dataset.cp.split('.')[0];const p=M.draft.client_proposals[id];if(p.status==='Sent'&&!p.sent_date)p.sent_date=todayStr();renderModal();return}
   if(M&&t.dataset.cp&&/amount/.test(t.dataset.cp)){renderModal();return}
@@ -4035,7 +4036,7 @@ document.addEventListener('change',e=>{
     case 'vscopeF':S.q.vscope=t.value;render();break;
     case 'vtypeF':S.q.vtype=t.value;render();break;
     case 'sup-addclient':if(t.value&&M.sup){M.sup.draft.client_ids.push(t.value);renderModal()}break;
-    case 'add-support':if(t.value){M.draft.support_estimator_ids.push(t.value);renderModal()}break;
+    case 'add-support':if(t.value==='__all'){const d=M.draft;S.estimators.filter(e=>e.active!==false&&e.id!==d.lead_estimator_id&&!d.support_estimator_ids.includes(e.id)).sort((a,c)=>a.name.localeCompare(c.name)).forEach(e=>d.support_estimator_ids.push(e.id));renderModal()}else if(t.value){M.draft.support_estimator_ids.push(t.value);renderModal()}break;
     case 'add-client':if(t.value){M.draft.client_ids.push(t.value);const first=byId(S.clients,t.value)?.contacts?.[0]?.name;if(first)M.draft.client_contacts[t.value]=first;renderModal()}break;
     case 'add-quote':if(t.value){addQuote(t.value);renderModal()}break;
     case 'apply-template':if(t.value){const tp=(lib().templates||[]).find(x=>x.id===t.value);const n=tp?tp.scopes.filter(x=>addScope(x)).length:0;toast(n?`Added ${n} scope${n===1?'':'s'} from ${tp.name}`:'Those scopes are already on this bid');renderModal()}break;
