@@ -372,6 +372,7 @@ The defaults every new estimate starts with. Each estimate keeps its own copy, s
   - **Bid item rows:** make one table row with `{{item.code}}`, `{{item.desc}}`, `{{item.qty}}`, `{{item.unit}}`, `{{item.unit_price}}`, `{{item.amount}}`. The app repeats it for every bid item. `{{scope.name}}` / `{{scope.total}}` repeat per section and `{{alt.…}}` per alternate.
   - **Excel:** a cell holding only a number field becomes a real number, so your number formats and formulas work. Formulas in the repeated row are copied down and a SUM range ending on that row grows with it. Excel tables, conditional formatting and named ranges below a repeated row are not moved.
   - **Managing:** admins upload, rename, download and delete templates under **Manage templates** (4 MB limit; old .doc/.xls files must be saved as .docx/.xlsx first). Starter Word and Excel files are there to download.
+- **Gantt schedule:** the Gantt schedule tab in an estimate draws one bar per bid item, grouped by section. Days come from each item's crew hours and your work schedule; items with no crew (subs, materials only) start at 1 day and show hatched until you type a number. Each item starts after the one above it; change **Starts** to run items side by side, and **Wait** to add a gap (negative overlaps). Set a start date to see real dates with weekends skipped. **Use N days for indirects** pushes the schedule length to Schedule & indirects. Print it or export to CSV for Excel. On the Proposal tab you can show the duration and include the chart; Word/Excel templates get `{{duration_days}}`, `{{duration_weeks}}`, `{{start_date}}` and `{{finish_date}}`.
 - **Revisions:** when plans change (prelim set → stamped set), click **Revise** on the Estimates list or **Revisions** inside the estimate. Name the copy being kept ("Original — prelim plans") and the new revision ("Stamped plans"). The app keeps a locked copy of the estimate as it is, and you keep working on the same estimate as Revision 1, 2, … with the same vendor quotes. Needs `supabase/update-22-estimate-revisions.sql`.
   - **Saved copies** are read-only. Open one to look at it or export it to Excel, then **Back to the working estimate**.
   - **Make this the working estimate** brings a saved copy back. The estimate it replaces is kept as a copy first, so nothing is lost.
@@ -441,3 +442,23 @@ Edit a file on GitHub (click it, then the pencil icon) and commit. The live site
 - **Free plan pausing:** Supabase pauses free projects after about a week with no activity. Normal daily use prevents it. If it pauses, click **Restore** in the dashboard. The Pro plan ($25/mo) never pauses and adds daily backups.
 - **Public repository is fine:** nothing secret is in these files. GitHub Pages on a private repository needs a paid GitHub plan.
 - **Re-running `schema.sql`:** safe to do. It keeps your data and refreshes the security rules.
+
+
+## Estimators: see every bid, ask to work on one
+
+Needs `supabase/update-24-estimator-view-requests.sql`.
+
+- Estimators now see every bid by default, read-only, and work only on the ones they're assigned to. The dashboard and pipeline have an **Assigned to me / All projects** switch.
+- Opening a bid they're not on shows **Request to work on it**. Whoever manages all bids (admins by default) sees the request on the dashboard and inside the bid. **Approve** adds the estimator as a supporting estimator; **Deny** closes it.
+- On Team → a person's access, **Which bids** has three levels: Assigned only, See all / work on assigned, All bids. Set someone to Assigned only to keep the old behavior.
+
+## Change orders
+
+Needs `supabase/update-25-change-orders.sql`. Open a job → **Change orders** tab. Anyone who can edit jobs (PMs and admins by default) writes them.
+
+- **Pricing lines:** labor, equipment, material, subcontract, trucking or other, each with quantity and unit cost. People with codebook access can pick an item to fill in its unit and price. **From a contract item** adds work at the job's bid unit price, which is not marked up again. Use a negative quantity for a credit.
+- **Markup:** separate percentages for your own work and for subs, plus bond/insurance. They carry over to the next change order on the job.
+- **Status:** Draft → Sent → Approved or Rejected, with dates and who approved. **Approved** adds a change-order line to the job's budget and schedule of values (so it bills on pay apps) and locks the change order.
+- **Days:** working days added to the contract time.
+- **Print / PDF:** a change order request with pricing (every line or totals by type), the contract summary (original, previously approved, this one, revised) and signature lines.
+- The top of the tab shows the original contract, approved, sent and draft amounts, and the revised contract.

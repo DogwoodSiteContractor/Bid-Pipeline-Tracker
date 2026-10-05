@@ -256,7 +256,7 @@ async function afterLogin(){
     await Promise.all(TABLES.map(loadTable));
     await loadProfiles();
     await loadPms();
-    await loadEstIndex();
+    await loadEstIndex();loadBidReqs();loadCOs();
     if(channel)sb.removeChannel(channel);
     channel=sb.channel('bid-pipeline').on('postgres_changes',{event:'*',schema:'public'},p=>{if(TABLES.includes(p.table))debounceLoad(p.table);if(p.table==='estimates')estRemote(p)}).subscribe();
   }
@@ -377,12 +377,13 @@ document.addEventListener('submit',async e=>{
 /* ---------- dashboard ---------- */
 function vDashboard(){
   const d=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  if(!bidsAll())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div></div>`+mine();
+  if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}</div></div>`+mine();
+  if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}</div></div>`+precon();
   if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}</div></div>`+board();
   return `<div class="head"><div><h1>${S.dash==='precon'?'Bid pipeline dashboard':'Board dashboard'}</h1><p>${d}${S.lastLoaded?` · <span class="dim">Last updated ${S.lastLoaded.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>`:''}</p></div>
   <div class="tools">${S.dash==='board'?yearSelect()+'<button class="btn" data-act="board-custom">Customize view</button>':'<button class="btn" data-act="refresh">↻ Refresh</button>'}
   <div class="seg" role="tablist"><button class="${S.dash==='precon'?'on':''}" data-act="dash" data-v="precon">Precon<small>Daily work</small></button><button class="${S.dash==='board'?'on':''}" data-act="dash" data-v="board">Board<small>Results & trends</small></button></div></div></div>`
-  +(S.dash==='precon'?precon():board());
+  +bidReqPanel()+(S.dash==='precon'?precon():board());
 }
 function yearSelect(){const ys=new Set([new Date().getFullYear()]);S.bids.forEach(b=>ys.add(yearOf(b)));return `<select class="field" data-act="year" style="width:auto">${[...ys].sort((a,b)=>b-a).map(y=>`<option${y===S.year?' selected':''}>${y}</option>`).join('')}</select>`}
 function kpi(l,v,s,cls,filter){const tag=filter?'button':'div';return `<${tag} class="kpi ${cls||''}"${filter?` data-act="kpi-filter" data-v="${filter}"`:''}><div class="l">${l}</div><div class="v">${v}</div><div class="s">${esc(s)}</div></${tag}>`}
@@ -666,7 +667,7 @@ function dueMatch(b,f){
 }
 function pvFilterCount(){const f=S.pv.f;return f.types.length+f.btypes.length+(f.est?1:0)+(f.client?1:0)+(f.due?1:0)+(f.min!==''?1:0)+(f.max!==''?1:0)+f.flags.length}
 function pvData(){
-  const q=(S.q.pipe||'').trim().toLowerCase();const est=!bidsAll();const f=S.pv.f;
+  const q=(S.q.pipe||'').trim().toLowerCase();const est=onlyMine();const f=S.pv.f;
   const pool=est?S.bids.filter(assigned):S.bids;
   const min=num(f.min),max=num(f.max);
   const base=pool.filter(b=>(!f.est||b.lead_estimator_id===f.est||(b.support_estimator_ids||[]).includes(f.est))
@@ -705,7 +706,7 @@ function vPipeline(){
     calendar:'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="12" rx="1.5"/><path d="M1.5 6.5h13M5 1v3M11 1v3"/></svg>'};
   const body=!list.length&&pv.mode!=='calendar'?`<div class="panel"><div class="empty"><b>No bids match</b>${pool.length?(q||nf||S.filter!=='active'?`Try a different search or filter. <button class="linkbtn" data-act="pv-reset">Clear search and filters</button>`:'Nothing active right now.'):est?'Bids assigned to you will appear here.':'Create your first bid to fill the pipeline.'}</div></div>`
     :pv.mode==='list'?listView(list):pv.mode==='calendar'?calendarView(list):`<div class="cards${S.selMode?' selecting':''}">${list.map(card).join('')}</div>`;
-  return `<div class="head"><div><h1>${est?'My bids':'Pipeline'}</h1><p>${pool.filter(live).length} bid${pool.filter(live).length===1?'':'s'}${est?' assigned to you':' on file'}</p></div><div class="tools">${est?'':'<button class="btn" data-act="export-xlsx">Export Excel</button><button class="btn ghost" data-act="export">CSV</button>'}${isAdmin()?`<button class="btn${S.selMode?' primary':''}" data-act="sel-mode">${S.selMode?'Selecting…':'Select'}</button>`:''}${isAdmin()?'<button class="btn" data-act="import">Import from Excel</button><button class="btn primary" data-act="new-bid">+ New bid</button>':''}</div></div>
+  return `<div class="head"><div><h1>${est?'My bids':'Pipeline'}</h1><p>${pool.filter(live).length} bid${pool.filter(live).length===1?'':'s'}${est?' assigned to you':' on file'}</p></div><div class="tools">${mineSeg()}${est||scopeView()?'':'<button class="btn" data-act="export-xlsx">Export Excel</button><button class="btn ghost" data-act="export">CSV</button>'}${isAdmin()?`<button class="btn${S.selMode?' primary':''}" data-act="sel-mode">${S.selMode?'Selecting…':'Select'}</button>`:''}${isAdmin()?'<button class="btn" data-act="import">Import from Excel</button><button class="btn primary" data-act="new-bid">+ New bid</button>':''}</div></div>
   <div class="bar">${FILTERS.map(([k,l,fn])=>`<button class="chip ${S.filter===k?'on':''}" data-act="filter" data-v="${k}">${l}<b>${base.filter(b=>live(b)&&fn(b)).length}</b></button>`).join('')}${base.some(b=>b.archived_at)||inArch?`<button class="chip ${inArch?'on':''}" data-act="filter" data-v="archived">🗄 Archived<b>${base.filter(b=>b.archived_at).length}</b></button>`:''}</div>
   <div class="pv-bar">
     <div class="pv-search"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><input id="q-pipe" class="field" placeholder="Search projects, GCs, estimators, scopes, vendors, notes…" value="${esc(S.q.pipe||'')}" data-q="pipe" aria-label="Search bids">${S.q.pipe?'<button class="rm" data-act="pv-clearq" aria-label="Clear search">×</button>':'<kbd>/</kbd>'}</div>
@@ -819,7 +820,7 @@ function palItems(){
   if(q&&canJob()){S.jobs.filter(j=>matchesQuery([j.job_number,j.name,j.location,clientName(j.client_id),pmName(j.pm_user_id)].join(' ').toLowerCase(),q)).slice(0,6)
     .forEach(j=>add('Jobs',(j.job_number?j.job_number+' · ':'')+j.name,[j.status,j.client_id?clientName(j.client_id):''].filter(Boolean).join(' · '),()=>{S.view='job';S.jobId=j.id;S.jt=null;render()}))}
   if(q&&!isPM()){
-    const bids=(!bidsAll()?S.bids.filter(assigned):S.bids).filter(b=>matchesQuery(bidHaystack(b),q))
+    const bids=(onlyMine()?S.bids.filter(assigned):S.bids).filter(b=>matchesQuery(bidHaystack(b),q))
       .sort((a,b)=>((b.name||'').toLowerCase().includes(q)-(a.name||'').toLowerCase().includes(q))||(live(b)-live(a))||(a.due_date||'9').localeCompare(b.due_date||'9'));
     bids.slice(0,8).forEach(b=>add('Bids',b.name,[b.status,b.due_date?fmtDate(b.due_date):'',clientsLine(b,1).replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")].filter(Boolean).join(' · '),()=>openBid(b.id),pill(b.status,BID_CLS[b.status])));
     S.clients.filter(c=>matchesQuery([c.company,c.type,...(c.contacts||[]).map(x=>x.name+' '+x.email)].join(' ').toLowerCase(),q)).slice(0,5)
@@ -932,8 +933,8 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={dirt:dirtModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
-  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt'].includes(M.kind)||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
+  const html={dirt:dirtModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt'].includes(M.kind)||M.kind==='cx'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();
@@ -1013,7 +1014,7 @@ function bidModal(){
   const outcome=isSent(b)||DECIDED.includes(b.status);
   const sub=isNew?'Project details, team, scope, vendor quotes and files':admin?'Last saved '+(b.updated_at?new Date(b.updated_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—'):work?'You’re on this bid, so you can update anything here except who’s assigned to it.':'Read-only';
   const files=isNew?[]:filesFor(b.id);
-  return mhead(isNew?'New bid':b.name||'Untitled bid',sub)+`<div class="mbody">${archNote}${supBanner(b)}
+  return mhead(isNew?'New bid':b.name||'Untitled bid',sub)+`<div class="mbody">${archNote}${supBanner(b)}${bidReqBanner(b)}
   ${isNew?'':`<div class="panel pad" style="margin-bottom:14px">${progress(b,{lg:true,quotes:b.quotes})}</div>`}
   <fieldset><legend>Project</legend><div class="fg">
     <label class="f s2">Project name ${work?'<span class="req">required</span>':''}<input class="field" ${bf('name')} placeholder="e.g. Riverside Commerce Park"></label>
@@ -1972,14 +1973,14 @@ function vJob(){
       return `<div class="tb" title="${t}: ${money(x.act)} spent of ${money(x.bud)} budget"><span class="lab">${t}</span><div class="track"><div class="bud" style="width:${x.bud/typeMax*100}%"></div><div class="act${over?' over':''}" style="width:${x.act/typeMax*100}%"></div></div><span class="v">${money(x.act)} <span class="dim">/ ${moneyK(x.bud)}</span></span></div>`}).join('')||'<div class="dim small">No budget yet.</div>'}</div>
     <div class="legend small" style="margin-top:8px"><span><i class="lg bud"></i>Budget</span><span><i class="lg act"></i>Actual</span><span><i class="lg over"></i>Over budget</span></div></div>`;
   const nNotes=S.bid_log.filter(e=>job.bid_id&&e.bid_id===job.bid_id).length;const showNotes=job.bid_id&&logOn();if(jt.tab==='notes'&&!showNotes)jt.tab='lines';
-  const tabs=`<div class="bar" style="margin-top:6px">${[['lines',`${job.structure==='cost_codes'?'Cost codes':'Bid items'} (${js.items.length})`],['log',`Cost log (${js.costs.length})`],...(showNotes?[['notes',`Estimator notes (${nNotes})`]]:[])].map(([k,l])=>`<button class="chip ${jt.tab===k?'on':''}" data-act="jt-tab" data-v="${k}">${l}</button>`).join('')}</div>`;
+  const tabs=`<div class="bar" style="margin-top:6px">${[['lines',`${job.structure==='cost_codes'?'Cost codes':'Bid items'} (${js.items.length})`],['log',`Cost log (${js.costs.length})`],['co',`Change orders (${jobCOs(job.id).length})`],...(showNotes?[['notes',`Estimator notes (${nNotes})`]]:[])].map(([k,l])=>`<button class="chip ${jt.tab===k?'on':''}" data-act="jt-tab" data-v="${k}">${l}</button>`).join('')}</div>`;
   return `<button class="linkbtn" data-act="nav" data-v="jobs" style="margin-bottom:8px">← All jobs</button>
   <div class="head"><div><h1>${job.job_number?`<span class="dim" style="font-weight:600">${esc(job.job_number)}</span> `:''}${esc(job.name)}</h1>
     <p>${[job.client_id?clientName(job.client_id):'',job.location,pmName(job.pm_user_id)?'PM: '+pmName(job.pm_user_id):'',job.start_date?fmtShort(job.start_date)+(job.end_date?' – '+fmtDate(job.end_date):''):'',(+job.overhead_pct||+job.markup_pct)?`OH ${+job.overhead_pct||0}% · markup ${+job.markup_pct||0}%`:''].filter(Boolean).map(esc).join(' · ')} ${pill(job.status,JOB_CLS[job.status])} ${pill(h,hc)}</p></div>
     <div class="tools">${canJob()?'<button class="btn" data-act="edit-job">Job details</button>':''}<button class="btn" data-act="export-job">Export</button>${canJob()?`<button class="btn" data-act="import" data-type="jobcosts"${js.items.length?'':' disabled title="Add budget lines first"'}>Import costs</button><button class="btn primary" data-act="log-costs"${js.items.length?'':' disabled title="Add budget lines first"'}>+ Log costs</button>`:''}</div></div>
   ${tiles}
   <div class="grid2" style="margin-bottom:22px"><div class="panel pad">${costChart(job,js)}</div>${burn}</div>
-  ${tabs}${jt.tab==='log'?costLog(job,js):jt.tab==='notes'?jobNotes(job):linesTable(job,js)}`;
+  ${tabs}${jt.tab==='co'?cxTab(job):jt.tab==='log'?costLog(job,js):jt.tab==='notes'?jobNotes(job):linesTable(job,js)}`;
 }
 
 function linesTable(job,js){
@@ -4620,6 +4621,7 @@ const estCanEdit=()=>{if(S.est&&S.est.ver)return false;if(S.est&&S.est.tpl)retur
 async function loadEstIndex(){if(!sb||!['admin','estimator','board'].includes(role()))return;
   const {data,error}=await sb.from('estimates').select('id,bid_id,version,total_cost,total_price,updated_at,updated_by_name');
   if(error){S.estMissing=/estimates|does not exist|schema cache/i.test(error.message||'');return}S.estMissing=false;S.estIndex=data||[];loadEstVers();loadPropTpls();schedule()}
+
 /* ---------- revisions: kept copies of an estimate ---------- */
 async function loadEstVers(){if(!sb)return;const {data,error}=await sb.from('estimate_versions').select('id,bid_id,label,note,rev,total_cost,total_price,created_at,created_by_name');
   if(error){S.estVersMissing=true;S.estVers=[];return}S.estVersMissing=false;S.estVers=data||[];schedule()}
@@ -4982,7 +4984,7 @@ function propRows(d,R,P){const base=d.items.map((it,i)=>({it,x:R.items[i]})).fil
   if(R.gc){const nm=d.markup.gcName||'General conditions';groups.unshift({name:nm,items:[{it:{code:'',desc:nm,qty:1,unit:'LS'},x:{price:R.gc,unitPrice:R.gc,q:1}}],total:R.gc})}
   return {total:R.total,groups}}
 function propPaper(d,R,b,P){const L=propLib();const co=S.settings.general?.companyName||CFG.companyName||'';const logo=BRAND.loginLogo||'';
-  const to=P.to.map(id=>byId(S.clients,id)).filter(Boolean);const PR=propRows(d,R,P);const alts=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>o.it.alt);
+  const to=P.to.map(id=>byId(S.clients,id)).filter(Boolean);const PR=propRows(d,R,P);const GT=P.showDur||P.showGantt?ganttCalc(d,R):{total:0};const alts=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>o.it.alt);
   const list=(arr,extra)=>{const all=[...arr,...propLines(extra)];return all.length?`<ul>${all.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''};
   const UP=P.showQty&&!P.hideUnit;const NQ=(P.showQty?2:0)+(UP?1:0);
   const table=P.format==='total'?`<table class="pp-t"><tbody><tr class="pp-grand"><td>Lump sum — ${esc((d.sections||[]).filter(s=>d.items.some(i=>!i.alt&&i.sec===s.id)).map(s=>s.name).join(', ')||'site work as described')}</td><td class="r">${money2(PR.total)}</td></tr></tbody></table>`
@@ -4996,8 +4998,10 @@ function propPaper(d,R,b,P){const L=propLib();const co=S.settings.general?.compa
     <div class="pp-meta"><div><span>Project</span><b>${esc(b.name)}</b>${b.location?`<div>${esc(b.location)}</div>`:''}</div><div><span>Date</span><b>${fmtDate(P.date)}</b></div>
       <div><span>To</span>${to.length?to.map(c=>`<b>${esc(c.company)}</b>${(b.client_contacts||{})[c.id]?`<div>Attn: ${esc(b.client_contacts[c.id])}</div>`:''}`).join(''):'<b>—</b>'}</div><div><span>Bid date</span><b>${fmtDate(b.due_date)}</b></div></div>
     ${P.intro?`<p>${esc(P.intro)}</p>`:''}${P.basis?`<p class="pp-basis"><b>Basis:</b> ${esc(P.basis)}</p>`:''}
+    ${P.showDur&&GT.total?`<p class="pp-basis"><b>Schedule:</b> approximately ${ganttWeeksText(GT)}${GT.hasStart?`, ${fmtDate(GT.startDate)} to ${fmtDate(GT.finishDate)}`:' from notice to proceed'}, weather permitting.</p>`:''}
     <h2>Pricing</h2>${table}
     ${alts.length?`<h2>Alternates</h2><table class="pp-t"><tbody>${alts.map(o=>`<tr><td>${esc(o.it.code)}</td><td>${esc(o.it.desc)}${o.x.q&&P.format==='unit'?` <span class="pp-dim">(${qtyFmt(o.it.qty)} ${esc(o.it.unit||'')} @ ${money2(o.x.unitPrice)})</span>`:''}</td><td class="r">${o.x.price<0?'Deduct ':'Add '}${money2(Math.abs(o.x.price))}</td></tr>`).join('')}</tbody></table>`:''}
+    ${P.showGantt&&GT.total?`<h2>Schedule</h2>${ganttPaper(d,R)}<p class="pp-dim" style="font-size:11px;margin:4px 0 0">${ganttWeeksText(GT)}. Working days only; durations are estimates.</p>`:''}
     ${P.incl.length||propLines(P.inclX).length?`<h2>Inclusions</h2>${list(P.incl,P.inclX)}`:''}
     ${P.excl.length||propLines(P.exclX).length?`<h2>Exclusions</h2>${list(P.excl,P.exclX)}`:''}
     ${P.clar.length||propLines(P.clarX).length?`<h2>Clarifications</h2>${list(P.clar,P.clarX)}`:''}
@@ -5018,6 +5022,8 @@ function estPropView(d,R,b,ro){const P=propData();const L=propLib();const dis=ro
     <div class="panel pad"><h3 class="pr-h">Pricing</h3><div class="radio pr-fmt">${[['unit','Unit prices — every bid item'],['scope','Lump sum by scope'],['total','One lump sum']].map(([k,l])=>`<label><input type="radio" name="prfmt" data-prf value="${k}"${P.format===k?' checked':''}${dis}> ${l}</label>`).join('')}</div>
       ${P.format==='unit'?`<label class="check small"><input type="checkbox" data-prb="showQty"${P.showQty?' checked':''}${dis}> Show quantities and units</label><label class="check small"><input type="checkbox" data-prb="hideUnit"${P.hideUnit?' checked':''}${dis||(P.showQty?'':' disabled')}> Hide unit prices</label><label class="check small"><input type="checkbox" data-prb="hideExt"${P.hideExt?' checked':''}${dis}> Hide line amounts (extensions)</label><label class="check small"><input type="checkbox" data-prb="subtotals"${P.subtotals?' checked':''}${dis}> Subtotal by scope</label>`:''}
       <p class="hint">Scopes are the estimate’s sections. Alternates are always listed separately.</p></div>
+    <div class="panel pad"><h3 class="pr-h">Schedule</h3><label class="check small"><input type="checkbox" data-prb="showDur"${P.showDur?' checked':''}${dis}> Show the estimated duration</label><label class="check small"><input type="checkbox" data-prb="showGantt"${P.showGantt?' checked':''}${dis}> Include the schedule chart</label>
+      <p class="hint">From the <b>Gantt schedule</b> tab: ${ganttWeeksText(ganttCalc(d,R))||'no bid items yet'}.</p></div>
     <div class="panel pad"><h3 class="pr-h">Opening</h3><label class="f">Intro${ptx('intro','A sentence or two before the pricing')}</label><label class="f">Basis of the proposal${ptx('basis','Plans dated …, Addenda …')}</label></div>
     <div class="panel pad"><h3 class="pr-h">Inclusions</h3>${chk('incl',L.incl)}<label class="f">More, one per line${ptx('inclX','Anything else that’s included')}</label></div>
     <div class="panel pad"><h3 class="pr-h">Exclusions</h3>${chk('excl',L.excl)}<label class="f">More, one per line${ptx('exclX','Anything else that’s excluded')}</label></div>
@@ -5093,7 +5099,7 @@ function tplSecData(D,name){const sid=newId();return {sections:[{...(D.sec||{nam
 function estFromTpl(tpl){const D=cbD(tpl);const d=estNorm(clone(tpl.book==='section'?tplSecData(D,tpl.description):(D.est||{})));
   const idm={};d.items.forEach(it=>{const nid=newId();idm[it.id]=nid;it.id=nid;it.acts.forEach(a=>{a.id=newId();a.res.forEach(r=>{r.id=newId();delete r.src})})});
   ['carry','adj'].forEach(k=>{const o=d.markup[k]||{};d.markup[k]=Object.fromEntries(Object.entries(o).filter(([id])=>idm[id]).map(([id,v])=>[idm[id],v]))});
-  (d.ind||[]).forEach(l=>l.id=newId());estApplyStale(estStale(d));delete d.pkgs;delete d.prop;return d}
+  (d.ind||[]).forEach(l=>l.id=newId());estApplyStale(estStale(d));delete d.pkgs;delete d.prop;delete d.gantt;return d}
 async function estCreate(mode,src){const b=byId(S.bids,S.est.bidId);if(!b)return;let d=estNorm(estBlank());
   try{if(mode==='scopes'){scopeItems(b).forEach((s,k)=>d.sections.push({id:newId(),code:String((k+1)*100),name:s.name,notes:''}))}
     if(mode==='copy'){if(!src)throw new Error('Pick an estimate to copy.');const r=await run(sb.from('estimates').select('data').eq('id',src).maybeSingle());if(!r)throw new Error('That estimate isn’t available.');d=estNorm(clone(r.data));delete d.prop}
@@ -5127,10 +5133,10 @@ function vEstimate(){const E=S.est;const tpl=!!(E&&E.tpl);const b=tpl?null:byId(
   if(E.err)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="err">${esc(E.err)}</div>`;
   if(!E.row)return estStartView(b,back);
   const d=E.data;const R=estCalc(d);const ro=EC().ro;estPick();const stale=estStale(d);
-  const tabs=tpl?[['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['sum','Default markup']]:[['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['quotes','Quotes'],['sum','Markup & totals'],['prop','Proposal']];
+  const tabs=tpl?[['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['sum','Default markup']]:[['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['quotes','Quotes'],['gantt','Gantt schedule'],['sum','Markup & totals'],['prop','Proposal']];
   if(!tabs.some(t=>t[0]===E.tab))E.tab='build';
   const kpi=(l,v,s,c)=>`<div class="est-kpi${c?' '+c:''}"><span>${l}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
-  const body=E.tab==='setup'?estSetupView(d,R,ro):E.tab==='ind'?estIndView(d,R,ro):E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='sum'?estSumView(d,R,b||{},ro):estBuildView(d,R,ro);
+  const body=E.tab==='setup'?estSetupView(d,R,ro):E.tab==='ind'?estIndView(d,R,ro):E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='gantt'?estGanttView(d,R,ro):E.tab==='sum'?estSumView(d,R,b||{},ro):estBuildView(d,R,ro);
   const title=tpl?`<input class="field est-tplname" id="est-tplname" data-tplname value="${esc(E.tplName||'')}" placeholder="Template name"${ro?' disabled':''}>`:`<h1>${esc(b.name)}</h1>`;
   return `<div class="head est-headrow"><div>${back}${title}<p class="small"><b>${tpl?(E.tplBook==='section'?'Section template':'Master template'):'Estimate'}</b>${tpl?'':` · <button class="linkbtn" data-act="est-revs" title="Saved copies and revisions">${esc(E.ver?E.ver.label:estRevName(d))}</button>`} · <span id="est-status">${estStatusText()}</span></p></div>
     <div class="tools">${stale.length&&!ro?`<button class="btn" data-act="est-stale" title="Codebook prices changed since they were added">↻ Update ${stale.length} price${stale.length===1?'':'s'}</button>`:''}${tpl?'':`<button class="btn" data-act="est-revs">Revisions${estVersOf(E.bidId).length?` (${estVersOf(E.bidId).length})`:''}</button><button class="btn" data-act="est-export">Export to Excel</button>`}${!tpl&&cbEditable()?'<button class="btn" data-act="est-savetpl" data-v="estimate">Save as master template</button>':''}</div></div>
@@ -6312,7 +6318,7 @@ const AREAS=[['dash','Dashboard','Bid pipeline dashboard and board results'],['b
 const ROLE_ACCESS={admin:{dash:'edit',bids:'edit',estimates:'edit',codebook:'edit',jobs:'edit',acct:'edit',contacts:'edit',calc:'edit',bids_scope:'all'},
   executive:{dash:'view',bids:'view',estimates:'view',codebook:'view',jobs:'view',acct:'view',contacts:'view',calc:'view',bids_scope:'all'},
   board:{dash:'view',bids:'view',estimates:'view',bids_scope:'all'},
-  estimator:{dash:'view',bids:'edit',estimates:'edit',codebook:'view',contacts:'view',calc:'edit',bids_scope:'mine'},
+  estimator:{dash:'view',bids:'edit',estimates:'edit',codebook:'view',contacts:'view',calc:'edit',bids_scope:'view'},
   pm:{jobs:'edit',acct:'edit',calc:'edit',bids_scope:'all'},
   accounting:{acct:'edit',bids_scope:'all'},pending:{bids_scope:'mine'}};
 const ROLE_ORDER=['admin','executive','estimator','pm','accounting','board','pending'];
@@ -6324,6 +6330,36 @@ function permOf(p,a){if(!p)return rolePerm('pending',a);if(p.role==='admin'||p.r
 const perm=a=>permOf(S.profile,a);
 const can=(a,l)=>{const v=perm(a);return l==='edit'?v==='edit':v==='view'||v==='edit'};
 const bidsAll=()=>perm('bids_scope')==='all';
+const SCOPE_LABEL={mine:'Assigned only',view:'See all, work on assigned',all:'All bids'};
+// 'view' scope: sees every bid, works only on assigned ones, and can flip between the two views
+const seesAll=()=>perm('bids_scope')!=='mine';const scopeView=()=>perm('bids_scope')==='view';
+const MINE_KEY='bp.mineview';S.mineView=(()=>{try{return localStorage.getItem(MINE_KEY)!=='0'}catch(e){return true}})();
+const onlyMine=()=>!seesAll()||(scopeView()&&S.mineView);
+const mineSeg=()=>scopeView()?`<div class="seg" role="tablist"><button class="${S.mineView?'on':''}" data-act="mine-view" data-v="1">Assigned to me</button><button class="${S.mineView?'':'on'}" data-act="mine-view" data-v="0">All projects</button></div>`:'';
+/* requests to work on a bid you're not assigned to */
+S.bidReqs=[];S.bidReqMissing=false;
+async function loadBidReqs(){if(!sb)return;const {data,error}=await sb.from('bid_requests').select('*');if(error){S.bidReqMissing=true;S.bidReqs=[];return}S.bidReqMissing=false;S.bidReqs=data||[];schedule()}
+const canAssign=()=>can('bids','edit')&&bidsAll();
+const myReq=bidId=>(S.bidReqs||[]).find(r=>r.bid_id===bidId&&r.user_id===S.session?.user?.id&&r.status==='Pending');
+const openReqs=()=>canAssign()?(S.bidReqs||[]).filter(r=>r.status==='Pending'&&byId(S.bids,r.bid_id)).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))):[];
+async function bidReqSend(bidId){const me=myEst();if(!me){toast('Your login isn’t linked to an estimator record yet. Ask an admin to link it on the Team page.');return}if(myReq(bidId))return;
+  const note=prompt('Add a note for whoever assigns bids (optional)','');if(note===null)return;
+  try{await run(sb.from('bid_requests').insert({id:newId(),bid_id:bidId,user_id:S.session.user.id,status:'Pending',created_at:new Date().toISOString(),estimator_id:me.id,name:myName(),note:String(note).trim().slice(0,300)}));await loadBidReqs();if(M&&M.kind==='bid')renderModal();render();toast('Request sent')}
+  catch(e){toast(/bid_requests|does not exist|schema cache/i.test(errMsg(e))?'Requests need a one-time database update (update-24-estimator-view-requests.sql).':errMsg(e))}}
+async function bidReqDecide(id,ok){const r=(S.bidReqs||[]).find(x=>x.id===id);if(!r||!canAssign())return;const b=byId(S.bids,r.bid_id);
+  try{if(ok&&b&&r.estimator_id&&b.lead_estimator_id!==r.estimator_id&&!(b.support_estimator_ids||[]).includes(r.estimator_id))await run(sb.from('bids').update({support_estimator_ids:[...(b.support_estimator_ids||[]),r.estimator_id]}).eq('id',b.id));
+    await run(sb.from('bid_requests').update({status:ok?'Approved':'Denied',decided_by_name:myName(),decided_at:new Date().toISOString()}).eq('id',id));await Promise.all([loadTable('bids'),loadBidReqs()]);if(M&&M.kind==='bid'&&b){const nb=byId(S.bids,b.id);if(nb)M.draft.support_estimator_ids=(nb.support_estimator_ids||[]).slice();renderModal()}render();
+    toast(ok?`${r.name||'They'} can now work on ${b?.name||'the bid'} as a supporting estimator`:'Request denied')}catch(e){toast(errMsg(e))}}
+function bidReqPanel(){const rs=openReqs();if(!rs.length)return '';
+  return `<div class="panel pad req-panel"><b>${rs.length} request${rs.length===1?'':'s'} to work on a bid</b><div class="list" style="margin-top:8px">${rs.map(r=>{const b=byId(S.bids,r.bid_id);return `<div class="li req-li"><span><b>${esc(r.name||'Someone')}</b> asked to work on <button class="linkbtn" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button>${r.note?`<div class="small dim">“${esc(r.note)}”</div>`:''}<div class="small dim">${fmtShort(String(r.created_at).slice(0,10))}</div></span>
+    <span class="rev-btns"><button class="btn sm primary" data-act="req-ok" data-id="${r.id}">Approve</button><button class="btn sm" data-act="req-no" data-id="${r.id}">Deny</button></span></div>`}).join('')}</div><p class="hint">Approving adds them to the bid as a supporting estimator.</p></div>`}
+function bidReqBanner(b){if(!b||b._new)return '';const rs=openReqs().filter(r=>r.bid_id===b.id);
+  if(rs.length)return rs.map(r=>`<div class="notice req-ban"><span><b>${esc(r.name||'Someone')}</b> asked to work on this bid.${r.note?` “${esc(r.note)}”`:''}</span> <button class="btn sm primary" data-act="req-ok" data-id="${r.id}">Approve</button> <button class="btn sm" data-act="req-no" data-id="${r.id}">Deny</button></div>`).join('');
+  if(!scopeView()||canWork(b)||!can('bids','edit'))return '';const p=myReq(b.id);const last=(S.bidReqs||[]).filter(r=>r.bid_id===b.id&&r.user_id===S.session?.user?.id&&r.status==='Denied').pop();
+  return `<div class="notice req-ban"><span>You’re not assigned to this bid, so it’s read-only for you.${last&&!p?' Your last request was denied.':''}</span> ${p?'<b>Request sent — waiting for approval</b>':`<button class="btn sm primary" data-act="req-send" data-id="${b.id}">Request to work on it</button>`}</div>`}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
+  if(a==='mine-view'){S.mineView=t.dataset.v==='1';try{localStorage.setItem(MINE_KEY,S.mineView?'1':'0')}catch(er){}render()}
+  else if(a==='req-send')bidReqSend(t.dataset.id);else if(a==='req-ok')bidReqDecide(t.dataset.id,true);else if(a==='req-no')bidReqDecide(t.dataset.id,false)});
 const customCount=p=>p&&p.role!=='admin'&&p.perms?Object.entries(p.perms).filter(([a,v])=>v&&v!==rolePerm(p.role,a)).length:0;
 const lvlPill=v=>v==='edit'?pill('Edit','good'):v==='view'?pill('View'):'<span class="dim">—</span>';
 function accessChips(p){return AREAS.filter(([a])=>permOf(p,a)!=='none').map(([a,l])=>`<span class="pill acc-${permOf(p,a)}" title="${esc(LVL_LABEL[permOf(p,a)])}">${esc(l)}${permOf(p,a)==='view'?' 👁':''}</span>`).join(' ')||'<span class="dim small">Nothing yet</span>'}
@@ -6332,8 +6368,8 @@ const pAv=p=>`<span class="av" style="background:${avColor(p.id)}" title="${esc(
 
 /* ----- top bar: tabs come from what each person can open ----- */
 function navGroups(){const g=[];
-  if(can('dash'))g.push(['dashboard',!bidsAll()?'My dashboard':role()==='board'?'Board dashboard':'Dashboard',['dashboard']]);
-  if(can('bids'))g.push(['pipeline',bidsAll()?'Pipeline':'My bids',['pipeline']]);
+  if(can('dash'))g.push(['dashboard',onlyMine()?'My dashboard':scopeView()?'Dashboard':role()==='board'?'Board dashboard':'Dashboard',['dashboard']]);
+  if(can('bids'))g.push(['pipeline',onlyMine()?'My bids':'Pipeline',['pipeline']]);
   const est=[...(can('estimates')?['estimates','estimate']:[]),...(can('codebook')?['cb']:[]),...(can('codebook','edit')?['settings','scopes']:[])];
   if(est.length)g.push([est[0],'Estimates',est.includes('cb')&&!est.includes('estimates')?[...est]:est]);
   if(can('jobs'))g.push(['jobs','Jobs',['jobs','job']]);
@@ -6354,7 +6390,7 @@ function vTeam(){const me=S.session.user.id;const f=S.teamRole||'';const all=S.p
   ${waiting?`<div class="notice"><b>${waiting} ${waiting===1?'person is':'people are'} waiting for access.</b> Pick a role for them below. They can't see anything until you do.</div>`:''}
   <div class="seg team-f">${[['','Everyone'],...ROLE_ORDER.map(r=>[r,ROLES.find(x=>x[0]===r)?.[1]||r])].filter(([k])=>!k||all.some(p=>p.role===k)).map(([k,l])=>`<button class="${f===k?'on':''}" data-act="team-f" data-v="${k}">${esc(l)}${k?` <small>${all.filter(p=>p.role===k).length}</small>`:''}</button>`).join('')}</div>
   <div class="panel scroll"><table class="team-t"><thead><tr><th>Person</th><th>Role</th><th>Can open</th><th>Estimator record</th><th></th></tr></thead><tbody>
-  ${list.map(p=>{const linked=S.estimators.find(e=>e.user_id===p.id);const self=p.id===me;const cc=customCount(p);const needsEst=permOf(p,'bids_scope')==='mine'&&permOf(p,'bids')!=='none';
+  ${list.map(p=>{const linked=S.estimators.find(e=>e.user_id===p.id);const self=p.id===me;const cc=customCount(p);const needsEst=permOf(p,'bids_scope')!=='all'&&permOf(p,'bids')==='edit';
     return `<tr><td><span class="who">${pAv(p)}<span><b>${esc(personName(p))}</b>${self?' '+pill('You','hot'):''}<div class="small dim">${[p.title,p.email,p.phone].filter(Boolean).map(esc).join(' · ')}</div></span></span></td>
     <td><select class="field" data-prole="${p.id}" ${self?'disabled title="You can’t change your own role"':''}>${ROLES.map(([k,l])=>`<option value="${k}"${p.role===k?' selected':''}>${l}</option>`).join('')}</select></td>
     <td class="team-acc">${accessChips(p)}${cc?`<div class="small warn-t">Custom: ${cc} change${cc===1?'':'s'} from the ${esc(ROLE_LABEL[p.role]||p.role)} default</div>`:''}</td>
@@ -6389,7 +6425,7 @@ function vAccess(){const rs=ROLE_ORDER.filter(r=>r!=='pending');const custom=S.p
   return teamHead('Access chart','What each role can open by default. Anyone can be adjusted on People & access.')+`
   <div class="panel scroll"><table class="team-t acc-t"><thead><tr><th>Area</th>${rs.map(r=>`<th class="c">${esc(ROLE_LABEL[r])}</th>`).join('')}</tr></thead><tbody>
   ${AREAS.map(([a,l,d])=>`<tr><td><b>${esc(l)}</b><div class="small dim">${esc(d)}</div></td>${rs.map(r=>`<td class="c">${lvlPill(rolePerm(r,a))}</td>`).join('')}</tr>`).join('')}
-  <tr><td><b>Which bids</b><div class="small dim">For bids, estimates and the dashboard</div></td>${rs.map(r=>`<td class="c small">${rolePerm(r,'bids')==='none'?'<span class="dim">—</span>':rolePerm(r,'bids_scope')==='all'?'All bids':'Assigned only'}</td>`).join('')}</tr>
+  <tr><td><b>Which bids</b><div class="small dim">For bids, estimates and the dashboard</div></td>${rs.map(r=>`<td class="c small">${rolePerm(r,'bids')==='none'?'<span class="dim">—</span>':SCOPE_LABEL[rolePerm(r,'bids_scope')]||'Assigned only'}</td>`).join('')}</tr>
   <tr><td><b>Team</b><div class="small dim">Logins, roles, access and company settings</div></td>${rs.map(r=>`<td class="c">${r==='admin'?pill('Edit','good'):'<span class="dim">—</span>'}</td>`).join('')}</tr></tbody></table></div>
   <div class="grid2" style="margin-top:14px"><div class="panel pad"><b>What the roles are for</b><div class="list" style="margin-top:6px">${rs.map(r=>`<div class="li small"><span><b>${esc(ROLE_LABEL[r])}</b> — ${esc(ROLE_ABOUT[r])}</span></div>`).join('')}</div></div>
   <div class="panel pad"><b>People with custom access</b>${custom.length?`<div class="list" style="margin-top:6px">${custom.map(p=>`<div class="li small"><span><b>${esc(personName(p))}</b> (${esc(ROLE_LABEL[p.role])}): ${AREAS.filter(([a])=>p.perms&&p.perms[a]&&p.perms[a]!==rolePerm(p.role,a)).map(([a,l])=>`${esc(l)} → ${LVL_LABEL[p.perms[a]]}`).join(', ')}${p.perms&&p.perms.bids_scope&&p.perms.bids_scope!==rolePerm(p.role,'bids_scope')?`, ${p.perms.bids_scope==='all'?'all bids':'assigned bids only'}`:''}</span><button class="btn sm ghost" data-act="team-edit" data-id="${p.id}">Edit</button></div>`).join('')}</div>`:'<p class="small dim">Everyone has their role\'s standard access.</p>'}
@@ -6406,8 +6442,8 @@ function accessModal(){const d=M.draft;const admin=d.role==='admin';const self=d
   <fieldset><legend>Access</legend>${admin?'<div class="notice small">Admins can open and change everything. Pick another role to limit access.</div>':d.role==='pending'?'<div class="notice small">Pick a role first. People waiting for access can\'t open anything.</div>':''}
     <table class="acc-ed"><tbody>${AREAS.map(([a,l,desc])=>{const def=rolePerm(d.role,a);const eff=permOf(d,a);return `<tr class="${d.perms[a]?'custom':''}"><td><b>${esc(l)}</b><div class="small dim">${esc(desc)}</div></td>
       <td><div class="seg acc-seg">${opt(a,'','Role default',LVL_LABEL[def])}${opt(a,'none','No access')}${opt(a,'view','View')}${opt(a,'edit','Edit')}</div></td><td class="c">${lvlPill(eff)}</td></tr>`}).join('')}
-      <tr class="${d.perms.bids_scope?'custom':''}"><td><b>Which bids</b><div class="small dim">Assigned only = bids where they're the lead or a supporting estimator</div></td>
-      <td><div class="seg acc-seg">${opt('bids_scope','','Role default',rolePerm(d.role,'bids_scope')==='all'?'All':'Assigned')}${opt('bids_scope','mine','Assigned only')}${opt('bids_scope','all','All bids')}</div></td><td class="c small">${permOf(d,'bids_scope')==='all'?'All bids':'Assigned'}</td></tr></tbody></table>
+      <tr class="${d.perms.bids_scope?'custom':''}"><td><b>Which bids</b><div class="small dim">Assigned = bids where they're the lead or a supporting estimator. “See all, work on assigned” lets them open every bid read-only and ask to join one.</div></td>
+      <td><div class="seg acc-seg">${opt('bids_scope','','Role default',SCOPE_LABEL[rolePerm(d.role,'bids_scope')])}${opt('bids_scope','mine','Assigned only')}${opt('bids_scope','view','See all, work on assigned')}${opt('bids_scope','all','All bids')}</div></td><td class="c small">${SCOPE_LABEL[permOf(d,'bids_scope')]||'Assigned only'}</td></tr></tbody></table>
     ${Object.values(d.perms).some(Boolean)&&!admin?'<button class="btn sm ghost" data-act="acc-reset">Reset to role defaults</button>':''}</fieldset></div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="acc-save">Save</button></div></div>`}
 async function accessSave(){const d=M.draft;const perms={};Object.entries(d.perms).forEach(([a,v])=>{if(v)perms[a]=v});
@@ -7161,6 +7197,7 @@ const PT_FIELDS=[['Project',[['project','Project name'],['location','Project loc
   ['Your company',[['company','Company name'],['letterhead','Letterhead lines from the proposal library'],['signed_by','Signed by'],['title','Signer’s title']]],
   ['Wording',[['intro','Intro'],['basis','Basis of the proposal'],['inclusions','Inclusions, one per line'],['exclusions','Exclusions, one per line'],['clarifications','Clarifications, one per line'],['terms','Terms'],['valid_days','Days the price is good for']]],
   ['Totals',[['total','Total base bid'],['alt_total','All alternates added up']]],
+  ['Schedule (from the Gantt schedule tab)',[['duration_days','Working days'],['duration_weeks','Weeks, rounded up'],['start_date','Start date, if set'],['finish_date','Finish date, if a start is set']]],
   ['Bid items — put these in one table row; the row repeats for every bid item',[['item.code','Item number'],['item.desc','Description'],['item.qty','Quantity'],['item.unit','Unit'],['item.unit_price','Unit price'],['item.amount','Extension'],['item.section','Section it’s in']]],
   ['Scopes — one row repeats for every section',[['scope.name','Section name'],['scope.total','Section total']]],
   ['Alternates — one row repeats for every alternate',[['alt.code','Item number'],['alt.desc','Description'],['alt.qty','Quantity'],['alt.unit','Unit'],['alt.unit_price','Unit price'],['alt.amount','Amount']]]];
@@ -7168,12 +7205,13 @@ function ptData(){const E=S.est,d=E.data,b=byId(S.bids,E.bidId)||{};const R=estC
   const to=P.to.map(id=>byId(S.clients,id)).filter(Boolean);const m=v=>({n:r2(num(v)||0),t:money2(num(v)||0)});const T=v=>({t:String(v==null?'':v)});
   const lines=(arr,x)=>[...arr,...propLines(x)].join('\n');const dt=v=>v?fmtDate(v):'';
   const row=(o,sec)=>({code:T(o.it.code),desc:T(o.it.desc),qty:{n:num(o.it.qty)||0,t:qtyFmt(num(o.it.qty)||0)},unit:T(o.it.unit),unit_price:o.x.q?m(o.x.unitPrice):T(''),amount:m(o.x.price),section:T(sec!=null?sec:(secOf(d,o.it.sec)||{}).name)});
-  const PR=propRows(d,R,{...P,format:'unit'});const alts=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>o.it.alt);
+  const PR=propRows(d,R,{...P,format:'unit'});const GTD=ganttCalc(d,R);const alts=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>o.it.alt);
   return {items:PR.groups.flatMap(g=>g.items.map(o=>row(o,g.name))),scopes:PR.groups.map(g=>({name:T(g.name),total:m(g.total)})),alts:alts.map(o=>row(o)),
     f:{project:T(b.name),location:T(b.location),date:T(dt(P.date)),bid_date:T(dt(b.due_date)),revision:T(estRevName(d)),estimator:T(b.lead_estimator_id?estName(b.lead_estimator_id):''),
       client:T(to[0]?.company),clients:T(to.map(c=>c.company).join(', ')),attn:T(to[0]?(b.client_contacts||{})[to[0].id]:''),
       company:T(S.settings.general?.companyName||CFG.companyName),letterhead:T(propLines(L.letterhead).join('\n')),signed_by:T(P.sign),title:T(P.title),
       intro:T(P.intro),basis:T(P.basis),inclusions:T(lines(P.incl,P.inclX)),exclusions:T(lines(P.excl,P.exclX)),clarifications:T(lines(P.clar,P.clarX)),terms:T(P.terms),valid_days:{n:num(P.valid)||0,t:String(P.valid||'')},
+      duration_days:{n:GTD.total,t:String(GTD.total)},duration_weeks:{n:Math.ceil(GTD.weeks-1e-9),t:String(Math.ceil(GTD.weeks-1e-9))},start_date:T(GTD.hasStart?fmtDate(GTD.startDate):''),finish_date:T(GTD.hasStart?fmtDate(GTD.finishDate):''),
       total:m(PR.total),alt_total:m(alts.reduce((s,o)=>s+o.x.price,0))}}}
 const PT_RE=/\{\{([^{}]+)\}\}/g;const PT_GROUP=/\{\{\s*(item|scope|alt)\s*\./i;const PT_LIST={item:'items',scope:'scopes',alt:'alts'};
 function ptVal(key,ctx,D){const k=String(key).trim().toLowerCase().replace(/\s+/g,'_');const p=k.split('.');
@@ -7300,3 +7338,180 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'pt-del':{if(!isAdmin())break;if(M.arm!==t.dataset.id){M.arm=t.dataset.id;renderModal();break}M.arm=null;run(sb.from('proposal_templates').delete().eq('id',t.dataset.id)).then(loadPropTpls).then(()=>{renderModal();render()}).catch(er=>toast(errMsg(er)));break}
   }});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset.ptsel!=null){S.ptSel=t.value;return}if(t.dataset.ptup!=null){const f=t.files&&t.files[0];t.value='';ptUpload(f)}});
+
+/* =====================================================================
+   Schedule (Gantt): one bar per bid item, filled in from the estimate.
+   Days come from crew hours ÷ hours per day; each item starts after the
+   one before it until you say otherwise. Saved in the estimate (data.gantt).
+   ===================================================================== */
+function ganttData(d){if(!d.gantt||typeof d.gantt!=='object')d.gantt={start:'',rows:{}};if(!d.gantt.rows||typeof d.gantt.rows!=='object')d.gantt.rows={};return d.gantt}
+function ganttCalc(d,R){R=R||estCalc(d);const G=d.gantt&&d.gantt.rows?d.gantt:{start:'',rows:{}};const wk=Math.min(7,Math.max(1,Math.round(num(R.ctx.days)||5)));
+  const rows=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>!o.it.alt).map((o,i)=>{const g=G.rows[o.it.id]||{};const cd=o.x.acts.reduce((s,a)=>s+(a.days||0),0);const auto=cd>0?Math.max(1,Math.ceil(cd-1e-9)):0;
+    const manual=g.dur!=null&&g.dur!=='';return {id:o.it.id,it:o.it,sec:o.it.sec,auto,crewDays:cd,manual,dur:manual?Math.max(0,Math.round(num(g.dur)||0)):(auto||1),pred:g.pred,lag:Math.round(num(g.lag)||0)}});
+  const by=new Map(rows.map(r=>[r.id,r]));rows.forEach((r,i)=>{r.predId=r.pred==='start'?null:r.pred&&by.has(r.pred)&&r.pred!==r.id?r.pred:r.pred?null:(i?rows[i-1].id:null);r.predAuto=!r.pred});
+  const seen=new Set();const place=r=>{if(r.start!=null)return;if(seen.has(r.id)){r.start=0;r.loop=true;return}seen.add(r.id);const p=r.predId&&by.get(r.predId);if(p)place(p);r.start=Math.max(0,(p?p.start+p.dur:0)+r.lag);r.end=r.start+r.dur};
+  rows.forEach(r=>{place(r);r.end=r.start+r.dur});const total=rows.reduce((m,r)=>Math.max(m,r.end),0);
+  const isWork=dt=>{const w=dt.getDay();return wk>=7||(wk===6?w!==0:w!==0&&w!==6)};
+  const s0=new Date((G.start||todayStr())+'T12:00:00');while(!isWork(s0))s0.setDate(s0.getDate()+1);
+  const cache=[new Date(s0)];const dateAt=n=>{n=Math.max(0,Math.round(n));while(cache.length<=n){const x=new Date(cache[cache.length-1]);do{x.setDate(x.getDate()+1)}while(!isWork(x));cache.push(x)}return cache[n]};
+  const iso=dt=>dt.getFullYear()+'-'+String(dt.getMonth()+1).padStart(2,'0')+'-'+String(dt.getDate()).padStart(2,'0');
+  rows.forEach(r=>{r.startDate=iso(dateAt(r.start));r.endDate=iso(dateAt(Math.max(r.start,r.end-1)))});
+  return {rows,total,wk,weeks:total/wk,hasStart:!!G.start,startDate:iso(s0),finishDate:total?iso(dateAt(total-1)):iso(s0),dateAt,iso}}
+const ganttWeeksText=g=>g.total?`${g.total} working day${g.total===1?'':'s'} (about ${fmtN(Math.max(1,Math.ceil(g.weeks-1e-9)),0)} week${Math.ceil(g.weeks-1e-9)<=1?'':'s'})`:'';
+function ganttBars(d,g,o={}){const px=o.px||Math.max(5,Math.min(26,Math.floor((o.width||880)/Math.max(1,g.total))));const W=Math.max(1,g.total)*px;const step=g.total>90?g.wk*2:g.wk;
+  const ticks=[];for(let n=0;n<g.total;n+=step)ticks.push(`<span class="gt-tick" style="left:${n*px}px">${g.hasStart?fmtShort(g.iso(g.dateAt(n))):'Wk '+(Math.round(n/g.wk)+1)}</span>`);
+  const grid=`background-size:${g.wk*px}px 100%`;const out=[];
+  (d.sections||[]).forEach(s=>{const rs=g.rows.filter(r=>r.sec===s.id);if(!rs.length)return;const a=Math.min(...rs.map(r=>r.start)),z=Math.max(...rs.map(r=>r.end));
+    out.push({sec:s,head:`<div class="gt-bar gt-sum" style="left:${a*px}px;width:${Math.max(2,(z-a)*px)}px"></div>`,days:z-a});rs.forEach(r=>out.push({r,head:`<div class="gt-bar${r.auto||r.manual?'':' gt-guess'}" style="left:${r.start*px}px;width:${Math.max(3,r.dur*px)}px" title="${esc(r.it.desc||'')}: ${r.dur} day${r.dur===1?'':'s'}"></div>`}))});
+  return {px,W,ticks:ticks.join(''),grid,out}}
+function estGanttView(d,R,ro){const G=ganttData(d);const g=ganttCalc(d,R);const dis=ro?' disabled':'';if(!g.rows.length)return `<div class="panel pad"><div class="empty"><b>No bid items yet</b>Add bid items on the Build tab and the schedule fills itself in.</div></div>`;
+  const B=ganttBars(d,g);const custom=Object.values(G.rows).some(x=>x&&(x.dur!=null&&x.dur!==''||x.pred||x.lag));const indDays=Math.round(R.dur.days||0);
+  const opts=r=>`<option value=""${r.pred?'':' selected'}>After the item above</option><option value="start"${r.pred==='start'?' selected':''}>At project start</option>${g.rows.filter(x=>x.id!==r.id).map(x=>`<option value="${x.id}"${r.pred===x.id?' selected':''}>After ${esc((x.it.code?x.it.code+' ':'')+(x.it.desc||'item')).slice(0,60)}</option>`).join('')}`;
+  const body=B.out.map(o=>o.sec?`<tr class="gt-sec"><td colspan="5"><b>${esc(o.sec.name||'Section')}</b> <span class="dim small">${o.days} day${o.days===1?'':'s'}</span></td><td class="gt-track" style="${B.grid}"><div class="gt-in" style="width:${B.W}px">${o.head}</div></td></tr>`
+    :`<tr><td class="gt-code">${esc(o.r.it.code||'')}</td><td class="gt-desc">${esc(o.r.it.desc||'')}${o.r.loop?' <span class="warn-t small">starts-after loop</span>':''}</td>
+      <td><input class="field num gt-n" id="gd-${o.r.id}" data-gd="${o.r.id}" inputmode="numeric" value="${o.r.manual?o.r.dur:''}" placeholder="${o.r.auto||1}" title="${o.r.auto?`From the estimate: ${fmtN(o.r.crewDays,1)} crew days`:'No crew hours on this item — type the days'}"${dis}></td>
+      <td><select class="field gt-p" data-gp="${o.r.id}" aria-label="Starts"${dis}>${opts(o.r)}</select></td>
+      <td><input class="field num gt-n" id="gl-${o.r.id}" data-gl="${o.r.id}" inputmode="numeric" value="${o.r.lag||''}" placeholder="0" title="Days to wait after that (negative to overlap)"${dis}></td>
+      <td class="gt-track" style="${B.grid}"><div class="gt-in" style="width:${B.W}px">${o.head}<span class="gt-lab" style="left:${o.r.end*B.px+6}px">${g.hasStart?fmtShort(o.r.startDate)+' – '+fmtShort(o.r.endDate):o.r.dur+'d'}</span></div></td></tr>`).join('');
+  return `<div class="panel pad gt-top"><div class="gt-sumline"><div><span>Duration</span><b>${g.total} working days</b><small>${fmtN(g.weeks,1)} weeks at ${g.wk} days a week</small></div>
+      <div><span>Start</span><input class="field" type="date" id="gt-start" data-gs value="${esc(G.start||'')}"${dis}><small>${G.start?'':'No date yet — showing weeks'}</small></div>
+      <div><span>Finish</span><b>${G.start?fmtDate(g.finishDate):'—'}</b><small>${G.start?'last working day':'set a start date'}</small></div>
+      <div><span>Indirects use</span><b>${indDays} days</b><small>${indDays===g.total?'matches this schedule':'from Schedule & indirects'}</small></div></div>
+    <div class="adders" style="margin:10px 0 0">${ro?'':`${indDays!==g.total?`<button class="btn sm primary" data-act="gt-useind" title="Sets the job duration on Schedule & indirects to ${g.total} days">Use ${g.total} days for indirects</button>`:''}<button class="btn sm" data-act="gt-reset"${custom?'':' disabled'}>Reset to the estimate</button>`}<button class="btn sm" data-act="gt-print">Print</button><button class="btn sm" data-act="gt-csv">Export (Excel / CSV)</button></div>
+    <p class="hint">Days come from each bid item’s crew hours. Items with no crew (subs, materials only) start at 1 day and show hatched — type the real number. Each item starts after the one above it; change <b>Starts</b> to run items side by side. Alternates aren’t scheduled.</p></div>
+  <div class="panel gt-wrap" id="gt-paper"><div class="gt-scroll"><table class="gt"><thead><tr><th>Item</th><th>Description</th><th>Days</th><th>Starts</th><th>Wait</th><th class="gt-track"><div class="gt-in gt-head" style="width:${B.W}px">${B.ticks}</div></th></tr></thead><tbody>${body}</tbody></table></div></div>`}
+// compact, read-only chart for the proposal
+function ganttPaper(d,R){const g=ganttCalc(d,R);if(!g.rows.length)return '';const B=ganttBars(d,g,{width:330});
+  return `<table class="pp-gt"><thead><tr><th>Item</th><th class="r">Days</th><th class="gt-track"><div class="gt-in gt-head" style="width:${B.W}px">${B.ticks}</div></th></tr></thead><tbody>${B.out.map(o=>o.sec?`<tr class="gt-sec"><td colspan="2"><b>${esc(o.sec.name||'')}</b></td><td class="gt-track" style="${B.grid}"><div class="gt-in" style="width:${B.W}px">${o.head}</div></td></tr>`
+    :`<tr><td>${esc(o.r.it.desc||'')}</td><td class="r">${o.r.dur}</td><td class="gt-track" style="${B.grid}"><div class="gt-in" style="width:${B.W}px">${o.head}</div></td></tr>`).join('')}</tbody></table>`}
+function ganttCsv(d){const g=ganttCalc(d);const b=byId(S.bids,S.est.bidId)||{};const q=v=>'"'+String(v==null?'':v).replace(/"/g,'""')+'"';const by=new Map(g.rows.map(r=>[r.id,r]));
+  const lines=[['Section','Item','Description','Working days','Starts after','Wait (days)','Start day #','Finish day #',...(g.hasStart?['Start date','Finish date']:[])].map(q).join(',')];
+  g.rows.forEach(r=>{const p=r.predId&&by.get(r.predId);lines.push([(secOf(d,r.sec)||{}).name||'',r.it.code||'',r.it.desc||'',r.dur,p?((p.it.code?p.it.code+' ':'')+(p.it.desc||'')):'Project start',r.lag,r.start+1,r.end,...(g.hasStart?[r.startDate,r.endDate]:[])].map(q).join(','))});
+  lines.push(['','','Total',g.total].map(q).join(','));ptSave(new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv'}),`Schedule - ${String(b.name||'estimate').replace(/[\\/:*?"<>|]+/g,' ').trim()}.csv`)}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('gt-')||!S.est||!S.est.data)return;const d=S.est.data;
+  switch(a){
+    case 'gt-reset':if(EC().ro)break;ganttData(d).rows={};estTouch();render();toast('Schedule reset to the estimate');break;
+    case 'gt-useind':{if(EC().ro)break;const g=ganttCalc(d);d.settings.durDays=g.total;estTouch();render();toast(`Indirects now use ${g.total} working days`);break}
+    case 'gt-csv':ganttCsv(d);break;
+    case 'gt-print':{const b=byId(S.bids,S.est.bidId);const g=ganttCalc(d);const old=document.title;document.title=`Schedule - ${b?.name||''}`;const pr=document.createElement('div');pr.id='print-root';pr.className='gt-print';
+      pr.innerHTML=`<h1>${esc(b?.name||'')}</h1><p>Schedule · ${ganttWeeksText(g)}${g.hasStart?` · ${fmtDate(g.startDate)} to ${fmtDate(g.finishDate)}`:''}</p>`+($('#gt-paper')?.outerHTML.replace('id="gt-paper"','')||'');pr.querySelectorAll('input,select').forEach(el=>{const s=document.createElement('span');s.textContent=el.tagName==='SELECT'?(el.selectedOptions[0]?.textContent||''):(el.value||el.placeholder||'');el.replaceWith(s)});
+      document.body.appendChild(pr);document.body.classList.add('printing-prop');window.print();setTimeout(()=>{document.body.classList.remove('printing-prop');pr.remove();document.title=old},500);break}
+  }});
+document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data||EC().ro)return;const d=S.est.data;const row=id=>{const G=ganttData(d);return G.rows[id]=G.rows[id]||{}};
+  if(t.dataset.gs!=null){ganttData(d).start=t.value||'';estTouch();render();return}
+  if(t.dataset.gd){const v=t.value.trim();const r=row(t.dataset.gd);if(v===''||isNaN(+v))delete r.dur;else r.dur=Math.max(0,Math.round(+v));estTouch();render();return}
+  if(t.dataset.gl){const v=t.value.trim();const r=row(t.dataset.gl);if(v===''||isNaN(+v)||!+v)delete r.lag;else r.lag=Math.round(+v);estTouch();render();return}
+  if(t.dataset.gp){const r=row(t.dataset.gp);if(t.value)r.pred=t.value;else delete r.pred;estTouch();render();return}});
+
+/* =====================================================================
+   Change orders: priced, tracked and printed from the job.
+   PMs (anyone who can edit jobs) write them. Approving one adds a
+   change-order line to the job's budget and schedule of values.
+   ===================================================================== */
+S.change_orders=[];S.coMissing=false;
+const CX_SQL='Change orders need a one-time database update (update-25-change-orders.sql).';
+const CX_STATUS=['Draft','Sent','Approved','Rejected','Void'];const CX_CLS={Draft:'',Sent:'warn',Approved:'good',Rejected:'bad',Void:''};
+const CX_REASONS=['Owner / GC request','Plan revision','RFI response','Field condition','Unsuitable soils / rock','Quantity overrun','Schedule / acceleration','Credit / deduct','Other'];
+const CX_KINDS=[['labor','Labor'],['equipment','Equipment'],['material','Material'],['sub','Subcontract'],['trucking','Trucking'],['other','Other'],['bid','Contract unit price']];
+async function loadCOs(){if(!sb||!(can('jobs')||can('acct')))return;const {data,error}=await sb.from('change_orders').select('*');if(error){S.coMissing=true;S.change_orders=[];return}S.coMissing=false;S.change_orders=data||[];schedule()}
+const jobCOs=jobId=>(S.change_orders||[]).filter(c=>c.job_id===jobId).sort((a,b)=>String(a.number).localeCompare(String(b.number),undefined,{numeric:true}));
+const cxD=c=>{const d=c.data&&typeof c.data==='object'?c.data:{};if(!Array.isArray(d.lines))d.lines=[];d.mk=d.mk&&typeof d.mk==='object'?d.mk:{};return d};
+function cxCalc(c){const d=cxD(c);const job=jobOf(c.job_id)||{};const by={labor:0,equipment:0,material:0,sub:0,trucking:0,other:0,bid:0};
+  d.lines.forEach(l=>{const k=by[l.kind]!=null?l.kind:'other';by[k]+=(num(l.qty)||0)*(num(l.price)||0)});
+  const self=by.labor+by.equipment+by.material+by.trucking+by.other,sub=by.sub;const ps=num(d.mk.self)||0,pb=num(d.mk.sub)||0,pbond=num(d.mk.bond)||0;
+  const mkSelf=self*ps/100,mkSub=sub*pb/100;const before=self+mkSelf+sub+mkSub+by.bid;const bond=before*pbond/100;const total=before+bond;
+  const jf=(1+(num(job.overhead_pct)||0)/100)*(1+(num(job.markup_pct)||0)/100);const bidCost=by.bid/(jf||1);
+  return {by,self,sub,mkSelf,mkSub,bond,before,total:r2(total),cost:r2(self+sub+bidCost),bidCost,ps,pb,pbond}}
+function cxExposure(jobId){const o={Approved:0,Sent:0,Draft:0,n:0,days:0};jobCOs(jobId).forEach(c=>{if(o[c.status]!=null){o[c.status]+=num(c.price)||0;o.n++}if(c.status==='Approved')o.days+=num(c.days)||0});return o}
+function cxNew(jobId){const cs=jobCOs(jobId);const last=cs[cs.length-1];const n=Math.max(0,...cs.map(c=>parseInt(c.number,10)||0),...jobItems(jobId).map(i=>parseInt(i.change_order,10)||0))+1;const mk=last?cxD(last).mk:{};
+  return {id:newId(),job_id:jobId,number:String(n),title:'',description:'',reason:CX_REASONS[0],status:'Draft',days:null,_new:true,data:{lines:[cxLine('labor')],mk:{self:mk.self??15,sub:mk.sub??10,bond:mk.bond??0},notes:'',detail:true}}}
+const cxLine=k=>({id:newId(),kind:k||'material',desc:'',qty:null,unit:'',price:null});
+function cxTab(job){const cs=jobCOs(job.id);const X=cxExposure(job.id);const C=jobContract(job);const edit=canJob();
+  if(S.coMissing)return `<div class="notice">${CX_SQL}</div>`;
+  return `<div class="statline cx-stat"><div><b>${money(C.contract-C.co)}</b>Original contract</div><div><b>${money(X.Approved)}</b>Approved change orders</div><div><b>${money(X.Sent)}</b>Sent, waiting on approval</div><div><b>${money(X.Draft)}</b>Drafts</div><div><b>${money(C.contract-C.co+X.Approved)}</b>Revised contract</div>${X.days?`<div><b>${X.days}</b>Days added</div>`:''}</div>
+  <div class="bar"><span class="small dim">${cs.length} change order${cs.length===1?'':'s'}</span><span style="flex:1"></span>${edit?'<button class="btn primary" data-act="cx-new">+ Change order</button>':''}</div>
+  <div class="panel scroll"><table><thead><tr><th>CO #</th><th>Title</th><th>Reason</th><th>Status</th><th class="r">Days</th><th class="r">Cost</th><th class="r">Price</th><th>Sent</th><th>Approved</th></tr></thead><tbody>
+  ${cs.map(c=>`<tr class="click" data-act="cx-open" data-id="${c.id}"><td><b>${esc(c.number)}</b></td><td class="proj">${esc(c.title||'Untitled')}</td><td class="small">${esc(c.reason||'')}</td><td>${pill(c.status,CX_CLS[c.status])}</td><td class="r num">${c.days||''}</td><td class="r num">${money(c.cost)}</td><td class="r num"><b>${money(c.price)}</b></td><td class="small">${c.sent_date?fmtShort(c.sent_date):''}</td><td class="small">${c.approved_date?fmtShort(c.approved_date):''}${c.approved_by?`<br><span class="dim">${esc(c.approved_by)}</span>`:''}</td></tr>`).join('')
+    ||`<tr><td colspan="9"><div class="empty"><b>No change orders yet</b>${edit?'Click <b>+ Change order</b> to price extra work, a credit, or a quantity change.':''}</div></td></tr>`}</tbody></table></div>
+  <p class="hint">Approving a change order adds it to this job’s budget and schedule of values, so it shows on pay applications. Work done on Sent or Draft change orders isn’t in the contract yet.</p>`}
+function cxTotHtml(c){const R=cxCalc(c);const ln=(l,v,cls)=>`<div class="cx-tl${cls?' '+cls:''}"><span>${l}</span><b>${money2(v)}</b></div>`;
+  return `${ln('Self-performed cost',R.self)}${R.ps?ln(`Markup ${fmtN(R.ps,1)}%`,R.mkSelf):''}${R.sub||R.pb?ln('Subcontract cost',R.sub):''}${R.sub&&R.pb?ln(`Markup on subs ${fmtN(R.pb,1)}%`,R.mkSub):''}${R.by.bid?ln('Work at contract unit prices',R.by.bid):''}${R.pbond?ln(`Bond / insurance ${fmtN(R.pbond,2)}%`,R.bond):''}${ln(R.total<0?'Credit':'Change order total',R.total,'cx-grand')}`}
+function cxModal(){const c=M.draft;const d=cxD(c);const job=jobOf(c.job_id);const lock=!canJob()||c.status==='Approved'||c.status==='Void';const dis=lock?' disabled':'';
+  const items=jobItems(c.job_id).filter(i=>!i.change_order&&num(i.quantity)>0&&num(i.bid_price)!=null);
+  const cbs=S.codebook.filter(x=>['material','labor','equipment'].includes(x.book)&&x.active!==false).slice(0,1500);
+  const rows=d.lines.map((l,i)=>`<tr><td><select class="field cx-k" data-cxl="${i}.kind"${dis}>${CX_KINDS.map(([k,n])=>`<option value="${k}"${l.kind===k?' selected':''}>${n}</option>`).join('')}</select></td>
+    <td><input class="field" id="cxd-${l.id}" data-cxl="${i}.desc" list="cx-cbl" value="${esc(l.desc||'')}" placeholder="${l.kind==='bid'?'Contract item':'Type, or pick from the codebook'}"${dis}></td>
+    <td><input class="field num cx-n" id="cxq-${l.id}" data-cxl="${i}.qty" inputmode="decimal" value="${l.qty??''}" placeholder="0"${dis}></td><td><input class="field cx-u" id="cxu-${l.id}" data-cxl="${i}.unit" list="cb-units" value="${esc(l.unit||'')}"${dis}></td>
+    <td><input class="field num cx-n" id="cxp-${l.id}" data-cxl="${i}.price" inputmode="decimal" value="${l.price??''}" placeholder="0.00"${dis}></td><td class="r num" id="cxt-${l.id}">${money2((num(l.qty)||0)*(num(l.price)||0))}</td><td>${lock?'':`<button class="x" data-act="cx-rm" data-i="${i}" aria-label="Remove line">×</button>`}</td></tr>`).join('');
+  return mhead(c._new?'New change order':`Change order ${c.number}`,jobLabel(job))+`<div class="mbody">
+    ${c.status==='Approved'?`<div class="notice">Approved${c.approved_date?' '+fmtShort(c.approved_date):''}${c.approved_by?' by '+esc(c.approved_by):''}. It’s in the job’s budget and schedule of values, so it’s locked. To change the amount, write another change order.</div>`:''}
+    <fieldset><legend>What changed</legend><div class="fg"><label class="f">CO number<input class="field" id="cx-no" data-cx="number" value="${esc(c.number)}"${dis}></label><label class="f s2">Title<input class="field" id="cx-title" data-cx="title" value="${esc(c.title||'')}" placeholder="e.g. Added storm line at Building C"${dis}></label>
+      <label class="f">Reason<select class="field" data-cx="reason"${dis}>${[...new Set([...CX_REASONS,c.reason].filter(Boolean))].map(r=>`<option${c.reason===r?' selected':''}>${esc(r)}</option>`).join('')}</select></label>
+      <label class="f s3">Description of the work<textarea class="field" id="cx-desc" data-cx="description" rows="3" placeholder="What is being added, removed or changed, and where. Reference the RFI, directive or plan sheet."${dis}>${esc(c.description||'')}</textarea></label>
+      <label class="f">Days added to the schedule<input class="field num" id="cx-days" data-cx="days" inputmode="numeric" value="${c.days??''}" placeholder="0"${dis}></label></div></fieldset>
+    <fieldset><legend>Pricing</legend><datalist id="cx-cbl">${cbs.map(x=>`<option value="${esc(x.description)}">${esc([x.code,x.unit,cbCost(x)!=null?money2(cbCost(x)):''].filter(Boolean).join(' · '))}</option>`).join('')}</datalist>
+      <div class="scroll"><table class="cx-t"><thead><tr><th>Type</th><th>Description</th><th class="r">Qty</th><th>Unit</th><th class="r">Unit cost</th><th class="r">Total</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="dim small">No lines yet.</td></tr>'}</tbody></table></div>
+      ${lock?'':`<div class="adders"><button class="btn sm" data-act="cx-add">+ Line</button>${items.length?`<select class="field cx-from" data-cxfrom aria-label="Add from a contract item"><option value="">+ From a contract item…</option>${items.map(i=>`<option value="${i.id}">${esc((i.code?i.code+' ':'')+i.description).slice(0,70)} — ${money2(num(i.bid_price)/num(i.quantity))}/${esc(i.unit||'unit')}</option>`).join('')}</select>`:''}</div>`}
+      <div class="cx-bot"><div class="fg cx-mk"><label class="f">Markup on your work %<input class="field num" id="cx-ms" data-cxm="self" inputmode="decimal" value="${d.mk.self??''}"${dis}></label><label class="f">Markup on subs %<input class="field num" id="cx-mb" data-cxm="sub" inputmode="decimal" value="${d.mk.sub??''}"${dis}></label><label class="f">Bond / insurance %<input class="field num" id="cx-mo" data-cxm="bond" inputmode="decimal" value="${d.mk.bond??''}"${dis}></label>
+        <p class="hint s3">Use a negative quantity for a credit. Lines at contract unit prices are not marked up again. Markups carry over to the next change order on this job.</p></div><div class="cx-tot" id="cx-tot">${cxTotHtml(c)}</div></div></fieldset>
+    <fieldset><legend>On the printed change order</legend><label class="check small"><input type="checkbox" data-cxb="detail"${d.detail!==false?' checked':''}${dis}> Show every pricing line (otherwise totals by type)</label>
+      <label class="f">Notes, exclusions and conditions<textarea class="field" id="cx-notes" data-cxn rows="2" placeholder="e.g. Price valid 15 days. Excludes rock, testing and survey."${dis}>${esc(d.notes||'')}</textarea></label></fieldset></div>
+  <div class="mfoot"><div>${!c._new&&canJob()&&c.status!=='Approved'?`<button class="btn danger${M.arm?' arm':''}" data-act="cx-del">${M.arm?'Click again to delete':'Delete'}</button>`:''}</div><div class="r"><button class="btn" data-act="close">Close</button><button class="btn" data-act="cx-print">Print / PDF</button>
+    ${lock?'':`<button class="btn" data-act="cx-save">Save</button>${c.status==='Draft'||c.status==='Rejected'?'<button class="btn" data-act="cx-status" data-v="Sent">Save &amp; mark sent</button>':''}${c.status==='Sent'?'<button class="btn" data-act="cx-status" data-v="Rejected">Rejected</button>':''}<button class="btn primary" data-act="cx-status" data-v="Approved">${M.armA?'Click again — adds it to the contract':'Approved'}</button>`}</div></div>`}
+function cxRow(c){const R=cxCalc(c);const d=cxD(c);return {id:c.id,job_id:c.job_id,number:String(c.number||'').trim(),title:String(c.title||'').trim(),description:String(c.description||'').trim(),reason:c.reason||'',status:c.status||'Draft',days:num(c.days)!=null?Math.round(num(c.days)):null,
+  data:{lines:d.lines.filter(l=>String(l.desc||'').trim()||num(l.qty)||num(l.price)),mk:d.mk,notes:d.notes||'',detail:d.detail!==false},cost:R.cost,price:R.total,sent_date:c.sent_date||null,approved_date:c.approved_date||null,approved_by:c.approved_by||'',job_item_id:c.job_item_id||null,updated_by_name:myName()}}
+async function cxSave(status){const c=M.draft;if(!canJob())return false;if(!String(c.title||'').trim()){toast('Give the change order a title.');return false}if(!String(c.number||'').trim()){toast('Give it a CO number.');return false}
+  if(jobCOs(c.job_id).some(x=>x.id!==c.id&&String(x.number).trim()===String(c.number).trim())){toast(`CO ${c.number} already exists on this job.`);return false}
+  const row=cxRow(c);const R=cxCalc(c);
+  try{if(status==='Sent'){row.status='Sent';row.sent_date=row.sent_date||todayStr()}
+    if(status==='Rejected')row.status='Rejected';
+    if(status==='Approved'){if(!row.data.lines.length){toast('Add at least one pricing line first.');return false}const who=prompt('Who approved it? (name at the GC or owner, optional)','');if(who===null)return false;
+      const by=R.by;const n=jobItems(c.job_id);const cost=R.cost;const jid=newId();
+      await run(sb.from('job_items').insert({id:jid,job_id:c.job_id,code:'CO'+row.number,description:row.title,unit:'LS',quantity:null,labor:r2(by.labor),equipment:r2(by.equipment),materials:r2(by.material),subcontract:r2(by.sub),other:r2(by.trucking+by.other+R.bidCost),overhead_pct:0,
+        markup_pct:cost?Math.max(-999,Math.min(9999,Math.round((R.total/cost-1)*1e5)/1e3)):0,bid_price:R.total,change_order:row.number,sort:n.reduce((m,i)=>Math.max(m,i.sort||0),0)+1,notes:'Change order'}));
+      row.status='Approved';row.approved_date=todayStr();row.approved_by=String(who).trim();row.job_item_id=jid;row.sent_date=row.sent_date||todayStr()}
+    if(c._new)await run(sb.from('change_orders').insert(row));else await run(sb.from('change_orders').update(row).eq('id',c.id));
+    await Promise.all([loadCOs(),status==='Approved'?loadTable('job_items'):null]);const nc=(S.change_orders||[]).find(x=>x.id===c.id);if(nc){M.draft=clone(nc);M.arm=M.armA=false;renderModal()}render();
+    toast(status==='Approved'?`CO ${row.number} approved — ${money(R.total)} added to the contract`:status==='Sent'?`CO ${row.number} marked sent`:status==='Rejected'?`CO ${row.number} marked rejected`:'Saved');return true}
+  catch(e){toast(/change_orders|does not exist|schema cache/i.test(errMsg(e))?CX_SQL:errMsg(e));return false}}
+function cxPrint(c){const job=jobOf(c.job_id)||{};const d=cxD(c);const R=cxCalc(c);const cl=jobClient(job);const co=S.settings.general?.companyName||CFG.companyName||'';const logo=BRAND.loginLogo||'';const L=propLib();const C=jobContract(job);
+  const prior=jobCOs(c.job_id).filter(x=>x.status==='Approved'&&x.id!==c.id).reduce((s,x)=>s+(num(x.price)||0),0);const orig=C.contract-C.co;const KN=Object.fromEntries(CX_KINDS);
+  const lines=d.lines.filter(l=>String(l.desc||'').trim()||num(l.qty)||num(l.price));
+  const table=d.detail!==false?`<table class="pp-t"><thead><tr><th>Type</th><th>Description</th><th class="r">Qty</th><th>Unit</th><th class="r">Unit price</th><th class="r">Amount</th></tr></thead><tbody>${lines.map(l=>`<tr><td>${esc(KN[l.kind]||'Other')}</td><td>${esc(l.desc||'')}</td><td class="r">${qtyFmt(num(l.qty)||0)}</td><td>${esc(l.unit||'')}</td><td class="r">${money2(num(l.price)||0)}</td><td class="r">${money2((num(l.qty)||0)*(num(l.price)||0))}</td></tr>`).join('')}</tbody></table>`
+    :`<table class="pp-t"><thead><tr><th>Type</th><th class="r">Amount</th></tr></thead><tbody>${CX_KINDS.filter(([k])=>R.by[k]).map(([k,n])=>`<tr><td>${n}</td><td class="r">${money2(R.by[k])}</td></tr>`).join('')}</tbody></table>`;
+  const tl=(l,v,g)=>`<tr${g?' class="pp-grand"':''}><td>${l}</td><td class="r">${money2(v)}</td></tr>`;
+  const html=`<div class="pp"><div class="pp-head">${logo?`<img src="${esc(logo)}" alt="" class="pp-logo">`:`<div class="pp-co">${esc(co)}</div>`}<div class="pp-lh">${propLines(L.letterhead).map(esc).join('<br>')}</div></div>
+    <h1 class="pp-title">Change Order Request ${esc(c.number||'')}</h1>
+    <div class="pp-meta"><div><span>Project</span><b>${esc(job.name||'')}</b>${job.location?`<div>${esc(job.location)}</div>`:''}</div><div><span>Date</span><b>${fmtDate(c.sent_date||todayStr())}</b></div><div><span>To</span><b>${esc(cl?.company||'—')}</b></div><div><span>Job #</span><b>${esc(job.job_number||'—')}</b></div></div>
+    <h2>${esc(c.title||'Change order')}</h2>${c.reason?`<p class="pp-basis"><b>Reason:</b> ${esc(c.reason)}</p>`:''}${propLines(c.description).map(x=>`<p>${esc(x)}</p>`).join('')}
+    <h2>Pricing</h2>${table}<table class="pp-t" style="margin-top:8px"><tbody>${R.self?tl('Self-performed work',R.self):''}${R.mkSelf?tl(`Markup ${fmtN(R.ps,1)}%`,R.mkSelf):''}${R.sub?tl('Subcontract work',R.sub):''}${R.mkSub?tl(`Markup on subcontract ${fmtN(R.pb,1)}%`,R.mkSub):''}${R.by.bid?tl('Work at contract unit prices',R.by.bid):''}${R.bond?tl(`Bond / insurance ${fmtN(R.pbond,2)}%`,R.bond):''}${tl(R.total<0?'Total credit':'Total this change order',R.total,1)}</tbody></table>
+    <h2>Contract summary</h2><table class="pp-t"><tbody>${tl('Original contract',orig)}${tl('Previously approved change orders',prior)}${tl('This change order',R.total)}${tl('Revised contract',orig+prior+R.total,1)}</tbody></table>
+    ${num(c.days)?`<p class="pp-basis"><b>Schedule:</b> ${Math.round(num(c.days))} working day${Math.round(num(c.days))===1?'':'s'} added to the contract time.</p>`:''}
+    ${propLines(d.notes).length?`<h2>Notes</h2><ul>${propLines(d.notes).map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}
+    <div class="pa-sign"><div>${esc(co)} / date</div><div>Approved by / date</div></div></div>`;
+  const old=document.title;document.title=`CO ${c.number} - ${job.name||''}`;const pr=document.createElement('div');pr.id='print-root';pr.innerHTML=html;document.body.appendChild(pr);document.body.classList.add('printing-prop');window.print();setTimeout(()=>{document.body.classList.remove('printing-prop');pr.remove();document.title=old},500)}
+FOCUS_ATTRS.push('data-cx','data-cxl','data-cxm','data-cxn');
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;if(!a.startsWith('cx-'))return;
+  switch(a){
+    case 'cx-new':if(canJob()){M={kind:'cx',draft:cxNew(S.jobId)};showModal();setTimeout(()=>$('#cx-title')?.focus(),0)}break;
+    case 'cx-open':{const c=(S.change_orders||[]).find(x=>x.id===t.dataset.id);if(c){M={kind:'cx',draft:clone(c)};cxD(M.draft);showModal()}break}
+    case 'cx-add':cxD(M.draft).lines.push(cxLine('material'));renderModal();break;
+    case 'cx-rm':cxD(M.draft).lines.splice(+t.dataset.i,1);renderModal();break;
+    case 'cx-save':cxSave();break;
+    case 'cx-status':{const v=t.dataset.v;if(v==='Approved'&&!M.armA){M.armA=true;renderModal();break}cxSave(v);break}
+    case 'cx-print':cxPrint(M.draft);break;
+    case 'cx-del':{if(!M.arm){M.arm=true;renderModal();break}const id=M.draft.id;run(sb.from('change_orders').delete().eq('id',id)).then(loadCOs).then(()=>{closeModal();render();toast('Change order deleted')}).catch(er=>toast(errMsg(er)));break}
+  }});
+document.addEventListener('input',e=>{const t=e.target;if(!M||M.kind!=='cx')return;const c=M.draft;const d=cxD(c);
+  if(t.dataset.cx&&t.tagName!=='SELECT'){c[t.dataset.cx]=t.value;return}
+  if(t.dataset.cxn!=null){d.notes=t.value;return}
+  if(t.dataset.cxm){d.mk[t.dataset.cxm]=t.value===''?null:num(t.value);const el=$('#cx-tot');if(el)el.innerHTML=cxTotHtml(c);return}
+  if(t.dataset.cxl&&t.tagName!=='SELECT'){const [i,k]=t.dataset.cxl.split('.');const l=d.lines[+i];if(!l)return;l[k]=k==='qty'||k==='price'?(t.value===''?null:num(t.value)):t.value;
+    const tc=$('#cxt-'+l.id);if(tc)tc.textContent=money2((num(l.qty)||0)*(num(l.price)||0));const el=$('#cx-tot');if(el)el.innerHTML=cxTotHtml(c)}});
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='cx')return;const c=M.draft;const d=cxD(c);
+  if(t.dataset.cx&&t.tagName==='SELECT'){c[t.dataset.cx]=t.value;return}
+  if(t.dataset.cxb){d[t.dataset.cxb]=t.checked;return}
+  if(t.dataset.cxfrom!=null){const it=byId(S.job_items,t.value);if(it){d.lines.push({id:newId(),kind:'bid',desc:(it.code?it.code+' ':'')+it.description,qty:null,unit:it.unit||'',price:r2(num(it.bid_price)/num(it.quantity)),item:it.id});renderModal();setTimeout(()=>$('#cxq-'+d.lines[d.lines.length-1].id)?.focus(),0)}return}
+  if(t.dataset.cxl){const [i,k]=t.dataset.cxl.split('.');const l=d.lines[+i];if(!l)return;
+    if(k==='kind'){l.kind=t.value;renderModal();return}
+    if(k==='desc'){const x=S.codebook.find(o=>['material','labor','equipment'].includes(o.book)&&o.description===t.value);if(x){l.kind=x.book==='material'?resKindOf(x):x.book;if(!l.unit)l.unit=x.book==='material'?(x.unit||''):'HR';if(l.price==null&&cbCost(x)!=null)l.price=+cbCost(x).toFixed(2);renderModal()}}}});
