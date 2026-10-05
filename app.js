@@ -936,8 +936,8 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={dirt:dirtModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
-  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
+  const html={dirt:dirtModal,push:pushModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();
@@ -6891,6 +6891,7 @@ const TROPHIES=[
  {id:'ideas',shape:'star',icon:'💡',names:['Bright Idea','Idea Machine','Product Visionary'],tiers:[1,3,10],what:'ideas of yours that got built',v:s=>s.ideas_built},
  {id:'tenure',shape:'shield',icon:'📅',names:['First Month','One Year In','Old Hand'],tiers:[30,365,1095],what:'days on the app',v:s=>s.days},
  {id:'dirt',shape:'cup',icon:'🚜',names:['Operator','Master Operator','Dirt Legend'],tiers:[80,200,400],what:'best Dirt Mover score',secret:true,v:(s,f)=>f('dirt')},
+ {id:'push',shape:'cup',icon:'🚧',names:['Pusher','Dozer Hand','Finish Blade'],tiers:[25,125,350],what:'most trucks handled in Push Crew',secret:true,v:(s,f)=>f('push')},
  {id:'clean',shape:'star',icon:'☎️',names:['Call Before You Dig'],tiers:[1],what:'Dirt Mover game with no utility strikes',secret:true,v:(s,f,d)=>d('dirt').clean?1:0},
  {id:'pipe',shape:'medal',icon:'🌧️',names:['Pipe Layer','Storm Chaser','Rainmaker'],tiers:[2,4,7],what:'Pipe Dream levels cleared in one run',v:(s,f,d)=>num(d('pipe').level)||0},
  {id:'guess',shape:'shield',icon:'👁️',names:['Good Eye','Eagle Eye','Human AGTEK'],tiers:[300,400,470],what:'best Guess the quantity score (out of 500)',v:(s,f)=>f('guess')},
@@ -7164,7 +7165,9 @@ function funGames(){const F=S.fun;if(F.game==='pipe')return `<button class="btn 
   return `<div class="gcards">${card('trivia','🎓','Daily trivia','One site-work question a day. Keep the streak alive.',tv.last===todayStr()?`Done for today · 🔥 ${num(tv.streak)||0}`:'Today’s question is waiting',tv.last===todayStr()?'See today’s answer':'Answer today’s question')}
     ${card('guess','👁️','Guess the quantity','Five sketches, 30 seconds each, no calculator. How good is your eye?',`Your best: ${num(funStat(me,'guess')?.value)||0} / 500`,'Play')}
     ${card('pipe','🌧️','Pipe Dream','Turn the pieces to connect the manhole to the outfall before the storm.',`Your best: ${Number(num(funStat(me,'pipe')?.value)||0).toLocaleString()}`,'Play')}
-    ${found?card('dirt','🚜','Dirt Mover','The secret one. Load trucks, don’t hit the line.',`Your best: ${num(funStat(me,'dirt')?.value)||0}`,'Play'):`<div class="panel pad gcard locked"><div class="gcard-i">🔒</div><h2>???</h2><p class="small">There’s a fourth game hidden somewhere in this app. Site-work folks know the first thing you do on any job.</p><div class="small dim">No hints at the trophy room either.</div></div>`}</div>`}
+    ${found?card('dirt','🚜','Dirt Mover','The secret one. Load trucks, don’t hit the line.',`Your best: ${num(funStat(me,'dirt')?.value)||0}`,'Play'):`<div class="panel pad gcard locked"><div class="gcard-i">🔒</div><h2>???</h2><p class="small">There’s a fourth game hidden somewhere in this app. Site-work folks know the first thing you do on any job.</p><div class="small dim">No hints at the trophy room either.</div></div>`}
+    ${funStat(me,'push')||(()=>{try{return localStorage.getItem('bp-push-found')==='1'}catch(e){return false}})()?`<div class="panel pad gcard"><div class="gcard-i">🚧</div><h2>Push Crew</h2><p class="small">The other secret one. Trucks dump, you push. Fill the lot before the shift ends.</p><div class="small dim">Your best: ${num(funStat(me,'push')?.value)||0} trucks</div><button class="btn primary" data-act="fun-push">Play</button></div>`
+      :found?`<div class="panel pad gcard locked"><div class="gcard-i">🔒</div><h2>???</h2><p class="small">You found one. There’s another. Once the trucks start dumping, what does the dozer do all day?</p><div class="small dim">Same trick as before.</div></div>`:''}</div>`}
 function vFun(){const F=S.fun;if(!F.loaded&&!F.loading)funLoad();
   const tabs=[['trophy','🏆 Trophy room'],['games','🎮 Games'],['crew','👥 The crew'],['profile','🪪 My profile']];const body={trophy:funTrophy,games:funGames,crew:funCrew,profile:funProfile}[F.tab]||funTrophy;
   return `<div class="head"><div><h1>Break room</h1><p>Trophies, games and your profile. Take five.</p></div><div class="tools"><button class="me-chip" data-act="fun-tab" data-v="profile">${funAv(crewOf(myId()),34)}<span>${esc(myName())}</span></button></div></div>
@@ -7794,3 +7797,85 @@ document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='fu')ret
 FOCUS_ATTRS.push('data-ful');
 document.addEventListener('input',e=>{const t=e.target;if(M&&M.kind==='fulist'&&t.dataset.ful){M[t.dataset.ful]=t.value;renderModal()}});
 document.addEventListener('change',e=>{const t=e.target;if(M&&M.kind==='fulist'&&t.dataset.fulsort!=null){M.sort=t.value;renderModal()}});
+
+/* =====================================================================
+   Push Crew — the second hidden game (type "push" anywhere).
+   Trucks back up to the haul road and dump. Drive the dozer into a pile
+   to push it: down the lot it slides until it lands, sideways one square.
+   Dirt lands on the lowest open square, so the lot fills bottom to top.
+   Fill the lot before the shift ends; a truck that can't dump is a strike.
+   Lots grow 5×5 → 10×10 → 15×15, and the trucks come faster.
+   ===================================================================== */
+const PC={W:600,H:680};
+const pcSize=l=>Math.min(15,5*l),pcEvery=l=>[2.3,1.7,1.3,1.1,0.95,0.85][Math.min(5,l-1)],pcMaxTrucks=l=>l<=1?1:l===2?2:3;
+function pcLevel(g,l){const N=pcSize(l);g.level=l;g.N=N;g.fill=Array.from({length:N},()=>new Array(N).fill(0));g.piles=[];g.trucks=[];g.left=N*N;g.spawn=1.2;g.every=pcEvery(l);
+  g.limit=Math.round(N*N*g.every*1.4+25);g.time=g.limit;g.dz={r:-1,c:Math.floor(N/2),d:'down'};g.banner={t:2.2,txt:`Lot ${l}: ${N} × ${N}`};g.flash=0}
+function pcNew(){const g={score:0,strikes:0,over:false,started:false,why:'',last:performance.now(),moveAt:0,best:0};pcLevel(g,1);return g}
+const pcPileAt=(g,r,c)=>g.piles.find(p=>p.r===r&&p.c===c);
+// a pile lands when it's over open ground with nothing open beneath it
+function pcSettle(g){let again=true;while(again){again=false;for(const p of g.piles.slice()){if(p.r<0||g.fill[p.r][p.c])continue;if(p.r===g.N-1||g.fill[p.r+1][p.c]){g.fill[p.r][p.c]=1;g.piles.splice(g.piles.indexOf(p),1);g.left--;g.score++;g.pop={r:p.r,c:p.c,t:.35};again=true}}}
+  if(g.left<=0&&!g.over){const bonus=Math.round(g.time/5);g.score+=bonus;g.strikes=Math.max(0,g.strikes-1);const l=g.level+1;g.best=Math.max(g.best,g.level);pcLevel(g,l);g.banner={t:2.6,txt:`Lot filled! +${bonus} for time · Lot ${l}: ${g.N} × ${g.N}`}}}
+function pcMove(g,d){if(g.over)return;if(!g.started){g.started=true;return}const now=performance.now();if(now<g.moveAt)return;g.moveAt=now+70;
+  const [dr,dc]={up:[-1,0],down:[1,0],left:[0,-1],right:[0,1]}[d];const z=g.dz;z.d=d;const r=z.r+dr,c=z.c+dc;if(r<-1||r>=g.N||c<0||c>=g.N)return;
+  const p=pcPileAt(g,r,c);
+  if(p){let nr=p.r+dr,nc=p.c+dc;if(nr<0||nr>=g.N||nc<0||nc>=g.N||pcPileAt(g,nr,nc)||(g.fill[nr][nc]&&nr!==0))return;   // jammed: the edge, another pile, or finished ground (dirt only rides on the top row)
+    if(d==='down'){while(nr+1<g.N&&!g.fill[nr][nc]&&!g.fill[nr+1][nc]&&!pcPileAt(g,nr+1,nc))nr++}   // slides down the lot until it lands
+    p.r=nr;p.c=nc;pcSettle(g)}
+  z.r=r;z.c=c}
+function pcStep(g,dt){if(g.banner){g.banner.t-=dt;if(g.banner.t<=0)g.banner=null}if(g.pop){g.pop.t-=dt;if(g.pop.t<=0)g.pop=null}if(g.flash>0)g.flash-=dt;if(g.over||!g.started)return;
+  g.time-=dt;if(g.time<=0){g.time=0;pcOver(g,'The shift ended before the lot was filled.');return}
+  g.spawn-=dt;if(g.spawn<=0&&g.trucks.length<pcMaxTrucks(g.level)){const open=[];for(let c=0;c<g.N;c++)if(!g.fill[0][c]&&!g.trucks.some(t=>t.c===c))open.push(c);
+    const inFlight=g.piles.length+g.trucks.length;if(open.length&&inFlight<g.left){const w=1.8+g.N*0.07;g.trucks.push({c:open[Math.floor(Math.random()*open.length)],t:w,T:w});g.spawn=g.every*(0.8+Math.random()*0.4)}else g.spawn=.3}
+  for(const t of g.trucks.slice()){t.t-=dt;if(t.t>0)continue;g.trucks.splice(g.trucks.indexOf(t),1);
+    if(pcPileAt(g,0,t.c)||(g.dz.r===0&&g.dz.c===t.c)){g.strikes++;g.flash=.5;g.banner={t:1.6,txt:g.dz.r===0&&g.dz.c===t.c?'You were in the way! Strike.':'Truck couldn’t dump! Strike.'};if(g.strikes>=3){pcOver(g,'Three trucks couldn’t dump. The super sent you home.');return}}
+    else{g.piles.push({r:0,c:t.c});pcSettle(g)}}}
+function pcOver(g,why){g.over=true;g.why=why;g.best=Math.max(g.best,g.level-1);const cur=funStat(myId(),'push');
+  funSave('push',g.score,{level:Math.max(num(cur?.data?.level)||0,g.best),plays:(num(cur?.data?.plays)||0)+1}).then(()=>{if(M&&M.kind==='push'){const b=$('.dirt-board');if(b)b.innerHTML='<b>Office high scores</b>'+funBoard('push',{fmt:(v,x)=>`${v} truck${v===1?'':'s'}${x.data.level?` · ${x.data.level} lot${x.data.level===1?'':'s'}`:''}`})}}).catch(()=>{})}
+function pcDraw(g,x){const W=PC.W,H=PC.H,N=g.N;const pad=20;const cs=Math.floor(Math.min(58,(W-pad*2)/N,(H-70-34)/(N+2)));const top=70+cs;const gx=Math.round((W-cs*N)/2),ay=top,gy=top+cs;
+  x.fillStyle='#22301F';x.fillRect(0,0,W,H);
+  // HUD
+  x.fillStyle='#F4F1E6';x.font='700 20px system-ui,sans-serif';x.textAlign='left';x.fillText(`Trucks ${g.score}`,pad,30);x.textAlign='center';x.fillText(`Lot ${g.level}  ·  ${g.left} to fill`,W/2,30);
+  x.textAlign='right';x.fillStyle=g.time<15?'#FF8A6B':'#F4F1E6';x.fillText(`${Math.floor(g.time/60)}:${String(Math.floor(g.time%60)).padStart(2,'0')}`,W-pad,30);
+  x.textAlign='left';x.font='600 13px system-ui,sans-serif';x.fillStyle='#C9C4B0';x.fillText('Strikes',pad,54);for(let i=0;i<3;i++){x.fillStyle=i<g.strikes?'#E0553A':'#4A5A45';x.beginPath();x.arc(pad+62+i*18,50,6,0,7);x.fill()}
+  x.fillStyle='#4A5A45';x.fillRect(W-pad-160,45,160,8);x.fillStyle=g.time<15?'#E0553A':'#E8B23A';x.fillRect(W-pad-160,45,160*Math.max(0,g.time/g.limit),8);
+  // haul road
+  x.fillStyle='#8C8A80';x.fillRect(gx,ay,cs*N,cs);x.fillStyle='#A5A398';for(let c=0;c<N;c++)x.fillRect(gx+c*cs+cs*.42,ay+cs*.45,cs*.16,cs*.1);
+  // lot
+  for(let r=0;r<N;r++)for(let c=0;c<N;c++){const X=gx+c*cs,Y=gy+r*cs;x.fillStyle=g.fill[r][c]?'#C9A66B':'#3B2E22';x.fillRect(X,Y,cs,cs);
+    if(g.fill[r][c]){x.strokeStyle='rgba(120,90,50,.35)';x.lineWidth=1;x.beginPath();x.moveTo(X+2,Y+cs*.33);x.lineTo(X+cs-2,Y+cs*.33);x.moveTo(X+2,Y+cs*.66);x.lineTo(X+cs-2,Y+cs*.66);x.stroke()}
+    x.strokeStyle='rgba(0,0,0,.28)';x.lineWidth=1;x.strokeRect(X+.5,Y+.5,cs-1,cs-1)}
+  if(g.pop){x.fillStyle=`rgba(255,240,180,${g.pop.t/.35*.7})`;x.fillRect(gx+g.pop.c*cs,gy+g.pop.r*cs,cs,cs)}
+  // trucks backing up above the road, with a marker where the load will land
+  for(const t of g.trucks){const X=gx+t.c*cs,k=1-t.t/t.T;const ty=ay-cs*.95+Math.min(1,k*1.4)*cs*.2;x.fillStyle='#E8B23A';x.fillRect(X+cs*.14,ty,cs*.72,cs*.62);x.fillStyle='#2B2B2B';x.fillRect(X+cs*.2,ty-cs*.2,cs*.6,cs*.22);
+    x.fillStyle='#111';x.fillRect(X+cs*.1,ty+cs*.5,cs*.14,cs*.16);x.fillRect(X+cs*.76,ty+cs*.5,cs*.14,cs*.16);
+    x.strokeStyle=Math.floor(t.t*6)%2?'#FF8A6B':'#FFD27A';x.lineWidth=2;x.setLineDash([4,3]);x.strokeRect(X+3,gy+3,cs-6,cs-6);x.setLineDash([]);x.fillStyle='#FFD27A';x.fillRect(X+3,gy+cs-7,(cs-6)*k,4)}
+  // piles
+  for(const p of g.piles){const X=gx+p.c*cs+cs/2,Y=gy+p.r*cs+cs/2;x.fillStyle='#7A5230';x.beginPath();x.ellipse(X,Y+cs*.08,cs*.38,cs*.3,0,0,7);x.fill();x.fillStyle='#96683E';x.beginPath();x.ellipse(X-cs*.06,Y-cs*.02,cs*.22,cs*.17,0,0,7);x.fill()}
+  // dozer
+  {const z=g.dz;const X=gx+z.c*cs+cs/2,Y=(z.r<0?ay:gy+z.r*cs)+cs/2;x.save();x.translate(X,Y);x.rotate({down:0,left:Math.PI/2,up:Math.PI,right:-Math.PI/2}[z.d]);
+    x.fillStyle='#1C1C1C';x.fillRect(-cs*.36,-cs*.32,cs*.14,cs*.56);x.fillRect(cs*.22,-cs*.32,cs*.14,cs*.56);x.fillStyle='#F2B705';x.fillRect(-cs*.24,-cs*.28,cs*.48,cs*.46);x.fillStyle='#2F3A44';x.fillRect(-cs*.14,-cs*.2,cs*.28,cs*.2);
+    x.fillStyle='#C9CED3';x.fillRect(-cs*.4,cs*.24,cs*.8,cs*.12);x.restore()}
+  // messages
+  x.textAlign='center';
+  if(g.flash>0){x.fillStyle=`rgba(224,85,58,${g.flash*.5})`;x.fillRect(0,0,W,H)}
+  if(g.banner&&!g.over){x.fillStyle='rgba(20,28,18,.82)';x.fillRect(W/2-250,H/2-28,500,48);x.fillStyle='#FFE9A8';x.font='700 17px system-ui,sans-serif';x.fillText(g.banner.txt,W/2,H/2+2)}
+  if(!g.started){x.fillStyle='rgba(20,28,18,.86)';x.fillRect(40,H/2-90,W-80,170);x.fillStyle='#FFE9A8';x.font='800 24px system-ui,sans-serif';x.fillText('PUSH CREW',W/2,H/2-50);x.fillStyle='#F4F1E6';x.font='500 14px system-ui,sans-serif';
+    ['Trucks dump at the top. Drive into a pile to push it.','Push it down the lot and it slides until it lands.','Clear each dump spot before the next truck. 3 strikes and you’re out.','Press any arrow key to start.'].forEach((s,i)=>x.fillText(s,W/2,H/2-18+i*24))}
+  if(g.over){x.fillStyle='rgba(20,28,18,.88)';x.fillRect(40,H/2-80,W-80,160);x.fillStyle='#FF8A6B';x.font='800 24px system-ui,sans-serif';x.fillText('Shift over',W/2,H/2-40);x.fillStyle='#F4F1E6';x.font='500 15px system-ui,sans-serif';x.fillText(g.why,W/2,H/2-10);
+    x.font='700 18px system-ui,sans-serif';x.fillText(`${g.score} truck${g.score===1?'':'s'} handled · ${g.best} lot${g.best===1?'':'s'} filled`,W/2,H/2+22);x.font='500 14px system-ui,sans-serif';x.fillStyle='#C9C4B0';x.fillText('Press Enter to go again',W/2,H/2+52)}
+  x.fillStyle='#8FA088';x.font='500 12px system-ui,sans-serif';x.fillText('Haul road ▲   ·   dirt fills from the bottom ▼',W/2,H-14)}
+function pushOpen(){M={kind:'push'};showModal();try{localStorage.setItem('bp-push-found','1')}catch(e){}setTimeout(pcInit,30)}
+function pushModal(){const st=funStat(myId(),'push');return mhead('Push Crew','You found the other one. Keep up with the trucks.')+`<div class="mbody dirt-b"><canvas id="push-cv" width="${PC.W}" height="${PC.H}" tabindex="0"></canvas>
+  <div class="dirt-ctl push-ctl"><button class="btn" data-push="left" aria-label="Left">◀</button><span><button class="btn" data-push="up" aria-label="Up">▲</button><button class="btn" data-push="down" aria-label="Down">▼</button></span><button class="btn" data-push="right" aria-label="Right">▶</button></div>
+  <p class="small dim" style="text-align:center;margin:8px 0 0">Arrow keys or W A S D drive the dozer · push a pile down and it slides until it lands · a truck that can’t dump is a strike${st?` · your best: <b>${num(st.value)}</b> trucks`:''}</p>
+  <div class="dirt-board"><b>Office high scores</b>${funBoard('push',{fmt:(v,x)=>`${v} truck${v===1?'':'s'}${x.data.level?` · ${x.data.level} lot${x.data.level===1?'':'s'}`:''}`})}</div></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Back to work</button></div></div>`}
+function pcInit(){const cv=$('#push-cv');if(!cv)return;const g=S.fun.push=pcNew();cv.focus();
+  const loop=now=>{if(!M||M.kind!=='push'||S.fun.push!==g)return;const dt=Math.min(0.05,(now-g.last)/1000);g.last=now;pcStep(g,dt);pcDraw(g,cv.getContext('2d'));requestAnimationFrame(loop)};requestAnimationFrame(loop)}
+let pushBuf='';
+document.addEventListener('keydown',e=>{const t=e.target;const typing=t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable);
+  if(M&&M.kind==='push'&&S.fun.push){const g=S.fun.push;const d={ArrowLeft:'left',a:'left',A:'left',ArrowRight:'right',d:'right',D:'right',ArrowUp:'up',w:'up',W:'up',ArrowDown:'down',s:'down',S:'down'}[e.key];
+    if(d){e.preventDefault();pcMove(g,d)}else if(e.key==='Enter'&&g.over){e.preventDefault();pcInit()}return}
+  if(typing||M||e.ctrlKey||e.metaKey||e.altKey||!S.session||role()==='pending'||S.tracker||e.key.length!==1)return;pushBuf=(pushBuf+e.key.toLowerCase()).slice(-4);if(pushBuf==='push'){pushBuf='';pushOpen()}});
+document.addEventListener('click',e=>{const b=e.target.closest('[data-push]');if(b&&M&&M.kind==='push'&&S.fun.push){const g=S.fun.push;if(g.over)pcInit();else pcMove(g,b.dataset.push);$('#push-cv')?.focus();return}
+  const t=e.target.closest('[data-act=fun-push]');if(t)pushOpen()});

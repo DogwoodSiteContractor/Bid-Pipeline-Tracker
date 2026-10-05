@@ -1642,3 +1642,8 @@ tr.eo-sec.eo-drop>td{box-shadow:inset 0 0 0 2px var(--accent)}
 .fu-go{font-weight:700;color:var(--accent);white-space:nowrap}
 .fu-old{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
 .fu-old span{flex:1;min-width:260px}
+
+/* Push Crew */
+#push-cv{width:100%;max-width:560px;height:auto;border-radius:12px;border:1px solid var(--line);outline:none;touch-action:none}
+.push-ctl{display:flex;justify-content:center;align-items:center;gap:8px;margin-top:8px}
+.push-ctl span{display:flex;flex-direction:column;gap:4px}

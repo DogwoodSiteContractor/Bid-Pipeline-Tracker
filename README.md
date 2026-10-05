@@ -158,6 +158,7 @@ A tab for morale: profiles, trophies and a few site-work games. Needs `supabase/
   - **Guess the quantity:** five sketches with dimensions, 30 seconds each, no calculator. Everyone gets the same set each day; replays are practice.
   - **Pipe Dream:** turn pipe pieces to connect the manhole to the outfall before the storm. Levels get bigger and faster.
   - **Dirt Mover:** hidden. Type **dig** anywhere in the app (not in a text box) to open it. Swing the excavator, load trucks, and don't dig the layer with the utility line in it. Once someone finds it, it shows on their Games page.
+  - **Push Crew:** also hidden. Type **push** anywhere in the app (not in a text box). Trucks back up to the haul road and dump; drive the dozer into a pile to push it. Pushed down the lot it slides until it lands, so the lot fills from the bottom up. A truck that can't dump is a strike (three and you're out, one is handed back for each lot you fill), and each lot has a shift clock. Lots grow 5×5, 10×10, 15×15 and the trucks come faster. Score is trucks handled; once found it shows as a card in the Break room, with its own trophy.
 - **Loading screen:** a small bulldozer pushing dirt replaces the spinner.
 
 ## Help and feedback (everyone)
