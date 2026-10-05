@@ -380,13 +380,13 @@ document.addEventListener('submit',async e=>{
 /* ---------- dashboard ---------- */
 function vDashboard(){
   const d=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}</div></div>`+mine();
-  if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}</div></div>`+precon();
+  if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}</div></div>`+fuPanel()+mine();
+  if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}</div></div>`+fuPanel()+precon();
   if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}</div></div>`+board();
   return `<div class="head"><div><h1>${S.dash==='precon'?'Bid pipeline dashboard':'Board dashboard'}</h1><p>${d}${S.lastLoaded?` · <span class="dim">Last updated ${S.lastLoaded.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>`:''}</p></div>
   <div class="tools">${S.dash==='board'?yearSelect()+'<button class="btn" data-act="board-custom">Customize view</button>':'<button class="btn" data-act="refresh">↻ Refresh</button>'}
   <div class="seg" role="tablist"><button class="${S.dash==='precon'?'on':''}" data-act="dash" data-v="precon">Precon<small>Daily work</small></button><button class="${S.dash==='board'?'on':''}" data-act="dash" data-v="board">Board<small>Results & trends</small></button></div></div></div>`
-  +bidReqPanel()+(S.dash==='precon'?precon():board());
+  +bidReqPanel()+fuPanel()+(S.dash==='precon'?precon():board());
 }
 function yearSelect(){const ys=new Set([new Date().getFullYear()]);S.bids.forEach(b=>ys.add(yearOf(b)));return `<select class="field" data-act="year" style="width:auto">${[...ys].sort((a,b)=>b-a).map(y=>`<option${y===S.year?' selected':''}>${y}</option>`).join('')}</select>`}
 function kpi(l,v,s,cls,filter){const tag=filter?'button':'div';return `<${tag} class="kpi ${cls||''}"${filter?` data-act="kpi-filter" data-v="${filter}"`:''}><div class="l">${l}</div><div class="v">${v}</div><div class="s">${esc(s)}</div></${tag}>`}
@@ -936,7 +936,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={dirt:dirtModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  const html={dirt:dirtModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt'].includes(M.kind)||M.kind==='cx'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -1017,7 +1017,7 @@ function bidModal(){
   const outcome=isSent(b)||DECIDED.includes(b.status);
   const sub=isNew?'Project details, team, scope, vendor quotes and files':admin?'Last saved '+(b.updated_at?new Date(b.updated_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—'):work?'You’re on this bid, so you can update anything here except who’s assigned to it.':'Read-only';
   const files=isNew?[]:filesFor(b.id);
-  return mhead(isNew?'New bid':b.name||'Untitled bid',sub)+`<div class="mbody">${archNote}${supBanner(b)}${bidReqBanner(b)}${trackRow(b)}${stageBar(b,work)}
+  return mhead(isNew?'New bid':b.name||'Untitled bid',sub)+`<div class="mbody">${archNote}${supBanner(b)}${bidReqBanner(b)}${trackRow(b)}${fuRow(b)}${stageBar(b,work)}
   ${isNew?'':`<p class="small dim stg-now">Step ${stageInfo(b,b.quotes).current+1} of ${STAGES.length} · <b>${STAGE_NAMES[stageInfo(b,b.quotes).current]}</b> — ${esc(stageInfo(b,b.quotes).detail)}${work?' · click a stage to move the bid':''}</p>`}
   <fieldset><legend>Project</legend><div class="fg">
     <label class="f s2">Project name ${work?'<span class="req">required</span>':''}<input class="field" ${bf('name')} placeholder="e.g. Riverside Commerce Park"></label>
@@ -7619,9 +7619,18 @@ async function trackPage(tk){const main=$('#main'),top=$('#topwrap');if(top)top.
   const draw=async first=>{let d=null,err=null;try{const r=await sb.rpc('client_tracker',{p_token:tk});if(r.error)err=r.error;else d=r.data}catch(e){err=e}
     if(err){if(first)main.innerHTML=shell(`<div class="tk-msg"><h1>We couldn’t load the tracker</h1><p>Please try again in a few minutes.</p></div>`);return}
     if(!d){main.innerHTML=shell(`<div class="tk-msg"><h1>This link isn’t active</h1><p>It may have been replaced. Please ask your contact at ${esc(co)} for a new one.</p></div>`);return}
-    const open=d.bids.filter(b=>!['Awarded','Not Awarded','No Bid'].includes(b.status)),closed=d.bids.filter(b=>!open.includes(b));
-    main.innerHTML=shell(`<div class="tk-title"><h1>${esc(d.client||'Your projects')}</h1><p>${open.length} bid${open.length===1?'':'s'} in progress${closed.length?` · ${closed.length} recently closed`:''} · updated ${new Date(d.as_of||Date.now()).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</p></div>
-      ${open.map(trackCard).join('')||'<div class="tk-msg"><p>No bids in progress right now.</p></div>'}${closed.length?`<h3 class="tk-sub">Recently closed</h3>${closed.map(trackCard).join('')}`:''}`)};
+    data=d;if(!$('#tk-list'))main.innerHTML=shell(`<div class="tk-title"><h1>${esc(d.client||'Your projects')}</h1><p id="tk-count"></p></div>
+      <div class="tk-bar"><input class="field" id="tk-q" type="search" placeholder="Search projects or locations" aria-label="Search"><select class="field" id="tk-stage" aria-label="Stage"><option value="">All stages</option>${TRACK_STEPS.slice(0,4).map(([l],i)=>`<option value="${i+1}">${l}</option>`).join('')}<option value="hold">On hold</option></select>
+        <select class="field" id="tk-sort" aria-label="Sort"><option value="due">Bid due date</option><option value="name">Project name</option><option value="stage">Stage</option><option value="new">Newest first</option></select></div><div id="tk-list"></div>`);
+    list()};
+  let data=null;
+  const list=()=>{if(!data||!$('#tk-list'))return;const q=($('#tk-q').value||'').trim().toLowerCase(),sg=$('#tk-stage').value,so=$('#tk-sort').value;
+    const all=data.bids.filter(b=>!['Awarded','Not Awarded','No Bid'].includes(b.status));
+    let L=all.filter(b=>(!q||(b.name+' '+(b.location||'')).toLowerCase().includes(q))&&(!sg||(sg==='hold'?b.status==='On Hold':b.status!=='On Hold'&&String(trackStage(b).n)===sg)));
+    const key={due:b=>b.due_date||'9999',name:b=>String(b.name).toLowerCase(),stage:b=>String(9-trackStage(b).n),new:b=>String(b.received||'')}[so];L=L.slice().sort((a,c)=>key(a).localeCompare(key(c)));if(so==='new')L.reverse();
+    $('#tk-count').textContent=`${all.length} bid${all.length===1?'':'s'} in progress${L.length!==all.length?` · showing ${L.length}`:''} · updated ${new Date(data.as_of||Date.now()).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}`;
+    $('#tk-list').innerHTML=L.map(trackCard).join('')||`<div class="tk-msg"><p>${all.length?'Nothing matches that search.':'No bids in progress right now.'}</p></div>`};
+  document.addEventListener('input',e=>{if(e.target.id==='tk-q')list()});document.addEventListener('change',e=>{if(e.target.id==='tk-stage'||e.target.id==='tk-sort')list()});
   main.innerHTML=shell(`<div class="tk-msg">${dozerLoader('Loading')}</div>`);await draw(true);setInterval(()=>{if(!document.hidden)draw(false)},60000)}
 /* ---- staff side ---- */
 function trackEmail(c,b,url){const who=String((b&&(b.client_contacts||{})[c.id])||'').split(/[,(]/)[0].trim();const co=S.settings.general?.companyName||CFG.companyName||'';const me=myEst();
@@ -7662,3 +7671,97 @@ function stageBar(b,work){const steps=[...PRE_SUBMIT,'Submitted'];const cur=step
   return `<div class="stg${b.status==='On Hold'?' hold':''}" role="group" aria-label="Pipeline stage">${steps.map((s,i)=>`<button type="button" class="${i<n?'past':i===n?'now':''}" data-act="bid-stage" data-v="${s}" title="${esc(BID_ABOUT[s]||'')}"${work?'':' disabled'}><i>${i<n?'✓':i+1}</i><span>${s==='Submitted'?'Proposal sent':s}</span></button>`).join('')}
     <span class="stg-end">${dec?pill(b.status,BID_CLS[b.status]):b.status==='On Hold'?pill('On Hold','warn'):''}</span></div>`}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act=bid-stage]');if(!t||!M||M.kind!=='bid'||t.disabled)return;M.draft.status=t.dataset.v;renderModal()});
+
+/* =====================================================================
+   GC follow-up after the proposal goes out.
+   A week (or whatever the bid says) after sending, the bid shows up under
+   "Follow-ups due" for its estimator and for managers. The app drafts the
+   email, logs the nudge, tracks the Teams/Zoom meeting and what was learned.
+   Plan lives on the bid (bids.follow_plan); nudges go in the follow-up log.
+   ===================================================================== */
+const fuTime=t=>{const m=/^(\d{1,2}):(\d{2})/.exec(String(t||''));if(!m)return String(t||'');const h=+m[1];return `${h%12||12}:${m[2]} ${h<12?'AM':'PM'}`};
+const FU_SQL='GC follow-ups need a one-time database update (update-30-follow-ups.sql).';
+const FU_STANDING=['No feedback yet','We’re low','We’re competitive','We’re high','Waiting on the owner','Budget / redesign','Project delayed'];
+const fuDefaults=()=>{const g=S.settings.general||{};return {days:num(g.fuDays)||7,rounds:num(g.fuRounds)||3}};
+const fuPlan=b=>{const p=b.follow_plan&&typeof b.follow_plan==='object'?b.follow_plan:{};const D=fuDefaults();return {days:num(p.days)>0?num(p.days):D.days,rounds:p.rounds!=null&&p.rounds!==''&&num(p.rounds)>=0?num(p.rounds):D.rounds,off:!!p.off,snooze:p.snooze||'',meeting:p.meeting&&typeof p.meeting==='object'?p.meeting:null,decision:p.decision||'',custom:{days:p.days,rounds:p.rounds}}};
+const fuSentDate=b=>b.submitted_date||(b.client_ids||[]).map(id=>propOf(b,id).sent_date).filter(Boolean).sort()[0]||'';
+const addDays=(iso,n)=>{const d=new Date(iso+'T12:00:00');d.setDate(d.getDate()+Math.round(n));return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')};
+// where a submitted bid stands on follow-up: {kind:'nudge'|'meeting'|'outcome'|'decision'|null, due, n, …}
+function fuState(b){const P=fuPlan(b);const sent=fuSentDate(b);const today=todayStr();const nudges=(b.follow_ups||[]).filter(f=>f.kind==='nudge'&&f.date&&(!sent||f.date>=sent)).sort((a,c)=>String(a.date).localeCompare(String(c.date)));
+  const o={P,sent,n:nudges.length,last:nudges.length?nudges[nudges.length-1].date:'',kind:null,due:'',label:''};
+  if(b.status!=='Submitted'||b.archived_at||!sent||P.off)return o;
+  const m=P.meeting;
+  if(m&&m.date&&!m.held){if(m.date>=today){o.kind='meeting';o.due=m.date;o.label=`Meeting ${fmtShort(m.date)}${m.time?' at '+fuTime(m.time):''}`;o.wait=true}else{o.kind='outcome';o.due=m.date;o.label='Record what you learned in the meeting'}return o}
+  if(P.decision){o.kind='decision';o.due=P.decision;o.label=`Decision expected ${fmtShort(P.decision)}`;o.wait=P.decision>today;if(!o.wait)o.label='Decision was expected — check in';return o}
+  if(o.n>=P.rounds){o.done=true;o.label=P.rounds?`All ${P.rounds} follow-up${P.rounds===1?'':'s'} sent`:'No follow-ups planned';return o}
+  o.kind='nudge';o.due=addDays(o.last||sent,P.days);if(P.snooze&&P.snooze>o.due)o.due=P.snooze;o.wait=o.due>today;o.label=`Follow-up ${o.n+1} of ${P.rounds}`;return o}
+const fuIsDue=b=>{const s=fuState(b);return !!s.kind&&!s.wait};
+function fuList(){const mine=!bidsAll();return S.bids.filter(b=>live(b)&&b.status==='Submitted'&&(mine?assigned(b):true)).map(b=>({b,s:fuState(b)})).filter(x=>x.s.kind).sort((a,c)=>String(a.s.due).localeCompare(String(c.s.due)))}
+function fuPanel(){if(!can('bids'))return '';const L=fuList();const due=L.filter(x=>!x.s.wait),soon=L.filter(x=>x.s.wait&&daysUntil(x.s.due)<=7);if(!due.length&&!soon.length)return '';
+  const row=x=>{const d=daysUntil(x.s.due);const gc=(x.b.client_ids||[]).map(clientName).filter(Boolean).slice(0,2).join(', ');
+    return `<div class="li fu-li"><span><button class="linkbtn" data-act="open-bid" data-id="${x.b.id}">${esc(x.b.name)}</button>${gc?` <span class="dim small">· ${esc(gc)}</span>`:''}<div class="small ${x.s.wait?'dim':'warn-t'}">${esc(x.s.label)} · ${x.s.wait?(d===0?'today':'in '+d+' day'+(d===1?'':'s')):d===0?'due today':-d+' day'+(d===-1?'':'s')+' overdue'}${x.b.lead_estimator_id&&bidsAll()?' · '+esc(estName(x.b.lead_estimator_id)):''}</div></span>
+      <span class="rev-btns">${canWork(x.b)?`<button class="btn sm${x.s.wait?'':' primary'}" data-act="fu-open" data-id="${x.b.id}">${x.s.kind==='outcome'?'Record meeting':x.s.kind==='nudge'?'Follow up…':'Open'}</button>`:''}</span></div>`};
+  return `<div class="panel pad req-panel fu-panel"><b>${due.length?`${due.length} GC follow-up${due.length===1?'':'s'} due`:'GC follow-ups coming up'}</b><div class="list" style="margin-top:8px">${due.map(row).join('')}${soon.length?`${due.length?'<div class="small dim" style="margin:8px 0 2px">Coming up this week</div>':''}${soon.map(row).join('')}`:''}</div></div>`}
+function fuEmail(b,cid,type,st){const c=byId(S.clients,cid)||{};const who=String((b.client_contacts||{})[cid]||'').split(/[,(]/)[0].trim().split(' ')[0];const co=S.settings.general?.companyName||CFG.companyName||'';const me=myEst();const hi=who?'Hi '+who:'Hello';
+  const sign=`\n\nThank you,\n${myName()}${me&&me.phone?'\n'+me.phone:''}${co?'\n'+co:''}`;const sent=fuSentDate(b);const when=sent?` on ${fmtDate(sent)}`:'';const m=st.P.meeting||{};
+  if(type==='meeting')return {subject:`${b.name} — time to review our proposal?`,body:`${hi},\n\nI’d like to set up a short Teams or Zoom call to walk through our proposal for ${b.name}. Twenty minutes is plenty. It gives us a chance to confirm scope, answer any questions and make sure nothing is missing or double-counted.\n\nWould any of these work?\n  • \n  • \n  • \n\nIf another time is better, send it over and I’ll make it work.${sign}`};
+  if(type==='confirm')return {subject:`${b.name} — proposal review ${m.date?fmtDate(m.date):''}${m.time?' at '+fuTime(m.time):''}`,body:`${hi},\n\nConfirming our call to review the ${b.name} proposal${m.date?' on '+fmtDate(m.date):''}${m.time?' at '+fuTime(m.time):''}.${m.link?`\n\nJoin here: ${m.link}`:''}\n\nIf there’s anything you’d like us to have ready, let me know.${sign}`};
+  const n=st.n+1;
+  if(n<=1)return {subject:`${b.name} — following up on our proposal`,body:`${hi},\n\nI wanted to follow up on the proposal we sent for ${b.name}${when}. Has your team had a chance to review it?\n\nIf you have questions on scope, quantities or anything we excluded, I’m glad to walk through it. I can also set up a quick Teams or Zoom call if that’s easier.${sign}`};
+  if(n===2)return {subject:`${b.name} — checking in`,body:`${hi},\n\nChecking back in on ${b.name}. Is there an update on where the project stands or when you expect a decision?\n\nIf our number needs another look, or the scope has changed since we priced it, send over what you have and we’ll turn it around quickly.${sign}`};
+  return {subject:`${b.name} — still interested`,body:`${hi},\n\nI know these decisions take time, so I’ll keep this short. We’re still very interested in ${b.name} and have the crews to start when you need us.\n\nCould you let me know where things stand, even if nothing has been decided yet? It helps us hold room in our schedule.${sign}`}}
+function fuOpen(bidId){const b=byId(S.bids,bidId);if(!b)return;const st=fuState(b);const P=st.P;M={kind:'fu',bidId,cid:(b.client_ids||[])[0]||'',type:st.kind==='nudge'||!st.kind?'nudge':'meeting',days:P.custom.days??'',rounds:P.custom.rounds??'',mt:{date:P.meeting?.date||'',time:P.meeting?.time||'',link:P.meeting?.link||''},out:{standing:FU_STANDING[0],decision:'',comp:'',notes:'',prob:b.probability??50}};showModal()}
+function fuModal(){const x=M;const b=byId(S.bids,x.bidId);if(!b)return mhead('Follow-up','')+'<div class="mbody"></div>';const st=fuState(b);const P=st.P;const work=canWork(b);const dis=work?'':' disabled';const D=fuDefaults();
+  const em=x.cid?fuEmail(b,x.cid,x.type,st):null;const log=(b.follow_ups||[]).filter(f=>f.date||f.note).slice().sort((a,c)=>String(c.date).localeCompare(String(a.date))).slice(0,6);const m=P.meeting;
+  const steps=[['Proposal sent',st.sent?fmtShort(st.sent):'—',1],[`Follow-ups`,`${st.n} of ${P.rounds}`,st.n>0?(st.n>=P.rounds?1:.5):0],['Meeting',m&&m.date?(m.held?'Held '+fmtShort(m.date):fmtShort(m.date)):'Not set',m&&m.held?1:m&&m.date?.5:0],['Decision',P.decision?'Expected '+fmtShort(P.decision):'Waiting',0]];
+  return mhead('GC follow-up',b.name)+`<div class="mbody">
+    ${b.follow_plan===undefined?`<div class="notice">${FU_SQL}</div>`:''}
+    <div class="fu-steps">${steps.map(([l,v,p])=>`<div class="${p>=1?'done':p>0?'cur':''}"><span>${l}</span><b>${esc(v)}</b></div>`).join('')}</div>
+    <p class="small ${st.kind&&!st.wait?'warn-t':'dim'}" style="margin:8px 0 14px">${b.status!=='Submitted'?`This bid is ${esc(b.status)}, so follow-ups are off.`:!st.sent?'No sent date on this bid yet.':P.off?'Follow-ups are paused for this bid.':esc(st.label)+(st.due&&st.kind?` · ${st.wait?'due':'was due'} ${fmtShort(st.due)}`:'')}</p>
+    ${st.kind==='outcome'?`<fieldset class="fu-hot"><legend>What did you learn in the meeting?</legend><div class="fg">
+      <label class="f s2">Where we stand<select class="field" data-fuo="standing"${dis}>${FU_STANDING.map(s=>`<option${x.out.standing===s?' selected':''}>${s}</option>`).join('')}</select></label>
+      <label class="f">Decision expected<input type="date" class="field" id="fuo-dec" data-fuo="decision" value="${esc(x.out.decision)}"${dis}></label><label class="f">Win probability %<input class="field num" id="fuo-prob" data-fuo="prob" inputmode="numeric" value="${esc(x.out.prob)}"${dis}></label>
+      <label class="f s2">Who else is in it<input class="field" id="fuo-comp" data-fuo="comp" value="${esc(x.out.comp)}" placeholder="Other bidders, if they said"${dis}></label><label class="f s2">Notes<input class="field" id="fuo-notes" data-fuo="notes" value="${esc(x.out.notes)}" placeholder="Scope questions, what they want changed…"${dis}></label></div>
+      <div class="adders"><button class="btn primary" data-act="fu-held"${dis}>Save meeting notes</button><button class="btn" data-act="fu-nomeet"${dis}>It didn’t happen</button></div></fieldset>`:''}
+    <fieldset><legend>Email the GC</legend>
+      <div class="fg"><label class="f s2">To<select class="field" data-fu="cid"${dis}>${(b.client_ids||[]).map(id=>`<option value="${id}"${x.cid===id?' selected':''}>${esc(clientName(id))}${(b.client_contacts||{})[id]?' — '+esc(b.client_contacts[id]):''}</option>`).join('')||'<option value="">No GC on this bid</option>'}</select></label>
+      <label class="f s2">Kind<select class="field" data-fu="type"${dis}><option value="nudge"${x.type==='nudge'?' selected':''}>Follow-up ${Math.min(st.n+1,Math.max(P.rounds,1))}</option><option value="meeting"${x.type==='meeting'?' selected':''}>Ask for a Teams / Zoom review</option>${m&&m.date&&!m.held?`<option value="confirm"${x.type==='confirm'?' selected':''}>Confirm the meeting</option>`:''}</select></label></div>
+      ${em?`<label class="f">Subject<input class="field" id="fu-subj" data-fu="subject" value="${esc(x.subject??em.subject)}"${dis}></label><label class="f">Message<textarea class="field" id="fu-body" data-fu="body" rows="9"${dis}>${esc(x.body??em.body)}</textarea></label>
+      <div class="adders"><button class="btn" data-act="fu-copy">Copy email</button><button class="btn" data-act="fu-mail">Open in my email</button>${work?`<button class="btn primary" data-act="fu-sent">I sent it — log it</button>`:''}</div><p class="hint">Send it from your own email, then click <b>I sent it</b>. That logs the follow-up and starts the clock for the next one.</p>`:''}</fieldset>
+    <fieldset><legend>Teams / Zoom meeting</legend><div class="fg"><label class="f">Date<input type="date" class="field" id="fum-date" data-fum="date" value="${esc(x.mt.date)}"${dis}></label><label class="f">Time<input type="time" class="field" id="fum-time" data-fum="time" value="${esc(x.mt.time)}"${dis}></label><label class="f s2">Meeting link<input class="field" id="fum-link" data-fum="link" value="${esc(x.mt.link)}" placeholder="Paste the Teams or Zoom link"${dis}></label></div>
+      ${work?`<div class="adders"><button class="btn" data-act="fu-meet">${m&&m.date&&!m.held?'Update meeting':'Meeting scheduled'}</button>${m&&m.date&&!m.held?'<button class="btn ghost" data-act="fu-nomeet">Cancel meeting</button>':''}</div>`:''}
+      ${m&&m.held&&m.outcome?`<p class="small" style="margin:8px 0 0"><b>Last meeting ${fmtShort(m.date)}:</b> ${esc(m.outcome.standing||'')}${m.outcome.comp?' · also bidding: '+esc(m.outcome.comp):''}${m.outcome.notes?' · '+esc(m.outcome.notes):''}</p>`:''}</fieldset>
+    <fieldset><legend>This bid’s follow-up plan</legend><div class="fg"><label class="f">Days between follow-ups<input class="field num" id="fu-days" data-fu="days" inputmode="numeric" value="${esc(x.days)}" placeholder="${D.days}"${dis}></label><label class="f">How many follow-ups<input class="field num" id="fu-rounds" data-fu="rounds" inputmode="numeric" value="${esc(x.rounds)}" placeholder="${D.rounds}"${dis}></label>
+      <div class="f s2" style="justify-content:flex-end">${work?`<div class="adders" style="margin:0"><button class="btn sm" data-act="fu-plan">Save plan</button><button class="btn sm" data-act="fu-snooze" title="Push the next reminder back a week">Remind me in a week</button><button class="btn sm ghost" data-act="fu-pause">${P.off?'Turn follow-ups back on':'Pause follow-ups'}</button></div>`:''}</div></div>
+      <p class="hint">Blank uses the company default (${D.days} days, ${D.rounds} follow-ups).${isAdmin()?' <button class="linkbtn" data-act="fu-default">Change the default</button>':''}</p></fieldset>
+    ${log.length?`<fieldset><legend>Follow-up log</legend>${log.map(f=>`<div class="small" style="padding:3px 0"><b>${f.date?fmtShort(f.date):''}</b> ${esc(f.note||'')}</div>`).join('')}</fieldset>`:''}</div>
+  <div class="mfoot"><div><button class="btn" data-act="fu-bid">Open the bid</button></div><div class="r"><button class="btn" data-act="close">Close</button></div></div>`}
+async function fuWrite(b,patch,logLine,extra){const plan={...(b.follow_plan&&typeof b.follow_plan==='object'?b.follow_plan:{}),...(patch||{})};Object.keys(plan).forEach(k=>{if(plan[k]===undefined)delete plan[k]});
+  const up={follow_plan:plan,...(extra||{})};if(logLine)up.follow_ups=[...(b.follow_ups||[]),{date:todayStr(),...logLine}];
+  try{await run(sb.from('bids').update(up).eq('id',b.id));await loadTable('bids');if(M&&M.kind==='fu'){M.subject=M.body=undefined;renderModal()}render();return true}
+  catch(e){toast(/follow_plan|column|schema cache/i.test(errMsg(e))?FU_SQL:errMsg(e));return false}}
+function fuRow(b){if(!b||b._new||b.status!=='Submitted')return '';const s=fuState(b);return `<div class="trk-row small"><span class="dim">GC follow-up:</span> ${esc(s.label||'not started')}${s.due&&s.kind?` · ${s.wait?'due':'was due'} ${fmtShort(s.due)}`:''} <button class="linkbtn" data-act="fu-open" data-id="${b.id}">${canWork(b)?'Follow up…':'View'}</button></div>`}
+FOCUS_ATTRS.push('data-fu','data-fum','data-fuo');
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;if(!a.startsWith('fu-'))return;
+  if(a==='fu-open'){closeModal();fuOpen(t.dataset.id);return}
+  const x=M&&M.kind==='fu'?M:null;if(!x)return;const b=byId(S.bids,x.bidId);if(!b)return;const st=fuState(b);const em=x.cid?fuEmail(b,x.cid,x.type,st):{subject:'',body:''};const subj=x.subject??em.subject,body=x.body??em.body;const gc=clientName(x.cid)||'the GC';
+  const copy=(txt,msg)=>(navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast(msg)).catch(()=>toast('Couldn’t copy — select the text and copy it by hand.'));
+  if(a==='fu-copy'){copy(`Subject: ${subj}\n\n${body}`,'Email copied');return}
+  if(a==='fu-mail'){const c=byId(S.clients,x.cid)||{};const to=(/[^\s<>(),;]+@[^\s<>(),;]+/.exec(String((b.client_contacts||{})[x.cid]||'')+' '+String(c.email||''))||[''])[0];location.href=`mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(subj)}&body=${encodeURIComponent(body)}`;return}
+  if(a==='fu-bid'){closeModal();openBid(b.id);return}
+  if(a==='fu-default'&&isAdmin()){const D=fuDefaults();const d=prompt('Days between follow-ups (company default)',D.days);if(d===null)return;const r=prompt('How many follow-ups (company default)',D.rounds);if(r===null)return;
+    const g={...(S.settings.general||{}),fuDays:Math.max(1,Math.round(num(d)||7)),fuRounds:Math.max(0,Math.round(num(r)??3))};run(sb.from('settings').upsert({key:'general',value:g})).then(()=>loadTable('settings')).then(()=>{renderModal();render();toast('Default saved')}).catch(er=>toast(errMsg(er)));return}
+  if(!canWork(b))return;
+  switch(a){
+    case 'fu-sent':{const kind=x.type==='nudge'?'nudge':'note';const note=x.type==='nudge'?`Follow-up ${st.n+1} emailed to ${gc}`:x.type==='meeting'?`Asked ${gc} for a Teams/Zoom proposal review`:`Confirmed the meeting with ${gc}`;
+      fuWrite(b,x.type==='nudge'?{snooze:undefined}:{},{note,kind:x.type==='meeting'?'nudge':kind,client_id:x.cid,by:myName()}).then(ok=>{if(ok)toast('Logged')});break}
+    case 'fu-meet':{if(!x.mt.date){toast('Pick the meeting date.');break}fuWrite(b,{meeting:{date:x.mt.date,time:x.mt.time||'',link:x.mt.link||'',held:false},decision:undefined},{note:`Meeting set with ${gc} for ${fmtShort(x.mt.date)}${x.mt.time?' at '+x.mt.time:''}`,kind:'meeting',client_id:x.cid,by:myName()}).then(ok=>{if(ok){M.type='confirm';renderModal();toast('Meeting saved')}});break}
+    case 'fu-nomeet':{x.mt={date:'',time:'',link:''};fuWrite(b,{meeting:undefined},{note:'Meeting cancelled / didn’t happen',kind:'note',by:myName()}).then(ok=>{if(ok)toast('Meeting cleared')});break}
+    case 'fu-held':{const o=x.out;const mt={...(st.P.meeting||{}),held:true,outcome:{standing:o.standing,comp:String(o.comp||'').trim(),notes:String(o.notes||'').trim()}};const pr=num(o.prob);
+      fuWrite(b,{meeting:mt,decision:o.decision||undefined},{note:`Meeting held: ${o.standing}${o.comp?' · also bidding: '+String(o.comp).trim():''}${o.decision?' · decision expected '+fmtShort(o.decision):''}${o.notes?' · '+String(o.notes).trim():''}`,kind:'meeting',client_id:x.cid,by:myName()},pr!=null&&pr>=0&&pr<=100?{probability:Math.round(pr)}:{}).then(ok=>{if(ok)toast('Meeting notes saved')});break}
+    case 'fu-plan':{const d=String(x.days).trim(),r=String(x.rounds).trim();fuWrite(b,{days:d===''?undefined:Math.max(1,Math.round(num(d)||7)),rounds:r===''?undefined:Math.max(0,Math.round(num(r)||0))}).then(ok=>{if(ok)toast('Plan saved')});break}
+    case 'fu-snooze':fuWrite(b,{snooze:addDays(todayStr(),7)}).then(ok=>{if(ok)toast('Next reminder pushed back a week')});break;
+    case 'fu-pause':fuWrite(b,{off:!st.P.off}).then(ok=>{if(ok)toast(st.P.off?'Follow-ups back on':'Follow-ups paused for this bid')});break;
+  }});
+document.addEventListener('input',e=>{const t=e.target;if(!M||M.kind!=='fu')return;if(t.dataset.fu&&t.tagName!=='SELECT')M[t.dataset.fu]=t.value;else if(t.dataset.fum)M.mt[t.dataset.fum]=t.value;else if(t.dataset.fuo&&t.tagName!=='SELECT')M.out[t.dataset.fuo]=t.value});
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='fu')return;if(t.dataset.fu&&t.tagName==='SELECT'){M[t.dataset.fu]=t.value;M.subject=M.body=undefined;renderModal()}else if(t.dataset.fuo&&t.tagName==='SELECT')M.out[t.dataset.fuo]=t.value});

@@ -480,9 +480,10 @@ Needs `supabase/update-26-accounts.sql`, and "Allow new users to sign up" left O
 Needs `supabase/update-28-client-tracker.sql`.
 
 - **What the client gets:** one private link per GC / client. It opens without a login and shows every project that client has sent you, each with a five-step tracker (Received → Estimating → Final review → Proposal sent → Decision), the bid due date, when to expect the proposal, which addenda you've acknowledged, and the lead estimator's name, phone and email. The page refreshes itself every minute.
-- **What it never shows:** prices, margins, other GCs on the same job, notes, quotes or files. A job awarded to a different GC shows only as "Closed".
-- **Stages come from the bid's pipeline stage:** Project Created = Received; RFQ Sent, Takeoff, Quotes Received and Estimating = Estimating; Proposal Review = Final review; Submitted (or that GC's proposal marked Sent) = Proposal sent, Awarded / Not Awarded = Decision. On Hold and No Bid show as such. Closed bids drop off after 90 days; archived bids never show.
+- **What it never shows:** prices, margins, other GCs on the same job, notes, quotes or files. A bid comes off the page as soon as it is Awarded, Not Awarded or No Bid.
+- **Stages come from the bid's pipeline stage:** Project Created = Received; RFQ Sent, Takeoff, Quotes Received and Estimating = Estimating; Proposal Review = Final review; Submitted (or that GC's proposal marked Sent) = Proposal sent, Awarded / Not Awarded = Decision. On Hold and No Bid show as such. Decided and archived bids never show.
 - **Proposal expected by:** a new date on the bid, next to the bid due date. Blank means the due date.
+- **Search and filters:** the client can search by project name or location, filter by stage, and sort by due date, name, stage or newest.
 - **Sending it:** when you save a new bid that has a GC on it, the app opens the tracker window with the link and a ready-to-edit email. **Copy link**, **Copy email** or **Open in my email**, then send it yourself. The same window is on every bid (the "Client tracker" line at the top) and on the client's page under Contacts.
 - **One link per client:** the link keeps working for future projects, so each client only needs it once. An admin can **Replace this link**, which turns the old one off.
 
@@ -506,3 +507,15 @@ Then **Awarded**, **Not Awarded** or **No Bid**; **On Hold** at any point.
 - **Moving a bid:** click a stage on the bar at the top of the bid, or use the Bid status dropdown.
 - **Moves by itself (forward only):** adding a quote request → RFQ Sent; starting a scope → Takeoff; every scope signed off and every quote answered → Quotes Received (or straight to Estimating when the bid has no quote requests); proposal marked sent → Submitted. Estimating and Proposal Review are set by hand.
 - **Old bids:** Not Started became Project Created, and Takeoff Complete became Estimating. Importing a spreadsheet still accepts the old names.
+
+
+## GC follow-up after the proposal goes out
+
+Needs `supabase/update-30-follow-ups.sql`.
+
+- **Reminders:** once a bid is Submitted, the app counts the days since the proposal went out. When a follow-up comes due the bid appears under **GC follow-ups due** on the dashboard, for the bid's estimators and for everyone who manages all bids. Follow-ups coming up in the next week are listed below it.
+- **Per-bid plan:** in the follow-up window, set the days between follow-ups and how many to send for that bid. Blank uses the company default (7 days, 3 follow-ups), which an admin can change from the same window. **Remind me in a week** pushes one reminder back; **Pause follow-ups** turns them off for that bid.
+- **Email drafts:** pick the GC and the kind (follow-up 1, 2, 3, a request for a Teams/Zoom review, or a meeting confirmation). Edit it, then **Copy email** or **Open in my email** and send it yourself. Click **I sent it** to log it and start the clock for the next one.
+- **Meeting:** enter the date, time and Teams/Zoom link. Reminders hold until the meeting. Afterwards the app asks what you learned: where you stand, who else is bidding, the expected decision date and a new win probability. That is written to the follow-up log, and the next reminder waits for the decision date.
+- **Stops by itself:** when the bid is Awarded, Not Awarded, No Bid or On Hold, or all its follow-ups are sent.
+- Open it from the dashboard list or the **GC follow-up** line at the top of a submitted bid. The client's tracker page is not affected by follow-ups.
