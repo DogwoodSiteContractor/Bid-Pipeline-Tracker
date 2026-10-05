@@ -469,6 +469,7 @@ Needs `supabase/update-26-accounts.sql`, and "Allow new users to sign up" left O
 
 - **Add a person:** Team → People & access → **+ Add a person**. Enter name, email, role and title; the app makes a temporary password and shows it once with a Copy button. You stay signed in.
 - **Manage a login:** open a person (**Edit access…**) and use the Login box: email a password reset link, set a temporary password, deactivate or reactivate, or delete the account.
+- **First sign-in:** after an admin creates a login or sets a temporary password, the person must choose their own password the next time they sign in, before they can open anything. Needs `supabase/update-27-first-login-password.sql`.
 - **Deactivate** blocks sign-in and removes access right away but keeps the account. Reactivating brings the login back with no role; pick one and save.
 - **Delete** removes the login for good. Their bids, notes and history stay.
 - You can't deactivate or delete your own account, and only the developer can change the developer account.

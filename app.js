@@ -279,7 +279,7 @@ function renderNow(){
   if(!CONFIGURED){top.hidden=true;main.innerHTML=setupScreen();return}
   if(S.loading){top.hidden=true;main.innerHTML=`<div class="auth">${dozerLoader('Loading')}</div>`;return}
   if(!S.session){top.hidden=true;main.innerHTML=authScreen();return}
-  if(S.needPassword){top.hidden=true;main.innerHTML=setPasswordScreen();return}
+  if(S.needPassword||(S.profile&&S.profile.must_change_pw)){top.hidden=true;main.innerHTML=setPasswordScreen();return}
   if(!S.profile){top.hidden=true;main.innerHTML=`<div class="auth">${dozerLoader('Loading')}</div>`;return}
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
@@ -340,7 +340,7 @@ function authScreen(){
    <button class="btn primary" type="submit">Sign in</button></form>
   <p class="hint" style="margin-top:14px">Don’t have a login? Ask your precon manager to add you.</p></div></div>`;
 }
-function setPasswordScreen(){return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Set your password</h1><p class="lead">Choose a password for ${esc(S.session?.user?.email||'your account')}.</p>
+function setPasswordScreen(){return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>${S.profile&&S.profile.must_change_pw?'Create your password':'Set your password'}</h1><p class="lead">${S.profile&&S.profile.must_change_pw?'Welcome. You signed in with a temporary password — choose your own to continue.':'Choose a password for '+esc(S.session?.user?.email||'your account')+'.'}</p>
   <form id="password-form">${msgBlock()}<label class="f">New password<input class="field" type="password" name="p1" minlength="8" autocomplete="new-password" required autofocus></label>
   <label class="f">Confirm password<input class="field" type="password" name="p2" minlength="8" autocomplete="new-password" required></label>
   <button class="btn primary" type="submit">Save password</button></form></div></div>`}
@@ -368,8 +368,10 @@ document.addEventListener('submit',async e=>{
     const p1=String(fd.get('p1')),p2=String(fd.get('p2'));
     if(p1!==p2){S.authMsg={err:'The passwords don’t match.'};render();return}
     busy('Saving…');
+    const first=!!(S.profile&&S.profile.must_change_pw);
     const {error}=await sb.auth.updateUser({password:p1});
-    if(error){S.authMsg={err:errMsg(error)};render();return}
+    if(error){S.authMsg={err:/different from the old|same_password/i.test(errMsg(error))?'Pick a password that’s different from the temporary one.':errMsg(error)};render();return}
+    if(first){try{await sb.rpc('password_changed')}catch(x){}if(S.profile)S.profile.must_change_pw=false}
     S.needPassword=false;S.authMsg=null;history.replaceState(null,'',location.pathname);toast('Password saved');render();
   }
 });
@@ -7532,7 +7534,7 @@ async function loadAcctInfo(){if(!sb||!isAdmin())return;const {data,error}=await
 function userAddModal(){const x=M;const done=x.done;
   if(done)return mhead('Account created',done.email)+`<div class="mbody"><div class="notice"><b>${esc(done.name||done.email)}</b> can sign in now as <b>${esc(ROLE_LABEL[done.role]||done.role)}</b>.</div>
     <fieldset><legend>Give them these</legend><div class="ua-cred"><div><span>Website</span><b>${esc(location.origin+location.pathname)}</b></div><div><span>Email</span><b>${esc(done.email)}</b></div><div><span>Temporary password</span><b class="ua-pw">${esc(done.pw)}</b></div></div>
-      <div class="adders"><button class="btn sm" data-act="ua-copy">Copy to clipboard</button></div><p class="hint">This password isn’t shown again. Ask them to change it after signing in (profile menu, or “Forgot password” on the sign-in page).</p></fieldset></div>
+      <div class="adders"><button class="btn sm" data-act="ua-copy">Copy to clipboard</button></div><p class="hint">This password isn’t shown again. The first time they sign in, the app makes them choose their own password before they can do anything else.</p></fieldset></div>
     <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="ua-again">Add another</button><button class="btn primary" data-act="close">Done</button></div></div>`;
   return mhead('Add a person','Creates their login and sets what they can open')+`<div class="mbody"><div class="fg">
     <label class="f s2">Name<input class="field" id="ua-name" data-ua="name" value="${esc(x.name)}" placeholder="First and last name"></label><label class="f s2">Email<input class="field" id="ua-email" data-ua="email" type="email" value="${esc(x.email)}" placeholder="name@company.com" autocomplete="off"></label>
@@ -7566,7 +7568,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'ua-copy':{const x=M.done;const txt=`${APP_NAME||'Bid pipeline'}\n${location.origin+location.pathname}\nEmail: ${x.email}\nTemporary password: ${x.pw}`;(navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast('Copied')).catch(()=>toast('Couldn’t copy — select the text and copy it by hand.'));break}
     case 'ua-reset':if(d)sb.auth.resetPasswordForEmail(d.email,{redirectTo:location.origin+location.pathname}).then(({error})=>toast(error?acctErr(error):`Reset link sent to ${d.email}`));break;
     case 'ua-setpw':{if(!d)break;const pw=prompt('Temporary password (at least 8 characters)',tempPassword());if(pw===null)break;if(String(pw).length<8){toast('The password needs at least 8 characters.');break}
-      run(sb.rpc('admin_set_password',{p_id:d.id,p_password:String(pw)})).then(()=>{M.newPw=String(pw);renderModal();toast('Password changed')}).catch(er=>toast(acctErr(er)));break}
+      run(sb.rpc('admin_set_password',{p_id:d.id,p_password:String(pw)})).then(()=>{M.newPw=String(pw);renderModal();toast('Password changed. They’ll choose their own at next sign-in.')}).catch(er=>toast(acctErr(er)));break}
     case 'ua-confirm':if(d)run(sb.rpc('admin_finish_user',{p_id:d.id,p_name:null,p_role:null,p_title:null})).then(after).then(()=>toast('Email confirmed')).catch(er=>toast(acctErr(er)));break;
     case 'ua-active':{if(!d)break;const on=t.dataset.v==='1';run(sb.rpc('admin_set_active',{p_id:d.id,p_active:on})).then(after).then(()=>{const p=S.profiles.find(x=>x.id===d.id);if(p&&M&&M.kind==='access'){M.draft.role=p.role;renderModal()}toast(on?'Reactivated — now pick their role and save':'Deactivated. They can’t sign in.')}).catch(er=>toast(acctErr(er)));break}
     case 'ua-del':{if(!d)break;if(!M.armDel){M.armDel=true;renderModal();break}run(sb.rpc('admin_delete_user',{p_id:d.id})).then(()=>{closeModal();return after()}).then(()=>toast('Account deleted')).catch(er=>{M.armDel=false;renderModal();toast(acctErr(er))});break}
