@@ -9,14 +9,17 @@ const SCOPE_ST=['Not Started','In Progress','Complete','N/A'];
 const SCOPE_CLS={'Not Started':'','In Progress':'warn','Complete':'good','N/A':'na'};
 const PROPOSAL_ST=['Not Started','In Progress','Complete','Sent'];
 const PROP_CLS={'Not Started':'','In Progress':'warn','Complete':'good','Sent':'info'};
-const BID_ST=['Not Started','Estimating','Takeoff Complete','Submitted','On Hold','Awarded','Not Awarded','No Bid'];
-const BID_CLS={'Not Started':'','Estimating':'warn','Takeoff Complete':'hot','Submitted':'info','On Hold':'','Awarded':'good','Not Awarded':'bad','No Bid':'na'};
-const ACTIVE=['Not Started','Estimating','Takeoff Complete','Submitted','On Hold'];
-const PRE_SUBMIT=['Not Started','Estimating','Takeoff Complete'];
+// The pipeline, in the order the work happens: invitation in → RFQs out → takeoff → quotes back → build the estimate → check the proposal → send it → decision
+const BID_ST=['Project Created','RFQ Sent','Takeoff','Quotes Received','Estimating','Proposal Review','Submitted','On Hold','Awarded','Not Awarded','No Bid'];
+const BID_ABOUT={'Project Created':'Invitation is in; nothing started yet','RFQ Sent':'Quote requests are out to vendors and subs','Takeoff':'Quantities are being taken off','Quotes Received':'Vendor and sub quotes are back','Estimating':'Building and pricing the estimate','Proposal Review':'Estimate is being checked and the proposal written','Submitted':'Proposal has gone to the GC','On Hold':'Paused','Awarded':'We got it','Not Awarded':'Went to someone else','No Bid':'We passed on it'};
+const BID_CLS={'Project Created':'','RFQ Sent':'st2','Takeoff':'st3','Quotes Received':'st4','Estimating':'warn','Proposal Review':'hot','Submitted':'info','On Hold':'','Awarded':'good','Not Awarded':'bad','No Bid':'na'};
+const ACTIVE=['Project Created','RFQ Sent','Takeoff','Quotes Received','Estimating','Proposal Review','Submitted','On Hold'];
+const PRE_SUBMIT=['Project Created','RFQ Sent','Takeoff','Quotes Received','Estimating','Proposal Review'];
+const stageNo=s=>PRE_SUBMIT.indexOf(s);   // -1 once it's sent, on hold or decided
 const DECIDED=['Awarded','Not Awarded','No Bid'];
 // older status names → current ones (bids saved before the status update)
-const LEGACY_STATUS={Lost:'Not Awarded',Pending:'Estimating'};
-function normBid(b){if(LEGACY_STATUS[b.status])b.status=LEGACY_STATUS[b.status];if(!BID_ST.includes(b.status))b.status='Not Started';return b}
+const LEGACY_STATUS={Lost:'Not Awarded',Pending:'Estimating','Not Started':'Project Created','Takeoff Complete':'Estimating'};
+function normBid(b){if(LEGACY_STATUS[b.status])b.status=LEGACY_STATUS[b.status];if(!BID_ST.includes(b.status))b.status='Project Created';return b}
 // "Proposal sent" = the proposal has gone to at least one GC. Awaiting decision = sent and not yet decided.
 const isSent=b=>b.status==='Submitted'||b.proposal_status==='Sent'||(b.client_ids||[]).some(id=>['Sent','Lost','Awarded'].includes(((b.client_proposals||{})[id]||{}).status))||['Awarded','Not Awarded'].includes(b.status);
 const isPending=b=>ACTIVE.includes(b.status)&&isSent(b);
@@ -176,27 +179,25 @@ function toast(msg){const t=$('#toast');t.innerHTML=`<div class="toast">${esc(ms
 
 
 /* ---------- pipeline progress (derived automatically from the bid) ---------- */
-const STAGES=['Received','Takeoff','Quotes','Proposal','Submitted','Decision'];
-const STAGE_NAMES=['Bid received','Scope takeoff','Vendor quotes','Proposal','Submitted to GC','Decision'];
+const STAGES=['Created','RFQ sent','Takeoff','Quotes in','Estimating','Review','Sent','Decision'];
+const STAGE_NAMES=['Project created','RFQ sent','Takeoff','Quotes received','Estimating','Proposal review','Proposal sent','Decision'];
+const LAST=STAGES.length-1;
+// Follows the bid's stage. The stage in progress fills part-way from the real work: scopes signed off, quotes back.
 function stageInfo(b,qs){
-  qs=qs||quotesFor(b.id);
+  qs=(qs||quotesFor(b.id)).filter(q=>q.status&&q.status!=='Not requested');
   const sc=scopeItems(b).map(x=>x.status||'Not Started');
-  const decided=DECIDED.includes(b.status);
-  const submitted=isSent(b);
-  const st=[1,
-    (sc.length&&sc.every(x=>x==='Complete'))||b.status==='Takeoff Complete'?1:sc.some(x=>x!=='Not Started')||b.status==='Estimating'?.5:0,
-    qs.length&&qs.every(q=>['Received','Declined','No response'].includes(q.status))?1:qs.some(q=>q.status==='Received')?.5:qs.length?.2:0,
-    ['Complete','Sent'].includes(b.proposal_status)?1:b.proposal_status==='In Progress'?.5:0,
-    submitted?1:0,
-    decided?1:0];
-  if(submitted)for(let i=0;i<4;i++)st[i]=1;              // once it's in, earlier steps count as done
-  const current=decided?5:Math.max(0,st.findIndex(x=>x<1));
-  const qOpen=qs.filter(q=>q.status==='Requested').length;
-  const detail=[
-    'Bid set up',
-    sc.length?`${sc.filter(x=>x==='Complete').length} of ${sc.length} scopes signed off`:'No scopes selected yet',
-    qs.length?`${qs.length-qOpen} of ${qs.length} quotes in`:'No quotes requested yet',
-    'Proposal '+String(b.proposal_status||'Not Started').toLowerCase(),
+  const decided=DECIDED.includes(b.status);const submitted=isSent(b);
+  const scDone=sc.filter(x=>x==='Complete'||x==='N/A').length,qIn=qs.filter(q=>q.status!=='Requested').length;
+  let current=decided?LAST:submitted?6:stageNo(b.status);
+  if(current<0)current=sc.length&&scDone===sc.length?(qs.length&&qIn===qs.length?3:2):sc.some(x=>x!=='Not Started')?2:qs.length?1:0;   // on hold: best guess from the work
+  const part=[.15,.5,sc.length?Math.max(.12,scDone/sc.length):.3,qs.length?Math.max(.12,qIn/qs.length):.5,.5,.5,.5,1][current];
+  const st=STAGES.map((_,i)=>i<current?1:i===current?(decided?1:part):0);
+  const detail=['Invitation is in',
+    qs.length?`${qs.length} quote request${qs.length===1?'':'s'} out`:'Quote requests going out',
+    sc.length?`${scDone} of ${sc.length} scopes signed off`:'No scopes selected yet',
+    qs.length?`${qIn} of ${qs.length} quotes in`:'No quotes requested',
+    'Building the estimate',
+    'Checking the numbers and writing the proposal',
     (b.client_ids||[]).length>1?`Sent to ${(b.client_ids||[]).filter(id=>['Sent','Lost','Awarded'].includes(propOf(b,id).status)).length} of ${b.client_ids.length} GCs · waiting on decision`:'Waiting on GC decision',
     b.status==='Awarded'?'Awarded':b.status==='Not Awarded'?'Not awarded':b.status==='No Bid'?'Passed on this bid':''][current];
   return {st,current,detail,decided};
@@ -204,13 +205,13 @@ function stageInfo(b,qs){
 function progress(b,opts={}){
   const {st,current,detail,decided}=stageInfo(b,opts.quotes);
   const end=b.status==='Awarded'?'won':b.status==='Not Awarded'?'lost':b.status==='No Bid'?'nobid':'';
-  const bars=STAGES.map((s,i)=>{const cls=i===5&&decided?end:st[i]>=1?'done':i===current?'cur':'';
+  const bars=STAGES.map((s,i)=>{const cls=i===LAST&&decided?end:st[i]>=1?'done':i===current?'cur':'';
     return `<i class="${cls}"><b style="width:${Math.round((i===current&&!decided?Math.max(st[i],.12):st[i])*100)}%"></b></i>`}).join('');
-  const labs=STAGES.map((s,i)=>`<span class="${i===current?(decided?end||'cur':'cur'):st[i]>=1?'done':''}">${i===5&&decided?esc(b.status):s}</span>`).join('');
+  const labs=STAGES.map((s,i)=>`<span class="${i===current?(decided?end||'cur':'cur'):st[i]>=1?'done':''}">${i===LAST&&decided?esc(b.status):s}</span>`).join('');
   const hold=b.status==='On Hold'?' · on hold':'';
   return `<div class="prog${opts.lg?' lg':''}" title="${esc(STAGE_NAMES.map((n,i)=>n+': '+(st[i]>=1?'done':st[i]>0?'in progress':'not started')).join('\n'))}">
     <div class="prog-bar">${bars}</div><div class="prog-lab">${labs}</div>
-    ${opts.lg?`<div class="prog-now">Step ${current+1} of 6 · <b>${STAGE_NAMES[current]}</b> — ${esc(detail)}${hold}</div>`:''}</div>`;
+    ${opts.lg?`<div class="prog-now">Step ${current+1} of ${STAGES.length} · <b>${STAGE_NAMES[current]}</b> — ${esc(detail)}${hold}</div>`:''}</div>`;
 }
 
 /* ---------- roles ---------- */
@@ -631,7 +632,7 @@ function board(){
 
 /* ----- pipeline ----- */
 const ARCHIVED_FILTER=['archived','Archived',b=>!!b.archived_at];
-const FILTERS=[['active','All active',b=>ACTIVE.includes(b.status)],['notstarted','Not started',b=>b.status==='Not Started'],['estimating','Estimating',b=>b.status==='Estimating'],['takeoff','Takeoff complete',b=>b.status==='Takeoff Complete'],['submitted','Submitted',b=>b.status==='Submitted'],['hold','On hold',b=>b.status==='On Hold'],['awarded','Awarded',b=>b.status==='Awarded'],['lost','Not awarded',b=>b.status==='Not Awarded'],['nobid','No bid',b=>b.status==='No Bid'],['all','Everything',()=>true]];
+const FILTERS=[['active','All active',b=>ACTIVE.includes(b.status)],['notstarted','Project created',b=>b.status==='Project Created'],['rfq','RFQ sent',b=>b.status==='RFQ Sent'],['takeoff','Takeoff',b=>b.status==='Takeoff'],['quotes','Quotes received',b=>b.status==='Quotes Received'],['estimating','Estimating',b=>b.status==='Estimating'],['review','Proposal review',b=>b.status==='Proposal Review'],['submitted','Submitted',b=>b.status==='Submitted'],['hold','On hold',b=>b.status==='On Hold'],['awarded','Awarded',b=>b.status==='Awarded'],['lost','Not awarded',b=>b.status==='Not Awarded'],['nobid','No bid',b=>b.status==='No Bid'],['all','Everything',()=>true]];
 /* =====================================================================
    Pipeline views: Cards / List / Calendar, filters, sort and search
    (view choices are remembered per browser)
@@ -751,7 +752,7 @@ function activePills(){
 
 /* ---- list view ---- */
 function miniProg(b){const {st,current,decided}=stageInfo(b);const end=b.status==='Awarded'?'won':b.status==='Not Awarded'?'lost':b.status==='No Bid'?'nobid':'';
-  return `<span class="mini-prog" title="Step ${current+1} of 6: ${STAGE_NAMES[current]}">${STAGES.map((x,i)=>`<i class="${i===5&&decided?end:st[i]>=1?'done':i===current?'cur':''}"></i>`).join('')}</span>`}
+  return `<span class="mini-prog" title="Step ${current+1} of ${STAGES.length}: ${STAGE_NAMES[current]}">${STAGES.map((x,i)=>`<i class="${i===LAST&&decided?end:st[i]>=1?'done':i===current?'cur':''}"></i>`).join('')}</span>`}
 function listView(list){
   const sel=S.sel||new Set();const pv=S.pv;
   const th=(k,l,cls)=>`<th class="${cls||''}${k?' sortable':''}"${k?` data-act="pv-sort" data-k="${k}" aria-sort="${pv.sort===k?(pv.dir==='desc'?'descending':'ascending'):'none'}"`:''}>${l}${k&&pv.sort===k?`<span class="sarrow">${pv.dir==='desc'?'↓':'↑'}</span>`:''}</th>`;
@@ -945,7 +946,7 @@ function mhead(t,s){return `<div class="mhead"><div><h2>${esc(t)}</h2>${s?`<p>${
 const DIS=()=>M&&M.kind==='bid'?(canWork(M.draft)?'':' disabled'):M&&(M.kind==='client'||M.kind==='vendor')?(can('contacts','edit')?'':' disabled'):M&&(M.kind==='lib'||M.kind==='tpl')?(can('codebook','edit')?'':' disabled'):(isAdmin()?'':' disabled');
 
 /* ----- bid editor ----- */
-function newBid(){return{id:newId(),name:'',location:'',project_type:'Commercial',bid_type:'Hard bid',size:'',status:'Not Started',probability:50,
+function newBid(){return{id:newId(),name:'',location:'',project_type:'Commercial',bid_type:'Hard bid',size:'',status:'Project Created',probability:50,
   due_date:'',due_time:'',walk_date:'',rfi_date:'',lead_estimator_id:'',support_estimator_ids:[],client_ids:[],client_contacts:{},client_proposals:{},awarded_client_id:'',addenda:[],revisions:[],
   scope_items:[],
   proposal_status:'Not Started',amount_with:null,amount_without:null,use_for:'with',margin:null,follow_ups:[],notes:'',
@@ -1016,8 +1017,8 @@ function bidModal(){
   const outcome=isSent(b)||DECIDED.includes(b.status);
   const sub=isNew?'Project details, team, scope, vendor quotes and files':admin?'Last saved '+(b.updated_at?new Date(b.updated_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—'):work?'You’re on this bid, so you can update anything here except who’s assigned to it.':'Read-only';
   const files=isNew?[]:filesFor(b.id);
-  return mhead(isNew?'New bid':b.name||'Untitled bid',sub)+`<div class="mbody">${archNote}${supBanner(b)}${bidReqBanner(b)}${trackRow(b)}
-  ${isNew?'':`<div class="panel pad" style="margin-bottom:14px">${progress(b,{lg:true,quotes:b.quotes})}</div>`}
+  return mhead(isNew?'New bid':b.name||'Untitled bid',sub)+`<div class="mbody">${archNote}${supBanner(b)}${bidReqBanner(b)}${trackRow(b)}${stageBar(b,work)}
+  ${isNew?'':`<p class="small dim stg-now">Step ${stageInfo(b,b.quotes).current+1} of ${STAGES.length} · <b>${STAGE_NAMES[stageInfo(b,b.quotes).current]}</b> — ${esc(stageInfo(b,b.quotes).detail)}${work?' · click a stage to move the bid':''}</p>`}
   <fieldset><legend>Project</legend><div class="fg">
     <label class="f s2">Project name ${work?'<span class="req">required</span>':''}<input class="field" ${bf('name')} placeholder="e.g. Riverside Commerce Park"></label>
     <label class="f s2">Location<input class="field" ${bf('location')} placeholder="City, county or address"></label>
@@ -1312,8 +1313,13 @@ async function saveBid(){
   if(sent.length&&d.proposal_status!=='Sent')d.proposal_status='Sent';   // a proposal went out
   // status follows the takeoff: first scope started → Estimating; every scope signed off → Takeoff Complete
   const its=d.scope_items||[];
-  if(its.length&&its.every(x=>x.status==='Complete')&&['Not Started','Estimating'].includes(d.status))d.status='Takeoff Complete';
-  else if(its.some(x=>x.status!=='Not Started')&&d.status==='Not Started')d.status='Estimating';
+  // The stage only ever moves forward by itself; anyone working the bid can set it by hand.
+  //   quote requests out → RFQ Sent · a scope started → Takeoff · every scope signed off and every quote answered → Quotes Received
+  const qs=(d.quotes||[]).filter(q=>q.status&&q.status!=='Not requested');const qIn=qs.length&&qs.every(q=>['Received','Declined','No response'].includes(q.status))&&qs.some(q=>q.status==='Received');
+  const toDone=its.length&&its.every(x=>x.status==='Complete'||x.status==='N/A');const toStarted=its.some(x=>x.status&&x.status!=='Not Started');
+  const up=to=>{if(stageNo(d.status)>=0&&stageNo(d.status)<stageNo(to))d.status=to};
+  if(qs.length)up('RFQ Sent');if(toStarted)up('Takeoff');
+  if(toDone&&qIn)up('Quotes Received');else if(toDone&&!qs.length)up('Estimating');
   // proposal went out → Submitted; Submitted → proposal marked Sent
   if(PRE_SUBMIT.includes(d.status)&&(d.proposal_status==='Sent'||sent.length))d.status='Submitted';
   if(d.status==='Submitted'&&d.proposal_status!=='Sent')d.proposal_status='Sent';
@@ -1503,9 +1509,12 @@ function xTime(v){
 function xMoney(v){if(v===''||v==null)return null;if(typeof v==='number')return v;const t=String(v).replace(/[$,\s]/g,'');if(!t||/^[-–—]+$/.test(t))return null;const n=+t;return isNaN(n)?undefined:n}
 const xList=v=>String(v??'').split(/[;\n]|,(?=\s*[A-Za-z])/).map(x=>x.trim()).filter(Boolean);
 function xStatus(v){const t=normH(v);if(!t)return '';
-  if(['notstarted','new','received','open'].includes(t))return 'Not Started';
-  if(['estimating','pending','inprogress','active','bidding'].includes(t))return 'Estimating';
-  if(['takeoffcomplete','takeoffdone','complete','completed'].includes(t))return 'Takeoff Complete';
+  if(['projectcreated','created','notstarted','new','received','open'].includes(t))return 'Project Created';
+  if(['rfqsent','rfq','rfqssent','quotesrequested'].includes(t))return 'RFQ Sent';
+  if(['takeoff','takeoffinprogress','takeoffstarted'].includes(t))return 'Takeoff';
+  if(['quotesreceived','rfqreceived','rfqsreceived','quotesin'].includes(t))return 'Quotes Received';
+  if(['estimating','estimate','pending','inprogress','active','bidding','takeoffcomplete','takeoffdone','complete','completed'].includes(t))return 'Estimating';
+  if(['proposalreview','proposal','review','finalreview'].includes(t))return 'Proposal Review';
   if(['submitted','sent','pendingdecision','awaitingdecision','proposalsent'].includes(t))return 'Submitted';
   if(['onhold','hold','paused'].includes(t))return 'On Hold';
   if(['awarded','won','win','awardedtous'].includes(t))return 'Awarded';
@@ -1551,7 +1560,7 @@ function buildImportPlan(X,t,g,fileName){
     DATE_KEYS.forEach(k=>{if(t.map[k]==null)return;const v=xDate(get(row,k),X);if(v===null)issues.push(`Couldn’t read ${k.replace(/_/g,' ')} “${get(row,k)}”`);else if(v)f[k]=v});
     if(t.map.due_time!=null){const v=xTime(get(row,'due_time'));if(v===null)issues.push(`Couldn’t read due time “${get(row,'due_time')}”`);else if(v)f.due_time=v}
     MONEY_KEYS.forEach(k=>{if(t.map[k]==null)return;const v=xMoney(get(row,k));if(v===undefined)issues.push(`Couldn’t read amount “${get(row,k)}”`);else if(v!=null)f[k]=v});
-    const st=xStatus(get(row,'status'));if(st===null){issues.push(`Unknown status “${get(row,'status')}”, used Not Started`);f.status='Not Started'}else if(st)f.status=st;
+    const st=xStatus(get(row,'status'));if(st===null){issues.push(`Unknown status “${get(row,'status')}”, used Project Created`);f.status='Project Created'}else if(st)f.status=st;
     const ps=xProposal(get(row,'proposal_status'));if(ps===null)issues.push(`Unknown proposal status “${get(row,'proposal_status')}”`);else if(ps)f.proposal_status=ps;
     const ptRaw=get(row,'project_type');const pt=ptRaw===''||ptRaw==null?'':(PROJECT_TYPES.includes(normProjectType(String(ptRaw).trim()))?normProjectType(String(ptRaw).trim()):xFromList(ptRaw,PROJECT_TYPES));if(pt===null){issues.push(`Project type “${get(row,'project_type')}” set to Other`);f.project_type='Other'}else if(pt)f.project_type=pt;
     if(t.map.units!=null){const u=get(row,'units');if(String(u).trim()!==''){const n=typeof u==='number'?u:+(String(u).replace(/,/g,'').match(/\d+(\.\d+)?/)||[])[0];if(isNaN(n))issues.push(`Couldn’t read units “${u}”`);else f.units=Math.round(n)}}
@@ -7595,7 +7604,7 @@ function trackStage(b){if(b.status==='No Bid')return {n:0,note:'We’re not able
   if(b.status==='Awarded')return {n:5,note:b.awarded_to_you?'Awarded to us — thank you!':'Closed',cls:b.awarded_to_you?'win':'done'};
   if(b.status==='Not Awarded')return {n:5,note:'Closed',cls:'done'};
   if(b.sent)return {n:4,note:b.sent_date?'Sent '+fmtShort(b.sent_date):'Proposal sent'};
-  if(b.status==='Takeoff Complete')return {n:3};if(b.status==='Estimating')return {n:2};
+  if(b.status==='Proposal Review')return {n:3};if(['RFQ Sent','Takeoff','Quotes Received','Estimating','Takeoff Complete'].includes(b.status))return {n:2};
   if(b.status==='On Hold')return {n:2,note:'On hold',cls:'hold'};return {n:1}}
 function trackCard(b){const st=trackStage(b);const e=b.estimator;const ad=b.addenda||[];const late=b.due_date&&!b.sent&&st.n<4&&st.n>0&&daysUntil(b.due_date)<0;
   const steps=st.n?`<ol class="tk-steps${st.cls?' '+st.cls:''}" aria-label="Stage ${st.n} of 5: ${TRACK_STEPS[st.n-1][0]}">${TRACK_STEPS.map(([l],i)=>`<li class="${i+1<st.n?'past':i+1===st.n?'now':''}"><span class="tk-dot">${i+1<st.n||(st.n===5&&i===4)?'✓':i+1}</span><span class="tk-lab">${l}</span></li>`).join('')}</ol>`:'';
@@ -7646,3 +7655,10 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'trk-new':if(x&&isAdmin()){if(!x.arm2){x.arm2=true;renderModal();break}x.arm2=false;x.subject=x.body=undefined;delete x.links[x.cur];renderModal();trackLoad(x.cur,true).then(()=>toast('New link made. The old one no longer works.'))}break;
   }});
 document.addEventListener('input',e=>{const t=e.target;if(M&&M.kind==='track'&&t.dataset.trk)M[t.dataset.trk]=t.value});
+
+
+/* ---- pipeline stage bar on the bid: where it is, and click to move it ---- */
+function stageBar(b,work){const steps=[...PRE_SUBMIT,'Submitted'];const cur=steps.indexOf(b.status);const dec=DECIDED.includes(b.status);const n=dec?steps.length:cur;
+  return `<div class="stg${b.status==='On Hold'?' hold':''}" role="group" aria-label="Pipeline stage">${steps.map((s,i)=>`<button type="button" class="${i<n?'past':i===n?'now':''}" data-act="bid-stage" data-v="${s}" title="${esc(BID_ABOUT[s]||'')}"${work?'':' disabled'}><i>${i<n?'✓':i+1}</i><span>${s==='Submitted'?'Proposal sent':s}</span></button>`).join('')}
+    <span class="stg-end">${dec?pill(b.status,BID_CLS[b.status]):b.status==='On Hold'?pill('On Hold','warn'):''}</span></div>`}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act=bid-stage]');if(!t||!M||M.kind!=='bid'||t.disabled)return;M.draft.status=t.dataset.v;renderModal()});

@@ -481,7 +481,28 @@ Needs `supabase/update-28-client-tracker.sql`.
 
 - **What the client gets:** one private link per GC / client. It opens without a login and shows every project that client has sent you, each with a five-step tracker (Received → Estimating → Final review → Proposal sent → Decision), the bid due date, when to expect the proposal, which addenda you've acknowledged, and the lead estimator's name, phone and email. The page refreshes itself every minute.
 - **What it never shows:** prices, margins, other GCs on the same job, notes, quotes or files. A job awarded to a different GC shows only as "Closed".
-- **Stages come from the bid status:** Not Started = Received, Estimating = Estimating, Takeoff Complete = Final review, Submitted (or that GC's proposal marked Sent) = Proposal sent, Awarded / Not Awarded = Decision. On Hold and No Bid show as such. Closed bids drop off after 90 days; archived bids never show.
+- **Stages come from the bid's pipeline stage:** Project Created = Received; RFQ Sent, Takeoff, Quotes Received and Estimating = Estimating; Proposal Review = Final review; Submitted (or that GC's proposal marked Sent) = Proposal sent, Awarded / Not Awarded = Decision. On Hold and No Bid show as such. Closed bids drop off after 90 days; archived bids never show.
 - **Proposal expected by:** a new date on the bid, next to the bid due date. Blank means the due date.
 - **Sending it:** when you save a new bid that has a GC on it, the app opens the tracker window with the link and a ready-to-edit email. **Copy link**, **Copy email** or **Open in my email**, then send it yourself. The same window is on every bid (the "Client tracker" line at the top) and on the client's page under Contacts.
 - **One link per client:** the link keeps working for future projects, so each client only needs it once. An admin can **Replace this link**, which turns the old one off.
+
+
+## Pipeline stages
+
+Needs `supabase/update-29-pipeline-stages.sql`. Run it first, then upload the new `app.js` right away.
+
+The pipeline follows the order the work happens:
+
+1. **Project Created** – the invitation is in.
+2. **RFQ Sent** – quote requests are out to vendors and subs.
+3. **Takeoff** – quantities are being taken off.
+4. **Quotes Received** – vendor and sub quotes are back.
+5. **Estimating** – building and pricing the estimate.
+6. **Proposal Review** – the estimate is being checked and the proposal written.
+7. **Submitted** – the proposal has gone to the GC.
+
+Then **Awarded**, **Not Awarded** or **No Bid**; **On Hold** at any point.
+
+- **Moving a bid:** click a stage on the bar at the top of the bid, or use the Bid status dropdown.
+- **Moves by itself (forward only):** adding a quote request → RFQ Sent; starting a scope → Takeoff; every scope signed off and every quote answered → Quotes Received (or straight to Estimating when the bid has no quote requests); proposal marked sent → Submitted. Estimating and Proposal Review are set by hand.
+- **Old bids:** Not Started became Project Created, and Takeoff Complete became Estimating. Importing a spreadsheet still accepts the old names.

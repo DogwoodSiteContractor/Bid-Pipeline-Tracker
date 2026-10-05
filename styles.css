@@ -242,12 +242,12 @@ textarea.field{min-height:84px;resize:vertical}
 
 /* ---- pipeline progress ---- */
 .prog{display:flex;flex-direction:column;gap:5px}
-.prog-bar{display:grid;grid-template-columns:repeat(6,1fr);gap:3px}
+.prog-bar{display:grid;grid-template-columns:repeat(8,1fr);gap:3px}
 .prog-bar i{display:block;height:6px;border-radius:2px;background:var(--mute-soft);overflow:hidden}
 .prog-bar i b{display:block;height:100%;background:var(--warn)}
 .prog-bar i.done b{background:var(--accent)}
 .prog-bar i.won b{background:var(--good)}.prog-bar i.lost b{background:var(--bad)}.prog-bar i.nobid b{background:var(--ink-3)}
-.prog-lab{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;font-size:10.5px;color:var(--ink-3);line-height:1.2}
+.prog-lab{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;font-size:9.5px;color:var(--ink-3);line-height:1.2}
 .prog-lab span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .prog-lab .done{color:var(--accent)}
 .prog-lab .cur{color:var(--warn);font-weight:700}
@@ -381,7 +381,7 @@ table.lv tr.picked .pickbox{background:var(--bad);border-color:var(--bad)}
 table.lv .proj{white-space:nowrap}
 tr.click:focus-visible td{background:var(--surface-2)}
 tr.click:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
-.mini-prog{display:inline-grid;grid-template-columns:repeat(6,12px);gap:2px}
+.mini-prog{display:inline-grid;grid-template-columns:repeat(8,10px);gap:2px}
 .mini-prog i{height:6px;border-radius:2px;background:var(--mute-soft)}
 .mini-prog i.done{background:var(--accent)}.mini-prog i.cur{background:var(--warn)}
 .mini-prog i.won{background:var(--good)}.mini-prog i.lost{background:var(--bad)}.mini-prog i.nobid{background:var(--ink-3)}
@@ -1594,3 +1594,28 @@ tr.eo-sec.eo-drop>td{box-shadow:inset 0 0 0 2px var(--accent)}
 .tk-foot{margin-top:26px;font-size:12px;color:var(--ink-3);text-align:center}
 @media(max-width:560px){.tk-lab{font-size:10.5px}.tk-dot{width:30px;height:30px;font-size:12px}.tk-steps li::before{top:12px}.tk-now{text-align:left}}
 .trk-row{margin:0 0 10px}
+
+/* pipeline stages */
+.pill.st2{background:#E8EEF7;color:#35527E}.pill.st3{background:#EFE9F6;color:#5B3E86}.pill.st4{background:#E3F1F1;color:#1F6468}
+:root[data-theme=dark] .pill.st2{background:#1E2A3D;color:#9DB8E3}:root[data-theme=dark] .pill.st3{background:#2A2238;color:#C3A8E8}:root[data-theme=dark] .pill.st4{background:#17302F;color:#86CFCF}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]) .pill.st2{background:#1E2A3D;color:#9DB8E3}:root:not([data-theme=light]) .pill.st3{background:#2A2238;color:#C3A8E8}:root:not([data-theme=light]) .pill.st4{background:#17302F;color:#86CFCF}}
+.stg{display:flex;align-items:stretch;gap:0;margin:0 0 14px;overflow-x:auto}
+.stg button{flex:1;min-width:92px;display:flex;flex-direction:column;align-items:center;gap:4px;padding:6px 4px 4px;border:0;background:none;color:var(--ink-3);font-size:11.5px;cursor:pointer;position:relative;font-family:inherit}
+.stg button:disabled{cursor:default}
+.stg button::before{content:"";position:absolute;top:18px;left:-50%;width:100%;height:4px;background:var(--line)}
+.stg button:first-child::before{display:none}
+.stg button.past::before,.stg button.now::before{background:var(--accent)}
+.stg i{position:relative;z-index:1;font-style:normal;width:26px;height:26px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;background:var(--surface);border:2px solid var(--line);font-weight:700;font-size:12px}
+.stg .past i{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.stg .now i{border-color:var(--accent);color:var(--accent);box-shadow:0 0 0 4px var(--accent-soft)}
+.stg .now{color:var(--ink);font-weight:700}
+.stg button:not(:disabled):hover i{border-color:var(--accent)}
+.stg.hold .now i{border-color:var(--warn);color:var(--warn);box-shadow:none}
+.stg-end{display:flex;align-items:center;padding-left:8px}
+
+.stg-now{margin:-6px 0 14px}
+/* eight stages: on cards, name only the stage the bid is in */
+.prog:not(.lg) .prog-lab{font-size:11px}
+.prog:not(.lg) .prog-lab span{visibility:hidden}
+.prog:not(.lg) .prog-lab .cur,.prog:not(.lg) .prog-lab .won,.prog:not(.lg) .prog-lab .lost,.prog:not(.lg) .prog-lab .nobid{visibility:visible;overflow:visible}
+.prog:not(.lg) .prog-lab span:nth-last-child(-n+2){justify-self:end}
