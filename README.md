@@ -449,7 +449,7 @@ Edit a file on GitHub (click it, then the pencil icon) and commit. The live site
 Needs `supabase/update-24-estimator-view-requests.sql`.
 
 - Estimators now see every bid by default, read-only, and work only on the ones they're assigned to. The dashboard and pipeline have an **Assigned to me / All projects** switch.
-- Opening a bid they're not on shows **Request to work on it**. Whoever manages all bids (admins by default) sees the request on the dashboard and inside the bid. **Approve** adds the estimator as a supporting estimator; **Deny** closes it.
+- Opening a bid they're not on shows **Request to work on it**. The bid's lead estimator and whoever manages all bids (admins by default) see the request on the dashboard and inside the bid; the lead approving needs `supabase/update-31-lead-approves-requests.sql`. **Approve** adds the estimator as a supporting estimator; **Deny** closes it.
 - On Team → a person's access, **Which bids** has three levels: Assigned only, See all / work on assigned, All bids. Set someone to Assigned only to keep the old behavior.
 
 ## Change orders
@@ -519,3 +519,5 @@ Needs `supabase/update-30-follow-ups.sql`.
 - **Meeting:** enter the date, time and Teams/Zoom link. Reminders hold until the meeting. Afterwards the app asks what you learned: where you stand, who else is bidding, the expected decision date and a new win probability. That is written to the follow-up log, and the next reminder waits for the decision date.
 - **Stops by itself:** when the bid is Awarded, Not Awarded, No Bid or On Hold, or all its follow-ups are sent.
 - Open it from the dashboard list or the **GC follow-up** line at the top of a submitted bid. The client's tracker page is not affected by follow-ups.
+
+- **Supporting estimators:** on a bid's Estimating team, the **+ Add** list has **Entire team**, which adds every other active estimator at once, and **Remove all** clears them. Changing the lead takes that person out of the supporting list.

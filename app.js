@@ -380,8 +380,8 @@ document.addEventListener('submit',async e=>{
 /* ---------- dashboard ---------- */
 function vDashboard(){
   const d=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}</div></div>`+fuPanel()+mine();
-  if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}</div></div>`+fuPanel()+precon();
+  if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}</div></div>`+bidReqPanel()+fuPanel()+mine();
+  if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}</div></div>`+bidReqPanel()+fuPanel()+precon();
   if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}</div></div>`+board();
   return `<div class="head"><div><h1>${S.dash==='precon'?'Bid pipeline dashboard':'Board dashboard'}</h1><p>${d}${S.lastLoaded?` · <span class="dim">Last updated ${S.lastLoaded.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>`:''}</p></div>
   <div class="tools">${S.dash==='board'?yearSelect()+'<button class="btn" data-act="board-custom">Customize view</button>':'<button class="btn" data-act="refresh">↻ Refresh</button>'}
@@ -6360,18 +6360,25 @@ S.bidReqs=[];S.bidReqMissing=false;
 async function loadBidReqs(){if(!sb)return;const {data,error}=await sb.from('bid_requests').select('*');if(error){S.bidReqMissing=true;S.bidReqs=[];return}S.bidReqMissing=false;S.bidReqs=data||[];schedule()}
 const canAssign=()=>can('bids','edit')&&bidsAll();
 const myReq=bidId=>(S.bidReqs||[]).find(r=>r.bid_id===bidId&&r.user_id===S.session?.user?.id&&r.status==='Pending');
-const openReqs=()=>canAssign()?(S.bidReqs||[]).filter(r=>r.status==='Pending'&&byId(S.bids,r.bid_id)).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at))):[];
+const leadOf=b=>{const me=myEst();return !!me&&!!b&&b.lead_estimator_id===me.id&&can('bids','edit')};
+const canDecide=b=>canAssign()||leadOf(b);
+const openReqs=()=>(S.bidReqs||[]).filter(r=>r.status==='Pending'&&byId(S.bids,r.bid_id)&&canDecide(byId(S.bids,r.bid_id))&&r.user_id!==S.session?.user?.id).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));
 async function bidReqSend(bidId){const me=myEst();if(!me){toast('Your login isn’t linked to an estimator record yet. Ask an admin to link it on the Team page.');return}if(myReq(bidId))return;
   const note=prompt('Add a note for whoever assigns bids (optional)','');if(note===null)return;
   try{await run(sb.from('bid_requests').insert({id:newId(),bid_id:bidId,user_id:S.session.user.id,status:'Pending',created_at:new Date().toISOString(),estimator_id:me.id,name:myName(),note:String(note).trim().slice(0,300)}));await loadBidReqs();if(M&&M.kind==='bid')renderModal();render();toast('Request sent')}
   catch(e){toast(/bid_requests|does not exist|schema cache/i.test(errMsg(e))?'Requests need a one-time database update (update-24-estimator-view-requests.sql).':errMsg(e))}}
-async function bidReqDecide(id,ok){const r=(S.bidReqs||[]).find(x=>x.id===id);if(!r||!canAssign())return;const b=byId(S.bids,r.bid_id);
-  try{if(ok&&b&&r.estimator_id&&b.lead_estimator_id!==r.estimator_id&&!(b.support_estimator_ids||[]).includes(r.estimator_id))await run(sb.from('bids').update({support_estimator_ids:[...(b.support_estimator_ids||[]),r.estimator_id]}).eq('id',b.id));
-    await run(sb.from('bid_requests').update({status:ok?'Approved':'Denied',decided_by_name:myName(),decided_at:new Date().toISOString()}).eq('id',id));await Promise.all([loadTable('bids'),loadBidReqs()]);if(M&&M.kind==='bid'&&b){const nb=byId(S.bids,b.id);if(nb)M.draft.support_estimator_ids=(nb.support_estimator_ids||[]).slice();renderModal()}render();
+async function bidReqDecide(id,ok){const r=(S.bidReqs||[]).find(x=>x.id===id);if(!r)return;const b=byId(S.bids,r.bid_id);if(!canDecide(b))return;
+  try{const res=await sb.rpc('decide_bid_request',{p_id:id,p_ok:!!ok});
+    if(res.error){if(!/decide_bid_request|does not exist|schema cache|PGRST202/i.test(errMsg(res.error)))throw res.error;
+      // before update-31: managers can still decide the old way
+      if(!canAssign())throw new Error('Lead estimators approving requests needs a one-time database update (update-31-lead-approves-requests.sql).');
+      if(ok&&b&&r.estimator_id&&b.lead_estimator_id!==r.estimator_id&&!(b.support_estimator_ids||[]).includes(r.estimator_id))await run(sb.from('bids').update({support_estimator_ids:[...(b.support_estimator_ids||[]),r.estimator_id]}).eq('id',b.id));
+      await run(sb.from('bid_requests').update({status:ok?'Approved':'Denied',decided_by_name:myName(),decided_at:new Date().toISOString()}).eq('id',id))}
+    await Promise.all([loadTable('bids'),loadBidReqs()]);if(M&&M.kind==='bid'&&b){const nb=byId(S.bids,b.id);if(nb)M.draft.support_estimator_ids=(nb.support_estimator_ids||[]).slice();renderModal()}render();
     toast(ok?`${r.name||'They'} can now work on ${b?.name||'the bid'} as a supporting estimator`:'Request denied')}catch(e){toast(errMsg(e))}}
 function bidReqPanel(){const rs=openReqs();if(!rs.length)return '';
   return `<div class="panel pad req-panel"><b>${rs.length} request${rs.length===1?'':'s'} to work on a bid</b><div class="list" style="margin-top:8px">${rs.map(r=>{const b=byId(S.bids,r.bid_id);return `<div class="li req-li"><span><b>${esc(r.name||'Someone')}</b> asked to work on <button class="linkbtn" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button>${r.note?`<div class="small dim">“${esc(r.note)}”</div>`:''}<div class="small dim">${fmtShort(String(r.created_at).slice(0,10))}</div></span>
-    <span class="rev-btns"><button class="btn sm primary" data-act="req-ok" data-id="${r.id}">Approve</button><button class="btn sm" data-act="req-no" data-id="${r.id}">Deny</button></span></div>`}).join('')}</div><p class="hint">Approving adds them to the bid as a supporting estimator.</p></div>`}
+    <span class="rev-btns"><button class="btn sm primary" data-act="req-ok" data-id="${r.id}">Approve</button><button class="btn sm" data-act="req-no" data-id="${r.id}">Deny</button></span></div>`}).join('')}</div><p class="hint">Approving adds them to the bid as a supporting estimator. The bid’s lead estimator and anyone who manages all bids can approve.</p></div>`}
 function bidReqBanner(b){if(!b||b._new)return '';const rs=openReqs().filter(r=>r.bid_id===b.id);
   if(rs.length)return rs.map(r=>`<div class="notice req-ban"><span><b>${esc(r.name||'Someone')}</b> asked to work on this bid.${r.note?` “${esc(r.note)}”`:''}</span> <button class="btn sm primary" data-act="req-ok" data-id="${r.id}">Approve</button> <button class="btn sm" data-act="req-no" data-id="${r.id}">Deny</button></div>`).join('');
   if(!scopeView()||canWork(b)||!can('bids','edit'))return '';const p=myReq(b.id);const last=(S.bidReqs||[]).filter(r=>r.bid_id===b.id&&r.user_id===S.session?.user?.id&&r.status==='Denied').pop();
