@@ -513,7 +513,7 @@ Then **Awarded**, **Not Awarded** or **No Bid**; **On Hold** at any point.
 
 Needs `supabase/update-30-follow-ups.sql`.
 
-- **Reminders:** once a bid is Submitted, the app counts the days since the proposal went out. When a follow-up comes due the bid appears under **GC follow-ups due** on the dashboard, for the bid's estimators and for everyone who manages all bids. Follow-ups coming up in the next week are listed below it.
+- **Reminders:** once a bid is Submitted, the app counts the days since the proposal went out. The dashboard shows one block with how many bids need a follow-up, for the bid's estimators and for everyone who manages all bids. Click it for the full list, with search, Due / Coming up / All, and sorting. **Pause** stops reminders for a bid, and **Pause those N** clears out everything that went out more than a month ago in one go.
 - **Per-bid plan:** in the follow-up window, set the days between follow-ups and how many to send for that bid. Blank uses the company default (7 days, 3 follow-ups), which an admin can change from the same window. **Remind me in a week** pushes one reminder back; **Pause follow-ups** turns them off for that bid.
 - **Email drafts:** pick the GC and the kind (follow-up 1, 2, 3, a request for a Teams/Zoom review, or a meeting confirmation). Edit it, then **Copy email** or **Open in my email** and send it yourself. Click **I sent it** to log it and start the clock for the next one.
 - **Meeting:** enter the date, time and Teams/Zoom link. Reminders hold until the meeting. Afterwards the app asks what you learned: where you stand, who else is bidding, the expected decision date and a new win probability. That is written to the follow-up log, and the next reminder waits for the decision date.

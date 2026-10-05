@@ -1632,3 +1632,14 @@ tr.eo-sec.eo-drop>td{box-shadow:inset 0 0 0 2px var(--accent)}
 .tk-bar{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 16px}
 .tk-bar #tk-q{flex:1;min-width:200px}
 .tk-bar select{background:var(--surface);color:var(--ink)}
+
+.fu-block{display:flex;align-items:center;gap:16px;width:100%;text-align:left;cursor:pointer;margin-bottom:14px;border-left:4px solid var(--warn);font-family:inherit;color:inherit}
+.fu-block:hover{border-color:var(--warn)}
+.fu-block.quiet{border-left-color:var(--line)}
+.fu-n{font-size:30px;font-weight:800;line-height:1;color:var(--warn);min-width:44px;text-align:center}
+.fu-block.quiet .fu-n{color:var(--ink-3)}
+.fu-t{flex:1;display:flex;flex-direction:column;gap:2px}
+.fu-t b{font-size:15px}.fu-t small{color:var(--ink-3);font-size:12.5px}
+.fu-go{font-weight:700;color:var(--accent);white-space:nowrap}
+.fu-old{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.fu-old span{flex:1;min-width:260px}
