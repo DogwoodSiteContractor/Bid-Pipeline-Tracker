@@ -522,3 +522,10 @@ Needs `supabase/update-30-follow-ups.sql`.
 - Open it from the dashboard list or the **GC follow-up** line at the top of a submitted bid. The client's tracker page is not affected by follow-ups.
 
 - **Supporting estimators:** on a bid's Estimating team, the **+ Add** list has **Entire team**, which adds every other active estimator at once, and **Remove all** clears them. Changing the lead takes that person out of the supporting list.
+
+
+## Turning tabs off
+
+Team → Access chart → **Tabs in use** (admins). Untick a tab to hide it for everyone, admins included: Dashboard, Pipeline, Estimates (with codebooks and bid settings), Jobs, Accounting, Contacts, Calculators, Break room or Help. Buttons and links that lead to a hidden tab disappear too, and the hidden games stop opening when Break room is off. Nothing is deleted; tick the tab again and everything is back. Team always stays on.
+
+This hides the tab in the app. It does not change who is allowed to read the data, so use a person's access settings (Team → People & access) when something must be kept from someone.

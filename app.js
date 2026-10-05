@@ -6346,7 +6346,11 @@ const ROLE_ABOUT={admin:'Runs the app: everything, plus logins, roles and compan
 const LVL_LABEL={none:'No access',view:'View',edit:'Edit'};
 function rolePerm(r,a){const o=ROLE_ACCESS[r]||ROLE_ACCESS.pending;return o[a]||(a==='bids_scope'?'all':'none')}
 function permOf(p,a){if(!p)return rolePerm('pending',a);if(p.role==='admin'||p.role==='pending')return rolePerm(p.role,a);const o=p.perms&&p.perms[a];return o||rolePerm(p.role,a)}
-const perm=a=>permOf(S.profile,a);
+// Tabs an admin has switched off for the whole company. Display only: it hides the tab and everything that leads to it.
+const TAB_SWITCH=[['dash','Dashboard'],['bids','Pipeline'],['estimates','Estimates','Estimates, codebooks, bid settings and templates'],['jobs','Jobs'],['acct','Accounting'],['contacts','Contacts'],['calc','Calculators'],['fun','Break room'],['help','Help']];
+const tabsOff=()=>{const v=S.settings&&S.settings.general&&S.settings.general.tabsOff;return Array.isArray(v)?v:[]};
+const tabOff=a=>{const o=tabsOff();return o.includes(a)||(a==='codebook'&&o.includes('estimates'))};
+const perm=a=>a!=='bids_scope'&&tabOff(a)?'none':permOf(S.profile,a);
 const can=(a,l)=>{const v=perm(a);return l==='edit'?v==='edit':v==='view'||v==='edit'};
 const bidsAll=()=>perm('bids_scope')==='all';
 const SCOPE_LABEL={mine:'Assigned only',view:'See all, work on assigned',all:'All bids'};
@@ -6403,8 +6407,8 @@ function navGroups(){const g=[];
   if(can('contacts'))g.push(['clients','Contacts',['clients','vendors']]);
   if(can('calc'))g.push(['calc','Calculators',['calc']]);
   if(isAdmin())g.push(['team','Team',['team','estimators','teampm','teamoffice','access']]);
-  g.push(['fun','Break room',['fun']]);
-  g.push(['help','Help',['help']]);
+  if(!tabOff('fun'))g.push(['fun','Break room',['fun']]);
+  if(!tabOff('help'))g.push(['help','Help',['help']]);
   if(isDev()){const n=(S.feedback||[]).filter(f=>f.status==='New').length;g.push(['dev','Developer'+(n?` (${n})`:''),['dev']])}
   return g}
 
@@ -6448,8 +6452,13 @@ function vTeamOffice(){const roles=['executive','accounting','board','admin'];co
     <div class="panel scroll"><table class="team-t"><thead><tr><th>Person</th><th>Title</th><th>Contact</th><th>Can open</th><th></th></tr></thead><tbody>${L.map(p=>`<tr><td><span class="who">${pAv(p)}<b>${esc(personName(p))}</b></span></td><td>${esc(p.title||'')}</td><td class="small">${esc(p.email)}${p.phone?'<br>'+esc(p.phone):''}</td><td class="team-acc">${accessChips(p)}</td><td class="r"><button class="btn sm" data-act="team-edit" data-id="${p.id}">Edit access…</button></td></tr>`).join('')||`<tr><td colspan="5" class="dim small">Nobody with this role yet.</td></tr>`}</tbody></table></div></div>`}).join('')}`}
 
 /* ----- Team: access chart ----- */
+function tabSwitchPanel(){if(!isAdmin())return '';const off=tabsOff();
+  return `<div class="panel pad tabsw"><b>Tabs in use</b><p class="small dim" style="margin:2px 0 10px">Untick a tab to hide it for everyone, admins included. Nothing is deleted; tick it again and it’s back as it was. Team always stays on.</p>
+    <div class="tabsw-g">${TAB_SWITCH.map(([k,l,sub])=>`<label class="check"><input type="checkbox" data-tabsw="${k}"${off.includes(k)?'':' checked'}> <span><b>${l}</b>${sub?`<small>${sub}</small>`:''}${k==='bids'?'<small>Turning this off hides every bid</small>':''}</span></label>`).join('')}</div></div>`}
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset.tabsw==null||!isAdmin())return;const k=t.dataset.tabsw;const off=tabsOff().filter(x=>x!==k);if(!t.checked)off.push(k);
+  const g={...(S.settings.general||{}),tabsOff:off};S.settings.general=g;render();run(sb.from('settings').upsert({key:'general',value:g})).then(()=>loadTable('settings')).then(()=>{render();toast(`${(TAB_SWITCH.find(x=>x[0]===k)||[])[1]} ${t.checked?'is back on':'is hidden for everyone'}`)}).catch(er=>toast(errMsg(er)))});
 function vAccess(){const rs=ROLE_ORDER.filter(r=>r!=='pending');const custom=S.profiles.filter(p=>customCount(p));
-  return teamHead('Access chart','What each role can open by default. Anyone can be adjusted on People & access.')+`
+  return teamHead('Access chart','What each role can open by default. Anyone can be adjusted on People & access.')+tabSwitchPanel()+`
   <div class="panel scroll"><table class="team-t acc-t"><thead><tr><th>Area</th>${rs.map(r=>`<th class="c">${esc(ROLE_LABEL[r])}</th>`).join('')}</tr></thead><tbody>
   ${AREAS.map(([a,l,d])=>`<tr><td><b>${esc(l)}</b><div class="small dim">${esc(d)}</div></td>${rs.map(r=>`<td class="c">${lvlPill(rolePerm(r,a))}</td>`).join('')}</tr>`).join('')}
   <tr><td><b>Which bids</b><div class="small dim">For bids, estimates and the dashboard</div></td>${rs.map(r=>`<td class="c small">${rolePerm(r,'bids')==='none'?'<span class="dim">—</span>':SCOPE_LABEL[rolePerm(r,'bids_scope')]||'Assigned only'}</td>`).join('')}</tr>
@@ -7154,7 +7163,7 @@ function dirtDraw(g,c){const {W,H,G}=DM;const dark=matchMedia('(prefers-color-sc
 let digBuf='';
 document.addEventListener('keydown',e=>{const t=e.target;const typing=t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable);
   if(M&&M.kind==='dirt'&&S.fun.dirt){const g=S.fun.dirt;if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A'){g.keys.left=true;e.preventDefault()}else if(e.key==='ArrowRight'||e.key==='d'||e.key==='D'){g.keys.right=true;e.preventDefault()}else if(e.key===' '||e.key==='ArrowDown'||e.key==='Enter'){e.preventDefault();if(!e.repeat)dirtAct(g)}return}
-  if(typing||M||e.ctrlKey||e.metaKey||e.altKey||!S.session||role()==='pending'||e.key.length!==1)return;digBuf=(digBuf+e.key.toLowerCase()).slice(-3);if(digBuf==='dig'){digBuf='';dirtOpen()}});
+  if(typing||M||e.ctrlKey||e.metaKey||e.altKey||!S.session||role()==='pending'||tabOff('fun')||e.key.length!==1)return;digBuf=(digBuf+e.key.toLowerCase()).slice(-3);if(digBuf==='dig'){digBuf='';dirtOpen()}});
 document.addEventListener('keyup',e=>{const g=S.fun.dirt;if(!g)return;if(e.key==='ArrowLeft'||e.key==='a'||e.key==='A')g.keys.left=false;if(e.key==='ArrowRight'||e.key==='d'||e.key==='D')g.keys.right=false});
 ['pointerdown','pointerup','pointerleave','pointercancel'].forEach(ev=>document.addEventListener(ev,e=>{const b=e.target.closest&&e.target.closest('[data-dirt]');const g=S.fun.dirt;if(!b||!g)return;const k=b.dataset.dirt;if(k==='act'){if(ev==='pointerdown')dirtAct(g)}else g.keys[k]=ev==='pointerdown'}));
 
@@ -7876,6 +7885,6 @@ let pushBuf='';
 document.addEventListener('keydown',e=>{const t=e.target;const typing=t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable);
   if(M&&M.kind==='push'&&S.fun.push){const g=S.fun.push;const d={ArrowLeft:'left',a:'left',A:'left',ArrowRight:'right',d:'right',D:'right',ArrowUp:'up',w:'up',W:'up',ArrowDown:'down',s:'down',S:'down'}[e.key];
     if(d){e.preventDefault();pcMove(g,d)}else if(e.key==='Enter'&&g.over){e.preventDefault();pcInit()}return}
-  if(typing||M||e.ctrlKey||e.metaKey||e.altKey||!S.session||role()==='pending'||S.tracker||e.key.length!==1)return;pushBuf=(pushBuf+e.key.toLowerCase()).slice(-4);if(pushBuf==='push'){pushBuf='';pushOpen()}});
+  if(typing||M||e.ctrlKey||e.metaKey||e.altKey||!S.session||role()==='pending'||S.tracker||tabOff('fun')||e.key.length!==1)return;pushBuf=(pushBuf+e.key.toLowerCase()).slice(-4);if(pushBuf==='push'){pushBuf='';pushOpen()}});
 document.addEventListener('click',e=>{const b=e.target.closest('[data-push]');if(b&&M&&M.kind==='push'&&S.fun.push){const g=S.fun.push;if(g.over)pcInit();else pcMove(g,b.dataset.push);$('#push-cv')?.focus();return}
   const t=e.target.closest('[data-act=fun-push]');if(t)pushOpen()});
