@@ -935,7 +935,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={dirt:dirtModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  const html={dirt:dirtModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt'].includes(M.kind)||M.kind==='cx'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -1016,7 +1016,7 @@ function bidModal(){
   const outcome=isSent(b)||DECIDED.includes(b.status);
   const sub=isNew?'Project details, team, scope, vendor quotes and files':admin?'Last saved '+(b.updated_at?new Date(b.updated_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'—'):work?'You’re on this bid, so you can update anything here except who’s assigned to it.':'Read-only';
   const files=isNew?[]:filesFor(b.id);
-  return mhead(isNew?'New bid':b.name||'Untitled bid',sub)+`<div class="mbody">${archNote}${supBanner(b)}${bidReqBanner(b)}
+  return mhead(isNew?'New bid':b.name||'Untitled bid',sub)+`<div class="mbody">${archNote}${supBanner(b)}${bidReqBanner(b)}${trackRow(b)}
   ${isNew?'':`<div class="panel pad" style="margin-bottom:14px">${progress(b,{lg:true,quotes:b.quotes})}</div>`}
   <fieldset><legend>Project</legend><div class="fg">
     <label class="f s2">Project name ${work?'<span class="req">required</span>':''}<input class="field" ${bf('name')} placeholder="e.g. Riverside Commerce Park"></label>
@@ -1027,6 +1027,7 @@ function bidModal(){
     <label class="f">Size<input class="field" ${bf('size')} placeholder="e.g. 14 acres"></label>
     <label class="f">Bid status${sel('status',BID_ST)}</label>
     <label class="f">Bid due date<input type="date" class="field" ${bf('due_date')}></label>
+    <label class="f" title="Shown to the client on their tracker. Blank = the bid due date.">Proposal expected by<input type="date" class="field" ${bf('proposal_eta')}></label>
     <label class="f">Due time<input type="time" class="field" ${bf('due_time')}></label>
     <label class="f">Site walk / pre-bid<input type="date" class="field" ${bf('walk_date')}></label>
     <label class="f">RFI deadline<input type="date" class="field" ${bf('rfi_date')}></label>
@@ -1265,6 +1266,7 @@ function clientModal(){const c=M.draft,isNew=M.isNew;const admin=can('contacts',
   const bs=S.bids.filter(b=>(b.client_ids||[]).includes(c.id));const w=bs.filter(b=>clientWon(b,c.id)),l=bs.filter(b=>clientLost(b,c.id));
   return mhead(isNew?'New client or GC':c.company||'Client','')+`<div class="mbody">
    ${isNew||!bidsAll()?'':`<div class="statline"><div><b>${bs.length}</b>Bids</div><div><b>${moneyK(bs.reduce((s,b)=>s+clientAmount(b,c.id),0))}</b>Total bid</div><div><b>${w.length}</b>Won</div><div><b>${w.length+l.length?Math.round(w.length/(w.length+l.length)*100)+'%':'—'}</b>Win rate</div><div><b>${moneyK(w.reduce((s,b)=>s+wonValue(b),0))}</b>Awarded</div></div>`}
+   ${isNew||!can('bids','edit')?'':`<div class="trk-row small"><button class="btn sm" data-act="trk-open" data-id="${c.id}">Client tracker link…</button> <span class="dim">A private page showing this client where each of their bids stands.</span></div>`}
    <fieldset><legend>Company</legend><div class="fg">
    <label class="f s2">Company name ${admin?'<span class="req">required</span>':''}${ef('company','e.g. Summit Builders')}</label><label class="f s2">Type${efSel('type',CLIENT_TYPES)}</label>
    <label class="f s2">Main phone${ef('phone','(000) 000-0000','tel')}</label><label class="f s2">Website or email${ef('email','')}</label>
@@ -1328,9 +1330,13 @@ async function saveBid(){
   const row={};BID_COLS.forEach(k=>row[k]=d[k]);
   ['due_date','due_time','walk_date','rfi_date','submitted_date','awarded_date','lead_estimator_id','awarded_client_id'].forEach(k=>row[k]=nullIfEmpty(row[k]));
   row.follow_ups=(d.follow_ups||[]).filter(f=>f.date||f.note);row.updated_by=S.session.user.id;
+  const wasNew=!!d._new;
   if(d._new)await run(sb.from('bids').insert(row));
   else{const {id,...rest}=row;await run(sb.from('bids').update(rest).eq('id',id))}
   d._new=false;
+  // kept out of the main save so bids still save before update-28 has been run
+  if(d.proposal_eta!==undefined&&(wasNew?d.proposal_eta:true)){try{await sb.from('bids').update({proposal_eta:nullIfEmpty(d.proposal_eta)}).eq('id',row.id)}catch(e){}}
+  if(wasNew&&(row.client_ids||[]).length&&!S.trackMissing)setTimeout(()=>{if(!M)trackOpen(row.client_ids,row.id)},400);
   if(isAdmin()){const gone=(M.origQuoteIds||[]).filter(id=>!d.quotes.some(q=>q.id===id));if(gone.length)await run(sb.from('quotes').delete().in('id',gone))}
   if(d.quotes.length)await run(sb.from('quotes').upsert(d.quotes.map(quoteRowData)));
   M.origQuoteIds=d.quotes.map(q=>q.id);
@@ -4643,7 +4649,7 @@ function estRevModal(){const x=M;const b=byId(S.bids,x.bidId)||{};const E=S.est;
     <fieldset><legend>Saved copies (${vs.length})</legend>
       ${d?`<div class="rev-row cur"><div><b>${esc(estRevName(d))}</b> ${pill('Working estimate','good')}<div class="small dim">${d.rev&&d.rev.started?'started '+fmtShort(d.rev.started):'the one you edit'}</div></div><div class="r num"><b>${money(estCalc(d).total)}</b></div><div></div></div>`:''}
       ${vs.map(v=>`<div class="rev-row"><div><b>${esc(v.label||'Saved copy')}</b>${v.note?`<div class="small">${esc(v.note)}</div>`:''}<div class="small dim">kept ${fmtShort(String(v.created_at).slice(0,10))}${v.created_by_name?' by '+esc(v.created_by_name):''}</div></div><div class="r num"><b>${money(v.total_price)}</b><div class="small dim">cost ${money(v.total_cost)}</div></div>
-        <div class="rev-btns"><button class="btn sm" data-act="estrev-view" data-id="${v.id}">Open</button>${isAdmin()?`<button class="btn sm danger${x.arm===v.id?' arm':''}" data-act="estrev-del" data-id="${v.id}">${x.arm===v.id?'Click again':'Delete'}</button>`:''}</div></div>`).join('')||(d?'':'<p class="small dim">No saved copies yet.</p>')}
+        <div class="rev-btns"><button class="btn sm" data-act="estrev-view" data-id="${v.id}">Open</button>${isAdmin()?`<button class="btn sm danger${x.arm2===v.id?' arm':''}" data-act="estrev-del" data-id="${v.id}">${x.arm2===v.id?'Click again':'Delete'}</button>`:''}</div></div>`).join('')||(d?'':'<p class="small dim">No saved copies yet.</p>')}
       ${vs.length?'<p class="hint">Saved copies are read-only. Open one to look at it, export it, or bring it back as the working estimate.</p>':''}</fieldset></div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Close</button></div></div>`}
 async function estSnapshot(bidId,d,label,note){const R=estCalc(d);await run(sb.from('estimate_versions').insert({id:newId(),bid_id:bidId,label:String(label||'').trim()||estRevName(d),note:String(note||'').trim(),rev:estRevNo(d),data:d,total_cost:r2(R.cost),total_price:r2(R.total),created_by_name:myName()}))}
@@ -5390,7 +5396,7 @@ document.addEventListener('click',e=>{
     case 'estdel-go':estDelGo();break;
     case 'estrev-start':estRevStart();break;
     case 'estrev-view':estRevView(t.dataset.id);break;
-    case 'estrev-del':{if(M.arm!==t.dataset.id){M.arm=t.dataset.id;renderModal();break}const id=t.dataset.id;M.arm=null;run(sb.from('estimate_versions').delete().eq('id',id)).then(()=>loadEstVers()).then(()=>{renderModal();render()}).catch(e=>toast(errMsg(e)));break}
+    case 'estrev-del':{if(M.arm2!==t.dataset.id){M.arm2=t.dataset.id;renderModal();break}const id=t.dataset.id;M.arm2=null;run(sb.from('estimate_versions').delete().eq('id',id)).then(()=>loadEstVers()).then(()=>{renderModal();render()}).catch(e=>toast(errMsg(e)));break}
     case 'est-verback':estOpen(S.est.bidId);break;
     case 'est-verrestore':{if(!S.est.ver)break;if(!S.est.armR){S.est.armR=true;render();break}estRevRestore();break}
     case 'ests-tab':{const v=t.dataset.v;if(v==='set')S.view='settings';else if(v==='cb'||v==='scopes')S.view=v;else{S.estsTab=v;S.view='estimates'}render();window.scrollTo(0,0);break}
@@ -5768,6 +5774,7 @@ async function checkConfig(){
   render();
 }
 async function start(){
+  const TRK=new URLSearchParams(location.search).get('track');if(TRK&&sb){S.tracker=true;setTimeout(()=>trackPage(TRK),0);return}
   render();
   if(!sb){S.loading=false;render();return}
   sb.auth.onAuthStateChange((event,session)=>{
@@ -7324,7 +7331,7 @@ function ptModal(){const ts=S.propTpls||[];const adm=isAdmin();
     ${S.propTplMissing?`<div class="notice">${PT_SQL}</div>`:''}
     <fieldset><legend>Company templates (${ts.length})</legend>
       ${ts.map(t=>`<div class="rev-row"><div><b>${esc(t.name)}</b> ${pill(t.kind==='docx'?'Word':'Excel')}<div class="small dim">${esc(t.filename||'')} · ${fmtN((t.size||0)/1024,0)} KB${t.updated_at?' · '+fmtShort(String(t.updated_at).slice(0,10)):''}${t.created_by_name?' · '+esc(t.created_by_name):''}</div></div><div></div>
-        <div class="rev-btns"><button class="btn sm" data-act="pt-dl" data-id="${t.id}">Download</button>${adm?`<button class="btn sm" data-act="pt-rename" data-id="${t.id}">Rename</button><button class="btn sm danger${M.arm===t.id?' arm':''}" data-act="pt-del" data-id="${t.id}">${M.arm===t.id?'Click again':'Delete'}</button>`:''}</div></div>`).join('')||'<p class="small dim">None yet.</p>'}
+        <div class="rev-btns"><button class="btn sm" data-act="pt-dl" data-id="${t.id}">Download</button>${adm?`<button class="btn sm" data-act="pt-rename" data-id="${t.id}">Rename</button><button class="btn sm danger${M.arm2===t.id?' arm':''}" data-act="pt-del" data-id="${t.id}">${M.arm2===t.id?'Click again':'Delete'}</button>`:''}</div></div>`).join('')||'<p class="small dim">None yet.</p>'}
       ${adm?`<div class="pt-up"><label class="btn primary">Upload a .docx or .xlsx<input type="file" accept=".docx,.xlsx" data-ptup hidden></label><button class="btn" data-act="pt-starter" data-v="docx">Download a Word starter</button><button class="btn" data-act="pt-starter" data-v="xlsx">Download an Excel starter</button></div>`:''}</fieldset>
     <fieldset><legend>How to build one</legend><ol class="pt-how"><li>Open your proposal in Word or Excel (or start from a starter file).</li><li>Wherever the app should fill something in, type the field name in double curly braces, like <code>{{project}}</code> or <code>{{total}}</code>. Keep your own fonts, logo and layout.</li>
       <li>For the list of bid items, make <b>one</b> table row with the <code>{{item.…}}</code> fields. The app repeats that row for every bid item. Same for <code>{{scope.…}}</code> and <code>{{alt.…}}</code>.</li><li>Save as .docx or .xlsx and upload it here. To change a template, upload the new file and delete the old one.</li></ol>
@@ -7338,7 +7345,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'pt-starter':ptStarter(t.dataset.v);break;
     case 'pt-dl':(async()=>{try{const x=await ptFetch(t.dataset.id);ptSave(new Blob([ptBytes(x.file)],{type:PT_MIME[x.kind]}),x.filename||x.name+'.'+x.kind)}catch(er){toast(errMsg(er))}})();break;
     case 'pt-rename':{const x=S.propTpls.find(p=>p.id===t.dataset.id);if(!x||!isAdmin())break;const n=(prompt('Template name',x.name)||'').trim();if(!n||n===x.name)break;run(sb.from('proposal_templates').update({name:n}).eq('id',x.id)).then(loadPropTpls).then(()=>{renderModal();render()}).catch(er=>toast(errMsg(er)));break}
-    case 'pt-del':{if(!isAdmin())break;if(M.arm!==t.dataset.id){M.arm=t.dataset.id;renderModal();break}M.arm=null;run(sb.from('proposal_templates').delete().eq('id',t.dataset.id)).then(loadPropTpls).then(()=>{renderModal();render()}).catch(er=>toast(errMsg(er)));break}
+    case 'pt-del':{if(!isAdmin())break;if(M.arm2!==t.dataset.id){M.arm2=t.dataset.id;renderModal();break}M.arm2=null;run(sb.from('proposal_templates').delete().eq('id',t.dataset.id)).then(loadPropTpls).then(()=>{renderModal();render()}).catch(er=>toast(errMsg(er)));break}
   }});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset.ptsel!=null){S.ptSel=t.value;return}if(t.dataset.ptup!=null){const f=t.files&&t.files[0];t.value='';ptUpload(f)}});
 
@@ -7459,7 +7466,7 @@ function cxModal(){const c=M.draft;const d=cxD(c);const job=jobOf(c.job_id);cons
         <p class="hint s3">Use a negative quantity for a credit. Lines at contract unit prices are not marked up again. Markups carry over to the next change order on this job.</p></div><div class="cx-tot" id="cx-tot">${cxTotHtml(c)}</div></div></fieldset>
     <fieldset><legend>On the printed change order</legend><label class="check small"><input type="checkbox" data-cxb="detail"${d.detail!==false?' checked':''}${dis}> Show every pricing line (otherwise totals by type)</label>
       <label class="f">Notes, exclusions and conditions<textarea class="field" id="cx-notes" data-cxn rows="2" placeholder="e.g. Price valid 15 days. Excludes rock, testing and survey."${dis}>${esc(d.notes||'')}</textarea></label></fieldset></div>
-  <div class="mfoot"><div>${!c._new&&canJob()&&c.status!=='Approved'?`<button class="btn danger${M.arm?' arm':''}" data-act="cx-del">${M.arm?'Click again to delete':'Delete'}</button>`:''}</div><div class="r"><button class="btn" data-act="close">Close</button><button class="btn" data-act="cx-print">Print / PDF</button>
+  <div class="mfoot"><div>${!c._new&&canJob()&&c.status!=='Approved'?`<button class="btn danger${M.arm2?' arm':''}" data-act="cx-del">${M.arm2?'Click again to delete':'Delete'}</button>`:''}</div><div class="r"><button class="btn" data-act="close">Close</button><button class="btn" data-act="cx-print">Print / PDF</button>
     ${lock?'':`<button class="btn" data-act="cx-save">Save</button>${c.status==='Draft'||c.status==='Rejected'?'<button class="btn" data-act="cx-status" data-v="Sent">Save &amp; mark sent</button>':''}${c.status==='Sent'?'<button class="btn" data-act="cx-status" data-v="Rejected">Rejected</button>':''}<button class="btn primary" data-act="cx-status" data-v="Approved">${M.armA?'Click again — adds it to the contract':'Approved'}</button>`}</div></div>`}
 function cxRow(c){const R=cxCalc(c);const d=cxD(c);return {id:c.id,job_id:c.job_id,number:String(c.number||'').trim(),title:String(c.title||'').trim(),description:String(c.description||'').trim(),reason:c.reason||'',status:c.status||'Draft',days:num(c.days)!=null?Math.round(num(c.days)):null,
   data:{lines:d.lines.filter(l=>String(l.desc||'').trim()||num(l.qty)||num(l.price)),mk:d.mk,notes:d.notes||'',detail:d.detail!==false},cost:R.cost,price:R.total,sent_date:c.sent_date||null,approved_date:c.approved_date||null,approved_by:c.approved_by||'',job_item_id:c.job_item_id||null,updated_by_name:myName()}}
@@ -7474,7 +7481,7 @@ async function cxSave(status){const c=M.draft;if(!canJob())return false;if(!Stri
         markup_pct:cost?Math.max(-999,Math.min(9999,Math.round((R.total/cost-1)*1e5)/1e3)):0,bid_price:R.total,change_order:row.number,sort:n.reduce((m,i)=>Math.max(m,i.sort||0),0)+1,notes:'Change order'}));
       row.status='Approved';row.approved_date=todayStr();row.approved_by=String(who).trim();row.job_item_id=jid;row.sent_date=row.sent_date||todayStr()}
     if(c._new)await run(sb.from('change_orders').insert(row));else await run(sb.from('change_orders').update(row).eq('id',c.id));
-    await Promise.all([loadCOs(),status==='Approved'?loadTable('job_items'):null]);const nc=(S.change_orders||[]).find(x=>x.id===c.id);if(nc){M.draft=clone(nc);M.arm=M.armA=false;renderModal()}render();
+    await Promise.all([loadCOs(),status==='Approved'?loadTable('job_items'):null]);const nc=(S.change_orders||[]).find(x=>x.id===c.id);if(nc){M.draft=clone(nc);M.arm2=M.armA=false;renderModal()}render();
     toast(status==='Approved'?`CO ${row.number} approved — ${money(R.total)} added to the contract`:status==='Sent'?`CO ${row.number} marked sent`:status==='Rejected'?`CO ${row.number} marked rejected`:'Saved');return true}
   catch(e){toast(/change_orders|does not exist|schema cache/i.test(errMsg(e))?CX_SQL:errMsg(e));return false}}
 function cxPrint(c){const job=jobOf(c.job_id)||{};const d=cxD(c);const R=cxCalc(c);const cl=jobClient(job);const co=S.settings.general?.companyName||CFG.companyName||'';const logo=BRAND.loginLogo||'';const L=propLib();const C=jobContract(job);
@@ -7503,7 +7510,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'cx-save':cxSave();break;
     case 'cx-status':{const v=t.dataset.v;if(v==='Approved'&&!M.armA){M.armA=true;renderModal();break}cxSave(v);break}
     case 'cx-print':cxPrint(M.draft);break;
-    case 'cx-del':{if(!M.arm){M.arm=true;renderModal();break}const id=M.draft.id;run(sb.from('change_orders').delete().eq('id',id)).then(loadCOs).then(()=>{closeModal();render();toast('Change order deleted')}).catch(er=>toast(errMsg(er)));break}
+    case 'cx-del':{if(!M.arm2){M.arm2=true;renderModal();break}const id=M.draft.id;run(sb.from('change_orders').delete().eq('id',id)).then(loadCOs).then(()=>{closeModal();render();toast('Change order deleted')}).catch(er=>toast(errMsg(er)));break}
   }});
 document.addEventListener('input',e=>{const t=e.target;if(!M||M.kind!=='cx')return;const c=M.draft;const d=cxD(c);
   if(t.dataset.cx&&t.tagName!=='SELECT'){c[t.dataset.cx]=t.value;return}
@@ -7575,3 +7582,67 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   }});
 document.addEventListener('input',e=>{const t=e.target;if(M&&M.kind==='useradd'&&t.dataset.ua&&t.tagName!=='SELECT')M[t.dataset.ua]=t.value});
 document.addEventListener('change',e=>{const t=e.target;if(M&&M.kind==='useradd'&&t.dataset.ua&&t.tagName==='SELECT'){M[t.dataset.ua]=t.value;renderModal()}});
+
+/* =====================================================================
+   Client bid tracker: one private link per GC / client. Opening it
+   (no login) shows every project they've sent and the stage each bid
+   is in. Prices, other GCs and notes never leave the database.
+   ===================================================================== */
+const TRACK_SQL='The client tracker needs a one-time database update (update-28-client-tracker.sql).';
+const TRACK_STEPS=[['Received','We have your invitation'],['Estimating','Takeoff and pricing under way'],['Final review','Numbers are being checked'],['Proposal sent','Our proposal is in your hands'],['Decision','Award decision']];
+const trackUrl=tk=>location.origin+location.pathname+'?track='+tk;
+function trackStage(b){if(b.status==='No Bid')return {n:0,note:'We’re not able to bid this one',cls:'off'};
+  if(b.status==='Awarded')return {n:5,note:b.awarded_to_you?'Awarded to us — thank you!':'Closed',cls:b.awarded_to_you?'win':'done'};
+  if(b.status==='Not Awarded')return {n:5,note:'Closed',cls:'done'};
+  if(b.sent)return {n:4,note:b.sent_date?'Sent '+fmtShort(b.sent_date):'Proposal sent'};
+  if(b.status==='Takeoff Complete')return {n:3};if(b.status==='Estimating')return {n:2};
+  if(b.status==='On Hold')return {n:2,note:'On hold',cls:'hold'};return {n:1}}
+function trackCard(b){const st=trackStage(b);const e=b.estimator;const ad=b.addenda||[];const late=b.due_date&&!b.sent&&st.n<4&&st.n>0&&daysUntil(b.due_date)<0;
+  const steps=st.n?`<ol class="tk-steps${st.cls?' '+st.cls:''}" aria-label="Stage ${st.n} of 5: ${TRACK_STEPS[st.n-1][0]}">${TRACK_STEPS.map(([l],i)=>`<li class="${i+1<st.n?'past':i+1===st.n?'now':''}"><span class="tk-dot">${i+1<st.n||(st.n===5&&i===4)?'✓':i+1}</span><span class="tk-lab">${l}</span></li>`).join('')}</ol>`:'';
+  return `<article class="tk-card"><header><div><h2>${esc(b.name)}</h2>${b.location?`<p>${esc(b.location)}</p>`:''}</div><div class="tk-now ${st.cls||''}">${st.n?esc(TRACK_STEPS[st.n-1][0]):'Not bidding'}<small>${esc(st.note||(st.n?TRACK_STEPS[st.n-1][1]:''))}</small></div></header>
+    ${steps}
+    <div class="tk-facts"><div><span>Bid due</span><b>${b.due_date?fmtDate(b.due_date):'Not set'}</b>${b.due_time?`<small>${esc(b.due_time)}</small>`:''}</div>
+      <div><span>${b.sent?'Proposal sent':'Proposal expected by'}</span><b>${b.sent?(b.sent_date?fmtDate(b.sent_date):'Sent'):b.proposal_eta?fmtDate(b.proposal_eta):'To be confirmed'}</b></div>
+      <div><span>Addenda acknowledged</span>${ad.length?`<div class="tk-ad">${ad.map(a=>`<i class="${a.acknowledged?'ok':''}" title="${a.acknowledged?'Acknowledged':'Received, not yet acknowledged'}${a.date?' · issued '+fmtShort(a.date):''}">${a.acknowledged?'✓ ':''}#${esc(a.number)}</i>`).join('')}</div>`:'<b>None so far</b>'}</div>
+      <div><span>Your estimator</span>${e&&e.name?`<b>${esc(e.name)}</b>${e.title?`<small>${esc(e.title)}</small>`:''}<small>${e.phone?`<a href="tel:${esc(e.phone)}">${esc(e.phone)}</a>`:''}${e.phone&&e.email?' · ':''}${e.email?`<a href="mailto:${esc(e.email)}">${esc(e.email)}</a>`:''}</small>`:'<b>To be assigned</b>'}</div></div></article>`}
+async function trackPage(tk){const main=$('#main'),top=$('#topwrap');if(top)top.hidden=true;document.title=`Bid tracker — ${S.settings?.general?.companyName||CFG.companyName||APP_NAME}`;const co=CFG.companyName||APP_NAME;const logo=BRAND.loginLogo||'';
+  const shell=inner=>`<div class="tk"><div class="tk-head">${logo?`<img src="${esc(logo)}" alt="${esc(co)}">`:`<b class="tk-co">${esc(co)}</b>`}<span>Bid tracker</span></div>${inner}<p class="tk-foot">${esc(co)} · This page is private to your company. It updates on its own as our estimating team moves each bid along.</p></div>`;
+  const draw=async first=>{let d=null,err=null;try{const r=await sb.rpc('client_tracker',{p_token:tk});if(r.error)err=r.error;else d=r.data}catch(e){err=e}
+    if(err){if(first)main.innerHTML=shell(`<div class="tk-msg"><h1>We couldn’t load the tracker</h1><p>Please try again in a few minutes.</p></div>`);return}
+    if(!d){main.innerHTML=shell(`<div class="tk-msg"><h1>This link isn’t active</h1><p>It may have been replaced. Please ask your contact at ${esc(co)} for a new one.</p></div>`);return}
+    const open=d.bids.filter(b=>!['Awarded','Not Awarded','No Bid'].includes(b.status)),closed=d.bids.filter(b=>!open.includes(b));
+    main.innerHTML=shell(`<div class="tk-title"><h1>${esc(d.client||'Your projects')}</h1><p>${open.length} bid${open.length===1?'':'s'} in progress${closed.length?` · ${closed.length} recently closed`:''} · updated ${new Date(d.as_of||Date.now()).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</p></div>
+      ${open.map(trackCard).join('')||'<div class="tk-msg"><p>No bids in progress right now.</p></div>'}${closed.length?`<h3 class="tk-sub">Recently closed</h3>${closed.map(trackCard).join('')}`:''}`)};
+  main.innerHTML=shell(`<div class="tk-msg">${dozerLoader('Loading')}</div>`);await draw(true);setInterval(()=>{if(!document.hidden)draw(false)},60000)}
+/* ---- staff side ---- */
+function trackEmail(c,b,url){const who=String((b&&(b.client_contacts||{})[c.id])||'').split(/[,(]/)[0].trim();const co=S.settings.general?.companyName||CFG.companyName||'';const me=myEst();
+  return {subject:`${co?co+' — ':''}bid tracker${b?' for '+b.name:''}`,
+    body:`${who?'Hi '+who.split(' ')[0]:'Hello'},\n\n${b?`Thank you for the invitation to bid ${b.name}. `:''}The link below is for tracking purposes. It shows where our bid stands on every project you’ve sent us: the stage it’s in, the bid due date, when to expect our proposal, the addenda we’ve acknowledged and who to call with questions.\n\n${url}\n\nNo login is needed, and the same link keeps working for future projects. It’s private to ${c.company||'your company'}, so please keep it within your team.\n\nThank you,\n${myName()}${me&&me.phone?'\n'+me.phone:''}${co?'\n'+co:''}`}}
+async function trackOpen(clientIds,bidId){const ids=(clientIds||[]).filter(id=>byId(S.clients,id));if(!ids.length)return;M={kind:'track',ids,bidId:bidId||null,cur:ids[0],links:{},fromNew:!!bidId&&M===null};showModal();trackLoad(ids[0])}
+async function trackLoad(id,fresh){const x=M;if(!x||x.kind!=='track')return;try{const tk=await run(sb.rpc('client_track_link',{p_client:id,p_new:!!fresh}));x.links[id]=tk;x.err=null}catch(e){x.err=/client_track_link|does not exist|schema cache|PGRST202/i.test(errMsg(e))?TRACK_SQL:errMsg(e)}if(M===x)renderModal()}
+function trackModal(){const x=M;const c=byId(S.clients,x.cur)||{};const b=x.bidId?byId(S.bids,x.bidId):null;const tk=x.links[x.cur];const url=tk?trackUrl(tk):'';const em=tk?trackEmail(c,b,url):null;
+  const n=S.bids.filter(q=>(q.client_ids||[]).includes(c.id)&&!q.archived_at&&!DECIDED.includes(q.status)).length;
+  return mhead('Client tracker link',b?`${b.name} — send the GC their tracking link`:c.company||'')+`<div class="mbody">
+    ${x.ids.length>1?`<div class="seg" style="margin-bottom:12px">${x.ids.map(id=>`<button class="${id===x.cur?'on':''}" data-act="trk-pick" data-id="${id}">${esc(byId(S.clients,id)?.company||'')}</button>`).join('')}</div>`:''}
+    ${x.err?`<div class="notice">${esc(x.err)}</div>`:!tk?'<p class="dim">Getting the link…</p>':`
+    <p class="small" style="margin:0 0 10px"><b>${esc(c.company||'This client')}</b> has one private link. It shows all ${n} of their bids in progress and any new ones you add later, so you only need to send it once.</p>
+    <fieldset><legend>Link</legend><div class="pt-row"><input class="field" id="trk-url" readonly value="${esc(url)}" onfocus="this.select()"><button class="btn primary" data-act="trk-copy" data-v="url">Copy link</button><a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Preview</a></div></fieldset>
+    <fieldset><legend>Email to send them</legend><label class="f">Subject<input class="field" id="trk-subj" data-trk="subject" value="${esc(x.subject??em.subject)}"></label><label class="f">Message<textarea class="field" id="trk-body" data-trk="body" rows="11">${esc(x.body??em.body)}</textarea></label>
+      <div class="adders"><button class="btn primary" data-act="trk-copy" data-v="email">Copy email</button><button class="btn" data-act="trk-mail">Open in my email</button></div>
+      <p class="hint">Paste it into Outlook or Gmail and send it yourself. The client sees stages, dates, acknowledged addenda and the lead estimator’s contact — never prices, other GCs or your notes.</p></fieldset>
+    ${isAdmin()?`<button class="btn sm ghost${x.arm2?' danger':''}" data-act="trk-new">${x.arm2?'Click again — the old link stops working':'Replace this link (turns the old one off)'}</button>`:''}`}</div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">${x.bidId?'Done':'Close'}</button></div></div>`}
+function trackRow(b){if(!b||b._new||!can('bids','edit'))return '';const ids=(b.client_ids||[]).filter(id=>byId(S.clients,id));if(!ids.length)return '';
+  return `<div class="trk-row small"><span class="dim">Client tracker:</span> ${ids.map(id=>`<button class="linkbtn" data-act="trk-open" data-id="${id}" data-bid="${b.id}">${esc(byId(S.clients,id).company)}</button>`).join(' · ')}</div>`}
+FOCUS_ATTRS.push('data-trk');
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('trk-'))return;const x=M&&M.kind==='track'?M:null;
+  const copy=(txt,msg)=>(navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast(msg)).catch(()=>toast('Couldn’t copy — select the text and copy it by hand.'));
+  const cur=()=>{const c=byId(S.clients,x.cur)||{};const b=x.bidId?byId(S.bids,x.bidId):null;const em=trackEmail(c,b,trackUrl(x.links[x.cur]));return {subject:x.subject??em.subject,body:x.body??em.body,c,b}};
+  switch(a){
+    case 'trk-open':{const bid=t.dataset.bid||null;const id=t.dataset.id;closeModal();M={kind:'track',ids:[id],bidId:bid,cur:id,links:{}};showModal();trackLoad(id);break}
+    case 'trk-pick':if(x){x.cur=t.dataset.id;x.subject=x.body=undefined;x.arm2=false;renderModal();if(!x.links[x.cur])trackLoad(x.cur)}break;
+    case 'trk-copy':if(x&&x.links[x.cur]){if(t.dataset.v==='url')copy(trackUrl(x.links[x.cur]),'Link copied');else{const m=cur();copy(`Subject: ${m.subject}\n\n${m.body}`,'Email copied')}}break;
+    case 'trk-mail':if(x&&x.links[x.cur]){const m=cur();const to=(/[^\s<>(),;]+@[^\s<>(),;]+/.exec(String((m.b&&(m.b.client_contacts||{})[m.c.id])||'')+' '+String(m.c.email||''))||[''])[0];location.href=`mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`}break;
+    case 'trk-new':if(x&&isAdmin()){if(!x.arm2){x.arm2=true;renderModal();break}x.arm2=false;x.subject=x.body=undefined;delete x.links[x.cur];renderModal();trackLoad(x.cur,true).then(()=>toast('New link made. The old one no longer works.'))}break;
+  }});
+document.addEventListener('input',e=>{const t=e.target;if(M&&M.kind==='track'&&t.dataset.trk)M[t.dataset.trk]=t.value});

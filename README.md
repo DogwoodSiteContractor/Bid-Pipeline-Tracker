@@ -474,3 +474,14 @@ Needs `supabase/update-26-accounts.sql`, and "Allow new users to sign up" left O
 - **Delete** removes the login for good. Their bids, notes and history stay.
 - You can't deactivate or delete your own account, and only the developer can change the developer account.
 - No secret key is stored in the app. Each action runs a database function that checks the signed-in person is an admin.
+
+## Client bid tracker
+
+Needs `supabase/update-28-client-tracker.sql`.
+
+- **What the client gets:** one private link per GC / client. It opens without a login and shows every project that client has sent you, each with a five-step tracker (Received → Estimating → Final review → Proposal sent → Decision), the bid due date, when to expect the proposal, which addenda you've acknowledged, and the lead estimator's name, phone and email. The page refreshes itself every minute.
+- **What it never shows:** prices, margins, other GCs on the same job, notes, quotes or files. A job awarded to a different GC shows only as "Closed".
+- **Stages come from the bid status:** Not Started = Received, Estimating = Estimating, Takeoff Complete = Final review, Submitted (or that GC's proposal marked Sent) = Proposal sent, Awarded / Not Awarded = Decision. On Hold and No Bid show as such. Closed bids drop off after 90 days; archived bids never show.
+- **Proposal expected by:** a new date on the bid, next to the bid due date. Blank means the due date.
+- **Sending it:** when you save a new bid that has a GC on it, the app opens the tracker window with the link and a ready-to-edit email. **Copy link**, **Copy email** or **Open in my email**, then send it yourself. The same window is on every bid (the "Client tracker" line at the top) and on the client's page under Contacts.
+- **One link per client:** the link keeps working for future projects, so each client only needs it once. An admin can **Replace this link**, which turns the old one off.
