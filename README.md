@@ -529,3 +529,11 @@ Needs `supabase/update-30-follow-ups.sql`.
 Team → Access chart → **Tabs in use** (admins). Untick a tab to hide it for everyone, admins included: Dashboard, Pipeline, Estimates (with codebooks and bid settings), Jobs, Accounting, Contacts, Calculators, Break room or Help. Buttons and links that lead to a hidden tab disappear too, and the hidden games stop opening when Break room is off. Nothing is deleted; tick the tab again and everything is back. Team always stays on.
 
 This hides the tab in the app. It does not change who is allowed to read the data, so use a person's access settings (Team → People & access) when something must be kept from someone.
+
+## Guide mode and Feedback mode
+
+Two helpers each person switches on or off for themselves, at the top of the **Help** tab. The first time someone signs in on a browser, the app asks whether they'd like the guide (and, optionally, feedback mode).
+
+- **Guide mode:** Rivet, a small construction bot, walks to things on the page and explains them: a short tour per page, with Next / Back / Got it. He only talks about things that person can actually see. After a tour he rests in the corner; click him to hear it again, or **Replay every tour** under Help. Needs nothing in the database.
+- **Feedback mode:** a card in the corner asks "How is *this feature* working for you?" for whatever page, estimate tab or window is open. Pick one of five faces (Broken, Clunky, OK, Good, Love it), add a note if you like, and Send. One rating per person per feature; sending again updates it. **List** shows the checklist of everything there is to review and what's been done. Needs `supabase/update-32-guide-feedback-modes.sql`.
+- **Developer → User reports:** every rating, worst-rated features first, with the spread of scores, the comments, coverage by person and the latest activity. It refreshes itself every 15 seconds while open. People see only their own ratings; the developer sees all of them.
