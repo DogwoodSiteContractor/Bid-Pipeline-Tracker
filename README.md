@@ -577,6 +577,15 @@ The checklist is the five AGTEK reports: **Earthwork, Structure measures, Materi
 - Categories follow the pay item number: 100 General Conditions, 200 Erosion Control, 300 Clearing, 350 Demolition, 400 Earthwork, 500/501 Storm, 600 Sewer, 650 Force Main, 700/701 Water, 800 Curb & Concrete, 900 Paving, 1000 Walls, 1100 Rock & Unsuitable.
 - Running it again leaves what is already in the codebook alone.
 
+### Codebook pack
+
+`dogwood-codebook-pack.json` is a ready-made set of bid items, activities and takeoff matches. Load it in **Codebook → Import from ProEstimate → Choose files**, in place of the master project export.
+
+- Every pay item in the master keeps its number, name, unit and unit cost. Each activity has a production (the master's quantity is one 10-hour crew day), a crew labor cost per hour and a crew equipment cost per hour, so durations and the schedule fill in.
+- Bid items numbered `.N01`, `.N02`… are AGTEK structures with no pay item. They have no price yet.
+- Takeoff matches for the AGTEK structure and material lists are loaded as remembered matches.
+- Loading the pack replaces a bid item or activity of the same number and name with the pack's version. Do not load it over items the team has already edited unless you mean to reset them.
+
 ### Takeoff to ProEstimate bid items
 
 - A takeoff line is suggested for a bid item with the same words in any order (AGTEK `8" PVC - SDR26` and pay item `8" SDR26 PVC`), preferring the same class (Storm, Sewer, Water).
