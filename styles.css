@@ -1727,3 +1727,10 @@ tr.eo-sec.eo-drop>td{box-shadow:inset 0 0 0 2px var(--accent)}
 .tko-ag .no{color:var(--warn)}
 .tko-dbl{margin:10px 0 0}
 .tko-in{flex-wrap:wrap}
+/* estimate: project info */
+.info-wrap{padding:16px;display:grid;gap:14px}
+.info-wrap fieldset{margin:0}
+.info-parties{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.info-party .fg{grid-template-columns:repeat(4,minmax(0,1fr))}
+.info-fixed{padding:8px 10px;border:1px dashed var(--line);border-radius:8px;min-height:36px;color:var(--ink-2)}
+@media(max-width:1100px){.info-parties{grid-template-columns:1fr}}

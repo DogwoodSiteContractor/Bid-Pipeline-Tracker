@@ -5158,10 +5158,10 @@ function vEstimate(){const E=S.est;const tpl=!!(E&&E.tpl);const b=tpl?null:byId(
   if(E.err)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="err">${esc(E.err)}</div>`;
   if(!E.row)return estStartView(b,back);
   const d=E.data;const R=estCalc(d);const ro=EC().ro;estPick();const stale=estStale(d);
-  const tabs=tpl?[['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['sum','Default markup']]:[['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['quotes','Quotes'],['gantt','Gantt schedule'],['sum','Markup & totals'],['prop','Proposal']];
+  const tabs=tpl?[['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['sum','Default markup']]:[['info','Project info'],['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['quotes','Quotes'],['gantt','Gantt schedule'],['sum','Markup & totals'],['prop','Proposal']];
   if(!tabs.some(t=>t[0]===E.tab))E.tab='build';
   const kpi=(l,v,s,c)=>`<div class="est-kpi${c?' '+c:''}"><span>${l}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
-  const body=E.tab==='setup'?estSetupView(d,R,ro):E.tab==='ind'?estIndView(d,R,ro):E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='gantt'?estGanttView(d,R,ro):E.tab==='sum'?estSumView(d,R,b||{},ro):estBuildView(d,R,ro);
+  const body=E.tab==='setup'?estSetupView(d,R,ro):E.tab==='info'?estInfoView(d,b||{},ro):E.tab==='ind'?estIndView(d,R,ro):E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='gantt'?estGanttView(d,R,ro):E.tab==='sum'?estSumView(d,R,b||{},ro):estBuildView(d,R,ro);
   const title=tpl?`<input class="field est-tplname" id="est-tplname" data-tplname value="${esc(E.tplName||'')}" placeholder="Template name"${ro?' disabled':''}>`:`<h1>${esc(b.name)}</h1>`;
   return `<div class="head est-headrow"><div>${back}${title}<p class="small"><b>${tpl?(E.tplBook==='section'?'Section template':'Master template'):'Estimate'}</b>${tpl?'':` · <button class="linkbtn" data-act="est-revs" title="Saved copies and revisions">${esc(E.ver?E.ver.label:estRevName(d))}</button>`} · <span id="est-status">${estStatusText()}</span></p></div>
     <div class="tools">${stale.length&&!ro?`<button class="btn" data-act="est-stale" title="Codebook prices changed since they were added">↻ Update ${stale.length} price${stale.length===1?'':'s'}</button>`:''}${tpl?'':`<button class="btn" data-act="est-revs">Revisions${estVersOf(E.bidId).length?` (${estVersOf(E.bidId).length})`:''}</button><button class="btn" data-act="est-export">Export to Excel</button>`}${!tpl&&cbEditable()?'<button class="btn" data-act="est-savetpl" data-v="estimate">Save as master template</button>':''}</div></div>
@@ -5222,7 +5222,8 @@ function estBuildView(d,R,ro){const E=S.est;const open=estOpenSet();const sel=E.
       <tbody>${rows||`<tr><td colspan="8"><div class="empty"><b>No sections yet</b>${ro?'':'Add a section, then bid items under it.'}</div></td></tr>`}</tbody>
       <tfoot>${R.gc?`<tr><td></td><td>${esc(d.markup.gcName||'General conditions')} <span class="dim small">(indirects, lump sum)</span></td><td></td><td></td><td class="r num">${money(R.ind)}</td><td></td><td class="r num">${money(R.gc)}</td><td></td></tr>`:''}<tr><td></td><td><b>Base bid</b></td><td></td><td></td><td class="r num">${money(R.cost+R.ind)}</td><td></td><td class="r num"><b>${money(R.total)}</b></td><td></td></tr>${R.alts?`<tr><td></td><td class="dim">Alternates</td><td></td><td></td><td></td><td></td><td class="r num dim">${money(R.alts)}</td><td></td></tr>`:''}</tfoot></table></div></div>`;
   return `<div class="eb${E.wide?' wide':''}${(E.sel||{}).t==='act'?' act':''}">${outline}${E.wide?'':`<div class="eb-right" id="eb-right">${estRight(d,R,ro)}</div>`}</div>`}
-function estFold(key,title,body,extra){const E=S.est;const shut=(E.fold||(E.fold=new Set())).has(key);
+const EF0={fold:new Set()}; // folds for the codebook's bid item / activity window when no estimate is open
+function estFold(key,title,body,extra){const E=S.est||EF0;const shut=(E.fold||(E.fold=new Set())).has(key);
   return `<div class="ef${shut?' shut':''}"><div class="ef-h"><button class="ef-t" data-act="ef-fold" data-k="${key}">${shut?'▸':'▾'} ${title}</button>${extra||''}</div>${shut?'':`<div class="ef-b">${body}</div>`}</div>`}
 function estRight(d,R,ro){const s=estSelResolve(d);if(!s)return `<div class="panel pad empty"><b>Pick a row on the left</b>A section, bid item or activity opens here.</div>`;
   if(s.t==='sec'){const sec=s.o;const its=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>o.it.sec===sec.id);const base=its.filter(o=>!o.it.alt);const c=sumC(base.map(o=>o.x));const cost=base.reduce((a,o)=>a+o.x.total,0),price=base.reduce((a,o)=>a+o.x.price,0);
@@ -5405,7 +5406,7 @@ document.addEventListener('click',e=>{
     case 'eo-mvsec':{const c=E.ctx;if(!c)break;E.ctx=null;const sec=secOf(E.data,t.dataset.v);if(estMoveItem(E.data,c.id,t.dataset.v)){estTouch();toast(`Moved to ${sec.name||'section'}`)}render();break}
     case 'eo-dropblank':{const d=E.data;const n=d.items.length;d.items=d.items.filter(i=>i.alt||!(i.qty==null||i.qty===''));toast(`Removed ${n-d.items.length} bid item${n-d.items.length===1?'':'s'}`);estTouch();render();break}
     case 'eo-qtydone':E.qtyMode=false;render();break;
-    case 'ef-fold':{const s=E.fold||(E.fold=new Set());const k=t.dataset.k;s.has(k)?s.delete(k):s.add(k);render();break}
+    case 'ef-fold':{const F=E||EF0;const s=F.fold||(F.fold=new Set());const k=t.dataset.k;s.has(k)?s.delete(k):s.add(k);if(M)renderModal();else render();break}
     case 'est-savetpl':estTplStart(t.dataset.v,t.dataset.id);break;
     case 'esttpl-save':estTplSave();break;
     case 'est-revs':estRevOpen(S.est.bidId);break;
@@ -8335,3 +8336,37 @@ async function peRun(){const x=M;if(x.busy)return;x.busy=true;renderModal();let 
   try{await loadTable('codebook')}catch(e){}x.busy=false;x.files.forEach(f=>{if(f.kind){const dn=(f.kind==='crewdb'||f.kind==='pack')&&f.done;pePlan(f);if(dn&&f.plan){f.plan.sum={new:0,upd:0,same:1,skip:0}}}});if(M===x)renderModal();render();toast(bad.length?bad[0]:`${saved} codebook lines saved`)}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('pe-'))return;if(a==='pe-open'){peOpen();return}if(!M||M.kind!=='peimp')return;if(a==='pe-close'){closeModal();render()}else if(a==='pe-run')peRun()});
 document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='peimp')return;if(t.dataset.pefile!=null){const fs=[...(t.files||[])];t.value='';peFiles(fs);return}if(t.dataset.peOn){const f=M.files[+t.dataset.peOn];if(f){f.on=t.checked;renderModal()}}});
+
+/* ===== Estimate: Project info (general details and owner / engineer / designer), kept inside the estimate ===== */
+const INFO_STATES=['','AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
+const INFO_PARTIES=[['owner','Owner'],['engineer','Engineer'],['designer','Designer']];
+function estInfo(d,b){if(!d.info||typeof d.info!=='object')d.info={location:(b&&b.location)||'',projectType:(b&&b.project_type)||''};const I=d.info;INFO_PARTIES.forEach(([k])=>{if(!I[k]||typeof I[k]!=='object')I[k]={}});if(!I.addr||typeof I.addr!=='object')I.addr={};return I}
+const infoClient=name=>{const n=normH(name);return n?S.clients.find(c=>normH(c.company)===n):null};
+function estInfoView(d,b,ro){const I=estInfo(d,b);const dis=ro?' disabled':'';const lead=byId(S.estimators,b.lead_estimator_id);
+  const dt=(p,v)=>`<input type="date" class="field" id="${epId(p)}" data-ep="${p}" value="${esc(v||'')}"${dis}>`;const st=(p,v)=>epSel(p,v||'',INFO_STATES.map(x=>[x,x||'State']));
+  const fixed=(l,v)=>`<label class="f">${l}<div class="info-fixed">${v?esc(v):'<span class="dim">Not set</span>'}</div></label>`;
+  const party=([k,l])=>{const P=I[k];const c=infoClient(P.name);const p='info.'+k;
+    return `<fieldset class="info-party"><legend>${l}</legend><div class="fg">
+      <label class="f s4">Name<input class="field" id="${epId(p+'.name')}" data-ep="${p}.name" data-infoparty="${k}" list="info-cl" value="${esc(P.name||'')}" placeholder="Pick from Contacts or type a new one"${dis}></label>
+      <label class="f s4">Address${epIn(p+'.address',P.address)}</label>
+      <label class="f">City${epIn(p+'.city',P.city)}</label><label class="f">State${st(p+'.state',P.state)}</label><label class="f">Zip${epIn(p+'.zip',P.zip)}</label><span></span>
+      <label class="f s2">Contact<input class="field" id="${epId(p+'.contact')}" data-ep="${p}.contact" data-infocontact="${k}" list="info-ct-${k}" value="${esc(P.contact||'')}"${dis}></label>
+      <label class="f">Phone${epIn(p+'.phone',P.phone)}</label><label class="f">Mobile${epIn(p+'.mobile',P.mobile)}</label>
+      <label class="f s2">Email${epIn(p+'.email',P.email)}</label></div>
+      <datalist id="info-ct-${k}">${((c&&c.contacts)||[]).map(x=>`<option value="${esc(x.name||'')}">`).join('')}</datalist>
+      ${P.name&&!c?`<p class="hint" style="margin:6px 0 0">Not in Contacts. It is kept on this estimate only.</p>`:''}</fieldset>`};
+  return `<div class="panel info-wrap"><datalist id="info-cl">${S.clients.slice().sort((a,b)=>String(a.company).localeCompare(String(b.company))).map(c=>`<option value="${esc(c.company)}">`).join('')}</datalist>
+    <fieldset><legend>General</legend><div class="fg">
+      <label class="f s2">Location${epIn('info.location',I.location,{ph:'County, state'})}</label><label class="f">Project #${epIn('info.projectNo',I.projectNo)}</label><label class="f">Internal project #${epIn('info.internalNo',I.internalNo)}</label>
+      <label class="f s2">Project type${epIn('info.projectType',I.projectType)}</label>${fixed('Bid date',b.due_date?fmtShort(b.due_date)+(b.due_time?' · '+String(b.due_time).slice(0,5):''):'')}${fixed('Estimator',lead?lead.name:'')}
+      <label class="f">Plan rev. date${dt('info.planRev',I.planRev)}</label><label class="f">Plan rev. note${epIn('info.planRevNote',I.planRevNote)}</label><label class="f">Est. start date${dt('info.start',I.start)}</label><label class="f">Est. completion date${dt('info.finish',I.finish)}</label>
+      ${fixed('Project status',b.status||'')}${fixed('Pay item database','Codebook · Bid items')}
+      <label class="f s4">Project notes<textarea class="field" id="${epId('info.notes')}" data-ep="info.notes" rows="4"${dis}>${esc(I.notes||'')}</textarea></label></div>
+      <p class="hint">Bid date, estimator and status come from the bid. Change them on the bid itself.</p></fieldset>
+    <div class="info-parties">${INFO_PARTIES.map(party).join('')}</div>
+    <fieldset><legend>Project address</legend><div class="fg"><label class="f s2">Street address${epIn('info.addr.street',I.addr.street)}</label><label class="f">City${epIn('info.addr.city',I.addr.city)}</label><label class="f">State${st('info.addr.state',I.addr.state)}</label><label class="f">Zip${epIn('info.addr.zip',I.addr.zip)}</label>
+      <label class="f s4">Address notes<textarea class="field" id="${epId('info.addr.notes')}" data-ep="info.addr.notes" rows="2"${dis}>${esc(I.addr.notes||'')}</textarea></label></div></fieldset></div>`}
+// picking a company from Contacts fills in what Contacts knows; picking one of its people fills their phone and email
+document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data||S.view!=='estimate'||EC().ro)return;const d=S.est.data;
+  if(t.dataset.infoparty){const P=estInfo(d,{})[t.dataset.infoparty];const c=infoClient(t.value);if(c){P.name=c.company;if(c.address&&!P.address)P.address=c.address;if(c.phone&&!P.phone)P.phone=c.phone;if(c.email&&!P.email)P.email=c.email;const one=(c.contacts||[])[0];if(one&&!P.contact&&(c.contacts||[]).length===1){P.contact=one.name||'';if(one.phone&&!P.mobile)P.mobile=one.phone;if(one.email&&!P.email)P.email=one.email}}estTouch();render();return}
+  if(t.dataset.infocontact){const P=estInfo(d,{})[t.dataset.infocontact];const c=infoClient(P.name);const x=c&&(c.contacts||[]).find(o=>normH(o.name)===normH(t.value));if(x){if(x.phone)P.mobile=x.phone;if(x.email)P.email=x.email;estTouch();render()}}});

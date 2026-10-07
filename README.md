@@ -604,3 +604,7 @@ The checklist is the five AGTEK reports: **Earthwork, Structure measures, Materi
 - **Remembered:** matches, factors and skips are saved for the whole company, so on the next job the same takeoff names match by themselves.
 - **Re-import:** when the takeoff changes, import the report again and click **Update the estimate**. Quantities change on the items already there, nothing is duplicated, and a note lists what moved and anything no longer in the takeoff (left in place for you to check).
 - **Setting up the codebook:** each bid item needs its activities saved with it (Estimates → Codebooks → Bid items) and a category. Giving bid items the same codes you use in the takeoff makes matching automatic from day one.
+
+## Estimate: Project info
+
+The first tab of an estimate. **General** holds location, project numbers, project type, plan revision date, estimated start and completion, and notes; bid date, estimator and status are shown from the bid. **Owner, Engineer and Designer** each take a name, address, contact, phone, mobile and email: start typing a company from Contacts and its details fill in, or type a new one, which is kept on this estimate only. **Project address** sits below. Everything saves with the estimate; no SQL needed.
