@@ -555,13 +555,32 @@ The checklist is the five AGTEK reports: **Earthwork, Structure measures, Materi
 - **Structure measures** gives one line per structure: pipe in LF, structures in EA, areas in SF.
 - **Materials** gives one line per material per class (Bedding for Storm and Bedding for Sewer are separate lines). A material that is only the structure counting itself (Catch Basin under Catch Basin) is marked *In Structure measures* and counted once, there.
 - **Trench volume** gives trench excavation in CY per pipe.
-- **Depth brackets** gives each pipe's length, and each structure's count, per depth bracket. If a pipe's total length and its depth brackets are both matched to the same bid item, the screen warns that it is counted twice.
+- **Depth brackets** gives pipe length per depth bracket for each class (see depth premium below).
 - **Skip the unmatched shown** leaves lines out of this estimate only. Nothing is remembered, so they come up again on the next job.
 - Phases in a file are added together. Strata rows in the Trench Volume and Depth Bracket reports become their own lines, named with the stratum.
 
-### ProEstimate lists into the codebook
+### Import from ProEstimate
 
-**Codebook → Import** recognises the ProEstimate Material, Labor and Equipment exports and maps their columns without asking. Equipment comes in at ProEstimate's *Total* hourly rate (ownership + fuel + oil and grease, no operator) with the rate build-up switched off so the imported rate stays. Where ProEstimate uses one ID for several different items, each is kept as its own item.
+**Codebook → Import from ProEstimate.** Choose every export at once. Each file is recognised by its column headings, and the screen shows which ProEstimate export it is, where it goes and what will happen before anything is saved.
+
+| ProEstimate export | Goes to |
+|---|---|
+| Labor rates | Codebook › Labor (craft and base wage) |
+| Equipment rates | Codebook › Equipment (ProEstimate's Total per hour, no operator; the rate build-up is switched off so the rate stays) |
+| Material list | Codebook › Materials (ID, description, category, unit, price) |
+| Crew list | Codebook › Crews (name, category, production in the notes; members are not in the export) |
+| Master project (pay items with activities) | Codebook › Bid items, one per pay item with the same number, holding its activities. Activities under a differently named pay item also go to Activities |
+| Pay item list (DOT) | Off unless ticked: it has no costs or activities |
+
+- Bid items come in at ProEstimate's unit cost, split into labor, equipment, material, subcontract and other per unit. The export has no crews or production under the activities, so man-hours and durations are empty until crews are attached.
+- Categories follow the pay item number: 100 General Conditions, 200 Erosion Control, 300 Clearing, 350 Demolition, 400 Earthwork, 500/501 Storm, 600 Sewer, 650 Force Main, 700/701 Water, 800 Curb & Concrete, 900 Paving, 1000 Walls, 1100 Rock & Unsuitable.
+- Running it again leaves what is already in the codebook alone.
+
+### Takeoff to ProEstimate bid items
+
+- A takeoff line is suggested for a bid item with the same words in any order (AGTEK `8" PVC - SDR26` and pay item `8" SDR26 PVC`), preferring the same class (Storm, Sewer, Water).
+- **Depth premium:** the Depth Bracket report gives pipe length per bracket for each class. The whole length still goes on the pipe's own line from Structure measures; the length in the 10-12 bracket goes to that class's *Depth Premium 10'-12'* item, and so on. Brackets with no premium item are greyed as *No premium at this depth*. Set AGTEK's brackets to match the premium items (10-12, 12-14, 14-16, 16-18, 18-20, 20+).
+- Items built from the takeoff keep the ProEstimate pay item number.
 
 1. **Reports checklist.** The left side lists the reports you import for every job (the five AGTEK reports to start; an admin can change the list). A tick shows which ones are in for this job, with the file name, line count, date and who did it.
 2. **Add a report.** Pick the report, then choose its file (Excel, CSV or text) or paste the rows. The app finds the name, quantity, unit and code columns, shows a preview, and lets you correct them. It skips headings and total rows. Importing a report again replaces that report's lines.
