@@ -1698,3 +1698,26 @@ tr.eo-sec.eo-drop>td{box-shadow:inset 0 0 0 2px var(--accent)}
 .asl div{display:flex;gap:8px;align-items:baseline}.asl .done{color:var(--good)}.asl small{margin-left:auto;color:var(--ink-3)}
 .rv-spread{display:flex;width:110px;height:10px;border-radius:5px;overflow:hidden;background:var(--mute-soft)}
 .rv-spread .s1{background:#C8452F}.rv-spread .s2{background:#E08A3C}.rv-spread .s3{background:#C9B037}.rv-spread .s4{background:#7DB58A}.rv-spread .s5{background:#3E8E57}
+
+/* import takeoff */
+.tko-g{display:grid;grid-template-columns:minmax(260px,1fr) minmax(0,1.6fr);gap:18px;align-items:start}
+@media(max-width:900px){.tko-g{grid-template-columns:1fr}}
+.tko-h{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);font-weight:700;margin-bottom:6px}
+.tko-slot{display:flex;align-items:center;border:1px solid var(--line);border-radius:10px;margin-bottom:6px;background:var(--surface)}
+.tko-slot.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.tko-pick{flex:1;display:flex;gap:10px;align-items:center;text-align:left;border:0;background:none;padding:8px 10px;cursor:pointer;color:inherit;font-family:inherit}
+.tko-pick small{display:block;color:var(--ink-3);font-size:12px}
+.tko-ck{width:22px;height:22px;border-radius:50%;border:2px solid var(--line);display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex:none;color:var(--ink-3)}
+.tko-slot.done .tko-ck{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.tko-in{display:flex;gap:10px;align-items:center;margin-bottom:8px}
+.tko-pend{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--surface-2)}
+.tko-pend .fg{grid-template-columns:repeat(4,1fr)}
+.tko-prev{margin:10px 0;max-height:190px}
+.tko-tbl{max-height:46vh}
+.tko-tbl td{vertical-align:top}
+.tko-sel{min-width:260px;max-width:380px;background:var(--surface);color:var(--ink)}
+.tko-sel option{background:var(--surface);color:var(--ink)}
+.tko-f{width:78px;padding:5px 7px}
+.tko-f.tko-warn{border-color:var(--warn);background:var(--warn-soft)}
+.tko-skip td{opacity:.5}
+.tko-note{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:10px}

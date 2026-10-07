@@ -537,3 +537,23 @@ Two helpers each person switches on or off for themselves, at the top of the **H
 - **Guide mode:** Rivet, a small construction bot, walks to things on the page and explains them: a tour for every tab, sub-tab and pop-up window (each estimate tab, each codebook, each calculator, each accounting tab, the bid window section by section), with Next / Back / Got it. He only talks about things that person can actually see. After a tour he rests in the corner; click him to hear it again, or **Replay every tour** under Help. Needs nothing in the database.
 - **Feedback mode:** a card in the corner asks "How is *this feature* working for you?" for whatever page, estimate tab or window is open. Pick one of five faces (Broken, Clunky, OK, Good, Love it), add a note if you like, and Send. One rating per person per feature; sending again updates it. **List** shows the checklist of everything there is to review and what's been done. Needs `supabase/update-32-guide-feedback-modes.sql`.
 - **Developer → User reports:** every rating, worst-rated features first, with the spread of scores, the comments, coverage by person and the latest activity. It refreshes itself every 15 seconds while open. People see only their own ratings; the developer sees all of them.
+
+
+## Import takeoff: quantities in, estimate out
+
+Needs `supabase/update-33-takeoff-import.sql` to remember matches (importing works without it).
+
+In an estimate, **Build → ⬇ Import takeoff**.
+
+1. **Reports checklist.** The left side lists the reports you import for every job (six to start; an admin can change the list). A tick shows which ones are in for this job, with the file name, line count, date and who did it.
+2. **Add a report.** Pick the report, then choose its file (Excel, CSV or text) or paste the rows. The app finds the name, quantity, unit and code columns, shows a preview, and lets you correct them. It skips headings and total rows. Importing a report again replaces that report's lines.
+3. **Match.** Every takeoff line gets a codebook **bid item**. The app suggests one when the line's code matches a bid item's code or its name matches the bid item's name. Otherwise pick one from the list.
+   - **Factor** multiplies the takeoff quantity (SF to SY is 0.1111). The box turns amber when the units differ and the factor is still 1.
+   - **Also fill another bid item** lets one takeoff number drive several items, each with its own factor.
+   - Several lines can go to the same bid item; they add up.
+   - **Skip** leaves a line out.
+4. **Build the estimate.** Every matched bid item is added with its quantity, activities, crews and current codebook prices, into a section named after the bid item's codebook category, in cost-code order.
+
+- **Remembered:** matches, factors and skips are saved for the whole company, so on the next job the same takeoff names match by themselves.
+- **Re-import:** when the takeoff changes, import the report again and click **Update the estimate**. Quantities change on the items already there, nothing is duplicated, and a note lists what moved and anything no longer in the takeoff (left in place for you to check).
+- **Setting up the codebook:** each bid item needs its activities saved with it (Estimates → Codebooks → Bid items) and a category. Giving bid items the same codes you use in the takeoff makes matching automatic from day one.
