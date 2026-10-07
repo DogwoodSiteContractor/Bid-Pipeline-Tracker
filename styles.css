@@ -1721,3 +1721,9 @@ tr.eo-sec.eo-drop>td{box-shadow:inset 0 0 0 2px var(--accent)}
 .tko-f.tko-warn{border-color:var(--warn);background:var(--warn-soft)}
 .tko-skip td{opacity:.5}
 .tko-note{display:flex;gap:12px;align-items:flex-start;justify-content:space-between;margin-bottom:10px}
+/* takeoff import: AGTEK files recognised, and double-count warning */
+.tko-ag{margin:8px 0 2px;font-size:12px;line-height:1.5;color:var(--ink-3)}
+.tko-ag .ok b{color:var(--ink)}
+.tko-ag .no{color:var(--warn)}
+.tko-dbl{margin:10px 0 0}
+.tko-in{flex-wrap:wrap}

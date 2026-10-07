@@ -545,7 +545,25 @@ Needs `supabase/update-33-takeoff-import.sql` to remember matches (importing wor
 
 In an estimate, **Build → ⬇ Import takeoff**.
 
-1. **Reports checklist.** The left side lists the reports you import for every job (six to start; an admin can change the list). A tick shows which ones are in for this job, with the file name, line count, date and who did it.
+### AGTEK reports
+
+The checklist is the five AGTEK reports: **Earthwork, Structure measures, Materials, Trench volume, Depth brackets**. Click **Choose files** and pick all of them at once. Each file is recognised by its column headings and goes to the right slot with no column picking.
+
+- **Summary or detail both work.** A detail report has one row per drawn object; the app adds the rows up, which gives the same lines as the summary. The one exception is Trench Volume: its detail report has no excavation column, so use the summary.
+- **Material report or Structure report:** they hold the same numbers sorted two ways, so either one fills the Materials slot.
+- **Earthwork** gives Cut, Fill, Fill with compaction, Export or Import, Site area, then an area and a volume for every named area (Stripping, House Pad, Sidewalk, Respread…), with repeated names added together.
+- **Structure measures** gives one line per structure: pipe in LF, structures in EA, areas in SF.
+- **Materials** gives one line per material per class (Bedding for Storm and Bedding for Sewer are separate lines). A material that is only the structure counting itself (Catch Basin under Catch Basin) is marked *In Structure measures* and counted once, there.
+- **Trench volume** gives trench excavation in CY per pipe.
+- **Depth brackets** gives each pipe's length, and each structure's count, per depth bracket. If a pipe's total length and its depth brackets are both matched to the same bid item, the screen warns that it is counted twice.
+- **Skip the unmatched shown** leaves lines out of this estimate only. Nothing is remembered, so they come up again on the next job.
+- Phases in a file are added together. Strata rows in the Trench Volume and Depth Bracket reports become their own lines, named with the stratum.
+
+### ProEstimate lists into the codebook
+
+**Codebook → Import** recognises the ProEstimate Material, Labor and Equipment exports and maps their columns without asking. Equipment comes in at ProEstimate's *Total* hourly rate (ownership + fuel + oil and grease, no operator) with the rate build-up switched off so the imported rate stays. Where ProEstimate uses one ID for several different items, each is kept as its own item.
+
+1. **Reports checklist.** The left side lists the reports you import for every job (the five AGTEK reports to start; an admin can change the list). A tick shows which ones are in for this job, with the file name, line count, date and who did it.
 2. **Add a report.** Pick the report, then choose its file (Excel, CSV or text) or paste the rows. The app finds the name, quantity, unit and code columns, shows a preview, and lets you correct them. It skips headings and total rows. Importing a report again replaces that report's lines.
 3. **Match.** Every takeoff line gets a codebook **bid item**. The app suggests one when the line's code matches a bid item's code or its name matches the bid item's name. Otherwise pick one from the list.
    - **Factor** multiplies the takeoff quantity (SF to SY is 0.1111). The box turns amber when the units differ and the factor is still 1.
