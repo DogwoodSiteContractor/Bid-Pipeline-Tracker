@@ -569,6 +569,7 @@ The checklist is the five AGTEK reports: **Earthwork, Structure measures, Materi
 | Equipment rates | Codebook › Equipment (ProEstimate's Total per hour, no operator; the rate build-up is switched off so the rate stays) |
 | Material list | Codebook › Materials (ID, description, category, unit, price) |
 | Crew list | Codebook › Crews (name, category, production in the notes; members are not in the export) |
+| Crew detail report (Crew Database Detail Report, one file per crew) | Codebook › Crews: the people and machines on the crew, linked to the Labor and Equipment lines by ID and name. A labor or equipment line that is not in the codebook is added. Crew cost is worked out from codebook rates; ProEstimate's own hourly figure is kept in the notes |
 | Master project (pay items with activities) | Codebook › Bid items, one per pay item with the same number, holding its activities. Activities under a differently named pay item also go to Activities |
 | Pay item list (DOT) | Off unless ticked: it has no costs or activities |
 
