@@ -1816,3 +1816,9 @@ tr.eo-sec.eo-drop>td{box-shadow:inset 0 0 0 2px var(--accent)}
 .tw-sec input{width:70px}.tw-sec select{max-width:160px}
 .tw-sec label.f{flex-direction:row;align-items:center;justify-content:space-between;text-align:left;margin:0}
 .tw-cf .tw-cfg label.check{justify-content:flex-start;flex-direction:row}
+.tw-secl{border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:6px 0;padding:6px 0;display:grid;gap:5px}
+.tw-sech{font-size:12px}
+.tw-secr{display:flex;align-items:center;gap:6px;font-size:12px}
+.tw-secn{flex:1;min-width:0;display:flex;flex-direction:column}
+.tw-secn small{color:var(--ink-3);font-size:11px}
+.tw-secr input{width:58px}
