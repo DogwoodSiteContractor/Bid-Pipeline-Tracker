@@ -1914,3 +1914,4 @@ tr.eo-sec.eo-drop>td{box-shadow:inset 0 0 0 2px var(--accent)}
 .tw-edm button.on{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink) inset;font-weight:600}
 .tw-edm kbd{font:600 10.5px ui-monospace,monospace;background:var(--surface-2,#f1f1ee);border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--ink-2)}
 .twc-px{margin:0;font-size:12.5px}.twc-px .small{margin-top:4px}
+.tw-cfsec{margin:6px 0 2px;line-height:1.4}

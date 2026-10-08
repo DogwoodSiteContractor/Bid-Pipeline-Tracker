@@ -8491,13 +8491,13 @@ async function twOpenWith(bidId,freeId){const key=bidId||freeId;
   S.view='tw';S.twBid=key;S.tw=null;S.twr=null;twR().loading='Opening the takeoff…';render();
   let row=null;if(freeId!=='new'){try{const q=sb.from('takeoffs').select('*');const r=await (bidId?q.eq('bid_id',bidId):q.eq('id',freeId)).maybeSingle();if(r.error){if(/takeoffs|does not exist|schema cache/i.test(errMsg(r.error)))S.twMissing=true;else throw r.error}else{row=r.data;S.twMissing=false}}catch(e){toast(errMsg(e))}}
   if(S.twBid!==key)return;
-  S.tw=row&&row.data&&row.data.v?row.data:twBlank(bidId);S.tw.bidId=bidId;S.tw.name=(row&&row.name)||S.tw.name||(bidId?'':'Untitled takeoff');const R=twR();R.row=row?{id:row.id,version:row.version}:null;R.free=!bidId;R.newId=row?null:newId();R.loading=null;
+  S.tw=row&&row.data&&row.data.v?row.data:twBlank(bidId);for(const it of (S.tw.items||[]))if(it.pk)await twUnpackTin(it);S.tw.bidId=bidId;S.tw.name=(row&&row.name)||S.tw.name||(bidId?'':'Untitled takeoff');const R=twR();R.row=row?{id:row.id,version:row.version}:null;R.free=!bidId;R.newId=row?null:newId();R.loading=null;
   if(!S.tw.active||!twSurf(S.tw.active))S.tw.active=(S.tw.surfaces[0]||{}).id||null;
   if(S.tw.file){const f=await twIdbGet(twFileKey());if(f&&f.name===S.tw.file.name&&f.size===S.tw.file.size)await twLoadPdf(f.blob,f.name,true)}
   render()}
 function twTouch(){TW_REV++;const R=twR();if(twRo())return;R.dirty=true;R.saveErr=null;clearTimeout(R._t);R._t=setTimeout(twSave,1800);twStatus()}
 async function twSave(){const R=twR();if(!S.tw||!R.dirty||R.saving||S.twMissing||twRo())return;R.saving=true;R.dirty=false;twStatus();
-  const data=JSON.parse(JSON.stringify(S.tw));const ver=(R.row&&R.row.version||0)+1;
+  const items=[];for(const it of S.tw.items)items.push(it.t==='tin'&&it.pts?await twPackTin(it):it);const data=JSON.parse(JSON.stringify({...S.tw,items}));const ver=(R.row&&R.row.version||0)+1;
   try{let r;if(R.row){r=await sb.from('takeoffs').update({data,name:S.tw.name||'',version:ver,updated_by_name:myName()}).eq('id',R.row.id).eq('version',R.row.version).select('id,version');if(!r.error&&(!r.data||!r.data.length)){const chk=await sb.from('takeoffs').select('id,version').eq('id',R.row.id).maybeSingle();if(chk.data&&chk.data.version===ver){r={data:[chk.data],error:null}}}
     if(R.row&&!r.error&&(!r.data||!r.data.length)){R.conflict=true;toast('Someone else saved this takeoff after you opened it. Reopen it to see their changes; your edits here are not saved.');R.saving=false;render();return}}
     else{const id=R.newId||newId();r=await sb.from('takeoffs').insert({id,bid_id:S.tw.bidId||null,name:S.tw.name||'',data,version:1,updated_by_name:myName()}).select('id,version');if(!r.error&&!(r.data||[]).length)r={data:[{id,version:1}],error:null}}
@@ -8505,8 +8505,11 @@ async function twSave(){const R=twR();if(!S.tw||!R.dirty||R.saving||S.twMissing|
   catch(e){R.dirty=true;R.saveErr=errMsg(e);if(/takeoffs|does not exist|schema cache/i.test(R.saveErr))S.twMissing=true}
   R.saving=false;twStatus();if(R.dirty&&!R.saveErr)twTouch()}
 function twStatus(){const n=$('#tw-save');if(!n)return;const R=twR();n.textContent=S.twMissing?'Not saved: needs update-34':R.conflict?'Not saved: changed elsewhere':R.saveErr?'Not saved: '+R.saveErr:R.saving?'Saving…':R.dirty?'Unsaved changes':R.savedAt?'Saved '+R.savedAt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';n.className='small '+(R.saveErr||S.twMissing||R.conflict?'warn-t':'dim')}
-function twSnap(){const R=twR();R.undo.push(JSON.stringify({items:S.tw.items,sheets:S.tw.sheets,apts:S.tw.apts,surfaces:S.tw.surfaces}));if(R.undo.length>12)R.undo.shift();R.redo=[]}
-function twUndo(redo){const R=twR();const from=redo?R.redo:R.undo,to=redo?R.undo:R.redo;const x=from.pop();if(!x)return;to.push(JSON.stringify({items:S.tw.items,sheets:S.tw.sheets,apts:S.tw.apts,surfaces:S.tw.surfaces}));Object.assign(S.tw,JSON.parse(x));R.selItem=null;R.sel.clear();R.ask=null;twVecUsed();twTouch();render()}
+// undo snapshots leave imported TINs out (they never change; they're kept by reference), so undo stays quick on big sites
+function twSnapStr(){const R=twR();R.tinKeep=R.tinKeep||{};return JSON.stringify({items:S.tw.items.map(i=>{if(i.t==='tin'){R.tinKeep[i.id]=i;return {__tin:i.id}}return i}),sheets:S.tw.sheets,apts:S.tw.apts,surfaces:S.tw.surfaces})}
+function twSnapLoad(x){const R=twR();const o=JSON.parse(x);o.items=o.items.map(i=>i.__tin?(R.tinKeep||{})[i.__tin]:i).filter(Boolean);return o}
+function twSnap(){const R=twR();R.undo.push(twSnapStr());if(R.undo.length>12)R.undo.shift();R.redo=[]}
+function twUndo(redo){const R=twR();const from=redo?R.redo:R.undo,to=redo?R.undo:R.redo;const x=from.pop();if(!x)return;to.push(twSnapStr());Object.assign(S.tw,twSnapLoad(x));R.selItem=null;R.sel.clear();R.ask=null;twVecUsed();twTouch();render()}
 
 /* ---------- the PDF ---------- */
 async function twLoadPdf(blob,name,quiet){const R=twR();R.loading='Opening '+name+'…';twPanels();
@@ -8855,7 +8858,7 @@ function twDocClick(e){const t=e.target.closest('[data-act]');if(!t)return;const
     case 'tw-mkref':twMakeRef();break;
     case 'tw-toarea':{const it=S.tw.items.find(x=>x.id===t.dataset.id);if(it&&it.pts.length>2){twSnap();it.t='area';delete it.ct;const a=it.pts[0],z=it.pts[it.pts.length-1];if(Math.hypot(a[0]-z[0],a[1]-z[1])<0.5)it.pts.pop();twTouch();twPanels();twDraw()}break}
     case 'tw-qty':M={kind:'twqty',off:new Set()};showModal();break;
-    case 'tw-cfopen':R.cfOpen=!R.cfOpen;twPanels();break;case 'tw-cfclose':R.cfOpen=false;twPanels();break;case 'tw-cfrun':twCfRun();break;
+    case 'tw-cfopen':R.cfOpen=!R.cfOpen;twPanels();break;case 'tw-cfclose':R.cfOpen=false;twPanels();break;case 'tw-cfrun':twCfRun();break;case 'tw-cfbridge':{e.preventDefault();const C=twCfDefaults();C.noBridge=!C.noBridge;twTouch();twCfRun();break}
     case 'tw-vec':twVectors(S.tw.page);break;
     case 'tw-addsel':twPickAdd([...R.sel]);break;case 'tw-clearsel':R.sel.clear();twPanels();twDraw();break;
     case 'tw-lyhide':{const k=S.tw.page+'|'+t.dataset.v;R.hidden[k]=!R.hidden[k];twPanels();twDraw();break}
@@ -8938,6 +8941,20 @@ function twTin(sid,maxEdge){const R=twR();const key=sid+'|'+TW_REV+'|'+maxEdge;R
   R.tins[sid]={key,tin};return tin}
 function twCfDefaults(){const el=S.tw.surfaces.filter(s=>s.kind==='elev');const C=S.tw.cf=S.tw.cf||{};if(!twSurf(C.a)||twSurf(C.a).kind!=='elev')C.a=(el.find(s=>/exist|eg|og|topo/i.test(s.name))||el[0]||{}).id;if(!twSurf(C.b)||twSurf(C.b).kind!=='elev')C.b=(el.find(s=>s.id!==C.a&&/design|prop|fg|final/i.test(s.name))||el.find(s=>s.id!==C.a)||{}).id;
   if(C.strip==null)C.strip=0;if(C.comp==null)C.comp=0;if(C.maxEdge==null)C.maxEdge=150;if(C.limit&&!S.tw.items.some(i=>i.id===C.limit))C.limit='';return C}
+// where one surface has no elevations but the other does, a modest patch (a notch at the edge of the survey, a void around an old building or pond,
+// long triangles trimmed away) is carried across from the elevations around it, the way AGTEK does. Big or long missing areas are left out.
+// g: elevations on the grid (NaN = none), changed in place; o: the other surface's grid. Returns the SF filled.
+function twBridgeGaps(g,o,nx,ny,cell,maxCells,maxSpan){const seen=new Uint8Array(nx*ny);let filled=0;const st=[];const want=q=>!isFinite(g[q])&&isFinite(o[q]);
+  for(let q0=0;q0<nx*ny;q0++){if(seen[q0]||!want(q0))continue;const comp=[];st.length=0;st.push(q0);seen[q0]=1;let i0=nx,i1=0,j0=ny,j1=0;
+    while(st.length){const q=st.pop();comp.push(q);const i=q%nx,j=(q-i)/nx;if(i<i0)i0=i;if(i>i1)i1=i;if(j<j0)j0=j;if(j>j1)j1=j;
+      const nb=[i>0?q-1:-1,i<nx-1?q+1:-1,j>0?q-nx:-1,j<ny-1?q+nx:-1];for(const r of nb){if(r<0||seen[r]||!want(r))continue;seen[r]=1;st.push(r)}}
+    if(comp.length>maxCells||Math.min(i1-i0+1,j1-j0+1)*cell>maxSpan)continue;
+    // the cells around the patch that do have elevations, triangulated, give the bridge (inverse distance where the patch is open on one side)
+    const rs=new Set();comp.forEach(q=>{const i=q%nx,j=(q-i)/nx;for(let v=-2;v<=2;v++)for(let u=-2;u<=2;u++){const a=i+u,b=j+v;if(a<0||b<0||a>=nx||b>=ny)continue;const r=b*nx+a;if(isFinite(g[r]))rs.add(r)}});
+    if(rs.size<3||rs.size<comp.length*0.02)continue;const X=[],Y=[],Z=[];rs.forEach(r=>{const i=r%nx;X.push(i);Y.push((r-i)/nx);Z.push(g[r])});
+    const T=fastDelaunay(X,Y);const pts=new Float64Array(X.length*3);for(let k=0;k<X.length;k++){pts[k*3]=X[k];pts[k*3+1]=Y[k];pts[k*3+2]=Z[k]}const tin={pts,tris:Uint32Array.from(T),n:X.length};
+    comp.forEach(q=>{const i=q%nx,j=(q-i)/nx;let z=tinZ(tin,i,j);if(!isFinite(z)){let sw=0,sz=0;for(let k=0;k<X.length;k++){const w=1/((X[k]-i)**2+(Y[k]-j)**2)**2;sw+=w;sz+=w*Z[k]}z=sz/sw}g[q]=z;filled++})}
+  return filled*cell*cell}
 function twCfRun(){const R=twR();const C=twCfDefaults();const A=twSurf(C.a),B=twSurf(C.b);if(!A||!B||A.id===B.id){toast('Pick two different elevation surfaces.');return}
   const miss=s=>S.tw.items.filter(i=>i.sid===s.id&&i.t==='contour'&&twNeedZ(i)).length;
   R.cfBusy=true;twPanels();setTimeout(()=>{try{const t0=performance.now();const me=+C.maxEdge||150;const ta=twTin(A.id,me),tb=twTin(B.id,me);if(!ta||!tb){toast(`${!ta?A.name:B.name} needs at least three points with elevations.`);return}
@@ -8949,11 +8966,14 @@ function twCfRun(){const R=twR();const C=twCfDefaults();const A=twSurf(C.a),B=tw
     // sections: an area with a depth lowers the surface it's set on (paving section → subgrade); the smallest area holding a spot wins
     const secs=C.noSec?[]:S.tw.items.map(i=>({it:i,sc:twSecOf(i)})).filter(o=>o.sc&&(o.sc.on===A.id||o.sc.on===B.id)).map(({it,sc})=>({it,bb:twBB(it),a:twArea(it.pts),d:sc.d/12,on:sc.on})).sort((x,y)=>x.a-y.a);
     const secAt=(x,y,sid)=>{for(const q of secs){if(q.on!==sid)continue;const b=q.bb;if(x<b[0]||x>b[2]||y<b[1]||y>b[3])continue;if(tkPip([x,y],q.it.pts))return q.d}return 0};
-    for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const x=box.x0+(i+0.5)*cell,y=box.y0+(j+0.5)*cell;if(lim&&!tkPip([x,y],lim.pts))continue;const za=tinZ(ta,x,y);if(!isFinite(za))continue;const zb=tinZ(tb,x,y);if(!isFinite(zb))continue;
+    const gA=new Float64Array(nx*ny),gB=new Float64Array(nx*ny);for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const x=box.x0+(i+0.5)*cell,y=box.y0+(j+0.5)*cell;gA[j*nx+i]=tinZ(ta,x,y);gB[j*nx+i]=tinZ(tb,x,y)}
+    const gaps=[];if(!C.noBridge)/* the design sets the work area: the existing ground is carried to it, never the other way */[[A,gA]].forEach(([sf,g])=>{const a=twBridgeGaps(g,g===gA?gB:gA,nx,ny,cell,Math.max(50,nx*ny*0.05),Math.max(150,2*me));if(a>0)gaps.push({name:sf.name,sf:Math.round(a)})});
+    for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){const x=box.x0+(i+0.5)*cell,y=box.y0+(j+0.5)*cell;if(lim&&!tkPip([x,y],lim.pts))continue;const za=gA[j*nx+i];if(!isFinite(za))continue;const zb=gB[j*nx+i];if(!isFinite(zb))continue;
       const d=(zb-(secs.length?secAt(x,y,B.id):0))-(za-strip-(secs.length?secAt(x,y,A.id):0));dz[j*nx+i]=d;n++;if(d<0){cut-=d*cA;if(-d>maxC)maxC=-d}else{fill+=d*cA;if(d>maxF)maxF=d}}
     if(!n){toast('No overlap between the surfaces'+(lim?' inside that limit.':'.'));return}
     const area=n*cA;const cutCY=cut/27,fillCY=fill/27,fillC=fillCY*(1+(+C.comp||0)/100),stripCY=area*strip/27;
-    R.cf={x0:box.x0,y0:box.y0,cell,nx,ny,dz,maxC,maxF,img:null};S.tw.cfRes={a:A.name,b:B.name,cut:+cutCY.toFixed(1),fill:+fillCY.toFixed(1),fillC:+fillC.toFixed(1),net:+(cutCY-fillC).toFixed(1),strip:+stripCY.toFixed(1),area:+area.toFixed(0),maxC:+maxC.toFixed(2),maxF:+maxF.toFixed(2),cell:+cell.toFixed(2),limit:lim?(twSurf(lim.sid)||{}).name||'Area':'',secs:secs.length,at:new Date().toISOString(),ms:Math.round(performance.now()-t0),missA:miss(A),missB:miss(B)};
+    R.cf={x0:box.x0,y0:box.y0,cell,nx,ny,dz,maxC,maxF,img:null};S.tw.cfRes={a:A.name,b:B.name,cut:+cutCY.toFixed(1),fill:+fillCY.toFixed(1),fillC:+fillC.toFixed(1),net:+(cutCY-fillC).toFixed(1),strip:+stripCY.toFixed(1),area:+area.toFixed(0),maxC:+maxC.toFixed(2),maxF:+maxF.toFixed(2),cell:+cell.toFixed(2),limit:lim?(twSurf(lim.sid)||{}).name||'Area':'',secs:secs.length,at:new Date().toISOString(),ms:Math.round(performance.now()-t0),missA:miss(A),missB:miss(B),gaps};
+    try{S.tw.cfRes.secs2=twSurfSections(me)}catch(e){console.warn(e)}
     R.cfShow=true;twTouch();twDraw()}catch(e){toast(errMsg(e))}finally{R.cfBusy=false;twPanels()}},20)}
 function twCfImg(){const R=twR();const F=R.cf;if(!F)return null;if(F.img)return F.img;const cv=document.createElement('canvas');cv.width=F.nx;cv.height=F.ny;const cx=cv.getContext('2d');const im=cx.createImageData(F.nx,F.ny);const m=Math.max(F.maxC,F.maxF,0.5);
   for(let k=0;k<F.dz.length;k++){const d=F.dz[k];if(!isFinite(d))continue;const a=Math.min(1,Math.abs(d)/m);const o=k*4;if(Math.abs(d)<0.05){im.data[o]=150;im.data[o+1]=150;im.data[o+2]=150;im.data[o+3]=60;continue}if(d<0){im.data[o]=214;im.data[o+1]=64;im.data[o+2]=40}else{im.data[o]=37;im.data[o+1]=102;im.data[o+2]=192}im.data[o+3]=Math.round(255*(0.18+0.6*a))}
@@ -8983,11 +9003,13 @@ function twCfCard(){const R=twR();if(!R.cfOpen)return '';const C=twCfDefaults();
       <tr><td>Area compared</td><td class="r num">${fmtN(X.area,0)} SF · ${fmtN(X.area/43560,2)} ac</td></tr>
       <tr><td>Deepest cut / fill</td><td class="r num">${fmtN(X.maxC,1)}′ / ${fmtN(X.maxF,1)}′</td></tr></tbody></table>
       <div class="small dim">${esc(X.a)} → ${esc(X.b)}${X.limit?' · inside '+esc(X.limit):''} · ${fmtN(X.cell,1)} ft grid${X.secs?` · ${X.secs} section${X.secs===1?'':'s'} applied`:''}${X.missA||X.missB?` · <span class="warn-t">${X.missA+X.missB} contour${X.missA+X.missB===1?'':'s'} without elevations left out</span>`:''}${R.cf?'':' · recalculate to see the map'}</div>
-      <div class="tw-cflg"><i class="c"></i> cut <i class="f"></i> fill <span class="dim">· darker = deeper · hover the model for elevations</span></div>`:'<p class="small dim">Uses the contours and spot elevations on both surfaces. Lines without an elevation are left out.</p>'}</div>`}
+      ${X.gaps&&X.gaps.length?`<div class="small dim">Filled in ${X.gaps.map(g=>`${fmtN(g.sf,0)} SF where ${esc(g.name)} had no elevations`).join(' and ')}, carried across from around it as AGTEK does. <a href="#" data-act="tw-cfbridge">Leave them out</a></div>`:(S.tw.cf&&S.tw.cf.noBridge?`<div class="small dim">Spots where one surface has no elevations are left out. <a href="#" data-act="tw-cfbridge">Fill them in</a></div>`:'')}
+      ${(S.tw.cfRes&&S.tw.cfRes.secs2||{}).rows&&S.tw.cfRes.secs2.rows.length?`<div class="tw-cfsec small"><b>Sections</b> (${esc(S.tw.cfRes.secs2.a)} − ${esc(S.tw.cfRes.secs2.b)}): ${S.tw.cfRes.secs2.rows.map(r=>`${r.in}″ ${fmtN(r.sf,0)} SF`).join(' · ')}</div>`:''}<div class="tw-cflg"><i class="c"></i> cut <i class="f"></i> fill <span class="dim">· darker = deeper · hover the model for elevations</span></div>`:'<p class="small dim">Uses the contours and spot elevations on both surfaces. Lines without an elevation are left out.</p>'}</div>`}
 /* ---------- finishing: the quantities list, exported or sent to the bid's estimate ---------- */
 function twQty(){const rows=[];const add=(group,name,qty,unit,key,note,x)=>{if(!(qty>0))return;rows.push({id:key,group,name,qty:+qty.toFixed(2),unit,key,note:note||'',...(x||{})})};
   const X=S.tw.cfRes;if(X){const g=`Earthwork (${X.a} → ${X.b})`;add(g,'Cut',X.cut,'CY','ew|cut');add(g,'Fill',X.fill,'CY','ew|fill');if(X.fillC!==X.fill)add(g,'Fill with compaction',X.fillC,'CY','ew|fillc');
     if(X.net>0)add(g,'Export',X.net,'CY','ew|export');if(X.net<0)add(g,'Import',-X.net,'CY','ew|import');add(g,'Stripping volume',X.strip,'CY','ew|strippingvol');add(g,'Site area',X.area,'SF','ew|sitearea')}
+  const SS=X&&X.secs2;if(SS&&SS.rows)SS.rows.forEach(r=>{const g=`Sections (${SS.a} − ${SS.b})`;add(g,`${r.in}″ section`,r.sf,'SF','twss|'+r.in+'|sf','',{cls:'Paving'});add(g,`${r.in}″ section`,r.cy,'CY','twss|'+r.in+'|cy','area × depth',{cls:'Paving'})});
   S.tw.surfaces.forEach(s=>{if(s.kind==='elev')return;const xs=S.tw.items.filter(i=>i.sid===s.id);const k=u=>'tw|'+normH(s.name)+'|'+u;if(s.kind==='util')twPipeQty(s,add);
     if(s.kind==='sub'){(s.types||[]).forEach(ty=>{const ar=xs.filter(i=>i.t==='area'&&i.sec===ty.id);add(s.name,ty.name,ar.reduce((a,i)=>a+twArea(i.pts),0),'SF','tw|'+normH(ty.name)+'|sf');add(s.name,ty.name+' section',ar.filter(i=>twSecOf(i)).reduce((a,i)=>a+twArea(i.pts)*twSecOf(i).d/12/27,0),'CY','tw|'+normH(ty.name)+'|seccy','area × depth')});return}
     if(s.kind==='take')twCtQty(s,add);add(s.name,s.name,xs.filter(i=>i.t==='line'&&!twCtOf(i)).reduce((a,i)=>a+twLen(i.pts),0),'LF',k('lf'));add(s.name,s.name,xs.filter(i=>i.t==='area'&&!twCtOf(i)).reduce((a,i)=>a+twArea(i.pts),0),'SF',k('sf'));add(s.name,s.name,xs.filter(i=>i.t==='count').length,'EA',k('ea'));
@@ -9261,19 +9283,23 @@ function cadArc(cx,cy,z,r,a0,a1,out){let sweep=a1-a0;while(sweep<=0)sweep+=Math.
 function cadBulge(p,q,b,out){const th=4*Math.atan(b);const dx=q[0]-p[0],dy=q[1]-p[1];const c=Math.hypot(dx,dy);if(!c||Math.abs(b)<1e-9)return;const r=c/(2*Math.sin(Math.abs(th)/2));const mx=(p[0]+q[0])/2,my=(p[1]+q[1])/2;const h=Math.sqrt(Math.max(0,r*r-c*c/4))*(Math.abs(th)>Math.PI?-1:1);
   const sgn=b>0?1:-1;const cx=mx-sgn*h*dy/c,cy=my+sgn*h*dx/c;let a0=Math.atan2(p[1]-cy,p[0]-cx),a1=Math.atan2(q[1]-cy,q[0]-cx);const n=Math.max(2,Math.ceil(Math.abs(th)/(Math.PI/18)));
   let sw=a1-a0;if(b>0){while(sw<=0)sw+=Math.PI*2}else{while(sw>=0)sw-=Math.PI*2}for(let k=1;k<n;k++){const a=a0+sw*k/n;out.push([cx+r*Math.cos(a),cy+r*Math.sin(a),p[2]])}}
-function cadParseDxf(text){const lines=text.split(/\r?\n/);const C=[],V=[];for(let i=0;i+1<lines.length;i+=2){C.push(parseInt(lines[i],10));V.push(lines[i+1].trim())}
+function cadParseDxf(text){
+  // the file is read in place: a code per pair, and where its value sits in the text (big DXFs are 100+ MB; a string per line would need gigabytes)
+  let np=0;for(let q=text.indexOf('\n');q>=0;q=text.indexOf('\n',q+1))np++;np=(np>>1)+1;const C=new Int32Array(np),VS=new Uint32Array(np),VE=new Uint32Array(np);let CN=0;
+  {let p=0;const TL=text.length;while(p<TL&&CN<np){let e=text.indexOf('\n',p);if(e<0)break;C[CN]=parseInt(text.slice(p,e),10);p=e+1;e=text.indexOf('\n',p);if(e<0)e=TL;let s=p,t=e;while(s<t&&text.charCodeAt(s)<=32)s++;while(t>s&&text.charCodeAt(t-1)<=32)t--;VS[CN]=s;VE[CN]=t;CN++;p=e+1}}
+  const Vs=k=>text.slice(VS[k],VE[k]);
   const map=new Map();let units='ft';const info={inserts:0,skipped:{}};
-  const hu=V.findIndex((v,i)=>C[i]===9&&v==='$INSUNITS');if(hu>=0){const u=+V[hu+1];units={1:'in',2:'ft',4:'mm',6:'m',10:'yd',21:'usft'}[u]||'ft'}
+  {let hu=-1;for(let q=0;q<CN;q++){if(C[q]===9&&Vs(q)==='$INSUNITS'){hu=q;break}if(C[q]===0&&Vs(q)==='ENDSEC')break}if(hu>=0){const u=+Vs(hu+1);units={1:'in',2:'ft',4:'mm',6:'m',10:'yd',21:'usft'}[u]||'ft'}}
   // class names, for the Civil 3D objects (ACAD_PROXY_ENTITY points at them by number)
-  const classes=[];{let sec=null;for(let q=0;q<C.length;q++){if(C[q]===0&&V[q]==='SECTION'){sec=V[q+1];if(sec==='ENTITIES')break}else if(sec==='CLASSES'&&C[q]===0&&V[q]==='CLASS'){let r=q+1;while(r<C.length&&C[r]!==0){if(C[r]===1){classes.push(V[r]);break}r++}}}}
+  const classes=[];{let sec=null;for(let q=0;q<CN;q++){if(C[q]===0&&Vs(q)==='SECTION'){sec=Vs(q+1);if(sec==='ENTITIES')break}else if(sec==='CLASSES'&&C[q]===0&&Vs(q)==='CLASS'){let r=q+1;while(r<CN&&C[r]!==0){if(C[r]===1){classes.push(Vs(r));break}r++}}}}
   const prox=[];
   // only the ENTITIES section (blocks are left out; their inserts are counted)
-  let i=0;const n=C.length;let inEnt=false;
-  const grab=k=>{const g=[];let j=k+1;while(j<n&&C[j]!==0){g.push([C[j],V[j]]);j++}return [g,j]};
+  let i=0;const n=CN;let inEnt=false;
+  const grab=k=>{const g=[];let j=k+1;while(j<n&&C[j]!==0){g.push([C[j],Vs(j)]);j++}return [g,j]};
   const gv=(g,c,d)=>{const e=g.find(x=>x[0]===c);return e?e[1]:d};const gn=(g,c,d)=>{const e=g.find(x=>x[0]===c);return e?+e[1]:d};
   const flip=g=>gn(g,230,1)<0;
-  while(i<n){if(C[i]!==0){i++;continue}const t=V[i];
-    if(t==='SECTION'){const nm=V[i+1];inEnt=nm==='ENTITIES';i+=2;continue}if(t==='ENDSEC'){inEnt=false;i++;continue}if(t==='EOF')break;
+  while(i<n){if(C[i]!==0){i++;continue}const t=Vs(i);
+    if(t==='SECTION'){const nm=Vs(i+1);inEnt=nm==='ENTITIES';i+=2;continue}if(t==='ENDSEC'){inEnt=false;i++;continue}if(t==='EOF')break;
     if(!inEnt){i++;continue}
     const [g,j]=grab(i);const lay=gv(g,8,'0');
     if(t==='LINE'){cadLayer(map,lay).pls.push({pts:[[gn(g,10,0),gn(g,20,0),gn(g,30,0)],[gn(g,11,0),gn(g,21,0),gn(g,31,0)]],closed:false});i=j;continue}
@@ -9281,8 +9307,8 @@ function cadParseDxf(text){const lines=text.split(/\r?\n/);const C=[],V=[];for(l
       g.forEach(([c,v])=>{if(c===10){cur=[f*+v,0,z,0];vs.push(cur)}else if(c===20&&cur)cur[1]=+v;else if(c===42&&cur)cur[3]=+v*f});
       const pts=[];vs.forEach((v,k)=>{pts.push([v[0],v[1],z]);const nx=vs[k+1]||(cl?vs[0]:null);if(nx&&v[3])cadBulge([v[0],v[1],z],[nx[0],nx[1],z],v[3],pts)});if(pts.length>1)cadLayer(map,lay).pls.push({pts,closed:cl});i=j;continue}
     if(t==='POLYLINE'){const fl=gn(g,70,0);const z0=gn(g,30,0);const vs=[];let k=j;
-      while(k<n&&C[k]===0&&V[k]==='VERTEX'){const [vg,vj]=grab(k);vs.push({x:gn(vg,10,0),y:gn(vg,20,0),z:gn(vg,30,null),f:gn(vg,70,0),b:gn(vg,42,0),i:[gn(vg,71,0),gn(vg,72,0),gn(vg,73,0),gn(vg,74,0)]});k=vj}
-      if(k<n&&C[k]===0&&V[k]==='SEQEND'){const [,sj]=grab(k);k=sj}
+      while(k<n&&C[k]===0&&Vs(k)==='VERTEX'){const [vg,vj]=grab(k);vs.push({x:gn(vg,10,0),y:gn(vg,20,0),z:gn(vg,30,null),f:gn(vg,70,0),b:gn(vg,42,0),i:[gn(vg,71,0),gn(vg,72,0),gn(vg,73,0),gn(vg,74,0)]});k=vj}
+      if(k<n&&C[k]===0&&Vs(k)==='SEQEND'){const [,sj]=grab(k);k=sj}
       if(fl&64){// polyface mesh: vertices, then faces that point at them (1-based; negative = hidden edge)
         const L=cadLayer(map,lay);const T=L.tin||(L.tin={v:[],t:[]});const base=T.v.length;const idx=[];vs.forEach(v=>{if((v.f&192)===192){idx.push(T.v.length);T.v.push([v.x,v.y,v.z??0])}});
         vs.forEach(v=>{if((v.f&192)===128){const q=v.i.filter(x=>x).map(x=>idx[Math.abs(x)-1]).filter(x=>x!=null);if(q.length>=3){T.t.push(q[0],q[1],q[2]);if(q.length===4)T.t.push(q[0],q[2],q[3])}}});void base}
@@ -9302,6 +9328,8 @@ function cadParseDxf(text){const lines=text.split(/\r?\n/);const C=[],V=[];for(l
     if(/^AECC/.test(t)){prox.push({cls:t,lay,g:{pls:[],tx:[],circ:[]},i:prox.length});i=j;continue}
     info.skipped[t]=(info.skipped[t]||0)+1;i=j}
   if(prox.length)cadProxyBuild(map,prox,info);
+  // some programs (AGTEK, CloudConvert…) write "inches" in the header of a drawing that's plainly in state-plane feet
+  if(units==='in'||units==='mm'){let mx=0;map.forEach(L=>{const see=q=>{const v=Math.max(Math.abs(q[0]),Math.abs(q[1]));if(v>mx)mx=v};L.pls.slice(0,200).forEach(p=>see(p.pts[0]));L.pts.slice(0,200).forEach(see);if(L.tin&&L.tin.v.length)see(L.tin.v[0])});if(mx>300000){info.unitsNote=`The file says ${units==='in'?'inches':'millimeters'}, but its coordinates look like state-plane feet, so feet are used. Change Units if that's wrong.`;units='ft'}}
   // 3D faces share corners: merge them so the TIN is connected
   map.forEach(L=>{if(L.tin)L.tin=cadWeld(L.tin)});
   return {layers:[...map.values()],units,info}}
@@ -9314,7 +9342,7 @@ function cadParseXml(text){const d=new DOMParser().parseFromString(text,'applica
     all(sf,'P').forEach(p=>{const a=num3(p.textContent);if(a.length>=2){ids.set(p.getAttribute('id'),v.length);v.push([a[1],a[0],a[2]||0])}});
     const t=[];all(sf,'F').forEach(f=>{if(f.getAttribute('i')==='1')return;const a=String(f.textContent).trim().split(/\s+/).map(x=>ids.get(x));if(a.length>=3&&a.every(x=>x!=null))t.push(a[0],a[1],a[2])});
     if(v.length){if(t.length)L.tin={v,t};else v.forEach(p=>L.pts.push(p))}
-    all(sf,'Breakline').forEach(b=>{const pl=all(b,'PntList3D')[0];if(!pl)return;const a=num3(pl.textContent);const pts=[];for(let k=0;k+2<a.length;k+=3)pts.push([a[k+1],a[k],a[k+2]]);if(pts.length>1)cadLayer(map,name+' breaklines').pls.push({pts,closed:false})});
+    all(sf,'Breakline').forEach(b=>{const pl=all(b,'PntList3D')[0];if(!pl)return;const a=num3(pl.textContent);const pts=[];for(let k=0;k+2<a.length;k+=3)pts.push([a[k+1],a[k],a[k+2]]);if(pts.length>1){const BL=cadLayer(map,name+' breaklines');BL.srcOf=name;BL.pls.push({pts,closed:false})}});
     if(!L.tin&&!L.pts.length&&!L.pls.length)map.delete(name)});
   all(d,'CgPoint').forEach(p=>{const a=num3(p.textContent);if(a.length<2)return;const code=p.getAttribute('code')||p.getAttribute('desc')||'Points';cadLayer(map,'Points: '+code).pts.push([a[1],a[0],a[2]||0])});
   const geom=(cg,name)=>{const pts=[];const add=q=>{const l=pts[pts.length-1];if(!l||Math.hypot(l[0]-q[0],l[1]-q[1])>1e-6)pts.push(q)};
@@ -9338,6 +9366,7 @@ function cadStats(L){let cz=0,vz=0,flat=0,closed=0,z0=Infinity,z1=-Infinity;L.pl
 function cadDesc(L){const s=L.st;const out=[];if(L.runs){const np=L.runs.reduce((a,r)=>a+r.segs.length,0);const ns=new Set(L.runs.flatMap(r=>r.nodes.map(n=>n.n).filter(Boolean))).size;out.push(`${L.runs.length} pipe run${L.runs.length===1?'':'s'} · ${np} pipe${np===1?'':'s'} · ${ns} structure${ns===1?'':'s'} (${L.sys}${L.ex?', existing':''})`)}if(L.c3d==='surface')out.push('Civil 3D surface:');if(L.c3d==='spot')out.push('Civil 3D spot labels:');if(L.c3d==='lines')out.push('Civil 3D:');if(s.tri)out.push(`TIN ${fmtN(s.tri,0)} triangles`);if(s.cz)out.push(`${fmtN(s.cz,0)} contour${s.cz===1?'':'s'}`);if(s.vz)out.push(`${fmtN(s.vz,0)} 3D line${s.vz===1?'':'s'}`);if(s.flat)out.push(`${fmtN(s.flat,0)} flat line${s.flat===1?'':'s'}${s.closed?` (${s.closed} closed)`:''}`);if(s.pts)out.push(L.blk?`${fmtN(s.pts,0)} × ${L.blk} block`:`${fmtN(s.pts,0)} point${s.pts===1?'':'s'}`);
   return out.join(' · ')+(s.hasZ?` · elev ${fmtN(s.z0,1)}–${fmtN(s.z1,1)}`:'')+(L.warn?` · ⚠ ${L.warn}`:'')}
 function cadSuggest(L){const s=L.st;const nm=L.name.toLowerCase();if(L.runs){if(L.ex)return 'skip';const u=S.tw.surfaces.find(x=>x.kind==='util'&&cadSysOf(x.name)===L.sys&&(L.sys!=='Storm Drain'||/storm|drain|sd/i.test(x.name)));return u?u.id:'new:util'}const el=S.tw.surfaces.filter(x=>x.kind==='elev');const ex=el.find(x=>/exist|^eg|topo|^og/i.test(x.name)),ds=el.find(x=>/design|prop|^fg|final|finish/i.test(x.name));
+  if(/sub-?grade|(^|[^a-z])sg([^a-z]|$)/.test(nm)&&(s.tri||s.cz||s.vz))return 'new:elev';
   const isEx=/(^|[^a-z])(ex|eg|og|exist|topo|survey)/.test(nm)||/^[-_ ]?X[A-Z]/.test(L.name),isDs=/(prop|^fg|[^a-z]fg|des|fin|grad|^p-|-p-|pr-)/.test(nm);
   if(L.c3d==='surface'||L.c3d==='spot'||L.c3d==='lines'){if(isEx&&!isDs&&!/prgr/.test(nm))return ex?ex.id:'new:elev';return ds?ds.id:'new:elev'}
   if(s.tri||s.cz||s.vz||(s.pz&&s.pz>=s.pts*0.8)){if(isEx&&!isDs)return ex?ex.id:'new:elev';if(isDs)return ds?ds.id:'new:elev';return s.tri?'new:elev':'skip'}
@@ -9350,7 +9379,11 @@ async function cadOpenFile(file){const nm=file.name;const ext=(nm.split('.').pop
   cadPrep(P,nm)}
 function cadPrep(P,nm){P.layers.forEach((L,i)=>{L.st=cadStats(L);L.color=CAD_COLORS[i%CAD_COLORS.length]});P.layers=P.layers.filter(L=>L.st.tri||L.pls.length||L.pts.length||(L.runs&&L.runs.length));
   P.layers.sort((a,b)=>(!!b.c3d-!!a.c3d)||(!!b.runs-!!a.runs)||(b.st.hasZ-a.st.hasZ)||a.name.localeCompare(b.name));if(!P.layers.length){toast('Nothing to bring in from '+nm+'.');return}
-  const placed=Object.values(S.tw.sheets).some(x=>x.scaled&&x.aligned);const to={};P.layers.forEach(L=>to[L.name]=cadSuggest(L));try{cadAgree(P,to)}catch(e){console.warn(e)}
+  const placed=Object.values(S.tw.sheets).some(x=>x.scaled&&x.aligned);const to={};P.layers.forEach(L=>to[L.name]=cadSuggest(L));
+  // two TINs are two surfaces: the second one headed for the same surface gets its own
+  {const took=new Set();P.layers.forEach(L=>{if(!L.tin||L.runs)return;const t=to[L.name];if(!t||t==='skip'||t.startsWith('new:'))return;if(took.has(t)){to[L.name]='new:elev';L.warn=`a second TIN for ${(twSurf(t)||{}).name||'that surface'}, so it gets its own surface`}else took.add(t)})}
+  // a LandXML surface's own breaklines are already in its triangles: adding them again would only re-triangulate it
+  P.layers.forEach(L=>{if(L.srcOf&&P.layers.some(x=>x.name===L.srcOf&&x.tin)){to[L.name]='skip';L.warn=`already part of ${L.srcOf}’s triangles`}});try{cadAgree(P,to)}catch(e){console.warn(e)}
   M={kind:'twcad',P,name:nm,to,units:P.units,place:S.tw.cadT?'same':placed||S.tw.items.some(i=>i.page==null&&i.t!=='tin')?'apts':'cad',pairs:{},pick:null,filter:'',v:null};if(M.place==='apts')M.pick=(S.tw.apts[0]||{}).id||null;showModal();cadDrawSoon()}
 const cadU=()=>CAD_UNITS[M.units]?CAD_UNITS[M.units][1]:1;
 // files from the same project share coordinates: feet and survey feet are treated alike (they're mixed up all the time, and 2 ppm is feet at state-plane distances)
@@ -9366,6 +9399,7 @@ function cadModal(){const x=M;const P=x.P;const el=S.tw.surfaces;const f=x.place
   const anyPlaced=Object.values(S.tw.sheets).some(s=>s.scaled&&s.aligned);
   return mhead('Import CAD, LandXML or points',`${x.name} · ${P.layers.length} layer${P.layers.length===1?'':'s'}${P.info.inserts?` · ${P.info.inserts} block inserts left out`:''}`)+`<div class="mbody"><div class="twc">
     <div class="twc-l">${cadProxyNote(P)}
+      ${P.info&&P.info.unitsNote?`<p class="small warn-t" style="margin:0">${esc(P.info.unitsNote)}</p>`:''}
       <div class="twc-row"><input class="field sm" data-twcfilter placeholder="Find a layer…" value="${esc(x.filter)}" style="flex:1"><label class="small">Units <select class="field sm" data-twcu>${Object.entries(CAD_UNITS).map(([k,[l]])=>`<option value="${k}"${x.units===k?' selected':''}>${l}</option>`).join('')}</select></label>${P.fmt?`<label class="small">Columns <select class="field sm" data-twcfmt>${['PNEZD','PENZD','PNEZ','PENZ','NEZ','ENZ','NEZD','ENZD'].map(k=>`<option${P.fmt===k?' selected':''}>${k}</option>`).join('')}</select></label>`:''}</div>
       <div class="twc-lay">${shown.map(L=>`<div class="twc-ly${x.to[L.name]==='skip'?' off':''}"><span class="tw-sw" style="background:${L.color}"></span><div class="twc-ln"><b title="${esc(L.name)}">${esc(L.name)}</b><small>${esc(cadDesc(L))}</small></div><select class="field sm" data-twct="${esc(L.name)}">${opts(x.to[L.name])}</select></div>`).join('')||'<p class="small dim">No layer matches.</p>'}</div>
       <p class="small dim" style="margin:4px 0">Layers with elevations are listed first and sent to Existing or Design by their names (EX-, EG, TOPO → Existing; PROP, FG, GRAD → Design). Contours keep their elevation; 3D lines and TINs keep theirs at every point. Lines without elevations can go to a takeoff or utility surface.</p>
@@ -9426,7 +9460,7 @@ function cadImport(){const x=M;const X=cadXf();if(!X)return;const u=cadU();const
   imp.n=nItems;S.tw.imports=(S.tw.imports||[]).concat(imp);
   const t=x.place==='cad'?{s:u,rot:0,tx:0,ty:0}:x.place==='same'?{...S.tw.cadT,s:cadSameS(u)}:(cadFit()||{}).t;if(t)S.tw.cadT={s:t.s,rot:t.rot,tx:t.tx,ty:t.ty,name:x.name,units:x.units};
   if(!S.tw.active||!twSurf(S.tw.active))S.tw.active=(S.tw.surfaces[0]||{}).id;twR().mv=null;twR().gt=null;twTouch();closeModal();twPanels();twDraw();
-  const big=JSON.stringify(S.tw).length>8e6;toast(`${fmtN(nItems,0)} item${nItems===1?'':'s'} imported from ${x.name}${left?`; ${left} without elevations left out of elevation surfaces`:''}.${x.place==='cad'&&!Object.values(S.tw.sheets).some(s=>s.aligned)?' To line plan sheets up with it, add alignment points on the model (◎ tool), then Align sheet on each sheet.':''}${big?' This takeoff is getting large; saving may be slow.':''}`)}
+  const big=JSON.stringify(S.tw).length>30e6;toast(`${fmtN(nItems,0)} item${nItems===1?'':'s'} imported from ${x.name}${left?`; ${left} without elevations left out of elevation surfaces`:''}.${x.place==='cad'&&!Object.values(S.tw.sheets).some(s=>s.aligned)?' To line plan sheets up with it, add alignment points on the model (◎ tool), then Align sheet on each sheet.':''}${big?' This takeoff is getting large; saving may be slow.':''}`)}
 function twImportsHtml(){const xs=S.tw.imports||[];if(!xs.length)return '';const ro=twRo();return `<div class="tw-h">Imported files</div><div class="tw-imps">${xs.map(m=>{const n=S.tw.items.filter(i=>i.imp===m.id).length;return `<div class="tw-imp"><span title="${esc(m.name)}">${esc(m.name)}</span><small class="dim">${fmtN(n,0)}</small>${ro?'':`<button class="x" data-act="tw-impdel" data-id="${m.id}" title="Remove everything that came from this file">×</button>`}</div>`}).join('')}</div>`}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!S.tw)return;const a=t.dataset.act;
   if(a==='tw-impdel'){const id=t.dataset.id;if(S.twImpArm!==id){S.twImpArm=id;toast('Click × again to remove everything imported from that file.');setTimeout(()=>{if(S.twImpArm===id)S.twImpArm=null},4000);return}S.twImpArm=null;twSnap();S.tw.items=S.tw.items.filter(i=>i.imp!==id);S.tw.imports=(S.tw.imports||[]).filter(m=>m.id!==id);if(!S.tw.imports.length)delete S.tw.cadT;twR().gt=null;twTouch();twPanels();twDraw()}});
@@ -9822,13 +9856,32 @@ function cadAgree(P,to){const el=new Map();P.layers.forEach(L=>{const t=to[L.nam
     const tp=new Float64Array(X.length*3);for(let i=0;i<X.length;i++){tp[i*3]=X[i];tp[i*3+1]=Y[i];tp[i*3+2]=Z[i]}const tin={pts:tp,tris:Uint32Array.from(keep),n:X.length};
     const tgtName=key.startsWith('new:')?lead[0].name:(twSurf(key)||{}).name||'Existing';const alt=`${tgtName} (${/surv|topo|^-?x|spot/i.test(rest.map(r=>r.name).join(' '))?'survey':'other ground'})`;
     rest.forEach(L=>{const d=[];sample(L,3000).forEach(q=>{const z=tinZ(tin,q[0],q[1]);if(isFinite(z))d.push(Math.abs(z-q[2]))});if(d.length<5)return;d.sort((a,b)=>a-b);const med=d[Math.floor(d.length/2)],avg=d.reduce((a,b)=>a+b,0)/d.length;L.agree={med,avg,n:d.length};
-      if(med>0.3||avg>0.5){to[L.name]='new:elev:'+alt;L.warn=`differs from ${lead.map(x=>x.name).join(', ')} by ${fmtN(avg,2)} ft on average: a different ground, so it goes on “${alt}”. Change it if this is the one you want.`}})})}
+      if(med>0.3||avg>0.5){to[L.name]='new:elev:'+alt;L.warn=`differs from ${lead.map(x=>x.name).join(', ')} by ${fmtN(avg,2)} ft on average: a different ground, so it goes on “${alt}”. Change it if this is the one you want.`}});
+    // a TIN that agrees with the contours was built from them: use the TIN as it is and leave the contours out
+    const tinL=Ls.find(L=>L.tin&&to[L.name]===key.replace(/^new:.*/,'new:elev'));if(tinL&&!key.startsWith('new:'))Ls.forEach(L=>{if(L!==tinL&&!L.tin&&to[L.name]===key){to[L.name]='skip';L.warn=`already in ${tinL.name}’s triangles, which are used as they are`}})})}
 
 /* ---------- placing plan sheets by themselves ----------
    Scale: read from the sheet's own text (1" = 20'). Position: once there's CAD in the takeoff, the sheet's linework is
    matched to it: line directions give the turn, a cross-correlation of the two drawings gives the shift, then the
    fit is tightened point to point. Nothing is changed unless the match is clearly good. */
+// a graphic scale bar: the numbers under it (0, 25, 50, 100…) sit at their distances along the bar, so their spacing is the scale
+function twBarScale(items){const pos=it=>{const t=it.transform;const L=Math.hypot(t[0],t[1])||1;return [t[4]+t[0]/L*(it.width||0)/2,t[5]+t[1]/L*(it.width||0)/2]};const out=[];
+  items.forEach((h,hi)=>{if(!/GRAPHIC\s*SCALE/i.test(h.str)&&!(/^GRAPHIC$/i.test(h.str.trim())&&items[hi+1]&&/^\s*SCALE/i.test(items[hi+1].str)))return;const hp=pos(h);
+    // measured in the text's own direction (sheets are often stored turned sideways)
+    const ht=h.transform,hl=Math.hypot(ht[0],ht[1])||1,du=[ht[0]/hl,ht[1]/hl],dv=[-du[1],du[0]];
+    const nums=items.map(it=>{const s=it.str.trim();if(!/^-?\d{1,5}('|’)?$/.test(s))return null;const q=pos(it);const u=(q[0]-hp[0])*du[0]+(q[1]-hp[1])*du[1],v=(q[0]-hp[0])*dv[0]+(q[1]-hp[1])*dv[1];if(Math.abs(u)>300||Math.abs(v)>40)return null;return {v:parseFloat(s),p:[u,v]}}).filter(Boolean);
+    if(nums.length<3||!nums.some(x=>x.v===0))return;
+    // which way the bar runs: the axis the numbers spread along
+    const ax=0;
+    // the numbers on the bar's own line (one row); others nearby ("1 inch = 50 ft") are left out
+    {const rows=new Map();nums.forEach(x=>{const k=Math.round(x.p[1]/6);rows.set(k,(rows.get(k)||[]).concat([x]))});const row=[...rows.values()].sort((a,b)=>b.length-a.length)[0];nums.length=0;row.forEach(x=>nums.push(x))}
+    if(nums.length<3||!nums.some(x=>x.v===0))return;
+    const m=nums.length,mx=nums.reduce((a,x)=>a+x.p[ax],0)/m,mv=nums.reduce((a,x)=>a+x.v,0)/m;let sxy=0,sxx=0;nums.forEach(x=>{sxy+=(x.p[ax]-mx)*(x.v-mv);sxx+=(x.p[ax]-mx)**2});if(!sxx)return;const k=Math.abs(sxy/sxx);
+    const res=Math.max(...nums.map(x=>Math.abs((x.v-mv)-(x.p[ax]-mx)*sxy/sxx)));if(res>Math.max(2,Math.max(...nums.map(x=>Math.abs(x.v)))*0.04))return;
+    const ft=k*72;const nice=[1,5,10,20,30,40,50,60,80,100,150,200,300,400,500,1000].find(v=>Math.abs(v-ft)/v<0.03);out.push(nice||+ft.toFixed(2))});return out}
 async function twReadScale(n){const R=twR();if(!R.pdf)return null;const page=await R.pdf.getPage(n);const tc=await page.getTextContent();const txt=tc.items.map(t=>t.str).join(' ');
+  // the bar scale is the plan's own; "SCALE 1" = 10'" text is often a detail on the same sheet
+  const bars=twBarScale(tc.items);if(bars.length){const bc=new Map();bars.forEach(v=>bc.set(v,(bc.get(v)||0)+1));const b=[...bc.entries()].sort((a,c)=>c[1]-a[1]);return {ft:b[0][0],n:b[0][1],others:b.slice(1).map(x=>x[0]),bar:true}}
   const cnt=new Map();const re=/1\s*(?:"|''|”|IN(?:CH)?\.?)\s*=\s*(\d{1,4}(?:\.\d+)?)\s*(?:'|’|FT|FEET)/gi;let m;while((m=re.exec(txt))){const v=+m[1];if(v>0&&v<=2000)cnt.set(v,(cnt.get(v)||0)+1)}
   // Civil 3D annotation scales on US civil sheets: "SCALE: 1:20" means 1" = 20'
   const re2=/SCALE\s*:?\s*1\s*:\s*(\d{1,4})(?!\d)/gi;while((m=re2.exec(txt))){const v=+m[1];if(v>0&&v<=2000)cnt.set(v,(cnt.get(v)||0)+1)}
@@ -9842,12 +9895,13 @@ function twFFT2(re,im,N,inv){const r=new Float64Array(N),i2=new Float64Array(N);
 const twDens=(pts,step,out)=>{for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i];const L=Math.hypot(b[0]-a[0],b[1]-a[1]);const n=Math.max(1,Math.floor(L/step));for(let k=0;k<n;k++)out.push([a[0]+(b[0]-a[0])*k/n,a[1]+(b[1]-a[1])*k/n])}if(pts.length)out.push(pts[pts.length-1])};
 const twAngHist=(lines)=>{const h=new Float64Array(720);lines.forEach(pts=>{for(let i=1;i<pts.length;i++){const dx=pts[i][0]-pts[i-1][0],dy=pts[i][1]-pts[i-1][1];const L=Math.hypot(dx,dy);if(!L)continue;let a=Math.atan2(dy,dx)%Math.PI;if(a<0)a+=Math.PI;h[Math.floor(a/Math.PI*720)%720]+=L}});return h};
 // the sheet's linework (page points) matched onto the CAD linework (job feet) at a known scale
-function twMatch(cadLines,pdfLines,s){const A=[];cadLines.forEach(p=>twDens(p,1,A));let B=[];pdfLines.forEach(p=>twDens(p,3,B));if(A.length<50||B.length<50)return null;
+function twMatch(cadLines,pdfLines,s,W,H,prior){let A=[];cadLines.forEach(p=>twDens(p,1,A));if(A.length>30000){const st=A.length/30000;const a2=[];for(let k=0;k<A.length;k+=st)a2.push(A[Math.floor(k)]);A=a2}let B=[];pdfLines.forEach(p=>twDens(p,3,B));if(A.length<50||B.length<50)return null;
   if(B.length>160000){const st=B.length/160000;const b2=[];for(let k=0;k<B.length;k+=st)b2.push(B[Math.floor(k)]);B=b2}
   const hA=twAngHist(cadLines),hB=twAngHist(pdfLines);const cc=[];for(let k=0;k<720;k++){let v=0;for(let i=0;i<720;i++)v+=hA[i]*hB[(i+720-k)%720];cc.push([v,k])}cc.sort((a,b)=>b[0]-a[0]);
-  const cands=[];cc.forEach(([v,k])=>{if(cands.length<3&&!cands.some(c=>Math.min(Math.abs(c-k),720-Math.abs(c-k))<8))cands.push(k)});
+  const cands=[];(prior||[]).forEach(r=>{let k=Math.round(((r%Math.PI)+Math.PI)%Math.PI/Math.PI*720)%720;if(!cands.some(c=>Math.min(Math.abs(c-k),720-Math.abs(c-k))<8))cands.push(k)});
+  const np=cands.length;cc.forEach(([v,k])=>{if(cands.length<3+np&&!cands.some(c=>Math.min(Math.abs(c-k),720-Math.abs(c-k))<8))cands.push(k)});
   let ax=0,ay=0;A.forEach(p=>{ax+=p[0];ay+=p[1]});ax/=A.length;ay/=A.length;let bx=0,by=0;B.forEach(p=>{bx+=p[0];by+=p[1]});bx/=B.length;by/=B.length;
-  const cell=2;let best=null;
+  const cell=2;const cand=[];
   cands.forEach(k=>[0,Math.PI].forEach(fl=>{const th=k/720*Math.PI+fl;const c=Math.cos(th),si=Math.sin(th);
     const Bt=B.map(p=>{const x=(p[0]-bx)*s,y=(p[1]-by)*s;return [x*c-y*si+ax,x*si+y*c+ay]});
     let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;[A,Bt].forEach(P=>P.forEach(p=>{if(p[0]<x0)x0=p[0];if(p[0]>x1)x1=p[0];if(p[1]<y0)y0=p[1];if(p[1]>y1)y1=p[1]}));
@@ -9855,27 +9909,41 @@ function twMatch(cadLines,pdfLines,s){const A=[];cadLines.forEach(p=>twDens(p,1,
     const ras=P=>{const g=new Float64Array(N*N);P.forEach(p=>{const i=Math.floor((p[0]-x0+50)/cl),j=Math.floor((p[1]-y0+50)/cl);if(i>=0&&j>=0&&i<N&&j<N)g[j*N+i]=1});return g};
     const ar=ras(A),ai=new Float64Array(N*N),br=ras(Bt),bi=new Float64Array(N*N);twFFT2(ar,ai,N,false);twFFT2(br,bi,N,false);
     for(let q=0;q<N*N;q++){const r=ar[q]*br[q]+ai[q]*bi[q],im=ai[q]*br[q]-ar[q]*bi[q];ar[q]=r;ai[q]=im}twFFT2(ar,ai,N,true);
-    let mx=-1,mi=0;for(let q=0;q<N*N;q++)if(ar[q]>mx){mx=ar[q];mi=q}let dx=mi%N,dy=Math.floor(mi/N);if(dx>N/2)dx-=N;if(dy>N/2)dy-=N;
-    if(!best||mx>best.score)best={score:mx,th,dx:dx*cl,dy:dy*cl}}));
-  if(!best)return null;
-  // the transform so far: job = s·R(th)·(p − b̄) + ā + d  →  tighten it point to point (turn + shift; the scale is the sheet's)
-  let th=best.th,tx=ax+best.dx-s*(Math.cos(th)*bx-Math.sin(th)*by),ty=ay+best.dy-s*(Math.sin(th)*bx+Math.cos(th)*by);let rms=Infinity,frac=0;
-  for(let it=0;it<25;it++){const c=Math.cos(th),si=Math.sin(th);const g=new Map(),gc=3;const Bt=B.map(p=>[tx+s*(p[0]*c-p[1]*si),ty+s*(p[0]*si+p[1]*c)]);Bt.forEach((p,i)=>{const k=Math.floor(p[0]/gc)+','+Math.floor(p[1]/gc);let L=g.get(k);if(!L)g.set(k,L=[]);L.push(i)});
-    const lim=it<5?20:it<12?6:3;const pr=[];let se=0;A.forEach(a=>{const ci=Math.floor(a[0]/gc),cj=Math.floor(a[1]/gc);let bd=lim,bi=-1;const rr=Math.ceil(lim/gc);for(let u=-rr;u<=rr;u++)for(let v=-rr;v<=rr;v++){(g.get((ci+u)+','+(cj+v))||[]).forEach(i=>{const d=Math.hypot(Bt[i][0]-a[0],Bt[i][1]-a[1]);if(d<bd){bd=d;bi=i}})}if(bi>=0){pr.push([a,B[bi]]);se+=bd*bd}});
-    if(pr.length<20)return null;frac=pr.length/A.length;rms=Math.sqrt(se/pr.length);
-    let mA=[0,0],mB=[0,0];pr.forEach(([a,b])=>{mA[0]+=a[0];mA[1]+=a[1];mB[0]+=b[0];mB[1]+=b[1]});mA=mA.map(v=>v/pr.length);mB=mB.map(v=>v/pr.length);
-    let sxx=0,sxy=0;pr.forEach(([a,b])=>{const px=b[0]-mB[0],py=b[1]-mB[1],qx=a[0]-mA[0],qy=a[1]-mA[1];sxx+=px*qx+py*qy;sxy+=px*qy-py*qx});th=Math.atan2(sxy,sxx);const c2=Math.cos(th),s2=Math.sin(th);tx=mA[0]-s*(mB[0]*c2-mB[1]*s2);ty=mA[1]-s*(mB[0]*s2+mB[1]*c2)}
-  return {s,rot:th,tx,ty,rms,frac,n:A.length}}
+    // the few strongest peaks, not just the top one: rows of identical parking stalls make look-alike matches
+    const peaks=[];for(let q=0;q<N*N;q++){const v=ar[q];if(peaks.length<4||v>peaks[peaks.length-1].v){const x=q%N,y=Math.floor(q/N);const near=peaks.findIndex(p=>Math.min(Math.abs(p.x-x),N-Math.abs(p.x-x))<6&&Math.min(Math.abs(p.y-y),N-Math.abs(p.y-y))<6);if(near>=0){if(v>peaks[near].v)peaks[near]={v,x,y};else continue}else peaks.push({v,x,y});peaks.sort((a,b)=>b.v-a.v);if(peaks.length>4)peaks.length=4}}
+    peaks.forEach(pk=>{let dx=pk.x,dy=pk.y;if(dx>N/2)dx-=N;if(dy>N/2)dy-=N;cand.push({score:pk.v,th,dx:dx*cl,dy:dy*cl})})}));
+  if(!cand.length)return null;cand.sort((a,b)=>b.score-a.score);
+  // tighten the candidates point to point (turn + shift; the scale is the sheet's): a quick pass on a thinned CAD for many, the full pass for the best two
+  const icp=(th,tx,ty,P,it0,it1,lock)=>{let rms=Infinity,frac=0;const gc=3,KM=1<<20;for(let it=it0;it<it1;it++){const c=Math.cos(th),si=Math.sin(th);const g=new Map();const Bt=new Float64Array(B.length*2);for(let i=0;i<B.length;i++){const x=tx+s*(B[i][0]*c-B[i][1]*si),y=ty+s*(B[i][0]*si+B[i][1]*c);Bt[2*i]=x;Bt[2*i+1]=y;const k=Math.floor(x/gc)*KM+Math.floor(y/gc);let L=g.get(k);if(!L)g.set(k,L=[]);L.push(i)}
+      const lim=it<5?20:it<12?6:3;const rr=Math.ceil(lim/gc);const pr=[];let se=0;for(const a of P){const ci=Math.floor(a[0]/gc),cj=Math.floor(a[1]/gc);let bd=lim*lim,bi=-1;for(let u=-rr;u<=rr;u++)for(let v=-rr;v<=rr;v++){const L=g.get((ci+u)*KM+cj+v);if(!L)continue;for(const i of L){const dx=Bt[2*i]-a[0],dy=Bt[2*i+1]-a[1],d=dx*dx+dy*dy;if(d<bd){bd=d;bi=i}}}if(bi>=0){pr.push([a,B[bi]]);se+=bd}}
+      if(pr.length<20)return null;frac=pr.length/P.length;rms=Math.sqrt(se/pr.length);
+      let mA=[0,0],mB=[0,0];pr.forEach(([a,b])=>{mA[0]+=a[0];mA[1]+=a[1];mB[0]+=b[0];mB[1]+=b[1]});mA=mA.map(v=>v/pr.length);mB=mB.map(v=>v/pr.length);
+      let sxx=0,sxy=0;pr.forEach(([a,b])=>{const px=b[0]-mB[0],py=b[1]-mB[1],qx=a[0]-mA[0],qy=a[1]-mA[1];sxx+=px*qx+py*qy;sxy+=px*qy-py*qx});th=lock!=null?lock:Math.atan2(sxy,sxx);const c2=Math.cos(th),s2=Math.sin(th);tx=mA[0]-s*(mB[0]*c2-mB[1]*s2);ty=mA[1]-s*(mB[0]*s2+mB[1]*c2)}
+    // an enlarged sheet shows part of the site: judge it on the CAD that falls inside the sheet
+    if(W&&H){const c=Math.cos(th),si=Math.sin(th);let inside=0;P.forEach(a=>{const dx=(a[0]-tx)/s,dy=(a[1]-ty)/s;const px=dx*c+dy*si,py=-dx*si+dy*c;if(px>=0&&py>=0&&px<=W&&py<=H)inside++});if(inside>20)frac=Math.min(1,frac*P.length/inside)}
+    // sheets in one set are turned the same way: a fit at another angle has to be clearly better to win
+    let off=0;if(prior&&prior.length){const d=Math.min(...prior.map(r=>{let x=Math.abs(th-r)%(2*Math.PI);return Math.min(x,2*Math.PI-x)}));if(d>2*Math.PI/180)off=0.25}
+    return {th,tx,ty,rms,frac,sc:frac-rms*0.05-off}};
+  let Aq=A;if(A.length>5000){const st=A.length/5000;Aq=[];for(let k=0;k<A.length;k+=st)Aq.push(A[Math.floor(k)])}
+  const quick=[];cand.slice(0,12).forEach(cd=>{const th0=cd.th;const r=icp(th0,ax+cd.dx-s*(Math.cos(th0)*bx-Math.sin(th0)*by),ay+cd.dy-s*(Math.sin(th0)*bx+Math.cos(th0)*by),Aq,0,10);if(r)quick.push(r)});
+  quick.sort((a,b)=>b.sc-a.sc);let best=null;quick.slice(0,2).forEach(q=>{const r=icp(q.th,q.tx,q.ty,A,8,25);if(r&&(!best||r.sc>best.sc))best=r});
+  if(!best)return null;let {th,tx,ty,rms,frac}=best;
+  // close to the way the other sheets sit: try it at exactly that turn, and keep that if it fits as well (it usually fits better at the edges)
+  let agree=false;if(prior&&prior.length){const near=prior.filter(r=>{let x=Math.abs(th-r)%(2*Math.PI);return Math.min(x,2*Math.PI-x)<1*Math.PI/180});if(near.length){agree=true;const m=Math.atan2(near.reduce((a,r)=>a+Math.sin(r),0),near.reduce((a,r)=>a+Math.cos(r),0));const r=icp(m,tx,ty,A,12,25,m);if(r&&r.rms<=rms+0.1&&r.frac>=frac-0.02)({th,tx,ty,rms,frac}=r)}}
+  return {s,rot:th,tx,ty,rms,frac,n:A.length,agree}}
 // one sheet: scale from its text (unless it already has one), then line it up with the CAD
 async function twAutoPlace(n,quiet){const R=twR();if(!R.pdf)return {ok:false,why:'no plans'};const cad=S.tw.items.filter(i=>i.page==null&&i.imp&&i.t!=='tin'&&i.pts&&i.pts.length>1);
-  if(!cad.length)return {ok:false,why:'Import the CAD first (Import under Surfaces); sheets line up to it.'};
-  let sh=S.tw.sheets[n];let scaleNote='';if(!sh||!sh.bar){const sc=await twReadScale(n);if(!sc)return {ok:false,why:`No scale found in sheet ${n}’s text. Set it with Scale.`};scaleNote=`1" = ${sc.ft}' from the sheet${sc.others.length?` (it also mentions ${sc.others.map(v=>v+"'").join(', ')}; details, probably)`:''}`;sh={...(sh||{}),bar:sc.ft/72}}
+  if(!cad.length&&!S.tw.items.some(i=>i.t==='tin'&&i.imp))return {ok:false,why:'Import the CAD first (Import under Surfaces); sheets line up to it.'};
+  let sh=S.tw.sheets[n];let scaleNote='';if(!sh||!sh.bar){const sc=await twReadScale(n);if(!sc)return {ok:false,why:`No scale found in sheet ${n}’s text. Set it with Scale.`};scaleNote=`1" = ${sc.ft}' from the sheet's ${sc.bar?'scale bar':'text'}${sc.others.length?` (it also mentions ${sc.others.map(v=>v+"'").join(', ')}; details, probably)`:''}`;sh={...(sh||{}),bar:sc.ft/72}}
   const s=sh.bar;const V=R.vec[n]||await twVectors(n);if(!V)return {ok:false,why:'Couldn’t read that sheet’s lines.'};
   // CAD that's linework (not the contours of a whole surface) matches best; cap it so big files stay quick
   let lines=cad.filter(i=>(twSurf(i.sid)||{}).kind!=='elev').map(i=>i.t==='area'?[...i.pts,i.pts[0]]:i.pts);if(lines.length<20)lines=cad.map(i=>i.t==='area'?[...i.pts,i.pts[0]]:i.pts);
+  // grading sheets show the contours: the imported TINs' index contours (every 5th) join the CAD to match against
+  S.tw.items.filter(i=>i.t==='tin'&&i.imp).forEach(it=>{const TL=twTinLines(it);const a=TL.maj;for(let k=0;k<a.length&&lines.length<60000;k+=4)lines.push([[a[k],a[k+1]],[a[k+2],a[k+3]]])});
   const pdfLines=V.paths.filter(p=>p.pts.length>1&&tkPolyLen(p.pts)*s>2).map(p=>p.pts);
-  const f=twMatch(lines,pdfLines,s);if(!f)return {ok:false,why:'Not enough linework to match.'};
-  const good=f.rms<1.5&&f.frac>0.6;if(!good)return {ok:false,why:`The sheet didn’t match the CAD well enough (${Math.round(f.frac*100)}% of the CAD found, ${fmtN(f.rms,2)} ft off). Line it up with alignment points instead.`,f};
+  const imP=R.imgs[n];const prior=Object.entries(S.tw.sheets).filter(([k,x])=>+k!==n&&x&&x.aligned&&x.rot!=null).map(([k,x])=>x.rot);const f=twMatch(lines,pdfLines,s,imP&&imP.w,imP&&imP.h,prior);if(!f)return {ok:false,why:'Not enough linework to match.'};
+  // turned the same way as sheets already placed: a bit more slack (enlarged sheets carry more text and hatching)
+  const good=f.frac>0.6&&(f.rms<1.5||f.agree&&f.frac>0.65&&f.rms<2.2);if(!good)return {ok:false,why:`The sheet didn’t match the CAD well enough (${Math.round(f.frac*100)}% of the CAD found, ${fmtN(f.rms,2)} ft off). Line it up with alignment points instead.`,f};
   const im=R.imgs[n];twSnap();const old=S.tw.sheets[n]?{...S.tw.sheets[n]}:null;S.tw.sheets[n]={...(old||{}),bar:s,s,rot:f.rot,tx:f.tx,ty:f.ty,scaled:true,aligned:true,auto:{rms:+f.rms.toFixed(2),frac:+f.frac.toFixed(2)},w:im?im.w:old&&old.w,h:im?im.h:old&&old.h};delete S.tw.sheets[n].ap;
   if(old&&old.scaled&&old.aligned)S.tw.items.forEach(it=>{if(it.page===n)it.pts=it.pts.map(p=>twP2W(S.tw.sheets[n],twW2P(old,p)))});
   twTouch();R.mv=null;twPanels();twDraw();return {ok:true,f,scaleNote,msg:`Sheet ${n} lined up with the CAD by itself: ${Math.round(f.frac*100)}% of the CAD linework found on it, ${fmtN(f.rms,2)} ft apart on average.${scaleNote?' Scale '+scaleNote+'.':''}`}}
@@ -9894,3 +9962,24 @@ function twAutoCard(){const R=twR();if(!R.pdf)return '';const n=S.tw.page;const 
   return `<div class="tw-card"><b>${sh&&sh.aligned?(sh.auto?`Sheet ${n} was lined up by itself`:`Sheet ${n} is lined up`):`Line sheet ${n} up with the CAD`}</b>${sh&&sh.auto?`<div class="small dim">${Math.round(sh.auto.frac*100)}% of the CAD found on it, ${sh.auto.rms} ft apart on average</div>`:''}
     <div class="adders"><button class="btn sm${sh&&sh.aligned?'':' primary'}" data-act="tw-auto"${R.autoBusy?' disabled':''}>${R.autoBusy===n?'Matching…':sh&&sh.aligned?'Match again':'Line it up automatically'}</button><button class="btn sm" data-act="tw-autoall" title="Every sheet that has a scale on it">All sheets</button></div>
     <p class="small dim" style="margin:0">Reads the scale off the sheet and matches its linework to the imported CAD.</p></div>`}
+
+// a TIN saved compactly: coordinates as 32-bit floats from a local origin (plenty: 0.001 ft over miles), triangles as 32-bit integers
+function twB64(buf){const b=new Uint8Array(buf);let s='';for(let i=0;i<b.length;i+=0x8000)s+=String.fromCharCode.apply(null,b.subarray(i,i+0x8000));return btoa(s)}
+function twUnB64(s){const bin=atob(s);const b=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)b[i]=bin.charCodeAt(i);return b.buffer}
+// squeezed with the browser's own deflate when it has one; triangles are stored as differences from the one before (small numbers pack tightly)
+async function twZip(buf,inv){if(typeof CompressionStream==='undefined')return null;const cs=inv?new DecompressionStream('deflate'):new CompressionStream('deflate');const out=await new Response(new Blob([buf]).stream().pipeThrough(cs)).arrayBuffer();return out}
+async function twPackTin(it){const n=it.pts.length;let x0=Infinity,y0=Infinity;it.pts.forEach(p=>{if(p[0]<x0)x0=p[0];if(p[1]<y0)y0=p[1]});const xy=new Float32Array(n*2),z=new Float32Array(n);
+  for(let i=0;i<n;i++){xy[i*2]=it.pts[i][0]-x0;xy[i*2+1]=it.pts[i][1]-y0;z[i]=it.zs[i]}const T=new Int32Array(it.tris.length);for(let i=0;i<T.length;i++)T[i]=it.tris[i]-(i?it.tris[i-1]:0);
+  const {pts,zs,tris,...rest}=it;const zxy=await twZip(xy.buffer).catch(()=>null),zz=await twZip(z.buffer).catch(()=>null),zt=await twZip(T.buffer).catch(()=>null);const gz=!!(zxy&&zz&&zt);
+  return {...rest,pk:{x0,y0,n,d:1,gz,xy:twB64(gz?zxy:xy.buffer),z:twB64(gz?zz:z.buffer),t:twB64(gz?zt:T.buffer)}}}
+async function twUnpackTin(it){const k=it.pk;const get=async s=>k.gz?await twZip(twUnB64(s),true):twUnB64(s);const xy=new Float32Array(await get(k.xy)),z=new Float32Array(await get(k.z));it.pts=[];it.zs=[];for(let i=0;i<k.n;i++){it.pts.push([+(xy[i*2]+k.x0).toFixed(3),+(xy[i*2+1]+k.y0).toFixed(3)]);it.zs.push(+z[i].toFixed(3))}
+  const T=new Int32Array(await get(k.t));const tr=new Array(T.length);let acc=0;for(let i=0;i<T.length;i++){acc=k.d?acc+T[i]:T[i];tr[i]=acc}it.tris=tr;delete it.pk}
+
+// two surfaces a section apart (finish grade and subgrade, from AGTEK, Civil 3D or drawn here): the gap between them, grouped by
+// depth, is the paving / pad takeoff: 6" over this much, 12" over that much…
+function twSurfSections(me){const el=S.tw.surfaces.filter(s=>s.kind==='elev');const sub=el.find(s=>/sub-?grade|(^|[^a-z])sg([^a-z]|$)/i.test(s.name));const fin=el.find(s=>s!==sub&&/design|prop|\bfg\b|final|finish/i.test(s.name));if(!sub||!fin)return null;
+  const ta=twTin(fin.id,me),tb=twTin(sub.id,me);if(!ta||!tb)return null;const ib=tinIndex(tb);const span=Math.max(ib.x1-ib.x0,ib.y1-ib.y0);const cell=Math.max(1,Math.sqrt((ib.x1-ib.x0)*(ib.y1-ib.y0)/400000));
+  const bins=new Map();let n=0;for(let y=ib.y0+cell/2;y<ib.y1;y+=cell)for(let x=ib.x0+cell/2;x<ib.x1;x+=cell){const zb=tinZ(tb,x,y);if(!isFinite(zb))continue;const za=tinZ(ta,x,y);if(!isFinite(za))continue;n++;const d=Math.round((za-zb)*12*2)/2;bins.set(d,(bins.get(d)||0)+1)}
+  if(!n)return null;const A=cell*cell;const peaks=[...bins.entries()].filter(([d])=>d>=1).sort((a,b)=>b[1]-a[1]);const rows=[];
+  peaks.forEach(([d,c])=>{if(c<n*0.002)return;if(rows.some(r=>Math.abs(r.d-d)<=1))return;let sf=0,cy=0;bins.forEach((cc,dd)=>{if(Math.abs(dd-d)<=1){sf+=cc*A;cy+=cc*A*dd/12/27}});rows.push({d,in:+d.toFixed(1),sf:+sf.toFixed(0),cy:+cy.toFixed(1)})});
+  rows.sort((a,b)=>a.d-b.d);void span;return {a:fin.name,b:sub.name,cell:+cell.toFixed(2),rows}}
