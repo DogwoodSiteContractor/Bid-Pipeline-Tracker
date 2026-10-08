@@ -9292,7 +9292,9 @@ function cadParseDxf(text){const lines=text.split(/\r?\n/);const C=[],V=[];for(l
     if(t==='ARC'||t==='CIRCLE'){const f=flip(g)?-1:1;const cx=f*gn(g,10,0),cy=gn(g,20,0),z=gn(g,30,0),r=gn(g,40,0);let a0=t==='CIRCLE'?0:gn(g,50,0)*Math.PI/180,a1=t==='CIRCLE'?Math.PI*2:gn(g,51,0)*Math.PI/180;if(f<0){const x=a0;a0=Math.PI-a1;a1=Math.PI-x}
       if(r>0)cadLayer(map,lay).pls.push({pts:cadArc(cx,cy,z,r,a0,a1,[]),closed:t==='CIRCLE'});i=j;continue}
     if(t==='SPLINE'){const fit=[],ctl=[];let cf=null,cc=null;g.forEach(([c,v])=>{if(c===11){cf=[+v,0,0];fit.push(cf)}else if(c===21&&cf)cf[1]=+v;else if(c===31&&cf)cf[2]=+v;else if(c===10){cc=[+v,0,0];ctl.push(cc)}else if(c===20&&cc)cc[1]=+v;else if(c===30&&cc)cc[2]=+v});const pts=fit.length>1?fit:ctl;if(pts.length>1)cadLayer(map,lay).pls.push({pts,closed:(gn(g,70,0)&1)===1});i=j;continue}
-    if(t==='INSERT'){info.inserts++;i=j;continue}
+    if(t==='INSERT'){const nm=gv(g,2,'');if(!nm||nm[0]==='*'){info.inserts++;i=j;continue}const f=flip(g)?-1:1;const p=[f*gn(g,10,0),gn(g,20,0),gn(g,30,0)];
+      if(p[2])cadLayer(map,lay).pts.push(p);else{const L=cadLayer(map,lay+' · '+nm);L.blk=nm;L.pts.push(p)}i=j;continue}
+    if(t==='ACAD_PROXY_ENTITY'||/^AECC/.test(t)){info.proxy=info.proxy||{};info.proxy[lay]=(info.proxy[lay]||0)+1;i=j;continue}
     info.skipped[t]=(info.skipped[t]||0)+1;i=j}
   // 3D faces share corners: merge them so the TIN is connected
   map.forEach(L=>{if(L.tin)L.tin=cadWeld(L.tin)});
@@ -9327,10 +9329,10 @@ function cadParsePts(text,fmt){const rows=text.split(/\r?\n/).map(l=>l.trim()).f
 function cadStats(L){let cz=0,vz=0,flat=0,closed=0,z0=Infinity,z1=-Infinity;L.pls.forEach(p=>{const zs=p.pts.map(q=>q[2]);const mn=Math.min(...zs),mx=Math.max(...zs);if(p.closed)closed++;if(mx===0&&mn===0)flat++;else{if(mx-mn<1e-6)cz++;else vz++;z0=Math.min(z0,mn);z1=Math.max(z1,mx)}});
   const pz=L.pts.filter(p=>p[2]);pz.forEach(p=>{z0=Math.min(z0,p[2]);z1=Math.max(z1,p[2])});if(L.tin)L.tin.v.forEach(p=>{z0=Math.min(z0,p[2]);z1=Math.max(z1,p[2])});
   return {cz,vz,flat,closed,pz:pz.length,pts:L.pts.length,tri:L.tin?L.tin.t.length/3:0,tv:L.tin?L.tin.v.length:0,z0,z1,hasZ:isFinite(z0)}}
-function cadDesc(L){const s=L.st;const out=[];if(s.tri)out.push(`TIN ${fmtN(s.tri,0)} triangles`);if(s.cz)out.push(`${fmtN(s.cz,0)} contour${s.cz===1?'':'s'}`);if(s.vz)out.push(`${fmtN(s.vz,0)} 3D line${s.vz===1?'':'s'}`);if(s.flat)out.push(`${fmtN(s.flat,0)} flat line${s.flat===1?'':'s'}${s.closed?` (${s.closed} closed)`:''}`);if(s.pts)out.push(`${fmtN(s.pts,0)} point${s.pts===1?'':'s'}`);
+function cadDesc(L){const s=L.st;const out=[];if(s.tri)out.push(`TIN ${fmtN(s.tri,0)} triangles`);if(s.cz)out.push(`${fmtN(s.cz,0)} contour${s.cz===1?'':'s'}`);if(s.vz)out.push(`${fmtN(s.vz,0)} 3D line${s.vz===1?'':'s'}`);if(s.flat)out.push(`${fmtN(s.flat,0)} flat line${s.flat===1?'':'s'}${s.closed?` (${s.closed} closed)`:''}`);if(s.pts)out.push(L.blk?`${fmtN(s.pts,0)} × ${L.blk} block`:`${fmtN(s.pts,0)} point${s.pts===1?'':'s'}`);
   return out.join(' · ')+(s.hasZ?` · elev ${fmtN(s.z0,1)}–${fmtN(s.z1,1)}`:'')}
 function cadSuggest(L){const s=L.st;const nm=L.name.toLowerCase();const el=S.tw.surfaces.filter(x=>x.kind==='elev');const ex=el.find(x=>/exist|^eg|topo|^og/i.test(x.name)),ds=el.find(x=>/design|prop|^fg|final|finish/i.test(x.name));
-  const isEx=/(^|[^a-z])(ex|eg|og|exist|topo|survey)/.test(nm),isDs=/(prop|^fg|[^a-z]fg|des|fin|grad|^p-|-p-|pr-)/.test(nm);
+  const isEx=/(^|[^a-z])(ex|eg|og|exist|topo|survey)/.test(nm)||/^[-_ ]?X[A-Z]/.test(L.name),isDs=/(prop|^fg|[^a-z]fg|des|fin|grad|^p-|-p-|pr-)/.test(nm);
   if(s.tri||s.cz||s.vz||(s.pz&&s.pz>=s.pts*0.8)){if(isEx&&!isDs)return ex?ex.id:'new:elev';if(isDs)return ds?ds.id:'new:elev';return s.tri?'new:elev':'skip'}
   return 'skip'}
 
@@ -9356,7 +9358,7 @@ function cadModal(){const x=M;const P=x.P;const el=S.tw.surfaces;const f=x.place
   const opts=v=>`<option value="skip"${v==='skip'?' selected':''}>Skip</option><optgroup label="Surfaces">${el.map(s=>`<option value="${s.id}"${v===s.id?' selected':''}>${esc(s.name)} (${TW_KINDS[s.kind][0].toLowerCase()})</option>`).join('')}</optgroup><optgroup label="New surface named after the layer">${['elev','take','util'].map(k=>`<option value="new:${k}"${v==='new:'+k?' selected':''}>New ${TW_KINDS[k][0].toLowerCase()} surface</option>`).join('')}</optgroup>`;
   const anyPlaced=Object.values(S.tw.sheets).some(s=>s.scaled&&s.aligned);
   return mhead('Import CAD, LandXML or points',`${x.name} · ${P.layers.length} layer${P.layers.length===1?'':'s'}${P.info.inserts?` · ${P.info.inserts} block inserts left out`:''}`)+`<div class="mbody"><div class="twc">
-    <div class="twc-l">
+    <div class="twc-l">${cadProxyNote(P)}
       <div class="twc-row"><input class="field sm" data-twcfilter placeholder="Find a layer…" value="${esc(x.filter)}" style="flex:1"><label class="small">Units <select class="field sm" data-twcu>${Object.entries(CAD_UNITS).map(([k,[l]])=>`<option value="${k}"${x.units===k?' selected':''}>${l}</option>`).join('')}</select></label>${P.fmt?`<label class="small">Columns <select class="field sm" data-twcfmt>${['PNEZD','PENZD','PNEZ','PENZ','NEZ','ENZ','NEZD','ENZD'].map(k=>`<option${P.fmt===k?' selected':''}>${k}</option>`).join('')}</select></label>`:''}</div>
       <div class="twc-lay">${shown.map(L=>`<div class="twc-ly${x.to[L.name]==='skip'?' off':''}"><span class="tw-sw" style="background:${L.color}"></span><div class="twc-ln"><b title="${esc(L.name)}">${esc(L.name)}</b><small>${esc(cadDesc(L))}</small></div><select class="field sm" data-twct="${esc(L.name)}">${opts(x.to[L.name])}</select></div>`).join('')||'<p class="small dim">No layer matches.</p>'}</div>
       <p class="small dim" style="margin:4px 0">Layers with elevations are listed first and sent to Existing or Design by their names (EX-, EG, TOPO → Existing; PROP, FG, GRAD → Design). Contours keep their elevation; 3D lines and TINs keep theirs at every point. Lines without elevations can go to a takeoff or utility surface.</p>
@@ -9371,8 +9373,11 @@ function cadModal(){const x=M;const P=x.P;const el=S.tw.surfaces;const f=x.place
     <div class="twc-r"><canvas id="twc-cv"></canvas><div class="twc-hint small">${x.pick?'Click the alignment point':'Scroll to zoom, drag to move'}</div></div></div></div>
     <div class="mfoot"><div class="small dim">${used.length} layer${used.length===1?'':'s'} → ${fmtN(nItems,0)} item${nItems===1?'':'s'}</div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="tw-cadgo"${used.length&&cadXf()?'':' disabled'}>Import</button></div></div>`}
 function cadDrawSoon(){requestAnimationFrame(cadDraw)}
-function cadFitView(c){const P=M.P;let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;const see=p=>{if(p[0]<x0)x0=p[0];if(p[0]>x1)x1=p[0];if(p[1]<y0)y0=p[1];if(p[1]>y1)y1=p[1]};
-  P.layers.forEach(L=>{L.pls.forEach(pl=>pl.pts.forEach(see));L.pts.forEach(see);if(L.tin)L.tin.v.forEach(see)});const W=c.clientWidth,H=c.clientHeight;const z=Math.min(W/Math.max(1,x1-x0),H/Math.max(1,y1-y0))*0.92;M.v={z,ox:W/2-(x0+x1)/2*z,oy:H/2+(y0+y1)/2*z}}
+function cadFitView(c){const P=M.P;const xs=[],ys=[];let n=0;P.layers.forEach(L=>{n+=L.pts.length+(L.tin?L.tin.v.length:0);L.pls.forEach(pl=>n+=pl.pts.length)});const every=Math.max(1,Math.floor(n/40000));let k=0;
+  const see=p=>{if((k++)%every)return;xs.push(p[0]);ys.push(p[1])};P.layers.forEach(L=>{L.pls.forEach(pl=>pl.pts.forEach(see));L.pts.forEach(see);if(L.tin)L.tin.v.forEach(see)});
+  // frame the bulk of the drawing: a title block or a stray block far away shouldn't shrink the site to a dot
+  xs.sort((a,b)=>a-b);ys.sort((a,b)=>a-b);const q=(a,f)=>a[Math.min(a.length-1,Math.max(0,Math.floor(a.length*f)))]||0;let x0=q(xs,0.01),x1=q(xs,0.99),y0=q(ys,0.01),y1=q(ys,0.99);const px=(x1-x0)*0.08,py=(y1-y0)*0.08;x0-=px;x1+=px;y0-=py;y1+=py;
+  const W=c.clientWidth,H=c.clientHeight;const z=Math.min(W/Math.max(1,x1-x0),H/Math.max(1,y1-y0))*0.92;M.v={z,ox:W/2-(x0+x1)/2*z,oy:H/2+(y0+y1)/2*z}}
 function cadDraw(){const c=document.getElementById('twc-cv');if(!c||!M||M.kind!=='twcad')return;const dpr=twSize(c);const ctx=c.getContext('2d');const K=twColors();ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=K.bg;ctx.fillRect(0,0,c.width,c.height);ctx.setTransform(dpr,0,0,dpr,0,0);
   if(!M.v)cadFitView(c);const v=M.v;const S2=p=>[v.ox+p[0]*v.z,v.oy-p[1]*v.z];
   M.P.layers.forEach(L=>{const on=M.to[L.name]!=='skip';ctx.strokeStyle=on?L.color:'#c9c9c4';ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=on?1.2:0.7;ctx.globalAlpha=on?1:0.6;ctx.beginPath();
@@ -9405,7 +9410,7 @@ function cadImport(){const x=M;const X=cadXf();if(!X)return;const u=cadU();const
     const push=it=>{it.id=newId();it.sid=s.id;it.page=null;it.imp=imp.id;S.tw.items.push(it);nItems++};const P2=p=>{const w=X(p);return [r2(w[0]),r2(w[1])]};
     if(s.kind==='elev'){
       L.pls.forEach(pl=>{const zs=pl.pts.map(p=>p[2]);const mn=Math.min(...zs),mx=Math.max(...zs);if(mx===0&&mn===0){const fp=cadSimplify(pl.pts.map(p=>[...P2(p),0]),0.05).map(p=>[p[0],p[1]]);if(pl.closed&&fp.length>2)fp.push(fp[0]);if(fp.length>1)push({t:'contour',pts:fp,em:'anno'});return}const pts=cadSimplify(pl.pts.map(p=>[...P2(p),r3(p[2]*u)]),0.05);const cl=pl.closed?[pts[0]]:[];
-        if(mx-mn<1e-6)push({t:'contour',pts:[...pts,...cl].map(p=>[p[0],p[1]]),z:r3(mn*u)});else{const all=[...pts,...cl];push({t:'contour',pts:all.map(p=>[p[0],p[1]]),zs:all.map(p=>p[2]),z:all[0][2]})}});
+        if(mn===0&&mx>0){push({t:'contour',pts:[...pts,...cl].map(p=>[p[0],p[1]]),em:'anno'});left++;return}if(mx-mn<1e-6)push({t:'contour',pts:[...pts,...cl].map(p=>[p[0],p[1]]),z:r3(mn*u)});else{const all=[...pts,...cl];push({t:'contour',pts:all.map(p=>[p[0],p[1]]),zs:all.map(p=>p[2]),z:all[0][2]})}});
       L.pts.forEach(p=>{if(!p[2]){left++;return}push({t:'spot',pts:[P2(p)],z:r3(p[2]*u)})});
       if(L.tin&&L.tin.t.length)push({t:'tin',name:L.name,pts:L.tin.v.map(P2),zs:L.tin.v.map(p=>r3(p[2]*u)),tris:L.tin.t.slice()})}
     else{L.pls.forEach(pl=>{const pts=cadSimplify(pl.pts.map(p=>[...P2(p),0]),0.05).map(p=>[p[0],p[1]]);if(pts.length<2)return;push({t:pl.closed&&pts.length>2&&s.kind!=='util'?'area':'line',pts})});L.pts.forEach(p=>push({t:'count',pts:[P2(p)]}));if(L.tin)left++}});
@@ -9731,3 +9736,8 @@ function twEditMarks(ctx,f){const R=twR();if(R.tool!=='edit')return;const m=R.em
   else if(m==='join'){const it2=h.it;const e0=it2.pts[0],e1=it2.pts[it2.pts.length-1];const end=Math.hypot(e0[0]-h.w[0],e0[1]-h.w[1])<=Math.hypot(e1[0]-h.w[0],e1[1]-h.w[1])?e0:e1;const q=f(end);ctx.strokeStyle='#2e9e5b';ctx.beginPath();ctx.arc(q[0],q[1],8,0,7);ctx.stroke()}
   ctx.restore()}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!S.tw)return;if(t.dataset.act==='tw-emode'){const R=twR();R.emode=t.dataset.v;R.emv=null;R.ejoin=null;twPanels();twDraw()}});
+
+// Civil 3D objects (surfaces, feature lines, pipe networks, alignments) travel in a DXF as proxies nobody else can read
+function cadProxyNote(P){const px=P.info&&P.info.proxy;if(!px)return '';const tot=Object.values(px).reduce((a,b)=>a+b,0);const top=Object.entries(px).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  return `<div class="notice twc-px"><b>${fmtN(tot,0)} Civil 3D object${tot===1?'':'s'} can’t be read from a DXF</b> (surfaces, feature lines, pipe networks, alignments), on ${top.map(([l,n])=>`${esc(l)} (${n})`).join(', ')}${Object.keys(px).length>6?'…':''}.
+    <div class="small">To bring them in: export the surfaces from Civil 3D as <b>LandXML</b> (Output → Export to LandXML) and import that file here too. For feature lines and pipes, use <b>Export → Export to AutoCAD</b> in Civil 3D, which turns them into plain 3D lines, and save that as the DXF. Or pick them off the plan sheets.</div></div>`}
