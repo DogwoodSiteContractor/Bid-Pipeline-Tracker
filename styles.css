@@ -1822,3 +1822,14 @@ tr.eo-sec.eo-drop>td{box-shadow:inset 0 0 0 2px var(--accent)}
 .tw-secn{flex:1;min-width:0;display:flex;flex-direction:column}
 .tw-secn small{color:var(--ink-3);font-size:11px}
 .tw-secr input{width:58px}
+.tw-types{display:grid;gap:5px}
+.tw-type{display:grid;grid-template-columns:22px minmax(0,1fr) auto;align-items:center;gap:4px 6px;padding:5px 6px;border:1px solid var(--line);border-radius:8px;cursor:pointer}
+.tw-type.on{border-color:var(--ink);box-shadow:0 0 0 1px var(--ink) inset}
+.tw-tsw{width:22px;height:22px;border:0;padding:0;background:none;cursor:pointer}
+.tw-type .tw-tname{width:100%;min-width:0}
+.tw-tsub{grid-column:2/4;display:flex;align-items:center;justify-content:space-between;gap:6px;font-size:12px;color:var(--ink-3)}
+.tw-tsub label{display:flex;align-items:center;gap:4px;flex-direction:row}
+.tw-tsub input.num{width:50px;min-width:0}
+.tw-tsub small{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tw-ton{display:flex;align-items:center;justify-content:space-between;gap:6px}
+.tw-ton select{max-width:150px}
