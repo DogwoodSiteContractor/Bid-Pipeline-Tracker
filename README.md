@@ -681,6 +681,16 @@ Sloped and conformed lines are 3D breaklines: the surface, cut / fill and the 3D
 - **Imported files** are listed in the left panel with how many items each brought in; × (twice) takes everything from that file back out.
 - Big TINs make the takeoff bigger to save; you'll get a note if it's getting large.
 
+**Civil 3D drawings (DXF).** Civil 3D surfaces, pipe networks, feature lines and labels can't travel in a DXF as objects, but each one carries a copy of how it was drawn, and the import reads those:
+- **Surface:** its contours, with elevations (as long as the surface style shows contours).
+- **Spot elevation labels:** a spot elevation at the label's point (TC/BC, TW/BW, FFE…).
+- **Pipe networks:** pipe runs, ready on a utility surface: structure names and types (J.B., D.I., S.S.M.H., C.O., A.D., G.T.…), rims and inverts from the structure labels, pipe size and material from the pipe labels, runs chained through structures, storm vs sanitary from the layer. Existing ("EX.") pipes come in on their own layer (skipped by default) and existing structures aren't counted as new work. Only inverts written on the structures are used; a pipe missing one says so on its profile.
+- **Feature lines, gradings and other drawn objects:** 3D lines.
+- **Two grounds in one file:** when layers headed for the same elevation surface don't agree (a 2007 survey TIN and the engineer's existing contours, say), the contours drawn on the plans stay on the surface and the others move to a surface of their own (e.g. "Existing (survey)"), with the difference shown, so cut / fill uses one ground.
+On the AC Marriott Alpharetta DXF this gives the finished-grade contours, 224 spot elevations, 39 storm and sewer runs, and cut / fill of 1,441 / 173 CY against the engineer's 1,260 / 143 (our area is ~6% bigger), with no hand work.
+
+**Sheets line themselves up.** With CAD imported, the plan card has **Line it up automatically** (one sheet) and **All sheets**: the scale is read off the sheet (1" = 20', or Civil 3D's 1:20) and the sheet's linework is matched to the CAD, turned and shifted until it fits. It's only placed when the match is clearly good (most of the CAD found on it, within about a foot); detail sheets are left alone. Without CAD, **Read the scale off the sheet** sets the scale.
+
 **Pipe runs (utility surfaces).** Make a surface of kind **Utility** (Storm, Sanitary, Water…), pick the **⦿ Pipe** tool (key U) and click each structure along the run, on the plan or the model; Enter or double-click finishes. Clicking an existing structure connects to it, and a structure with the same name on two runs counts once. A line picked from the plan on a utility surface has **Make it a pipe run** on its card (its ends become structures, the corners bends).
 - **The profile panel** opens under the model and plan whenever a run is selected (and while you draw one, showing the ground as you go). Drag its top edge to resize it.
 - **The table:** each structure's name, type, rim, invert in and invert out, then each pipe's size, material, length and slope. Blank rim = the ground surface at that spot. Blank invert out = same as in. Type a slope and the next invert is filled in. Enter moves down the column. Changing a structure's rim or type changes it on every run that shares it.

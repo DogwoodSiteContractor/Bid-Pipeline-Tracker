@@ -8774,7 +8774,7 @@ function twPlanSideHtml(){const R=twR();const n=S.tw.page;const V=R.vec[n];const
     <p class="small">Or click both ends of the bar scale (or any known distance) and type it. Use the bar if the sheet was printed smaller than full size. Every sheet keeps its own scale.</p></div>`}
   else if(!sh||!sh.scaled)card=R.pdf?`<div class="tw-card"><b>Sheet ${n} isn’t placed yet</b><p class="small">${S.tw.apts.length>=2?'Line it up with <button class="linkbtn" data-act="tw-tool" data-v="align">Align sheet</button>.':'Start with <button class="linkbtn" data-act="tw-tool" data-v="scale">Scale</button> on your first sheet; it sets the job’s coordinates.'}</p></div>`:'';
   else if(!sh.aligned)card=`<div class="tw-card"><b>Sheet ${n} has a scale but isn’t lined up</b><p class="small">${S.tw.apts.length>=2?'<button class="linkbtn" data-act="tw-tool" data-v="align">Align sheet</button> to the alignment points, or ':''}<button class="linkbtn" data-act="tw-mkref">make this the reference sheet</button>${S.tw.apts.length>=2?'':' (there aren’t two alignment points to line it up with)'}.</p></div>`;
-  return card+(R.lastPane==='model'?'':twAskHtml())}
+  return (['align','scale','pick'].includes(R.tool)?'':twAutoCard())+card+(R.lastPane==='model'?'':twAskHtml())}
 function twItemCard(){const R=twR();const it=S.tw.items.find(x=>x.id===R.selItem);if(!it)return '';if(it.t==='pipe')return twPipeCard(it);const s=twSurf(it.sid);const ro=twRo();
   return `<div class="tw-card tw-item"><div class="tw-ih"><b>${esc({contour:it.em==='anno'||it.zs?'Line':'Contour',spot:'Spot elevation',line:'Line',area:'Area',count:'Count'}[it.t])}</b><button class="x" data-act="tw-desel" aria-label="Close">×</button></div>
     <div class="small dim">${esc(twItemText(it))}</div>
@@ -9230,7 +9230,7 @@ function twPipeQty(s,add){const runs=S.tw.items.filter(i=>i.sid===s.id&&i.t==='p
   const pipe=new Map(),dp=new Map(),str=new Map(),seen=new Set(),ex=new Map(),stn=new Map(),unk=new Map();const bump=(m,k,o,q)=>{const e=m.get(k);if(e)e.q+=q;else m.set(k,{...o,q})};
   runs.forEach(it=>{const C=twPipeCalc(it);const sys=it.sys||'Storm Drain';
     C.segs.forEach(sg=>{const nm=`${sg.d?sg.d+'" ':''}${sg.m||'Pipe'}`;bump(pipe,sys+'|'+nm,{sys,nm},sg.L);sg.br.forEach((lf,bi)=>{if(bi>0&&lf>0)bump(dp,sys+'|'+bi,{sys,b:C.B[bi]},lf)});bump(ex,sys,{sys},sg.exc);bump(stn,sys,{sys},sg.stone);if(sg.unk>0)bump(unk,sys+'|'+nm,{},sg.unk)});
-    C.nodes.forEach((nd,i)=>{if(twNoStr(nd.k))return;const key=String(nd.n||'').trim().toLowerCase()||(it.id+'#'+i);if(seen.has(key))return;seen.add(key);let nm=nd.k;
+    C.nodes.forEach((nd,i)=>{if(twNoStr(nd.k)||/^\s*EX[.\s]/i.test(nd.n||''))return;const key=String(nd.n||'').trim().toLowerCase()||(it.id+'#'+i);if(seen.has(key))return;seen.add(key);let nm=nd.k;
       if(/end section|headwall/i.test(nm)){const sg=C.segs[i]||C.segs[i-1];if(sg&&sg.d)nm=`${sg.d}" ${nm}`}bump(str,sys+'|'+nm,{sys,nm,vf:0},1);const e=str.get(sys+'|'+nm);if(nd.depth!=null)e.vf+=nd.depth})});
   pipe.forEach((o,k)=>{const u=(unk.get(k)||{}).q||0;add(g,o.nm+tag(o.sys),o.q,'LF','twp|'+normH(o.sys)+'|'+normH(o.nm),u>0.5?`${fmtN(u,0)} LF without a depth`:'',{cls:o.sys,fz:1})});
   [...dp.values()].sort((a,b)=>a.b.lo-b.b.lo).forEach(o=>add(g,`Depth premium ${o.b.lab} ft${tag(o.sys)}`,o.q,'LF','dp|'+normH(o.sys)+'|'+o.b.dg,'',{cls:o.sys,dp:o.b.dg}));
@@ -9264,6 +9264,9 @@ function cadBulge(p,q,b,out){const th=4*Math.atan(b);const dx=q[0]-p[0],dy=q[1]-
 function cadParseDxf(text){const lines=text.split(/\r?\n/);const C=[],V=[];for(let i=0;i+1<lines.length;i+=2){C.push(parseInt(lines[i],10));V.push(lines[i+1].trim())}
   const map=new Map();let units='ft';const info={inserts:0,skipped:{}};
   const hu=V.findIndex((v,i)=>C[i]===9&&v==='$INSUNITS');if(hu>=0){const u=+V[hu+1];units={1:'in',2:'ft',4:'mm',6:'m',10:'yd',21:'usft'}[u]||'ft'}
+  // class names, for the Civil 3D objects (ACAD_PROXY_ENTITY points at them by number)
+  const classes=[];{let sec=null;for(let q=0;q<C.length;q++){if(C[q]===0&&V[q]==='SECTION'){sec=V[q+1];if(sec==='ENTITIES')break}else if(sec==='CLASSES'&&C[q]===0&&V[q]==='CLASS'){let r=q+1;while(r<C.length&&C[r]!==0){if(C[r]===1){classes.push(V[r]);break}r++}}}}
+  const prox=[];
   // only the ENTITIES section (blocks are left out; their inserts are counted)
   let i=0;const n=C.length;let inEnt=false;
   const grab=k=>{const g=[];let j=k+1;while(j<n&&C[j]!==0){g.push([C[j],V[j]]);j++}return [g,j]};
@@ -9294,8 +9297,11 @@ function cadParseDxf(text){const lines=text.split(/\r?\n/);const C=[],V=[];for(l
     if(t==='SPLINE'){const fit=[],ctl=[];let cf=null,cc=null;g.forEach(([c,v])=>{if(c===11){cf=[+v,0,0];fit.push(cf)}else if(c===21&&cf)cf[1]=+v;else if(c===31&&cf)cf[2]=+v;else if(c===10){cc=[+v,0,0];ctl.push(cc)}else if(c===20&&cc)cc[1]=+v;else if(c===30&&cc)cc[2]=+v});const pts=fit.length>1?fit:ctl;if(pts.length>1)cadLayer(map,lay).pls.push({pts,closed:(gn(g,70,0)&1)===1});i=j;continue}
     if(t==='INSERT'){const nm=gv(g,2,'');if(!nm||nm[0]==='*'){info.inserts++;i=j;continue}const f=flip(g)?-1:1;const p=[f*gn(g,10,0),gn(g,20,0),gn(g,30,0)];
       if(p[2])cadLayer(map,lay).pts.push(p);else{const L=cadLayer(map,lay+' · '+nm);L.blk=nm;L.pts.push(p)}i=j;continue}
-    if(t==='ACAD_PROXY_ENTITY'||/^AECC/.test(t)){info.proxy=info.proxy||{};info.proxy[lay]=(info.proxy[lay]||0)+1;i=j;continue}
+    if(t==='ACAD_PROXY_ENTITY'){let size=0,on=false;const ch=[];let cid=null;for(const [c,v] of g){if(c===91&&cid==null)cid=+v;else if(c===92){size=+v;on=true}else if(c===93)on=false;else if(c===310&&on)ch.push(v)}
+      let gfx={pls:[],tx:[],circ:[]};if(size&&ch.length){try{gfx=cadProxyGfx(cadHex(ch).subarray(0,size))}catch(e){}}prox.push({cls:classes[cid-500]||String(cid),lay,g:gfx,i:prox.length});i=j;continue}
+    if(/^AECC/.test(t)){prox.push({cls:t,lay,g:{pls:[],tx:[],circ:[]},i:prox.length});i=j;continue}
     info.skipped[t]=(info.skipped[t]||0)+1;i=j}
+  if(prox.length)cadProxyBuild(map,prox,info);
   // 3D faces share corners: merge them so the TIN is connected
   map.forEach(L=>{if(L.tin)L.tin=cadWeld(L.tin)});
   return {layers:[...map.values()],units,info}}
@@ -9329,10 +9335,11 @@ function cadParsePts(text,fmt){const rows=text.split(/\r?\n/).map(l=>l.trim()).f
 function cadStats(L){let cz=0,vz=0,flat=0,closed=0,z0=Infinity,z1=-Infinity;L.pls.forEach(p=>{const zs=p.pts.map(q=>q[2]);const mn=Math.min(...zs),mx=Math.max(...zs);if(p.closed)closed++;if(mx===0&&mn===0)flat++;else{if(mx-mn<1e-6)cz++;else vz++;z0=Math.min(z0,mn);z1=Math.max(z1,mx)}});
   const pz=L.pts.filter(p=>p[2]);pz.forEach(p=>{z0=Math.min(z0,p[2]);z1=Math.max(z1,p[2])});if(L.tin)L.tin.v.forEach(p=>{z0=Math.min(z0,p[2]);z1=Math.max(z1,p[2])});
   return {cz,vz,flat,closed,pz:pz.length,pts:L.pts.length,tri:L.tin?L.tin.t.length/3:0,tv:L.tin?L.tin.v.length:0,z0,z1,hasZ:isFinite(z0)}}
-function cadDesc(L){const s=L.st;const out=[];if(s.tri)out.push(`TIN ${fmtN(s.tri,0)} triangles`);if(s.cz)out.push(`${fmtN(s.cz,0)} contour${s.cz===1?'':'s'}`);if(s.vz)out.push(`${fmtN(s.vz,0)} 3D line${s.vz===1?'':'s'}`);if(s.flat)out.push(`${fmtN(s.flat,0)} flat line${s.flat===1?'':'s'}${s.closed?` (${s.closed} closed)`:''}`);if(s.pts)out.push(L.blk?`${fmtN(s.pts,0)} × ${L.blk} block`:`${fmtN(s.pts,0)} point${s.pts===1?'':'s'}`);
-  return out.join(' · ')+(s.hasZ?` · elev ${fmtN(s.z0,1)}–${fmtN(s.z1,1)}`:'')}
-function cadSuggest(L){const s=L.st;const nm=L.name.toLowerCase();const el=S.tw.surfaces.filter(x=>x.kind==='elev');const ex=el.find(x=>/exist|^eg|topo|^og/i.test(x.name)),ds=el.find(x=>/design|prop|^fg|final|finish/i.test(x.name));
+function cadDesc(L){const s=L.st;const out=[];if(L.runs){const np=L.runs.reduce((a,r)=>a+r.segs.length,0);const ns=new Set(L.runs.flatMap(r=>r.nodes.map(n=>n.n).filter(Boolean))).size;out.push(`${L.runs.length} pipe run${L.runs.length===1?'':'s'} · ${np} pipe${np===1?'':'s'} · ${ns} structure${ns===1?'':'s'} (${L.sys}${L.ex?', existing':''})`)}if(L.c3d==='surface')out.push('Civil 3D surface:');if(L.c3d==='spot')out.push('Civil 3D spot labels:');if(L.c3d==='lines')out.push('Civil 3D:');if(s.tri)out.push(`TIN ${fmtN(s.tri,0)} triangles`);if(s.cz)out.push(`${fmtN(s.cz,0)} contour${s.cz===1?'':'s'}`);if(s.vz)out.push(`${fmtN(s.vz,0)} 3D line${s.vz===1?'':'s'}`);if(s.flat)out.push(`${fmtN(s.flat,0)} flat line${s.flat===1?'':'s'}${s.closed?` (${s.closed} closed)`:''}`);if(s.pts)out.push(L.blk?`${fmtN(s.pts,0)} × ${L.blk} block`:`${fmtN(s.pts,0)} point${s.pts===1?'':'s'}`);
+  return out.join(' · ')+(s.hasZ?` · elev ${fmtN(s.z0,1)}–${fmtN(s.z1,1)}`:'')+(L.warn?` · ⚠ ${L.warn}`:'')}
+function cadSuggest(L){const s=L.st;const nm=L.name.toLowerCase();if(L.runs){if(L.ex)return 'skip';const u=S.tw.surfaces.find(x=>x.kind==='util'&&cadSysOf(x.name)===L.sys&&(L.sys!=='Storm Drain'||/storm|drain|sd/i.test(x.name)));return u?u.id:'new:util'}const el=S.tw.surfaces.filter(x=>x.kind==='elev');const ex=el.find(x=>/exist|^eg|topo|^og/i.test(x.name)),ds=el.find(x=>/design|prop|^fg|final|finish/i.test(x.name));
   const isEx=/(^|[^a-z])(ex|eg|og|exist|topo|survey)/.test(nm)||/^[-_ ]?X[A-Z]/.test(L.name),isDs=/(prop|^fg|[^a-z]fg|des|fin|grad|^p-|-p-|pr-)/.test(nm);
+  if(L.c3d==='surface'||L.c3d==='spot'||L.c3d==='lines'){if(isEx&&!isDs&&!/prgr/.test(nm))return ex?ex.id:'new:elev';return ds?ds.id:'new:elev'}
   if(s.tri||s.cz||s.vz||(s.pz&&s.pz>=s.pts*0.8)){if(isEx&&!isDs)return ex?ex.id:'new:elev';if(isDs)return ds?ds.id:'new:elev';return s.tri?'new:elev':'skip'}
   return 'skip'}
 
@@ -9341,9 +9348,9 @@ async function cadOpenFile(file){const nm=file.name;const ext=(nm.split('.').pop
   if(ext==='dwg'){toast('DWG files can’t be read in the browser. In AutoCAD or Civil 3D, Save As → DXF (any version), or export the surfaces as LandXML, then import that.');return}
   toast('Reading '+nm+'…');let P;try{const text=await file.text();P=ext==='xml'||ext==='landxml'||/^\s*<\?xml|<LandXML/i.test(text.slice(0,400))?cadParseXml(text):ext==='dxf'||/^\s*0\s*\r?\nSECTION/.test(text.slice(0,40))?cadParseDxf(text):cadParsePts(text);P.raw=P.fmt?text:null}catch(e){toast(errMsg(e));return}
   cadPrep(P,nm)}
-function cadPrep(P,nm){P.layers.forEach((L,i)=>{L.st=cadStats(L);L.color=CAD_COLORS[i%CAD_COLORS.length]});P.layers=P.layers.filter(L=>L.st.tri||L.pls.length||L.pts.length);
-  P.layers.sort((a,b)=>(b.st.hasZ-a.st.hasZ)||a.name.localeCompare(b.name));if(!P.layers.length){toast('Nothing to bring in from '+nm+'.');return}
-  const placed=Object.values(S.tw.sheets).some(x=>x.scaled&&x.aligned);const to={};P.layers.forEach(L=>to[L.name]=cadSuggest(L));
+function cadPrep(P,nm){P.layers.forEach((L,i)=>{L.st=cadStats(L);L.color=CAD_COLORS[i%CAD_COLORS.length]});P.layers=P.layers.filter(L=>L.st.tri||L.pls.length||L.pts.length||(L.runs&&L.runs.length));
+  P.layers.sort((a,b)=>(!!b.c3d-!!a.c3d)||(!!b.runs-!!a.runs)||(b.st.hasZ-a.st.hasZ)||a.name.localeCompare(b.name));if(!P.layers.length){toast('Nothing to bring in from '+nm+'.');return}
+  const placed=Object.values(S.tw.sheets).some(x=>x.scaled&&x.aligned);const to={};P.layers.forEach(L=>to[L.name]=cadSuggest(L));try{cadAgree(P,to)}catch(e){console.warn(e)}
   M={kind:'twcad',P,name:nm,to,units:P.units,place:S.tw.cadT?'same':placed||S.tw.items.some(i=>i.page==null&&i.t!=='tin')?'apts':'cad',pairs:{},pick:null,filter:'',v:null};if(M.place==='apts')M.pick=(S.tw.apts[0]||{}).id||null;showModal();cadDrawSoon()}
 const cadU=()=>CAD_UNITS[M.units]?CAD_UNITS[M.units][1]:1;
 // files from the same project share coordinates: feet and survey feet are treated alike (they're mixed up all the time, and 2 ppm is feet at state-plane distances)
@@ -9354,8 +9361,8 @@ function cadXf(){const u=cadU();if(M.place==='cad')return p=>[p[0]*u,-p[1]*u];
   if(M.place==='apts'){const f=cadFit();if(f)return p=>twP2W(f.t,[p[0],-p[1]])}return null}
 function cadFit(){const pr=Object.entries(M.pairs).filter(([id])=>S.tw.apts.some(a=>a.id===id)).map(([id,p])=>({id,p:[p[0],-p[1]]}));if(!pr.length)return null;return twFit(pr,cadU())}
 function cadModal(){const x=M;const P=x.P;const el=S.tw.surfaces;const f=x.place==='apts'?cadFit():null;const q=x.filter.toLowerCase();
-  const shown=P.layers.filter(L=>!q||L.name.toLowerCase().includes(q));const used=P.layers.filter(L=>x.to[L.name]!=='skip');const nItems=used.reduce((a,L)=>a+L.pls.length+L.pts.length+(L.st.tri?1:0),0);
-  const opts=v=>`<option value="skip"${v==='skip'?' selected':''}>Skip</option><optgroup label="Surfaces">${el.map(s=>`<option value="${s.id}"${v===s.id?' selected':''}>${esc(s.name)} (${TW_KINDS[s.kind][0].toLowerCase()})</option>`).join('')}</optgroup><optgroup label="New surface named after the layer">${['elev','take','util'].map(k=>`<option value="new:${k}"${v==='new:'+k?' selected':''}>New ${TW_KINDS[k][0].toLowerCase()} surface</option>`).join('')}</optgroup>`;
+  const shown=P.layers.filter(L=>!q||L.name.toLowerCase().includes(q));const used=P.layers.filter(L=>x.to[L.name]!=='skip');const nItems=used.reduce((a,L)=>a+L.pls.length+L.pts.length+(L.st.tri?1:0)+(L.runs?L.runs.length:0),0);
+  const opts=v=>`<option value="skip"${v==='skip'?' selected':''}>Skip</option><optgroup label="Surfaces">${el.map(s=>`<option value="${s.id}"${v===s.id?' selected':''}>${esc(s.name)} (${TW_KINDS[s.kind][0].toLowerCase()})</option>`).join('')}</optgroup><optgroup label="New surface named after the layer">${['elev','take','util'].map(k=>`<option value="new:${k}"${v==='new:'+k?' selected':''}>New ${TW_KINDS[k][0].toLowerCase()} surface</option>`).join('')}</optgroup>${[...new Set(Object.values(x.to).filter(t=>/^new:[a-z]+:/.test(t)))].map(t=>`<option value="${esc(t)}"${v===t?' selected':''}>New: ${esc(t.split(':').slice(2).join(':'))}</option>`).join('')}`;
   const anyPlaced=Object.values(S.tw.sheets).some(s=>s.scaled&&s.aligned);
   return mhead('Import CAD, LandXML or points',`${x.name} · ${P.layers.length} layer${P.layers.length===1?'':'s'}${P.info.inserts?` · ${P.info.inserts} block inserts left out`:''}`)+`<div class="mbody"><div class="twc">
     <div class="twc-l">${cadProxyNote(P)}
@@ -9382,6 +9389,7 @@ function cadDraw(){const c=document.getElementById('twc-cv');if(!c||!M||M.kind!=
   if(!M.v)cadFitView(c);const v=M.v;const S2=p=>[v.ox+p[0]*v.z,v.oy-p[1]*v.z];
   M.P.layers.forEach(L=>{const on=M.to[L.name]!=='skip';ctx.strokeStyle=on?L.color:'#c9c9c4';ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=on?1.2:0.7;ctx.globalAlpha=on?1:0.6;ctx.beginPath();
     L.pls.forEach(pl=>{pl.pts.forEach((p,k)=>{const q=S2(p);k?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1])});if(pl.closed){const q=S2(pl.pts[0]);ctx.lineTo(q[0],q[1])}});ctx.stroke();
+    (L.runs||[]).forEach(r=>{r.nodes.forEach((n,k)=>{const q=S2(n.xy);k?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1])})});if(L.runs)ctx.stroke();
     const every=L.pts.length>20000?Math.ceil(L.pts.length/20000):1;L.pts.forEach((p,k)=>{if(k%every)return;const q=S2(p);ctx.fillRect(q[0]-1,q[1]-1,2,2)});
     if(L.tin){const T=L.tin;const step=T.t.length/3>30000?Math.ceil(T.t.length/3/30000):1;ctx.globalAlpha=on?0.45:0.3;ctx.beginPath();for(let k=0;k<T.t.length;k+=3*step){const a=S2(T.v[T.t[k]]),b=S2(T.v[T.t[k+1]]),d=S2(T.v[T.t[k+2]]);ctx.moveTo(a[0],a[1]);ctx.lineTo(b[0],b[1]);ctx.lineTo(d[0],d[1]);ctx.closePath()}ctx.stroke()}});
   ctx.globalAlpha=1;Object.entries(M.pairs).forEach(([id,p])=>{const a=S.tw.apts.find(x=>x.id===id);if(a)twMark(ctx,S2(p),a.name,'#2e9e5b')});if(M.hov){twMark(ctx,S2(M.hov),'','#ff8c00')}}
@@ -9406,8 +9414,9 @@ function cadSimplify(pts,tol){if(pts.length<3)return pts;const keep=new Uint8Arr
   return pts.filter((p,i)=>keep[i])}
 function cadImport(){const x=M;const X=cadXf();if(!X)return;const u=cadU();const r2=v=>Math.round(v*100)/100,r3=v=>Math.round(v*1000)/1000;const imp={id:newId(),name:x.name,at:new Date().toISOString(),n:0};twSnap();
   const made={};let nItems=0,left=0;
-  x.P.layers.forEach(L=>{const to=x.to[L.name];if(to==='skip')return;let s;if(to.startsWith('new:')){const k=to.slice(4);s=made[L.name]||(made[L.name]={id:newId(),name:L.name,kind:k,color:L.color,vis:true,lock:false});if(!S.tw.surfaces.includes(s))S.tw.surfaces.push(s)}else s=twSurf(to);if(!s)return;
+  x.P.layers.forEach(L=>{const to=x.to[L.name];if(to==='skip')return;let s;if(to.startsWith('new:')){const [,k,gn]=to.split(':');const mk=gn?'g:'+gn:L.name;s=made[mk]||(made[mk]={id:newId(),name:gn||L.name,kind:k,color:L.color,vis:true,lock:false});if(!S.tw.surfaces.includes(s))S.tw.surfaces.push(s)}else s=twSurf(to);if(!s)return;
     const push=it=>{it.id=newId();it.sid=s.id;it.page=null;it.imp=imp.id;S.tw.items.push(it);nItems++};const P2=p=>{const w=X(p);return [r2(w[0]),r2(w[1])]};
+    if(L.runs){L.runs.forEach(r=>{const pts=r.nodes.map(n=>P2(n.xy));if(s.kind==='util')push({t:'pipe',name:r.name||'',sys:r.sys,pts,nodes:r.nodes.map(({xy,...n})=>({...n})),segs:r.segs.map(x=>({...x})),gnd:''});else push({t:'line',pts})});return}
     if(s.kind==='elev'){
       L.pls.forEach(pl=>{const zs=pl.pts.map(p=>p[2]);const mn=Math.min(...zs),mx=Math.max(...zs);if(mx===0&&mn===0){const fp=cadSimplify(pl.pts.map(p=>[...P2(p),0]),0.05).map(p=>[p[0],p[1]]);if(pl.closed&&fp.length>2)fp.push(fp[0]);if(fp.length>1)push({t:'contour',pts:fp,em:'anno'});return}const pts=cadSimplify(pl.pts.map(p=>[...P2(p),r3(p[2]*u)]),0.05);const cl=pl.closed?[pts[0]]:[];
         if(mn===0&&mx>0){push({t:'contour',pts:[...pts,...cl].map(p=>[p[0],p[1]]),em:'anno'});left++;return}if(mx-mn<1e-6)push({t:'contour',pts:[...pts,...cl].map(p=>[p[0],p[1]]),z:r3(mn*u)});else{const all=[...pts,...cl];push({t:'contour',pts:all.map(p=>[p[0],p[1]]),zs:all.map(p=>p[2]),z:all[0][2]})}});
@@ -9738,6 +9747,150 @@ function twEditMarks(ctx,f){const R=twR();if(R.tool!=='edit')return;const m=R.em
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!S.tw)return;if(t.dataset.act==='tw-emode'){const R=twR();R.emode=t.dataset.v;R.emv=null;R.ejoin=null;twPanels();twDraw()}});
 
 // Civil 3D objects (surfaces, feature lines, pipe networks, alignments) travel in a DXF as proxies nobody else can read
-function cadProxyNote(P){const px=P.info&&P.info.proxy;if(!px)return '';const tot=Object.values(px).reduce((a,b)=>a+b,0);const top=Object.entries(px).sort((a,b)=>b[1]-a[1]).slice(0,6);
-  return `<div class="notice twc-px"><b>${fmtN(tot,0)} Civil 3D object${tot===1?'':'s'} can’t be read from a DXF</b> (surfaces, feature lines, pipe networks, alignments), on ${top.map(([l,n])=>`${esc(l)} (${n})`).join(', ')}${Object.keys(px).length>6?'…':''}.
-    <div class="small">To bring them in: export the surfaces from Civil 3D as <b>LandXML</b> (Output → Export to LandXML) and import that file here too. For feature lines and pipes, use <b>Export → Export to AutoCAD</b> in Civil 3D, which turns them into plain 3D lines, and save that as the DXF. Or pick them off the plan sheets.</div></div>`}
+function cadProxyNote(P){const I=P.info||{};const px=I.proxy;const rd=I.proxyRead||0;if(!px&&!rd)return '';const un=px?Object.values(px).reduce((a,b)=>a+b,0):0;const top=px?Object.entries(px).sort((a,b)=>b[1]-a[1]).slice(0,5):[];const N=I.net;
+  return `<div class="notice twc-px">${rd?`<b>Read ${fmtN(rd,0)} Civil 3D object${rd===1?'':'s'} from how they're drawn</b>${N?`: pipe networks (${N.runs} run${N.runs===1?'':'s'}, ${N.pipes} pipe${N.pipes===1?'':'s'}, ${N.named} named structure${N.named===1?'':'s'}${N.noInv?`; ${N.noInv} pipe${N.noInv===1?'':'s'} missing an invert`:''})`:''}${(I.read||{}).AECC_SURFACE_ELEVATION_LABEL?`, ${I.read.AECC_SURFACE_ELEVATION_LABEL} spot labels`:''}${Object.keys(I.read||{}).some(k=>/SURFACE$/.test(k))?', surface contours':''}. They're listed first; check rims and inverts on the pipe profiles.`:''}
+    ${un?`<div class="small">${fmtN(un,0)} other Civil 3D object${un===1?'':'s'} had nothing usable drawn (on ${top.map(([l,n])=>`${esc(l)} ${n}`).join(', ')}${px&&Object.keys(px).length>5?'…':''}). A surface whose style shows no contours can't be read this way: export it from Civil 3D as <b>LandXML</b> (Output → Export to LandXML) and import that too.</div>`:''}</div>`}
+function cadHex(chunks){let n=0;chunks.forEach(h=>n+=h.length>>1);const b=new Uint8Array(n);let k=0;chunks.forEach(h=>{for(let i=0;i+1<h.length;i+=2)b[k++]=parseInt(h.substr(i,2),16)});return b}
+function cadProxyGfx(bytes){const dv=new DataView(bytes.buffer,bytes.byteOffset,bytes.byteLength);const out={pls:[],tx:[],circ:[]};const N=bytes.length;
+  const v3=o=>[dv.getFloat64(o,true),dv.getFloat64(o+8,true),dv.getFloat64(o+16,true)];
+  const str=(o,end)=>{let s='';let k=o;while(k<end&&bytes[k])s+=String.fromCharCode(bytes[k++]);return s};
+  const ustr=(o,end)=>{let s='';let k=o;while(k+1<end){const c=bytes[k]|(bytes[k+1]<<8);if(!c)break;s+=String.fromCharCode(c);k+=2}return s};
+  let k=8;while(k+8<=N){const size=dv.getUint32(k,true),t=dv.getUint32(k+4,true);if(size<8||k+size>N)break;const o=k+8,end=k+size;
+    try{if(t===6||t===7||t===32){const c=dv.getUint32(o,true);if(c>0&&o+4+c*24<=end){const pts=[];for(let q=0;q<c;q++)pts.push(v3(o+4+q*24));out.pls.push({pts,closed:t===7})}}
+      else if(t===2||t===4){const c=v3(o);const r=dv.getFloat64(o+24,true);out.circ.push({c,r})}
+      else if(t===10||t===36){const p=v3(o);out.tx.push({p,s:t===10?str(o+96,end):ustr(o+96,end)})}
+      else if(t===11||t===38){const p=v3(o);out.tx.push({p,s:t===11?str(o+72,end):ustr(o+72,end)})}}catch(e){}
+    k+=size}return out}
+const cadCls=n=>String(n||'').toUpperCase();
+function cadStructKind(nm){const s=String(nm||'').toUpperCase().replace(/^EX\.?\s*/,'');
+  return /^J\.?\s?B\b|JUNCTION/.test(s)?'Junction Box':/^D\.?\s?I\b|DROP INLET/.test(s)?'Drop Inlet':/^C\.?\s?I\b|CURB INLET/.test(s)?'Curb Inlet':/^(S\.?\s?S\.?\s?)?M\.?\s?H\b|MANHOLE/.test(s)?'Manhole':/^(SW)?C\.?\s?B\b|CATCH/.test(s)?'Catch Basin':/^A\.?\s?D\b|AREA DRAIN|PAD DRAIN/.test(s)?'Yard Inlet':/^Y\.?\s?I\b|YARD/.test(s)?'Yard Inlet':/^G\.?\s?I\b|GRATE/.test(s)?'Grate Inlet':/G\.?\s?T\b|GREASE/.test(s)?'Grease Trap':/^F\.?E\.?S\b|FLARED/.test(s)?'Flared End Section':/^H\.?W\b|HEADWALL/.test(s)?'Headwall':/^C\.?O\b|CLEAN ?OUT/.test(s)?'Cleanout':/OCS|OUTLET CONTROL/.test(s)?'Junction Box':'Structure'}
+const cadSysOf=lay=>/san|sewer|\bss\b|ssmh/i.test(lay)?'Sanitary Sewer':/water|\bwl\b/i.test(lay)?'Water':'Storm Drain';
+function cadProxyBuild(map,prox,info){const done={};const nd=(k,x)=>{done[k]=(done[k]||0)+1;if(x)x.ok=1};
+  const surf={},S=[],SL=[],P=[],PL=[];
+  prox.forEach(x=>{const c=cadCls(x.cls),g=x.g;const has=g.pls.length||g.circ.length||g.tx.length;
+    if(c==='AECC_TIN_SURFACE'||c==='AECC_GRID_SURFACE'||c==='AECC_TIN_VOLUME_SURFACE'){const cz=g.pls.filter(p=>p.pts.length>1&&Math.max(...p.pts.map(q=>q[2]))-Math.min(...p.pts.map(q=>q[2]))<1e-6&&p.pts[0][2]);if(!cz.length)return;const key=x.lay+'#'+x.i;surf[key]={lay:x.lay,pls:cz};nd(c,x);return}
+    if(c==='AECC_SURFACE_ELEVATION_LABEL'){const m=g.pls.find(p=>p.pts.length===2&&Math.hypot(p.pts[1][0]-p.pts[0][0],p.pts[1][1]-p.pts[0][1])<4);if(!m||!m.pts[0][2])return;
+      const L=cadLayer(map,x.lay+' · Civil 3D spot labels');L.c3d='spot';L.pts.push([(m.pts[0][0]+m.pts[1][0])/2,(m.pts[0][1]+m.pts[1][1])/2,m.pts[0][2]]);nd(c,x);return}
+    if(c==='AECC_STRUCTURE'){const xs=[],ys=[];g.pls.forEach(p=>p.pts.forEach(q=>{xs.push(q[0]);ys.push(q[1])}));g.circ.forEach(o=>{xs.push(o.c[0]-o.r,o.c[0]+o.r);ys.push(o.c[1]-o.r,o.c[1]+o.r)});if(!xs.length)return;
+      const z=(g.pls[0]&&g.pls[0].pts[0][2])||(g.circ[0]&&g.circ[0].c[2])||0;S.push({lay:x.lay,c:[(Math.min(...xs)+Math.max(...xs))/2,(Math.min(...ys)+Math.max(...ys))/2],r:Math.max(1,(Math.max(...xs)-Math.min(...xs))/2),z});nd(c,x);return}
+    if(c==='AECC_STRUCTURE_LABEL'){if(g.tx.length)SL.push({lay:x.lay,z:(g.pls[0]&&g.pls[0].pts[0][2])||g.tx[0].p[2],tx:g.tx.map(t=>t.s),p:g.tx[0].p,lead:g.pls.flatMap(p=>p.pts)});nd(c,x);return}
+    if(c==='AECC_PIPE'){let best=null;g.pls.forEach(p=>{const a=p.pts[0],b=p.pts[p.pts.length-1];const L=Math.hypot(b[0]-a[0],b[1]-a[1]);if(!best||L>best.L)best={a,b,L}});if(best&&best.L>1){P.push({lay:x.lay,a:best.a,b:best.b,L:best.L});nd(c,x)}return}
+    if(c==='AECC_PIPE_LABEL'){if(g.tx.length)PL.push({lay:x.lay,z:(g.pls[0]&&g.pls[0].pts[0][2])||g.tx[0].p[2],tx:g.tx.map(t=>t.s),p:g.tx[0].p});nd(c,x);return}
+    if(/LABEL|CONNECTOR|NETWORK$|^AECC_ALIGNMENT$|SAMPLE_LINE|VIEW|TABLE/.test(c)||!g.pls.length)return;
+    // anything else drawn with lines (feature lines, gradings, corridors…): its lines, with their elevations
+    const nm=c.replace(/^AECC_/,'').toLowerCase().replace(/_/g,' ');const L=cadLayer(map,`${x.lay} · Civil 3D ${nm}`);L.c3d='lines';g.pls.forEach(p=>{if(p.pts.length>1)L.pls.push({pts:p.pts,closed:!!p.closed})});nd(c,x)});
+  // surfaces: their contours (one layer per surface)
+  Object.values(surf).forEach((s,i,all)=>{const L=cadLayer(map,`${s.lay==='0'?'':s.lay+' · '}Civil 3D surface${all.length>1?' '+(i+1):''}`);L.c3d='surface';s.pls.forEach(p=>L.pls.push({pts:p.pts,closed:false}))});
+  // pipe networks
+  if(P.length){const num=t=>{const m=/(\d{3,5}\.\d+)/.exec(t);return m?+m[1]:null};
+    S.forEach(s=>{s.ins=[];s.outs=[];s.invs=[];s.rim=null;let best=null,bd=Infinity;SL.forEach(l=>{if(l.used||Math.abs(l.z-s.z)>0.006)return;const d=Math.min(Math.hypot(l.p[0]-s.c[0],l.p[1]-s.c[1]),...l.lead.map(q=>Math.hypot(q[0]-s.c[0],q[1]-s.c[1])));if(d<bd){bd=d;best=l}});
+      if(best&&bd<120){best.used=true;s.name=best.tx[0];const T=best.tx.slice(1);
+        T.forEach(t=>{const u=t.toUpperCase();const v=num(t);if(v==null)return;if(/INV\.?\s*IN\b/.test(u))s.ins.push(v);else if(/INV\.?\s*OUT\b/.test(u))s.outs.push(v);else if(/INV/.test(u))s.invs.push(v);else if(/RIM|INLET|TOP|GRATE|TC|EL/.test(u)&&s.rim==null)s.rim=v})}
+      if(s.rim==null&&s.z)s.rim=+s.z.toFixed(2)});
+    const segD=(p,a,b)=>{const dx=b[0]-a[0],dy=b[1]-a[1];const L2=dx*dx+dy*dy||1e-9;let t=((p[0]-a[0])*dx+(p[1]-a[1])*dy)/L2;const tt=Math.max(0,Math.min(1,t));return [Math.hypot(a[0]+dx*tt-p[0],a[1]+dy*tt-p[1]),t]};
+    const near=p=>{let best=null,bd=Infinity;S.forEach(s=>{const d=Math.hypot(s.c[0]-p[0],s.c[1]-p[1])-s.r;if(d<bd){bd=d;best=s}});return bd<=4?best:null};
+    const pipes=[];P.forEach(p=>{let lab=null,ld=Infinity,lt=0.5;PL.forEach(l=>{const [d,t]=segD(l.p,p.a,p.b);if(t<-0.05||t>1.05)return;if(d<ld){ld=d;lab=l;lt=t}});if(ld>10)lab=null;
+      const txt=lab?lab.tx.join(' '):'';const m=/(\d+)\s*(?:"|''|IN\b|”)\s*([A-Z][A-Z0-9 .-]*)/i.exec(txt);const D=m?+m[1]:null;const mat=m?m[2].trim().replace(/\s+PIPE.*$/i,''):'';const name=(lab&&lab.tx.find(t=>/PIPE|^P-?\d/i.test(t)))||'';const ex=/^\s*EX\b/i.test(txt);
+      const A=near(p.a),B=near(p.b);if(A&&A===B)return;
+      // inverts: the label sits on the pipe at its centreline elevation, so (label z − radius) is the invert there
+      const cand=(s,which)=>s?[...(which==='out'?s.outs:s.ins),...s.invs,...(which==='out'?s.ins:s.outs)]:[];const tgt=lab&&D?lab.z-D/24:null;
+      let best=null;const ca=[...new Set([...cand(A,'out'),...cand(A,'in')])],cb=[...new Set([...cand(B,'in'),...cand(B,'out')])];
+      const tryPair=(ia,ib)=>{let sc=0;if(tgt!=null&&ia!=null&&ib!=null)sc+=Math.abs(ia+(ib-ia)*Math.max(0,Math.min(1,lt))-tgt);else if(ia!=null&&ib!=null)sc+=Math.abs(ia-ib)>3?1:0;if(!best||sc<best.sc)best={ia,ib,sc}};
+      // only inverts that are written on a structure: a guessed one is worse than a blank the profile flags
+      const okA=v=>!(A&&A.rim!=null&&v>A.rim),okB=v=>!(B&&B.rim!=null&&v>B.rim);if(ca.length&&cb.length)ca.filter(okA).forEach(ia=>cb.filter(okB).forEach(ib=>tryPair(ia,ib)));else if(ca.length)ca.filter(okA).forEach(ia=>tryPair(ia,null));else if(cb.length)cb.filter(okB).forEach(ib=>tryPair(null,ib));
+      let ia=best&&best.ia!=null?+best.ia.toFixed(2):null,ib=best&&best.ib!=null?+best.ib.toFixed(2):null;let a=p.a,b=p.b,SA=A,SB=B;if(ia!=null&&ib!=null&&ib>ia){[a,b]=[b,a];[SA,SB]=[SB,SA];[ia,ib]=[ib,ia]}
+      pipes.push({lay:p.lay,sys:cadSysOf(p.lay),ex,a:SA?SA.c:a,b:SB?SB.c:b,A:SA,B:SB,ia,ib,D,mat,name:name.trim(),L:p.L})});
+    // chain pipes into runs through structures that have exactly one pipe in and one out
+    const key=(s,pt)=>s?'s'+S.indexOf(s):'p'+Math.round(pt[0]*10)+','+Math.round(pt[1]*10);const inn={},outn={};pipes.forEach(q=>{const u=key(q.A,q.a),v=key(q.B,q.b);q.u=u;q.v=v;(outn[u]=outn[u]||[]).push(q);(inn[v]=inn[v]||[]).push(q)});
+    const used=new Set();const runs=[];const chainFrom=q=>{const run=[q];used.add(q);let cur=q;while(true){const v=cur.v;if((inn[v]||[]).length!==1||(outn[v]||[]).length!==1)break;const nx=outn[v][0];if(used.has(nx)||nx.sys!==cur.sys||nx.ex!==cur.ex)break;run.push(nx);used.add(nx);cur=nx}runs.push(run)};
+    pipes.filter(q=>(inn[q.u]||[]).length!==1||(outn[q.u]||[]).length!==1).forEach(q=>{if(!used.has(q))chainFrom(q)});pipes.forEach(q=>{if(!used.has(q))chainFrom(q)});
+    const nodeOf=(s,pt)=>({n:s&&s.name||'',k:s?(s.name?cadStructKind(s.name):'Bend'):'',rim:s&&s.rim!=null?s.rim:'',ii:'',io:'',xy:pt});
+    runs.forEach(run=>{const r0=run[0];const lay=`${r0.lay} · Civil 3D pipes${r0.ex?' (existing)':''}`;const L=cadLayer(map,lay);L.c3d='pipes';L.sys=r0.sys;L.ex=r0.ex;
+      const nodes=[nodeOf(r0.A,r0.a)];const segs=[];run.forEach((q,i)=>{nodes[nodes.length-1].io=q.ia??'';const nn=nodeOf(q.B,q.b);nn.ii=q.ib??'';nodes.push(nn);segs.push({d:q.D||'',m:q.mat||''})});
+      (L.runs=L.runs||[]).push({name:run.map(q=>q.name).filter(Boolean).join(', ')||'',sys:r0.sys,nodes,segs})});
+    info.net={pipes:pipes.length,runs:runs.length,structs:S.length,named:S.filter(s=>s.name).length,noInv:pipes.filter(q=>q.ia==null||q.ib==null).length}}
+  info.read=done;const un={};prox.forEach(x=>{if(!x.ok)un[x.lay]=(un[x.lay]||0)+1});info.proxy=Object.keys(un).length?un:null;info.proxyRead=prox.filter(x=>x.ok).length}
+
+// layers headed for the same elevation surface must describe the same ground. A DXF often carries two: the survey
+// (its TIN and shots) and the engineer's existing contours the design was built on. The contours drawn on the plans
+// lead; layers that disagree with them (median difference over 0.3 ft) go together onto a surface of their own.
+function cadAgree(P,to){const el=new Map();P.layers.forEach(L=>{const t=to[L.name];if(!t||t==='skip'||L.runs)return;const s=twSurf(t);const isEl=t==='new:elev'||(s&&s.kind==='elev');if(!isEl||!L.st.hasZ)return;const key=t==='new:elev'?'new:'+L.name:t;if(!el.has(key))el.set(key,[]);el.get(key).push(L)});
+  const sample=(L,max)=>{const o=[];L.pls.forEach(p=>p.pts.forEach(q=>{if(q[2])o.push(q)}));L.pts.forEach(q=>{if(q[2])o.push(q)});if(L.tin)L.tin.v.forEach(q=>o.push(q));if(o.length<=max)return o;const st=o.length/max;const r=[];for(let k=0;k<o.length;k+=st)r.push(o[Math.floor(k)]);return r};
+  el.forEach((Ls,key)=>{if(Ls.length<2)return;const prim=Ls.filter(L=>L.st.cz>0);const lead=prim.length?prim:[Ls.slice().sort((a,b)=>sample(b,1e9).length-sample(a,1e9).length)[0]];const rest=Ls.filter(L=>!lead.includes(L));if(!rest.length)return;
+    const pts=[];lead.forEach(L=>sample(L,30000).forEach(q=>pts.push(q)));if(pts.length<10)return;const seen=new Set(),X=[],Y=[],Z=[];pts.forEach(q=>{const k=Math.round(q[0]*10)+','+Math.round(q[1]*10);if(seen.has(k))return;seen.add(k);X.push(q[0]);Y.push(q[1]);Z.push(q[2])});
+    const T=fastDelaunay(X,Y);const keep=[];for(let i=0;i<T.length;i+=3){const a=T[i],b=T[i+1],c=T[i+2];const d=(p,q)=>Math.hypot(X[p]-X[q],Y[p]-Y[q]);if(d(a,b)<100&&d(b,c)<100&&d(c,a)<100)keep.push(a,b,c)}if(!keep.length)return;
+    const tp=new Float64Array(X.length*3);for(let i=0;i<X.length;i++){tp[i*3]=X[i];tp[i*3+1]=Y[i];tp[i*3+2]=Z[i]}const tin={pts:tp,tris:Uint32Array.from(keep),n:X.length};
+    const tgtName=key.startsWith('new:')?lead[0].name:(twSurf(key)||{}).name||'Existing';const alt=`${tgtName} (${/surv|topo|^-?x|spot/i.test(rest.map(r=>r.name).join(' '))?'survey':'other ground'})`;
+    rest.forEach(L=>{const d=[];sample(L,3000).forEach(q=>{const z=tinZ(tin,q[0],q[1]);if(isFinite(z))d.push(Math.abs(z-q[2]))});if(d.length<5)return;d.sort((a,b)=>a-b);const med=d[Math.floor(d.length/2)],avg=d.reduce((a,b)=>a+b,0)/d.length;L.agree={med,avg,n:d.length};
+      if(med>0.3||avg>0.5){to[L.name]='new:elev:'+alt;L.warn=`differs from ${lead.map(x=>x.name).join(', ')} by ${fmtN(avg,2)} ft on average: a different ground, so it goes on “${alt}”. Change it if this is the one you want.`}})})}
+
+/* ---------- placing plan sheets by themselves ----------
+   Scale: read from the sheet's own text (1" = 20'). Position: once there's CAD in the takeoff, the sheet's linework is
+   matched to it: line directions give the turn, a cross-correlation of the two drawings gives the shift, then the
+   fit is tightened point to point. Nothing is changed unless the match is clearly good. */
+async function twReadScale(n){const R=twR();if(!R.pdf)return null;const page=await R.pdf.getPage(n);const tc=await page.getTextContent();const txt=tc.items.map(t=>t.str).join(' ');
+  const cnt=new Map();const re=/1\s*(?:"|''|”|IN(?:CH)?\.?)\s*=\s*(\d{1,4}(?:\.\d+)?)\s*(?:'|’|FT|FEET)/gi;let m;while((m=re.exec(txt))){const v=+m[1];if(v>0&&v<=2000)cnt.set(v,(cnt.get(v)||0)+1)}
+  // Civil 3D annotation scales on US civil sheets: "SCALE: 1:20" means 1" = 20'
+  const re2=/SCALE\s*:?\s*1\s*:\s*(\d{1,4})(?!\d)/gi;while((m=re2.exec(txt))){const v=+m[1];if(v>0&&v<=2000)cnt.set(v,(cnt.get(v)||0)+1)}
+  if(!cnt.size)return null;const best=[...cnt.entries()].sort((a,b)=>b[1]-a[1]);return {ft:best[0][0],n:best[0][1],others:best.slice(1).map(x=>x[0])}}
+// iterative radix-2 FFT on (re, im) of length n (power of two), in place
+function twFFT(re,im,inv){const n=re.length;for(let i=1,j=0;i<n;i++){let b=n>>1;for(;j&b;b>>=1)j^=b;j^=b;if(i<j){let t=re[i];re[i]=re[j];re[j]=t;t=im[i];im[i]=im[j];im[j]=t}}
+  for(let len=2;len<=n;len<<=1){const a=(inv?2:-2)*Math.PI/len,wr=Math.cos(a),wi=Math.sin(a);for(let i=0;i<n;i+=len){let cr=1,ci=0;for(let k=0;k<len/2;k++){const ur=re[i+k],ui=im[i+k],vr=re[i+k+len/2]*cr-im[i+k+len/2]*ci,vi=re[i+k+len/2]*ci+im[i+k+len/2]*cr;re[i+k]=ur+vr;im[i+k]=ui+vi;re[i+k+len/2]=ur-vr;im[i+k+len/2]=ui-vi;const t=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=t}}}
+  if(inv)for(let i=0;i<n;i++){re[i]/=n;im[i]/=n}}
+function twFFT2(re,im,N,inv){const r=new Float64Array(N),i2=new Float64Array(N);for(let y=0;y<N;y++){const o=y*N;for(let x=0;x<N;x++){r[x]=re[o+x];i2[x]=im[o+x]}twFFT(r,i2,inv);for(let x=0;x<N;x++){re[o+x]=r[x];im[o+x]=i2[x]}}
+  for(let x=0;x<N;x++){for(let y=0;y<N;y++){r[y]=re[y*N+x];i2[y]=im[y*N+x]}twFFT(r,i2,inv);for(let y=0;y<N;y++){re[y*N+x]=r[y];im[y*N+x]=i2[y]}}}
+const twDens=(pts,step,out)=>{for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i];const L=Math.hypot(b[0]-a[0],b[1]-a[1]);const n=Math.max(1,Math.floor(L/step));for(let k=0;k<n;k++)out.push([a[0]+(b[0]-a[0])*k/n,a[1]+(b[1]-a[1])*k/n])}if(pts.length)out.push(pts[pts.length-1])};
+const twAngHist=(lines)=>{const h=new Float64Array(720);lines.forEach(pts=>{for(let i=1;i<pts.length;i++){const dx=pts[i][0]-pts[i-1][0],dy=pts[i][1]-pts[i-1][1];const L=Math.hypot(dx,dy);if(!L)continue;let a=Math.atan2(dy,dx)%Math.PI;if(a<0)a+=Math.PI;h[Math.floor(a/Math.PI*720)%720]+=L}});return h};
+// the sheet's linework (page points) matched onto the CAD linework (job feet) at a known scale
+function twMatch(cadLines,pdfLines,s){const A=[];cadLines.forEach(p=>twDens(p,1,A));let B=[];pdfLines.forEach(p=>twDens(p,3,B));if(A.length<50||B.length<50)return null;
+  if(B.length>160000){const st=B.length/160000;const b2=[];for(let k=0;k<B.length;k+=st)b2.push(B[Math.floor(k)]);B=b2}
+  const hA=twAngHist(cadLines),hB=twAngHist(pdfLines);const cc=[];for(let k=0;k<720;k++){let v=0;for(let i=0;i<720;i++)v+=hA[i]*hB[(i+720-k)%720];cc.push([v,k])}cc.sort((a,b)=>b[0]-a[0]);
+  const cands=[];cc.forEach(([v,k])=>{if(cands.length<3&&!cands.some(c=>Math.min(Math.abs(c-k),720-Math.abs(c-k))<8))cands.push(k)});
+  let ax=0,ay=0;A.forEach(p=>{ax+=p[0];ay+=p[1]});ax/=A.length;ay/=A.length;let bx=0,by=0;B.forEach(p=>{bx+=p[0];by+=p[1]});bx/=B.length;by/=B.length;
+  const cell=2;let best=null;
+  cands.forEach(k=>[0,Math.PI].forEach(fl=>{const th=k/720*Math.PI+fl;const c=Math.cos(th),si=Math.sin(th);
+    const Bt=B.map(p=>{const x=(p[0]-bx)*s,y=(p[1]-by)*s;return [x*c-y*si+ax,x*si+y*c+ay]});
+    let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;[A,Bt].forEach(P=>P.forEach(p=>{if(p[0]<x0)x0=p[0];if(p[0]>x1)x1=p[0];if(p[1]<y0)y0=p[1];if(p[1]>y1)y1=p[1]}));
+    const span=Math.max(x1-x0,y1-y0)+100;let N=64;while(N*cell<span*2&&N<1024)N*=2;const cl=Math.max(cell,span*2/N);
+    const ras=P=>{const g=new Float64Array(N*N);P.forEach(p=>{const i=Math.floor((p[0]-x0+50)/cl),j=Math.floor((p[1]-y0+50)/cl);if(i>=0&&j>=0&&i<N&&j<N)g[j*N+i]=1});return g};
+    const ar=ras(A),ai=new Float64Array(N*N),br=ras(Bt),bi=new Float64Array(N*N);twFFT2(ar,ai,N,false);twFFT2(br,bi,N,false);
+    for(let q=0;q<N*N;q++){const r=ar[q]*br[q]+ai[q]*bi[q],im=ai[q]*br[q]-ar[q]*bi[q];ar[q]=r;ai[q]=im}twFFT2(ar,ai,N,true);
+    let mx=-1,mi=0;for(let q=0;q<N*N;q++)if(ar[q]>mx){mx=ar[q];mi=q}let dx=mi%N,dy=Math.floor(mi/N);if(dx>N/2)dx-=N;if(dy>N/2)dy-=N;
+    if(!best||mx>best.score)best={score:mx,th,dx:dx*cl,dy:dy*cl}}));
+  if(!best)return null;
+  // the transform so far: job = s·R(th)·(p − b̄) + ā + d  →  tighten it point to point (turn + shift; the scale is the sheet's)
+  let th=best.th,tx=ax+best.dx-s*(Math.cos(th)*bx-Math.sin(th)*by),ty=ay+best.dy-s*(Math.sin(th)*bx+Math.cos(th)*by);let rms=Infinity,frac=0;
+  for(let it=0;it<25;it++){const c=Math.cos(th),si=Math.sin(th);const g=new Map(),gc=3;const Bt=B.map(p=>[tx+s*(p[0]*c-p[1]*si),ty+s*(p[0]*si+p[1]*c)]);Bt.forEach((p,i)=>{const k=Math.floor(p[0]/gc)+','+Math.floor(p[1]/gc);let L=g.get(k);if(!L)g.set(k,L=[]);L.push(i)});
+    const lim=it<5?20:it<12?6:3;const pr=[];let se=0;A.forEach(a=>{const ci=Math.floor(a[0]/gc),cj=Math.floor(a[1]/gc);let bd=lim,bi=-1;const rr=Math.ceil(lim/gc);for(let u=-rr;u<=rr;u++)for(let v=-rr;v<=rr;v++){(g.get((ci+u)+','+(cj+v))||[]).forEach(i=>{const d=Math.hypot(Bt[i][0]-a[0],Bt[i][1]-a[1]);if(d<bd){bd=d;bi=i}})}if(bi>=0){pr.push([a,B[bi]]);se+=bd*bd}});
+    if(pr.length<20)return null;frac=pr.length/A.length;rms=Math.sqrt(se/pr.length);
+    let mA=[0,0],mB=[0,0];pr.forEach(([a,b])=>{mA[0]+=a[0];mA[1]+=a[1];mB[0]+=b[0];mB[1]+=b[1]});mA=mA.map(v=>v/pr.length);mB=mB.map(v=>v/pr.length);
+    let sxx=0,sxy=0;pr.forEach(([a,b])=>{const px=b[0]-mB[0],py=b[1]-mB[1],qx=a[0]-mA[0],qy=a[1]-mA[1];sxx+=px*qx+py*qy;sxy+=px*qy-py*qx});th=Math.atan2(sxy,sxx);const c2=Math.cos(th),s2=Math.sin(th);tx=mA[0]-s*(mB[0]*c2-mB[1]*s2);ty=mA[1]-s*(mB[0]*s2+mB[1]*c2)}
+  return {s,rot:th,tx,ty,rms,frac,n:A.length}}
+// one sheet: scale from its text (unless it already has one), then line it up with the CAD
+async function twAutoPlace(n,quiet){const R=twR();if(!R.pdf)return {ok:false,why:'no plans'};const cad=S.tw.items.filter(i=>i.page==null&&i.imp&&i.t!=='tin'&&i.pts&&i.pts.length>1);
+  if(!cad.length)return {ok:false,why:'Import the CAD first (Import under Surfaces); sheets line up to it.'};
+  let sh=S.tw.sheets[n];let scaleNote='';if(!sh||!sh.bar){const sc=await twReadScale(n);if(!sc)return {ok:false,why:`No scale found in sheet ${n}’s text. Set it with Scale.`};scaleNote=`1" = ${sc.ft}' from the sheet${sc.others.length?` (it also mentions ${sc.others.map(v=>v+"'").join(', ')}; details, probably)`:''}`;sh={...(sh||{}),bar:sc.ft/72}}
+  const s=sh.bar;const V=R.vec[n]||await twVectors(n);if(!V)return {ok:false,why:'Couldn’t read that sheet’s lines.'};
+  // CAD that's linework (not the contours of a whole surface) matches best; cap it so big files stay quick
+  let lines=cad.filter(i=>(twSurf(i.sid)||{}).kind!=='elev').map(i=>i.t==='area'?[...i.pts,i.pts[0]]:i.pts);if(lines.length<20)lines=cad.map(i=>i.t==='area'?[...i.pts,i.pts[0]]:i.pts);
+  const pdfLines=V.paths.filter(p=>p.pts.length>1&&tkPolyLen(p.pts)*s>2).map(p=>p.pts);
+  const f=twMatch(lines,pdfLines,s);if(!f)return {ok:false,why:'Not enough linework to match.'};
+  const good=f.rms<1.5&&f.frac>0.6;if(!good)return {ok:false,why:`The sheet didn’t match the CAD well enough (${Math.round(f.frac*100)}% of the CAD found, ${fmtN(f.rms,2)} ft off). Line it up with alignment points instead.`,f};
+  const im=R.imgs[n];twSnap();const old=S.tw.sheets[n]?{...S.tw.sheets[n]}:null;S.tw.sheets[n]={...(old||{}),bar:s,s,rot:f.rot,tx:f.tx,ty:f.ty,scaled:true,aligned:true,auto:{rms:+f.rms.toFixed(2),frac:+f.frac.toFixed(2)},w:im?im.w:old&&old.w,h:im?im.h:old&&old.h};delete S.tw.sheets[n].ap;
+  if(old&&old.scaled&&old.aligned)S.tw.items.forEach(it=>{if(it.page===n)it.pts=it.pts.map(p=>twP2W(S.tw.sheets[n],twW2P(old,p)))});
+  twTouch();R.mv=null;twPanels();twDraw();return {ok:true,f,scaleNote,msg:`Sheet ${n} lined up with the CAD by itself: ${Math.round(f.frac*100)}% of the CAD linework found on it, ${fmtN(f.rms,2)} ft apart on average.${scaleNote?' Scale '+scaleNote+'.':''}`}}
+async function twAutoPlaceUi(n){const R=twR();R.autoBusy=n;twPanels();try{const r=await twAutoPlace(n);toast(r.ok?r.msg:r.why)}catch(e){toast(errMsg(e))}R.autoBusy=null;twPanels();twDraw()}
+// every sheet the CAD can be found on (plan sheets); the rest are left as they are
+async function twAutoPlaceAll(){const R=twR();if(!R.pdf)return;const N=R.pdf.numPages;let ok=0,skip=0;R.autoAll={i:0,N};twPanels();
+  for(let n=1;n<=N;n++){if(!R.autoAll)break;R.autoAll.i=n;twPanels();const sh=S.tw.sheets[n];if(sh&&sh.aligned){skip++;continue}const sc=await twReadScale(n).catch(()=>null);if(!sc)continue;
+    try{await twRenderPage(n);const r=await twAutoPlace(n,true);if(r.ok)ok++}catch(e){}if(R.vec[n]&&n!==S.tw.page)delete R.vec[n]}
+  R.autoAll=null;twPanels();twDraw();toast(`${ok} sheet${ok===1?'':'s'} lined up with the CAD by themselves.${skip?` ${skip} already were.`:''} Sheets without a plan view (details, notes) were left alone.`)}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!S.tw)return;const a=t.dataset.act;
+  if(a==='tw-scaleread')twScaleFromSheet();else if(a==='tw-auto')twAutoPlaceUi(S.tw.page);else if(a==='tw-autoall')twAutoPlaceAll();else if(a==='tw-autostop'){twR().autoAll=null}});
+async function twScaleFromSheet(){const n=S.tw.page;const sc=await twReadScale(n).catch(()=>null);if(!sc){toast(`No scale found in sheet ${n}’s text. Set it with Scale.`);return}twSetScale(sc.ft/72);toast(`Scale 1" = ${sc.ft}' read from sheet ${n}.${sc.others.length?` It also mentions ${sc.others.map(v=>v+"'").join(', ')}; check it if this sheet has details at other scales.`:''}`)}
+function twAutoCard(){const R=twR();if(!R.pdf)return '';const n=S.tw.page;const sh=twSheet(n);
+  if(!(S.tw.imports||[]).length)return sh&&sh.scaled?'':`<div class="tw-card"><b>Scale for sheet ${n}</b><div class="adders"><button class="btn sm primary" data-act="tw-scaleread">Read the scale off the sheet</button></div><p class="small dim" style="margin:0">Finds 1" = 20' (or 1:20) in the sheet's text. Import the CAD too and sheets line themselves up.</p></div>`;
+  if(R.autoAll)return `<div class="tw-card"><b>Lining up sheets…</b><p class="small">Sheet ${R.autoAll.i} of ${R.autoAll.N}</p><button class="btn sm" data-act="tw-autostop">Stop</button></div>`;
+  return `<div class="tw-card"><b>${sh&&sh.aligned?(sh.auto?`Sheet ${n} was lined up by itself`:`Sheet ${n} is lined up`):`Line sheet ${n} up with the CAD`}</b>${sh&&sh.auto?`<div class="small dim">${Math.round(sh.auto.frac*100)}% of the CAD found on it, ${sh.auto.rms} ft apart on average</div>`:''}
+    <div class="adders"><button class="btn sm${sh&&sh.aligned?'':' primary'}" data-act="tw-auto"${R.autoBusy?' disabled':''}>${R.autoBusy===n?'Matching…':sh&&sh.aligned?'Match again':'Line it up automatically'}</button><button class="btn sm" data-act="tw-autoall" title="Every sheet that has a scale on it">All sheets</button></div>
+    <p class="small dim" style="margin:0">Reads the scale off the sheet and matches its linework to the imported CAD.</p></div>`}
