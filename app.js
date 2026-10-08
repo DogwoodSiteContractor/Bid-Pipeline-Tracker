@@ -8241,7 +8241,7 @@ function tkoTargets(l){if(l.skip||l.dup)return [];if(Array.isArray(l.to))return 
 const TKO_TOK=new Map();function tkoTok(v){v=String(v||'');let t=TKO_TOK.get(v);if(t==null){t=v.toLowerCase().replace(/3\s*[-\/]\s*4/g,'0.75').replace(/[^a-z0-9.]+/g,' ').trim().split(' ').filter(w=>w&&!['and','the','of'].includes(w)).map(w=>w.replace(/s$/,'')).sort().join(' ');if(TKO_TOK.size>20000)TKO_TOK.clear();TKO_TOK.set(v,t)}return t}
 const TKO_CLS={storm:['storm','stormdrain','drainage'],sewer:['sewer','sanitarysewer'],swpp:['erosioncontrol','swpp'],demo:['demolition','demo'],concrete:['siteconcrete','curbconcrete','concrete'],asphalt:['asphaltpaving','paving','asphalt']};
 function tkoFuzzy(l,bi){const cl=normH(l.cls);const same=x=>{const c=normH(x.category);return c===cl||(TKO_CLS[cl]||[]).includes(c)};if(l.dp){const c=bi.filter(x=>normH(x.description)==='depthpremium'+l.dp);return c.find(same)||(c.length===1?c[0]:null)}
-  if(l.ag!=='meas'&&l.ag!=='mat')return null;const t=tkoTok(l.name);if(!t)return null;const c=bi.filter(x=>tkoTok(x.description)===t);return c.find(same)||(c.length===1?c[0]:null)}
+  if(l.ag!=='meas'&&l.ag!=='mat'&&!l.fz)return null;const t=tkoTok(l.name);if(!t)return null;const c=bi.filter(x=>tkoTok(x.description)===t);return c.find(same)||(c.length===1?c[0]:null)}
 const tkoState=l=>{if(l.dup)return 'dup';if(l.skip)return 'skip';const m=!Array.isArray(l.to)&&S.tkoMap&&S.tkoMap.get(tkoKey(l));if(m&&m.skip)return 'skip';const t=tkoTargets(l)||[];return !t.length?(l.dp&&!Array.isArray(l.to)?'nop':'none'):Array.isArray(l.to)?'set':t[0].auto?'auto':'known'};
 function tkoOpen(){const E=S.est;if(!E||!E.data||EC().ro)return;M={kind:'tko',slot:tkoSlots()[0],f:'all',q:''};showModal();loadXLSX().catch(()=>{});if(S.tkoMap===null)loadTkoMap().then(()=>{if(M&&M.kind==='tko')renderModal()})}
 function tkoModal(){const x=M;const d=S.est.data;const T=tkoData(d);const slots=[...new Set([...tkoSlots(),...Object.keys(T.reports)])];const bi=cbList('biditem').filter(b=>b.active!==false).sort((a,b)=>String(a.description).localeCompare(String(b.description)));
@@ -8440,11 +8440,11 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
    Saved data (S.tw, one per bid in public.takeoffs):
      sheets  {page: {s: feet per PDF point, rot, tx, ty, w, h, scaled, aligned, ref}}   page point → job feet
      apts    [{id, name, x, y}]            named alignment points, in job feet
-     surfaces[{id, name, kind: elev|take|util, color, vis, lock}]
-     items   [{id, sid, t: contour|spot|line|area|count, pts:[[x,y]] job feet, z, page, vkey}]
+     surfaces[{id, name, kind: elev|take|sub|util, color, vis, lock}]
+     items   [{id, sid, t: contour|spot|line|area|count|pipe, pts:[[x,y]] job feet, z, page, vkey}]
    Runtime (S.twr, not saved): the PDF, page images, vectors, views, tool state, undo.
    =================================================================================================== */
-const TW_KINDS={elev:['Elevation','Contours, spot elevations. Used for cut and fill.'],take:['Takeoff','Lines, areas and counts. Erosion, demo, striping, anything.'],sub:['Subgrade','Section areas with depths (paving, pads, sidewalk) on one surface. Cut / fill runs to subgrade.'],util:['Utility','Pipe runs and structures. Drawing tools for these come next.']};
+const TW_KINDS={elev:['Elevation','Contours, spot elevations. Used for cut and fill.'],take:['Takeoff','Lines, areas and counts. Erosion, demo, striping, anything.'],sub:['Subgrade','Section areas with depths (paving, pads, sidewalk) on one surface. Cut / fill runs to subgrade.'],util:['Utility','Pipe runs and structures: rims, inverts, sizes, a live profile, depth brackets and trench quantities.']};
 const TW_COLORS=['#8a6d3b','#2f6fd6','#d1462f','#2e9e5b','#c78a16','#8e44ad','#16a2b8','#e0457b','#6b7c2f','#555555'];
 const TW_TOOLS=[
   ['pan','✋','Move','both','Drag to move, scroll to zoom. Drag works in every tool.'],
@@ -8456,6 +8456,7 @@ const TW_TOOLS=[
   ['draw','✎','Draw','both','Click along a line; Enter, double-click or right-click to finish. Snaps to plan linework.'],
   ['area','⬠','Area','both','Click around an area; click the first point or press Enter to close it.'],
   ['count','✚','Count / spot','both','Click to place a count (takeoff surface) or a spot elevation (elevation surface).'],
+  ['pipe','⦿','Pipe','both','Utility surface: click each structure along the run; Enter or double-click finishes. Click an existing structure to connect to it. Rims and inverts go in the table below.'],
   ['sweep','⇢','Sweep','both','Click before the first contour, then past the last. Contours crossed get elevations one interval apart.']];
 const TW_UIKEY='bp-tw-ui';
 function twUiPrefs(){try{return JSON.parse(localStorage.getItem(TW_UIKEY)||'{}')}catch(e){return {}}}
@@ -8536,7 +8537,7 @@ function twFitModel(){const R=twR();const c=twPane('model');if(!c)return;const W
   if(!isFinite(x0)){R.mv={z:1,ox:W/2,oy:H/2};return}const bw=Math.max(x1-x0,20),bh=Math.max(y1-y0,20);const z=Math.min(W/bw,H/bh)*0.9;R.mv={z,ox:(W-bw*z)/2-x0*z,oy:(H-bh*z)/2-y0*z}}
 const twVisible=it=>{const s=twSurf(it.sid);return !!(s&&s.vis)};
 function twSize(c){const dpr=(c.ownerDocument.defaultView.devicePixelRatio)||1;const W=c.clientWidth,H=c.clientHeight;if(c.width!==Math.round(W*dpr)||c.height!==Math.round(H*dpr)){c.width=Math.round(W*dpr);c.height=Math.round(H*dpr)}return dpr}
-let twRaf=0;function twDraw(){if(twRaf)return;twRaf=requestAnimationFrame(()=>{twRaf=0;try{twDrawPlan();twDrawModel()}catch(e){console.warn(e)}})}
+let twRaf=0;function twDraw(){if(twRaf)return;twRaf=requestAnimationFrame(()=>{twRaf=0;try{twDrawPlan();twDrawModel();twDrawProf()}catch(e){console.warn(e)}})}
 function twColors(){const cs=getComputedStyle(document.documentElement);return {bg:cs.getPropertyValue('--surface').trim()||'#fff',ink:cs.getPropertyValue('--ink').trim()||'#222',mute:cs.getPropertyValue('--ink-3').trim()||'#888',line:cs.getPropertyValue('--line').trim()||'#ddd',warn:'#d93025',hi:'#ff8c00',sel:'#00a8e8'}}
 function twPath(ctx,pts,f,close){ctx.beginPath();pts.forEach((p,i)=>{const q=f(p);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1])});if(close)ctx.closePath()}
 function twDrawItems(ctx,f,scale,cull,C,onPage){const R=twR();const sel=R.selItem,hi=R.hi;const showZ=scale>0.6;
@@ -8544,9 +8545,9 @@ function twDrawItems(ctx,f,scale,cull,C,onPage){const R=twR();const sel=R.selIte
     xs.forEach(it=>{if(cull&&!cull(twBB(it)))return;const miss=s.kind==='elev'&&it.t!=='count'&&!twHasZ(it);const on=it.id===sel||it.id===hi;
       const ty=s.kind==='sub'?twType(it):null;ctx.strokeStyle=on?(it.id===sel?C.sel:C.hi):miss?C.warn:ty&&ty.color||s.color;ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=on?3:act?1.6:1.1;ctx.globalAlpha=act||on?1:0.75;ctx.setLineDash(miss&&!on?[5,3]:[]);
       if(it.t==='count'||it.t==='spot'){const q=f(it.pts[0]);ctx.beginPath();ctx.arc(q[0],q[1],on?6:4,0,7);ctx.fill();if(it.t==='spot'&&showZ&&twHasZ(it)){ctx.font='11px system-ui';ctx.fillText(qtyFmt(it.z),q[0]+6,q[1]-6)}return}
-      twPath(ctx,it.pts,f,it.t==='area');if(it.t==='area'){const sc=twSecOf(it);ctx.globalAlpha=sc?0.22:0.12;ctx.fill();ctx.globalAlpha=act||on?1:0.75}ctx.stroke();if(it.t==='area'&&scale>0.15){const sc=twSecOf(it);if(sc){const b=twBB(it);const q=f([(b[0]+b[2])/2,(b[1]+b[3])/2]);ctx.font='bold 11px system-ui';const ty=twType(it);const lab=(ty&&scale>0.5?ty.name+' ':'')+'−'+sc.d+'″';ctx.fillText(lab,q[0]-ctx.measureText(lab).width/2,q[1]+4)}}
+      twPath(ctx,it.pts,f,it.t==='area');if(it.t==='area'){const sc=twSecOf(it);ctx.globalAlpha=sc?0.22:0.12;ctx.fill();ctx.globalAlpha=act||on?1:0.75}ctx.stroke();if(it.t==='pipe')twDrawPipeItem(ctx,it,f,scale,ctx.strokeStyle,on);if(it.t==='area'&&scale>0.15){const sc=twSecOf(it);if(sc){const b=twBB(it);const q=f([(b[0]+b[2])/2,(b[1]+b[3])/2]);ctx.font='bold 11px system-ui';const ty=twType(it);const lab=(ty&&scale>0.5?ty.name+' ':'')+'−'+sc.d+'″';ctx.fillText(lab,q[0]-ctx.measureText(lab).width/2,q[1]+4)}}
       if(showZ&&twHasZ(it)&&it.pts.length>1){const m=it.pts[Math.floor(it.pts.length/2)];const q=f(m);ctx.font='10px system-ui';ctx.fillText(qtyFmt(it.z),q[0]+3,q[1]-3)}})});
-  ctx.globalAlpha=1;ctx.setLineDash([])}
+  ctx.globalAlpha=1;ctx.setLineDash([]);twDrawMarks(ctx,f)}
 function twDrawPlan(){const R=twR();const c=twPane('plan');if(!c||!S.tw)return;const dpr=twSize(c);const ctx=c.getContext('2d');const C=twColors();ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#f4f4f1';ctx.fillRect(0,0,c.width,c.height);
   const n=S.tw.page,im=R.imgs[n];if(!im)return;if(!R.pv[n])twFitPlan();const v=R.pv[n];if(!v)return;ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.imageSmoothingEnabled=true;ctx.drawImage(im.cv,v.ox,v.oy,im.w*v.z,im.h*v.z);
@@ -8612,7 +8613,7 @@ function twKey(e){if(S.view!=='tw'||!S.tw)return;const R=twR();const tag=(e.targ
   else if(e.key==='Escape'){R.cur=[];R.sweepA=null;R.scaleRun=null;R.sel.clear();R.ask=null;R.alignRun=null;twPanels();twDraw()}
   else if((e.key==='Delete'||e.key==='Backspace')&&R.cur.length){e.preventDefault();R.cur.pop();twDraw()}
   else if((e.key==='Delete'||e.key==='Backspace')&&R.selItem&&!twRo()){e.preventDefault();twDelItem(R.selItem)}
-  else if(!e.ctrlKey&&!e.metaKey&&!e.altKey){const k={v:'pan',s:'select',p:'pick',d:'draw',a:'area',c:'count',w:'sweep'}[e.key.toLowerCase()];if(k){twTool(k)}}}
+  else if(!e.ctrlKey&&!e.metaKey&&!e.altKey){const k={v:'pan',s:'select',p:'pick',d:'draw',a:'area',c:'count',w:'sweep',u:'pipe'}[e.key.toLowerCase()];if(k){twTool(k)}}}
 document.addEventListener('keydown',twKey);
 
 /* ---------- hover, pick, snap ---------- */
@@ -8629,9 +8630,10 @@ function twItemAt(which,q){const R=twR();const v=which==='plan'?R.pv[S.tw.page]:
     const pts=it.t==='area'?[...it.pts,it.pts[0]]:it.pts;for(let k=1;k<pts.length;k++){const d=tkSegDist(w,pts[k-1],pts[k]);if(d<bd){bd=d;best=it}}});return best}
 function twHover(which,q){const R=twR();R.snap=null;R.vhov=null;
   if(which==='plan'&&(R.tool==='pick')){const V=R.vec[S.tw.page];const v=R.pv[S.tw.page];if(V&&v){const pi=twNearPath(V,q,8/v.z);R.vhov=pi>=0&&!V.paths[pi].used?pi:null}}
-  if(which==='plan'&&['draw','area','count','scale','apt','align'].includes(R.tool)){const v=R.pv[S.tw.page];if(v)R.snap=twSnapPt(q,9/v.z)}
+  if(which==='plan'&&['draw','area','count','scale','apt','align','pipe'].includes(R.tool)){const v=R.pv[S.tw.page];if(v)R.snap=twSnapPt(q,9/v.z)}
+  R.nsnap=null;if(R.tool==='pipe'){const s=twActive();const nk=s&&s.kind==='util'?twNodeNear(which,q,s.id):null;R.nsnap=nk?nk.w:null}
   if(['select','pan','sweep'].includes(R.tool)&&!R.cur.length){const it=twItemAt(which,q);const id=it?it.id:null;if(id!==R.hi){R.hi=id||R.selItem;const h=twPane(which)?.parentElement?.querySelector('.tw-hint');if(h&&it)h.textContent=twItemText(it)}}}
-function twItemText(it){const s=twSurf(it.sid);const sc0=twSecOf(it);const ty0=twType(it);const sec=sc0?`${ty0?ty0.name+', ':''}${sc0.d}″ section`:ty0?ty0.name+' (no depth yet)':'';const L=it.t==='area'?`${fmtN(twArea(it.pts),0)} SF`:it.t==='count'||it.t==='spot'?'':`${fmtN(twLen(it.pts),1)} LF`;return [s?s.name:'',{contour:'Contour',spot:'Spot elevation',line:'Line',area:'Area',count:'Count'}[it.t],twHasZ(it)?'elev '+qtyFmt(it.z):(s&&s.kind==='elev'&&it.t!=='count'?'no elevation yet':''),L,sec,it.page?'sheet '+it.page:''].filter(Boolean).join(' · ')}
+function twItemText(it){const s=twSurf(it.sid);const sc0=twSecOf(it);const ty0=twType(it);const sec=sc0?`${ty0?ty0.name+', ':''}${sc0.d}″ section`:ty0?ty0.name+' (no depth yet)':'';const L=it.t==='area'?`${fmtN(twArea(it.pts),0)} SF`:it.t==='count'||it.t==='spot'?'':`${fmtN(twLen(it.pts),1)} LF`;return [s?s.name:'',(it.t==='pipe'&&it.name?it.name+' · ':'')+{contour:'Contour',spot:'Spot elevation',line:'Line',area:'Area',count:'Count',pipe:'Pipe run'}[it.t],it.t==='pipe'?(it.nodes||[]).filter(n=>!twNoStr(n.k)).length+' structures':'',twHasZ(it)?'elev '+qtyFmt(it.z):(s&&s.kind==='elev'&&it.t!=='count'?'no elevation yet':''),L,sec,it.page?'sheet '+it.page:''].filter(Boolean).join(' · ')}
 
 /* ---------- clicks by tool ---------- */
 function twNeedPlaced(){const sh=twSheet(S.tw.page);if(!sh||!sh.scaled){toast('Set the scale on this sheet first (Scale tool), or align it to your alignment points.');twTool(S.tw.apts.length>=2?'align':'scale');return false}if(!sh.aligned){if(S.tw.apts.length<2){toast('There aren’t two alignment points to line this sheet up with. Use “Make this the reference sheet”, then add points here.');twPanels()}else{toast('Line this sheet up with the alignment points first (Align sheet).');twTool('align')}return false}return true}
@@ -8655,12 +8657,14 @@ function twClick(which,q,e){const R=twR();R.lastPane=which;if(twRo()&&!['pan','s
     case 'count':{const s=twNeedSurface(['elev','take','util']);if(!s)return;let w=q;if(which==='plan'){if(!twNeedPlaced())return;w=twP2W(twSheet(n),R.snap||q)}
       if(s.kind==='elev'){R.ask={type:'spot',w,page:which==='plan'?n:null,def:'',label:'Spot elevation'};twPanels();return}
       twSnap();S.tw.items.push({id:newId(),sid:s.id,t:'count',pts:[w],page:which==='plan'?n:null});twTouch();twPanels();twDraw();return}
+    case 'pipe':twPipeClick(which,q);return;
     case 'sweep':{const s=twNeedSurface(['elev']);if(!s)return;let w=q;if(which==='plan'){if(!twNeedPlaced())return;w=twP2W(twSheet(n),q)}
       if(!R.sweepA||R.curPane!==which){R.sweepA=w;R.curPane=which;twDraw();return}const a=R.sweepA;R.sweepA=null;twSweep(a,w);return}
   }}
-function twFinish(which){const R=twR();if(!R.cur.length)return;const n=S.tw.page;const s=twActive();let pts=R.cur.slice();R.cur=[];
+function twFinish(which){const R=twR();if(!R.cur.length)return;const n=S.tw.page;const s=twActive();const raw=R.cur.slice();let pts=raw.slice();R.cur=[];
   if(R.tool==='area'&&pts.length<3){twDraw();return}if(pts.length<2&&R.tool!=='area'){twDraw();return}
   if(which==='plan'){const sh=twSheet(n);pts=pts.map(p=>twP2W(sh,p))}
+  if(R.tool==='pipe'){twPipeFinish(s&&s.kind==='util'?s:null,raw,pts,which==='plan'?n:null);return}
   const t=R.tool==='area'?'area':s.kind==='elev'?'contour':'line';twSnap();const it={id:newId(),sid:s.id,t,pts,page:which==='plan'?n:null};if(s.kind==='sub'){const ty=twSubType(s);if(ty)it.sec=ty.id}S.tw.items.push(it);R.selItem=it.id;
   if(t==='contour')twAskZ([it.id]);twTouch();twPanels();twDraw()}
 function twPickAdd(idxs,whole){const R=twR();const n=S.tw.page;const V=R.vec[n];const sh=twSheet(n);const s=twNeedSurface(['elev','take','util','sub']);if(!s||!V)return;if(s.kind==='sub'&&!twSubType(s)){toast('Add a section type first (left panel, under the surface).');return}
@@ -8733,7 +8737,8 @@ function twTool(k){const R=twR();R.tool=k;R.cur=[];R.sweepA=null;R.scaleRun=null
 
 /* ---------- panels ---------- */
 function twSurfStats(s){const xs=S.tw.items.filter(i=>i.sid===s.id);if(s.kind==='sub'){const A=xs.filter(i=>i.t==='area');return `${A.length} area${A.length===1?'':'s'} · ${(s.types||[]).length} type${(s.types||[]).length===1?'':'s'}${A.some(i=>!twSecOf(i))?' · <span class="warn-t">some without a depth</span>':''}`}if(s.kind==='elev'){const c=xs.filter(i=>i.t==='contour'),sp=xs.filter(i=>i.t==='spot');const miss=c.filter(i=>!twHasZ(i)).length;return `${fmtN(c.length,0)} contour${c.length===1?'':'s'}${sp.length?` · ${sp.length} spot${sp.length===1?'':'s'}`:''}${miss?` · <span class="warn-t">${fmtN(miss,0)} need elevation</span>`:''}`}
-  const L=xs.filter(i=>i.t==='line').reduce((a,i)=>a+twLen(i.pts),0),A=xs.filter(i=>i.t==='area').reduce((a,i)=>a+twArea(i.pts),0),C=xs.filter(i=>i.t==='count').length;return [L?fmtN(L,0)+' LF':'',A?fmtN(A,0)+' SF':'',C?C+' EA':''].filter(Boolean).join(' · ')||'Nothing yet'}
+  const pr=xs.filter(i=>i.t==='pipe');const PL=pr.reduce((a,i)=>a+twLen(i.pts),0);const PS=new Set();pr.forEach(i=>(i.nodes||[]).forEach((n,k)=>{if(!twNoStr(n.k))PS.add(String(n.n||'').trim().toLowerCase()||i.id+'#'+k)}));
+  const L=xs.filter(i=>i.t==='line').reduce((a,i)=>a+twLen(i.pts),0),A=xs.filter(i=>i.t==='area').reduce((a,i)=>a+twArea(i.pts),0),C=xs.filter(i=>i.t==='count').length;return [pr.length?`${pr.length} run${pr.length===1?'':'s'} · ${fmtN(PL,0)} LF pipe · ${PS.size} structure${PS.size===1?'':'s'}`:'',L?fmtN(L,0)+' LF':'',A?fmtN(A,0)+' SF':'',C?C+' EA':''].filter(Boolean).join(' · ')||'Nothing yet'}
 function twSideHtml(){const R=twR();const ro=twRo();const T=S.tw;const n=R.pdf?R.pdf.numPages:(T.file&&T.file.pages)||0;
   return `<div class="tw-h">Surfaces${ro?'':`<button class="btn sm" data-act="tw-newsurf">+ New</button>`}</div>
     <div class="tw-surfs">${T.surfaces.map(s=>`<div class="tw-surf${s.id===T.active?' on':''}" data-act="tw-surf" data-id="${s.id}"><span class="tw-sw" style="background:${esc(s.color)}"></span><div class="tw-sn"><b>${esc(s.name)}</b><small>${TW_KINDS[s.kind][0]} · ${twSurfStats(s)}</small></div>
@@ -8762,10 +8767,11 @@ function twPlanSideHtml(){const R=twR();const n=S.tw.page;const V=R.vec[n];const
   else if(!sh||!sh.scaled)card=R.pdf?`<div class="tw-card"><b>Sheet ${n} isn’t placed yet</b><p class="small">${S.tw.apts.length>=2?'Line it up with <button class="linkbtn" data-act="tw-tool" data-v="align">Align sheet</button>.':'Start with <button class="linkbtn" data-act="tw-tool" data-v="scale">Scale</button> on your first sheet; it sets the job’s coordinates.'}</p></div>`:'';
   else if(!sh.aligned)card=`<div class="tw-card"><b>Sheet ${n} has a scale but isn’t lined up</b><p class="small">${S.tw.apts.length>=2?'<button class="linkbtn" data-act="tw-tool" data-v="align">Align sheet</button> to the alignment points, or ':''}<button class="linkbtn" data-act="tw-mkref">make this the reference sheet</button>${S.tw.apts.length>=2?'':' (there aren’t two alignment points to line it up with)'}.</p></div>`;
   return card+(R.lastPane==='model'?'':twAskHtml())}
-function twItemCard(){const R=twR();const it=S.tw.items.find(x=>x.id===R.selItem);if(!it)return '';const s=twSurf(it.sid);const ro=twRo();
+function twItemCard(){const R=twR();const it=S.tw.items.find(x=>x.id===R.selItem);if(!it)return '';if(it.t==='pipe')return twPipeCard(it);const s=twSurf(it.sid);const ro=twRo();
   return `<div class="tw-card tw-item"><div class="tw-ih"><b>${esc({contour:'Contour',spot:'Spot elevation',line:'Line',area:'Area',count:'Count'}[it.t])}</b><button class="x" data-act="tw-desel" aria-label="Close">×</button></div>
     <div class="small dim">${esc(twItemText(it))}</div>
     ${s&&s.kind==='elev'&&it.t!=='count'?`<label class="f">Elevation <input class="field sm num" data-twz="${it.id}" id="twz-${it.id}" value="${twHasZ(it)?it.z:''}" inputmode="decimal"${ro?' disabled':''}></label>`:''}
+    ${it.t==='line'&&s&&s.kind==='util'&&!ro?`<div class="adders"><button class="btn sm" data-act="tw-topipe" data-id="${it.id}">Make it a pipe run</button><span class="small dim">ends become structures</span></div>`:''}
     ${it.t==='line'&&it.pts.length>2&&!ro?`<div class="adders"><button class="btn sm" data-act="tw-toarea" data-id="${it.id}">Make it an area</button><span class="small dim">closes the outline</span></div>`:''}
     ${it.t==='area'&&s&&s.kind==='sub'?`<div class="tw-sec"><label class="f">Section type<select class="field sm" data-twsec="${it.id}"${ro?' disabled':''}><option value="">—</option>${(s.types||[]).map(t=>`<option value="${t.id}"${it.sec===t.id?' selected':''}>${esc(t.name)} (${+t.depth>0?t.depth+'″':'no depth'})</option>`).join('')}</select></label></div>`:''}
     ${it.t==='area'?`<div class="tw-sec"><label class="f">Section depth <span class="small dim">in</span><input class="field sm num" data-twdepth="${it.id}" id="twd-${it.id}" value="${+it.depth>0?it.depth:''}" placeholder="${twType(it)&&+twType(it).depth>0?twType(it).depth+' (type)':s&&+s.depth>0?s.depth+' (surface)':'e.g. 8'}" inputmode="decimal"${ro?' disabled':''}></label>
@@ -8776,7 +8782,7 @@ function twPanels(){if(S.view!=='tw'||!S.tw)return;const R=twR();const set=(id,h
   set('tw-side',twSideHtml());set('tw-tbar',twToolbarHtml());set('tw-mhud',twCfCard()+twItemCard()+(R.ask&&R.lastPane==='model'?twAskHtml():''));const pd=R.pop&&!R.pop.closed?R.pop.document:document;set('tw-phud',twPlanSideHtml(),pd);
   const ld=$('#tw-load');if(ld)ld.textContent=R.loading||'';const pl=pd.getElementById('tw-pload');if(pl)pl.textContent=R.loading||(R.vecBusy?'Reading lines…':'');
   const hint=(TW_TOOLS.find(t=>t[0]===R.tool)||[])[4]||'';[document.getElementById('tw-mhint'),pd.getElementById('tw-phint')].forEach(h=>{if(h&&!R.hover)h.textContent=hint});
-  twStatus();const a=twAskDoc().getElementById('tw-askv');if(a&&a.ownerDocument.activeElement!==a&&R.ask&&!R.ask._f){R.ask._f=1;setTimeout(()=>{a.focus();a.select()},0)}
+  twProfPanel();twStatus();const a=twAskDoc().getElementById('tw-askv');if(a&&a.ownerDocument.activeElement!==a&&R.ask&&!R.ask._f){R.ask._f=1;setTimeout(()=>{a.focus();a.select()},0)}
   setTimeout(()=>{const t=document.querySelector('[data-twthumb]:not([src])');if(t&&R.pdf)twThumb(+t.dataset.twthumb)},50)}
 
 /* ---------- page ---------- */
@@ -8789,10 +8795,11 @@ function vTw(){if(!S.tw){if(S.twr&&S.twr.loading)return `<div class="panel"><div
       <label class="check small"><input type="checkbox" data-twunder${R.under?' checked':''}> Plan under model</label>
       <button class="btn sm" data-act="tw-pop">${pop?'Bring plans back':'⧉ Plans in new window'}</button><span id="tw-save" class="small dim"></span>${ro?'<span class="pill">Read only</span>':''}</div>
     <div class="tw-tbar" id="tw-tbar"></div>
-    <div class="tw-main${pop?' popped':''}" id="tw-main" style="--tw-split:${R.split}">
+    <div class="tw-main${pop?' popped':''}" id="tw-main" style="--tw-split:${R.split};--tw-profh:${R.profH||twUiPrefs().profH||280}px">
       <aside class="tw-side" id="tw-side"></aside>
       <section class="tw-pane"><canvas id="tw-model" tabindex="0"></canvas><div class="tw-hud" id="tw-mhud"></div><div class="tw-hint" id="tw-mhint"></div><span class="tw-tag">Model</span></section>
       ${pop?'':`<div class="tw-div" id="tw-div" title="Drag to resize"></div>${twPlanPaneHtml()}`}
+      <div class="tw-prof" id="tw-prof"></div>
     </div></div>`}
 function twPlanPaneHtml(){const R=twR();return `<section class="tw-pane tw-planp">${R.pdf?'':`<div class="tw-empty">${S.tw.file?`<b>Open ${esc(S.tw.file.name)}</b><p>The plan file stays on each computer. Open it here to keep working; everything you've done is saved with the bid.</p>`:'<b>Open the plan PDF</b><p>Then set the scale on your first sheet. That sheet sets the job’s coordinates; every other sheet lines up to it.</p>'}<label class="btn primary">Choose PDF<input type="file" accept=".pdf,application/pdf" data-twfile hidden></label></div>`}
   <canvas id="tw-plan" tabindex="0"></canvas><div class="tw-hud tw-phud" id="tw-phud"></div><div class="tw-hint" id="tw-phint"></div><span class="tw-tag">Plan · sheet ${S.tw.page}<span id="tw-pload"></span></span></section>`}
@@ -8965,10 +8972,10 @@ function twCfCard(){const R=twR();if(!R.cfOpen)return '';const C=twCfDefaults();
       <div class="small dim">${esc(X.a)} → ${esc(X.b)}${X.limit?' · inside '+esc(X.limit):''} · ${fmtN(X.cell,1)} ft grid${X.secs?` · ${X.secs} section${X.secs===1?'':'s'} applied`:''}${X.missA||X.missB?` · <span class="warn-t">${X.missA+X.missB} contour${X.missA+X.missB===1?'':'s'} without elevations left out</span>`:''}${R.cf?'':' · recalculate to see the map'}</div>
       <div class="tw-cflg"><i class="c"></i> cut <i class="f"></i> fill <span class="dim">· darker = deeper · hover the model for elevations</span></div>`:'<p class="small dim">Uses the contours and spot elevations on both surfaces. Lines without an elevation are left out.</p>'}</div>`}
 /* ---------- finishing: the quantities list, exported or sent to the bid's estimate ---------- */
-function twQty(){const rows=[];const add=(group,name,qty,unit,key,note)=>{if(!(qty>0))return;rows.push({id:key,group,name,qty:+qty.toFixed(2),unit,key,note:note||''})};
+function twQty(){const rows=[];const add=(group,name,qty,unit,key,note,x)=>{if(!(qty>0))return;rows.push({id:key,group,name,qty:+qty.toFixed(2),unit,key,note:note||'',...(x||{})})};
   const X=S.tw.cfRes;if(X){const g=`Earthwork (${X.a} → ${X.b})`;add(g,'Cut',X.cut,'CY','ew|cut');add(g,'Fill',X.fill,'CY','ew|fill');if(X.fillC!==X.fill)add(g,'Fill with compaction',X.fillC,'CY','ew|fillc');
     if(X.net>0)add(g,'Export',X.net,'CY','ew|export');if(X.net<0)add(g,'Import',-X.net,'CY','ew|import');add(g,'Stripping volume',X.strip,'CY','ew|strippingvol');add(g,'Site area',X.area,'SF','ew|sitearea')}
-  S.tw.surfaces.forEach(s=>{if(s.kind==='elev')return;const xs=S.tw.items.filter(i=>i.sid===s.id);const k=u=>'tw|'+normH(s.name)+'|'+u;
+  S.tw.surfaces.forEach(s=>{if(s.kind==='elev')return;const xs=S.tw.items.filter(i=>i.sid===s.id);const k=u=>'tw|'+normH(s.name)+'|'+u;if(s.kind==='util')twPipeQty(s,add);
     if(s.kind==='sub'){(s.types||[]).forEach(ty=>{const ar=xs.filter(i=>i.t==='area'&&i.sec===ty.id);add(s.name,ty.name,ar.reduce((a,i)=>a+twArea(i.pts),0),'SF','tw|'+normH(ty.name)+'|sf');add(s.name,ty.name+' section',ar.filter(i=>twSecOf(i)).reduce((a,i)=>a+twArea(i.pts)*twSecOf(i).d/12/27,0),'CY','tw|'+normH(ty.name)+'|seccy','area × depth')});return}
     add(s.name,s.name,xs.filter(i=>i.t==='line').reduce((a,i)=>a+twLen(i.pts),0),'LF',k('lf'));add(s.name,s.name,xs.filter(i=>i.t==='area').reduce((a,i)=>a+twArea(i.pts),0),'SF',k('sf'));add(s.name,s.name,xs.filter(i=>i.t==='count').length,'EA',k('ea'));
     const sec=xs.filter(i=>twSecOf(i));if(sec.length)add(s.name,s.name+' section',sec.reduce((a,i)=>a+twArea(i.pts)*twSecOf(i).d/12/27,0),'CY',k('seccy'),'area × section depth')});
@@ -8982,18 +8989,18 @@ function twQtyModal(){const x=M;const rows=twQty();const b=S.tw.bidId&&byId(S.bi
 const twQOn=()=>twQty().filter(r=>!M.off.has(r.key));
 async function twQExcel(){const rows=twQOn();try{const X=await loadXLSX();const wb=X.utils.book_new();const title=(byId(S.bids,S.tw.bidId)||{}).name||S.tw.name||'Takeoff';
   const q=[[title+' — takeoff quantities'],[`Exported ${new Date().toLocaleString()} by ${myName()}`],[],['Group','Item','Quantity','Unit','Note'],...rows.map(r=>[r.group,r.name,r.qty,r.unit,r.note])];X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet(q),'Quantities');
-  const det=[['Surface','Kind','Type','Elevation','Length LF','Area SF','Section in','Sheet']];S.tw.items.forEach(i=>{const s=twSurf(i.sid);if(!s)return;det.push([s.name,TW_KINDS[s.kind][0],i.t,twHasZ(i)?i.z:'',i.t==='line'||i.t==='contour'?+twLen(i.pts).toFixed(1):'',i.t==='area'?+twArea(i.pts).toFixed(0):'',twSecOf(i)?twSecOf(i).d:'',i.page||''])});X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet(det),'Items');
+  const det=[['Surface','Kind','Type','Elevation','Length LF','Area SF','Section in','Sheet']];S.tw.items.forEach(i=>{const s=twSurf(i.sid);if(!s)return;det.push([s.name,TW_KINDS[s.kind][0],i.t,twHasZ(i)?i.z:'',i.t==='line'||i.t==='contour'||i.t==='pipe'?+twLen(i.pts).toFixed(1):'',i.t==='area'?+twArea(i.pts).toFixed(0):'',twSecOf(i)?twSecOf(i).d:'',i.page||''])});X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet(det),'Items');
   const X2=S.tw.cfRes;if(X2)X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet([['Cut / fill',X2.a+' → '+X2.b],['Cut CY',X2.cut],['Fill CY',X2.fill],['Fill with compaction CY',X2.fillC],[X2.net>=0?'Export CY':'Import CY',Math.abs(X2.net)],['Stripping CY',X2.strip],['Area SF',X2.area],['Deepest cut ft',X2.maxC],['Deepest fill ft',X2.maxF],['Grid ft',X2.cell],['Limits',X2.limit||'Wherever both surfaces exist'],['Sections applied',X2.secs||0],['Calculated',X2.at]]),'Cut fill');
-  X.writeFile(wb,`${title.replace(/[^\w\- ]+/g,'').trim()||'Takeoff'} takeoff.xlsx`)}catch(e){toast(errMsg(e))}}
+  twPipeSheets(X,wb);X.writeFile(wb,`${title.replace(/[^\w\- ]+/g,'').trim()||'Takeoff'} takeoff.xlsx`)}catch(e){toast(errMsg(e))}}
 function twQPdf(){const rows=twQOn();const title=(byId(S.bids,S.tw.bidId)||{}).name||S.tw.name||'Takeoff';const c=twPane('model');let img='';try{img=c?c.toDataURL('image/png'):''}catch(e){}
   const w=window.open('','_blank');if(!w){toast('Your browser blocked the new window. Allow pop-ups for this site.');return}const groups=[...new Set(rows.map(r=>r.group))];const X=S.tw.cfRes;
   w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)} takeoff</title><style>body{font:13px system-ui,sans-serif;color:#222;margin:28px}h1{font-size:20px;margin:0 0 4px}p{color:#666;margin:0 0 14px}table{border-collapse:collapse;width:100%;margin-bottom:16px}td,th{border-bottom:1px solid #ddd;padding:5px 6px;text-align:left}td.r,th.r{text-align:right}tr.g td{background:#f3f3f0;font-weight:700}img{max-width:100%;border:1px solid #ddd;margin-top:8px}@media print{button{display:none}}</style></head><body>
     <button onclick="print()" style="float:right">Print / save as PDF</button><h1>${esc(title)} — takeoff quantities</h1><p>${new Date().toLocaleString()} · ${esc(myName())}${X?` · Cut / fill ${esc(X.a)} → ${esc(X.b)}${X.limit?' inside '+esc(X.limit):''}${X.secs?`, ${X.secs} section${X.secs===1?'':'s'}`:''}`:''}</p>
     <table><thead><tr><th>Item</th><th class="r">Quantity</th><th>Unit</th></tr></thead><tbody>${groups.map(g=>`<tr class="g"><td colspan="3">${esc(g)}</td></tr>${rows.filter(r=>r.group===g).map(r=>`<tr><td>${esc(r.name)}${r.note?` <small style="color:#888">${esc(r.note)}</small>`:''}</td><td class="r">${fmtN(r.qty,r.unit==='EA'?0:1)}</td><td>${esc(r.unit)}</td></tr>`).join('')}`).join('')}</tbody></table>
-    ${img?`<div><b>Model</b><br><img src="${img}"></div>`:''}</body></html>`);w.document.close()}
+    ${twPipeReport()}${img?`<div><b>Model</b><br><img src="${img}"></div>`:''}</body></html>`);w.document.close()}
 // hand the ticked quantities to the bid's estimate, through the same matching screen the AGTEK import uses
 async function twQApply(){const rows=twQOn();const bid=S.tw.bidId;if(!bid)return;await twSave();const R=twR();if(R.pop&&!R.pop.closed)R.pop.close();
-  S.twPending={bidId:bid,at:new Date().toISOString(),name:S.tw.name||'Takeoff workspace',lines:rows.map(r=>({id:newId(),rep:'Takeoff workspace',ag:'tw',name:r.name,code:'',qty:r.qty,unit:r.unit,cls:r.group,key:r.key}))};
+  S.twPending={bidId:bid,at:new Date().toISOString(),name:S.tw.name||'Takeoff workspace',lines:rows.map(r=>{const o={id:newId(),rep:'Takeoff workspace',ag:'tw',name:r.name,code:'',qty:r.qty,unit:r.unit,cls:r.cls||r.group,key:r.key};if(r.dp!=null)o.dp=r.dp;if(r.fz)o.fz=1;return o})};
   closeModal();await estOpen(bid,'pipeline');twPendingApply()}
 function twPendingApply(){const P=S.twPending;if(!P||!S.est||S.est.bidId!==P.bidId)return;if(!S.est.data){toast('This bid has no estimate yet. Start one; the takeoff quantities will be waiting in Import takeoff.');return}
   const T=tkoData(S.est.data);T.lines=T.lines.filter(l=>l.rep!=='Takeoff workspace').concat(P.lines);T.reports['Takeoff workspace']={file:P.name,n:P.lines.length,at:P.at,by:myName(),tw:true};tkoMarkDups(T);S.twPending=null;estTouch();
@@ -9023,3 +9030,208 @@ document.addEventListener('change',e=>{const t=e.target;if(!S.tw)return;const s=
   else if(t.dataset.twtdep){const x=ty(t.dataset.twtdep);if(x){twSnap();const v=num(t.value);x.depth=v>0?v:'';twTouch();twPanels();twDraw()}}
   else if(t.dataset.twtcol){const x=ty(t.dataset.twtcol);if(x){x.color=t.value;twTouch();twDraw()}}
   else if(t.dataset.twsubon){s.on=t.value;twTouch();twPanels()}});
+
+/* ---------- utility surfaces: pipe runs, structures and the profile ----------
+   A pipe run is an item {t:'pipe', pts, nodes:[{n,k,rim,ii,io}], segs:[{d,m}], sys, name, gnd, tw, bb, sc}.
+   Each vertex is a structure (or a bend); each segment is a pipe. Inverts are typed per structure (in / out),
+   like the plan profile reads. Depth = ground − invert, from the run's ground surface (or straight rim to rim). */
+const TW_SYS=['Storm Drain','Sanitary Sewer','Water','Other'];
+const TW_MATS=['RCP','HDPE','CMP','HP','PVC','SDR35 PVC','SDR26 PVC','C900 PVC','DIP'];
+const TW_STRS=['Manhole','Catch Basin','Curb Inlet','Drop Inlet','Grate Inlet','Yard Inlet','Junction Box','Flared End Section','Mitered End Section','Headwall','Cleanout','Bend','Tee','Plug'];
+const TW_PFX={'manhole':'MH','catch basin':'CB','curb inlet':'CI','drop inlet':'DI','grate inlet':'GI','yard inlet':'YI','junction box':'JB','flared end section':'FES','mitered end section':'MES','headwall':'HW','cleanout':'CO'};
+const TW_DBR=[10,12,14,16,18,20];
+const twNoStr=k=>!String(k||'').trim()||/^(bend|tee|wye|plug|fitting|none|-)$/i.test(String(k).trim());
+const twN=v=>{if(v==null)return null;const s=String(v).trim();if(!s)return null;const n=+s.replace(/,/g,'');return isFinite(n)?n:null};
+const twDbr=()=>{const b=Array.isArray(S.tw.dbr)?S.tw.dbr.filter(x=>x>0).sort((a,c)=>a-c):[];return b.length?b:TW_DBR};
+// the depth brackets: [0-10, 10-12, …, 20+]; dg is what the bid item's name reduces to ("Depth Premium 10'-12'" → 1012)
+function twBrs(){const b=twDbr();const out=[{lo:0,hi:b[0],lab:`0-${b[0]}`,dg:''}];b.forEach((x,i)=>{const hi=b[i+1];out.push(hi?{lo:x,hi,lab:`${x}-${hi}`,dg:`${x}${hi}`}:{lo:x,hi:Infinity,lab:`${x}+`,dg:String(x)})});return out}
+const twBrIdx=(d,B)=>{for(let i=B.length-1;i>=0;i--)if(d>=B[i].lo)return i;return 0};
+const twPfx=k=>TW_PFX[String(k||'').trim().toLowerCase()]||String(k||'').trim().split(/\s+/).map(w=>w[0]||'').join('').toUpperCase()||'S';
+function twNextName(sid,k,extra){const p=twPfx(k);const re=new RegExp('^'+p.replace(/[^A-Z0-9]/gi,'')+'\\s*-?\\s*(\\d+)$','i');let mx=0;
+  const scan=n=>{const m=re.exec(String(n||'').trim());if(m)mx=Math.max(mx,+m[1])};S.tw.items.forEach(i=>{if(i.sid===sid&&i.t==='pipe')(i.nodes||[]).forEach(nd=>scan(nd.n))});(extra||[]).forEach(nd=>scan(nd.n));return `${p}-${mx+1}`}
+const twSysShort=s=>({'Storm Drain':'Storm','Sanitary Sewer':'Sanitary'}[s]||s||'Line');
+function twDefSys(s){return /san|sewer|\bss\b/i.test(s.name)?'Sanitary Sewer':/water|\bwl\b|fire/i.test(s.name)?'Water':'Storm Drain'}
+const twDefKind=sys=>sys==='Sanitary Sewer'?'Manhole':sys==='Water'?'Bend':sys==='Other'?'Manhole':'Catch Basin';
+const twDefMat=sys=>sys==='Sanitary Sewer'?'SDR35 PVC':sys==='Water'?'C900 PVC':'RCP';
+
+// ground for depth: a chosen elevation surface, or straight between rims. Auto = the design surface when there is one.
+function twGndSurf(it){if(it.gnd==='rim')return null;const el=S.tw.surfaces.filter(s=>s.kind==='elev');const g=it.gnd&&twSurf(it.gnd);if(g&&g.kind==='elev')return g;
+  const C=S.tw.cf||{};return el.find(s=>/design|prop|\bfg\b|final|finish/i.test(s.name))||twSurf(C.b)||el[el.length-1]||null}
+// a TIN for profiles, rebuilt only when that surface's own lines change (not on every pipe edit)
+function twGTin(sid){const R=twR();R.gt=R.gt||{};let sig=0,n=0;for(const it of S.tw.items){if(it.sid!==sid||!twHasZ(it))continue;n++;sig=(sig*31+it.pts.length*7+Math.round(it.z*100)+Math.round(it.pts[0][0]*10)+Math.round(it.pts[0][1]*10))%1000000007}
+  const me=+((S.tw.cf||{}).maxEdge)||150;const key=n+'|'+sig+'|'+me;const c=R.gt[sid];if(c&&c.key===key)return c.tin;let tin=null;if(n){try{tin=twTin(sid,me)}catch(e){}}R.gt[sid]={key,tin};return tin}
+
+function twPipeCalc(it){const P=it.pts||[];const N=it.nodes||[];const st=[0];for(let i=1;i<P.length;i++)st.push(st[i-1]+Math.hypot(P[i][0]-P[i-1][0],P[i][1]-P[i-1][1]));
+  const gs0=twGndSurf(it);const tin=gs0?twGTin(gs0.id):null;const gs=tin?gs0:null;const gz=(x,y)=>tin?tinZ(tin,x,y):NaN;const B=twBrs();
+  const nodes=P.map((p,i)=>{const n=N[i]||{};const g=gz(p[0],p[1]);const r=twN(n.rim);const ii=twN(n.ii),io=twN(n.io);const lo=[ii,io].filter(v=>v!=null);const rim=r!=null?r:isFinite(g)?g:null;
+    return {n:n.n||'',k:n.k||'',i,st:st[i],p,rim,rimSet:r!=null,g,ii,io,low:lo.length?Math.min(...lo):null,depth:rim!=null&&lo.length?rim-Math.min(...lo):null}});
+  const total=st[st.length-1]||0;const segs=[];const samp=[];let unk=0;const step=Math.max(0.5,total/1500);
+  for(let i=0;i<P.length-1;i++){const a=nodes[i],b=nodes[i+1];const L=st[i+1]-st[i];const iu=a.io!=null?a.io:a.ii,id=b.ii!=null?b.ii:b.io;const sg=(it.segs||[])[i]||{};const D=twN(sg.d);
+    const g={i,L,iu,id,d:D,m:sg.m||'',s:iu!=null&&id!=null&&L>0?(iu-id)/L*100:null,br:B.map(()=>0),unk:0,min:null,max:null,exc:0,stone:0,dsum:0,dlen:0};
+    const Dft=(D||0)/12;const W=twN(it.tw)!=null?twN(it.tw):Dft+2;const bb=(twN(it.bb)!=null?twN(it.bb):6)/12,sc=(twN(it.sc)!=null?twN(it.sc):12)/12;
+    const m=Math.max(1,Math.ceil(L/step));const gAt=t=>{const x=a.p[0]+(b.p[0]-a.p[0])*t,y=a.p[1]+(b.p[1]-a.p[1])*t;const z=gz(x,y);if(isFinite(z))return z;return a.rim!=null&&b.rim!=null?a.rim+(b.rim-a.rim)*t:a.rim!=null&&!b.rim?a.rim:b.rim!=null?b.rim:NaN};
+    const invAt=t=>iu!=null&&id!=null?iu+(id-iu)*t:NaN;
+    for(let j=0;j<=m;j++){const t=j/m;const x=a.p[0]+(b.p[0]-a.p[0])*t,y=a.p[1]+(b.p[1]-a.p[1])*t;if(j||!i)samp.push({s:st[i]+L*t,x,y,g:gAt(t),inv:invAt(t),k:i})}
+    // depth is taken as straight between samples, so the bracket lengths come out exact on a straight grade
+    let d0=gAt(0)-invAt(0);for(let j=0;j<m;j++){const d1=gAt((j+1)/m)-invAt((j+1)/m),dl=L/m;if(!isFinite(d0)||!isFinite(d1)){g.unk+=dl;d0=d1;continue}
+      const a0=Math.max(0,d0),a1=Math.max(0,d1);const lo=Math.min(a0,a1),hi=Math.max(a0,a1);if(hi-lo<1e-9)g.br[twBrIdx(lo,B)]+=dl;else B.forEach((q,bi)=>{const o=Math.min(hi,q.hi)-Math.max(lo,q.lo);if(o>0)g.br[bi]+=dl*o/(hi-lo)});
+      g.min=g.min==null?lo:Math.min(g.min,lo);g.max=g.max==null?hi:Math.max(g.max,hi);const d=(a0+a1)/2;g.dsum+=d*dl;g.dlen+=dl;
+      g.exc+=dl*W*(d+bb);const hs=Math.min(d+bb,bb+Dft+sc);g.stone+=Math.max(0,dl*(W*hs-Math.PI*(Dft/2)**2));d0=d1}
+    g.avg=g.dlen?g.dsum/g.dlen:null;g.exc/=27;g.stone/=27;g.W=W;unk+=g.unk;segs.push(g)}
+  return {st,nodes,segs,total,samp,gs,tin,unk,B}}
+
+/* ---------- drawing a run ---------- */
+function twNodeNear(which,q,sid){const R=twR();const v=which==='plan'?R.pv[S.tw.page]:R.mv;if(!v)return null;const sh=twSheet(S.tw.page);let w=q;let tol=10/v.z;if(which==='plan'){if(!sh||!sh.scaled)return null;w=twP2W(sh,q);tol*=sh.s}
+  let best=null,bd=tol;S.tw.items.forEach(it=>{if(it.t!=='pipe'||it.sid!==sid||!twVisible(it))return;it.pts.forEach((p,i)=>{const d=Math.hypot(p[0]-w[0],p[1]-w[1]);if(d<bd){bd=d;best={w:p.slice(),node:(it.nodes||[])[i]||{},it,i}}})});return best}
+function twPipeClick(which,q){const R=twR();const s=twNeedSurface(['util']);if(!s)return;const n=S.tw.page;let w=q;if(which==='plan'){if(!twNeedPlaced())return;w=R.snap||q}
+  if(R.cur.length&&R.curPane!==which)R.cur=[];R.curPane=which;const nk=twNodeNear(which,q,s.id);
+  if(nk)w=which==='plan'?twW2P(twSheet(n),nk.w):nk.w.slice();const p=[w[0],w[1]];if(nk)p.lk={n:nk.node.n||'',k:nk.node.k||'',rim:nk.node.rim??''};R.cur.push(p);twPanels();twDraw()}
+function twPipeFinish(s,raw,pts,page){const R=twR();if(!s||pts.length<2){twDraw();return}twSnap();
+  const prev=[...S.tw.items].reverse().find(i=>i.t==='pipe'&&i.sid===s.id);const sys=prev&&prev.sys||twDefSys(s);const kind=s.nk||twDefKind(sys);const ls=prev&&prev.segs&&prev.segs[prev.segs.length-1]||{};
+  const nodes=[];raw.forEach((p,i)=>{if(p.lk){nodes.push({n:p.lk.n,k:p.lk.k,rim:p.lk.rim,ii:'',io:''});return}const k=i===0||i===raw.length-1||!twNoStr(kind)?kind:'Bend';nodes.push({n:twNoStr(k)?'':twNextName(s.id,k,nodes),k,rim:'',ii:'',io:''})});
+  const runs=S.tw.items.filter(i=>i.t==='pipe'&&i.sid===s.id).length;const it={id:newId(),sid:s.id,t:'pipe',pts,page,name:`${twSysShort(sys)} ${runs<26?String.fromCharCode(65+runs):runs+1}`,sys,nodes,segs:pts.slice(1).map(()=>({d:ls.d||(sys==='Water'?8:sys==='Sanitary Sewer'?8:15),m:ls.m||twDefMat(sys)})),gnd:prev?prev.gnd||'':'',tw:prev?prev.tw||'':'',bb:prev?prev.bb??'':'',sc:prev?prev.sc??'':''};
+  S.tw.items.push(it);R.selItem=it.id;R.hi=it.id;twTouch();twPanels();twDraw();toast(`${it.name}: ${pts.length} structures, ${fmtN(twLen(pts),0)} LF. Type the rims and inverts in the table under the drawing.`)}
+// a picked or drawn line on a utility surface becomes a run: its ends are structures, the corners between are bends
+function twToPipe(it){const s=twSurf(it.sid);if(!s||it.pts.length<2)return;twSnap();const sys=twDefSys(s);const kind=s.nk||twDefKind(sys);const nodes=[];
+  it.pts.forEach((p,i)=>{const end=i===0||i===it.pts.length-1;const k=end?kind:'Bend';nodes.push({n:twNoStr(k)?'':twNextName(s.id,k,nodes),k,rim:'',ii:'',io:''})});
+  const runs=S.tw.items.filter(i=>i.t==='pipe'&&i.sid===s.id).length;Object.assign(it,{t:'pipe',sys,nodes,name:`${twSysShort(sys)} ${String.fromCharCode(65+runs%26)}`,segs:it.pts.slice(1).map(()=>({d:sys==='Storm Drain'?15:8,m:twDefMat(sys)}))});twTouch();twPanels();twDraw()}
+
+/* ---------- what's on screen ---------- */
+// the run shown in the profile: the one being drawn, else the selected one
+function twProfItem(){const R=twR();if(!S.tw)return null;if(R.tool==='pipe'&&R.cur.length){const s=twActive();if(!s||s.kind!=='util')return null;const sh=twSheet(S.tw.page);const cv=p=>R.curPane==='plan'&&sh?twP2W(sh,p):p;
+    const pts=R.cur.map(cv);const raw=R.cur.slice();if(R.hover&&R.hoverPane===R.curPane){const h=R.curPane==='plan'?(R.snap||R.hover):R.hover;pts.push(cv(h));raw.push(h)}
+    return {drawing:true,it:{t:'pipe',sid:s.id,pts,nodes:raw.map(p=>p.lk?{n:p.lk.n,k:p.lk.k,rim:p.lk.rim}:{}),segs:[],gnd:''}}}
+  const it=S.tw.items.find(x=>x.id===R.selItem);return it&&it.t==='pipe'?{it}:null}
+function twDrawPipeItem(ctx,it,f,scale,col,on){const show=scale>0.35;ctx.save();ctx.setLineDash([]);
+  (it.nodes||[]).forEach((nd,i)=>{const p=it.pts[i];if(!p)return;const q=f(p);if(twNoStr(nd.k)){ctx.beginPath();ctx.arc(q[0],q[1],2.5,0,7);ctx.fill();return}
+    const r=on?6:5;ctx.fillStyle='#fff';ctx.fillRect(q[0]-r,q[1]-r,r*2,r*2);ctx.strokeStyle=col;ctx.lineWidth=on?2:1.5;ctx.strokeRect(q[0]-r,q[1]-r,r*2,r*2);ctx.fillStyle=col;
+    if(show&&nd.n){ctx.font='bold 11px system-ui';ctx.fillText(nd.n,q[0]+r+3,q[1]-r-2)}});
+  if(scale>0.9)(it.segs||[]).forEach((g,i)=>{const a=it.pts[i],b=it.pts[i+1];if(!a||!b||!(g.d||g.m))return;const qa=f(a),qb=f(b);const len=Math.hypot(qb[0]-qa[0],qb[1]-qa[1]);const lab=`${g.d?g.d+'″ ':''}${g.m||''}`;ctx.font='10px system-ui';if(len<ctx.measureText(lab).width+30)return;
+    let ang=Math.atan2(qb[1]-qa[1],qb[0]-qa[0]);if(ang>Math.PI/2)ang-=Math.PI;if(ang<-Math.PI/2)ang+=Math.PI;ctx.save();ctx.translate((qa[0]+qb[0])/2,(qa[1]+qb[1])/2);ctx.rotate(ang);ctx.fillStyle=col;ctx.fillText(lab,-ctx.measureText(lab).width/2,-4);ctx.restore()});
+  ctx.restore()}
+function twDrawMarks(ctx,f){const R=twR();if(R.nsnap){const q=f(R.nsnap);ctx.strokeStyle='#ff8c00';ctx.lineWidth=2;ctx.beginPath();ctx.arc(q[0],q[1],9,0,7);ctx.stroke()}
+  if(R.phw){const q=f(R.phw);ctx.strokeStyle='#d93025';ctx.lineWidth=2;ctx.beginPath();ctx.arc(q[0],q[1],7,0,7);ctx.moveTo(q[0]-12,q[1]);ctx.lineTo(q[0]+12,q[1]);ctx.moveTo(q[0],q[1]-12);ctx.lineTo(q[0],q[1]+12);ctx.stroke()}}
+
+/* ---------- the profile panel (under the model and plan) ---------- */
+const twSta=s=>{if(!isFinite(s))return '—';const h=Math.floor(s/100),r=s-h*100;return `${h}+${r.toFixed(2).padStart(5,'0')}`};
+const twF2=v=>v==null||!isFinite(v)?'':(+v).toFixed(2);
+function twProfHtml(){const R=twR();const P=twProfItem();if(!P)return '';const ro=twRo();
+  if(P.drawing){const L=twLen(P.it.pts);return `<div class="tw-pgrip" title="Drag to resize"></div><div class="tw-ph"><b>Drawing a pipe run</b><span class="small dim">${R.cur.length} structure${R.cur.length===1?'':'s'} placed · ${fmtN(L,1)} ft so far. Click each structure; Enter or double-click finishes; Backspace takes back a click. Clicking an existing structure connects to it.</span></div>
+    <div class="tw-pb"><div class="tw-pt small dim" style="padding:10px">The ground along the run shows on the right as you draw.${twGndSurf(P.it)&&twGTin(twGndSurf(P.it).id)?` From <b>${esc(twGndSurf(P.it).name)}</b>.`:' Add contours to an elevation surface to see it; until then depths run straight between rims.'}</div><div class="tw-pcw"><canvas id="tw-pcv"></canvas><div class="tw-pread" id="tw-pread"></div></div></div>`}
+  const it=P.it;const C=twPipeCalc(it);const s=twSurf(it.sid);const el=S.tw.surfaces.filter(x=>x.kind==='elev');const gs=C.gs;const dis=ro?' disabled':'';
+  const nIn=(f,i,v,ph,cls)=>`<input class="field xs ${cls||'num'}" data-pf="${f}|${i}" value="${esc(v??'')}"${ph?` placeholder="${esc(ph)}"`:''}${dis}${cls?'':' inputmode="decimal"'}>`;
+  const maxD=Math.max(0,...C.segs.map(g=>g.max||0));const prem=C.segs.reduce((a,g)=>a+g.br.slice(1).reduce((x,y)=>x+y,0),0);
+  const rows=C.nodes.map((nd,i)=>{const N=(it.nodes||[])[i]||{};const g=C.segs[i];const last=i===C.nodes.length-1;const bend=twNoStr(nd.k);
+    let h=`<tr class="tw-pn${bend?' bend':''}" data-pni="${i}"><td>${nIn('n',i,N.n,bend?'':'Name','txt')}</td><td>${nIn('k',i,N.k,'Type','txt" list="tw-strs')}</td>
+      <td>${nIn('rim',i,N.rim,nd.rimSet||!isFinite(nd.g)?'':twF2(nd.g))}</td><td>${nIn('ii',i,N.ii,i===0?'—':'')}</td><td>${nIn('io',i,N.io,last?'—':N.ii?twF2(twN(N.ii)):'')}</td>
+      <td class="r small">${nd.depth!=null?fmtN(nd.depth,2):''}</td><td>${!ro&&C.nodes.length>2?`<button class="x" data-act="tw-pndel" data-v="${i}" title="Remove this point (joins the pipes on each side)" aria-label="Remove">×</button>`:''}</td></tr>`;
+    if(g){const sl=g.s!=null?g.s.toFixed(2):'';const brs=g.br.map((lf,bi)=>lf>0.05&&bi>0?`<span class="tw-chip b${Math.min(bi,6)}" title="Depth ${C.B[bi].lab} ft">${C.B[bi].lab}′ ${fmtN(lf,0)}</span>`:'').join('');
+      h+=`<tr class="tw-ps"><td colspan="7"><div class="tw-psr"><span class="dim">↓</span>${nIn('d',i,(it.segs[i]||{}).d,'in','num sz')}<span class="small dim">″</span>${nIn('m',i,(it.segs[i]||{}).m,'Material','txt mat" list="tw-mats')}
+        <span class="small">${fmtN(g.L,1)} ft</span><label class="small">slope ${nIn('s',i,sl,'%','num sl')}%</label>
+        <span class="small ${g.iu==null||g.id==null||g.s<0?'warn-t':'dim'}">${g.iu==null||g.id==null?'needs both inverts':g.s<0?'runs uphill':g.min!=null?`depth ${fmtN(g.min,1)}–${fmtN(g.max,1)} ft`:'no ground'}</span></div>${brs?`<div class="tw-pchips">${brs}</div>`:''}</td></tr>`}
+    return h}).join('');
+  return `<div class="tw-pgrip" title="Drag to resize"></div><div class="tw-ph"><input class="field sm tw-pname" data-pf="name|0" value="${esc(it.name||'')}" placeholder="Run name"${dis}>
+      <select class="field sm" data-pf="sys|0"${dis}>${TW_SYS.map(x=>`<option${(it.sys||'Storm Drain')===x?' selected':''}>${x}</option>`).join('')}</select>
+      <label class="small">Depth from <select class="field sm" data-pf="gnd|0"${dis}><option value="">Auto: ${gs?esc(gs.name):'rim to rim'}</option>${el.map(x=>`<option value="${x.id}"${it.gnd===x.id?' selected':''}>${esc(x.name)}</option>`).join('')}<option value="rim"${it.gnd==='rim'?' selected':''}>Rim to rim (straight)</option></select></label>
+      <span class="small dim">${fmtN(C.total,1)} LF · ${C.nodes.filter(n=>!twNoStr(n.k)).length} structures${maxD?` · deepest ${fmtN(maxD,1)} ft`:''}${prem>0.05?` · ${fmtN(prem,0)} LF over ${twDbr()[0]} ft`:''}${C.unk>0.5?` · <span class="warn-t">${fmtN(C.unk,0)} LF without a depth</span>`:''}</span>
+      <span style="flex:1"></span>${ro?'':`<button class="btn xs" data-act="tw-prev" title="Flip upstream / downstream">⇄ Reverse</button>`}<button class="btn xs" data-act="tw-ptrench" title="Trench and bedding for this run">Trench</button><button class="x" data-act="tw-desel" aria-label="Close">×</button></div>
+    ${R.ptrench?`<div class="tw-ptr small"><label>Trench width <input class="field xs num" data-pf="tw|0" value="${esc(it.tw??'')}" placeholder="pipe + 2"${dis}> ft</label><label>Bedding under pipe <input class="field xs num" data-pf="bb|0" value="${esc(it.bb??'')}" placeholder="6"${dis}> in</label><label>Stone over the top <input class="field xs num" data-pf="sc|0" value="${esc(it.sc??'')}" placeholder="12"${dis}> in</label>
+      <label>Depth brackets <input class="field xs txt" data-pf="dbr|0" value="${esc(twDbr().join(', '))}" style="width:130px"${dis}> ft</label><span class="dim">Excavation ${fmtN(C.segs.reduce((a,g)=>a+g.exc,0),1)} CY · stone ${fmtN(C.segs.reduce((a,g)=>a+g.stone,0),1)} CY</span></div>`:''}
+    <div class="tw-pb"><div class="tw-pt"><table class="tw-ptab"><thead><tr><th>Structure</th><th>Type</th><th>Rim</th><th>Inv in</th><th>Inv out</th><th class="r">Depth</th><th></th></tr></thead><tbody>${rows}</tbody></table>
+      <p class="small dim" style="margin:6px 8px">Blank rim = the ground surface there. Blank inv out = same as in. Type a slope to set the next invert. Same structure name on two runs = one structure.</p></div>
+      <div class="tw-pcw"><canvas id="tw-pcv"></canvas><div class="tw-pread" id="tw-pread"></div></div></div>
+    <datalist id="tw-strs">${TW_STRS.map(x=>`<option value="${x}">`).join('')}</datalist><datalist id="tw-mats">${TW_MATS.map(x=>`<option value="${x}">`).join('')}</datalist>`}
+function twProfPanel(){const e=document.getElementById('tw-prof');if(!e)return;const h=twProfHtml();if(e._h===h)return;
+  const a=document.activeElement;const k=a&&a.dataset&&a.dataset.pf&&e.contains(a)?a.dataset.pf:null;e.innerHTML=h;e._h=h;e.classList.toggle('on',!!h);
+  if(k){const b=e.querySelector(`[data-pf="${k}"]`);if(b){b.focus();try{b.select()}catch(x){}}}}
+
+// the profile picture: ground, rims, structures, the pipe (invert to crown), depth brackets along the bottom
+function twDrawProf(){const c=document.getElementById('tw-pcv');if(!c)return;const P=twProfItem();if(!P)return;const R=twR();const dpr=twSize(c);const ctx=c.getContext('2d');const K=twColors();
+  ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=K.bg;ctx.fillRect(0,0,c.width,c.height);ctx.setTransform(dpr,0,0,dpr,0,0);const W=c.clientWidth,H=c.clientHeight;
+  const it=P.it;const C=twPipeCalc(it);R.pcalc=C;if(C.total<=0){ctx.fillStyle=K.mute;ctx.font='12px system-ui';ctx.fillText('Click the next structure to see the profile.',14,24);return}
+  // other elevation surfaces, for reference
+  const others=S.tw.surfaces.filter(x=>x.kind==='elev'&&(!C.gs||x.id!==C.gs.id)&&x.vis).map(x=>({x,tin:twGTin(x.id)})).filter(o=>o.tin).map(o=>({s:o.x,z:C.samp.map(p=>tinZ(o.tin,p.x,p.y))}));
+  let lo=Infinity,hi=-Infinity;const see=v=>{if(v!=null&&isFinite(v)){lo=Math.min(lo,v);hi=Math.max(hi,v)}};C.samp.forEach(p=>{see(p.g);see(p.inv)});C.nodes.forEach(n=>{see(n.rim);see(n.low)});others.forEach(o=>o.z.forEach(see));
+  if(!isFinite(lo)){ctx.fillStyle=K.mute;ctx.font='12px system-ui';ctx.fillText('No elevations yet: type rims and inverts, or add contours to an elevation surface.',14,24);return}
+  const maxD=Math.max(0,...C.segs.map(g=>((g.d||0)/12)));hi+=1.5;lo-=1.5;if(hi-lo<6){const m=(hi+lo)/2;hi=m+3;lo=m-3}
+  const L=58,Rr=14,T=22,Bm=40;const X=s=>L+(s/C.total)*(W-L-Rr),Y=z=>T+(hi-z)/(hi-lo)*(H-T-Bm);R.pmap={L,Rr,W,total:C.total};
+  // grid
+  const NS=[0.5,1,2,5,10,20,25,50,100,200,250,500,1000,2000,5000];const ez=NS.find(x=>(hi-lo)/x<=Math.max(3,(H-T-Bm)/28))||5000,es=NS.find(x=>x>=C.total/Math.max(1,(W-L-Rr)/80))||5000;ctx.font='10px system-ui';ctx.lineWidth=1;
+  ctx.strokeStyle=K.line;ctx.fillStyle=K.mute;for(let z=Math.ceil(lo/ez)*ez;z<=hi;z+=ez){const y=Math.round(Y(z))+0.5;ctx.beginPath();ctx.moveTo(L,y);ctx.lineTo(W-Rr,y);ctx.stroke();ctx.fillText(fmtN(z,1),4,y+3)}
+  for(let s=0;s<=C.total+0.01;s+=es){const x=Math.round(X(s))+0.5;ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,H-Bm);ctx.stroke();const t=`${Math.floor(s/100)}+${String(Math.round(s%100)).padStart(2,'0')}`;ctx.fillText(t,x-ctx.measureText(t).width/2,H-Bm+24)}
+  // depth brackets strip
+  const BC=['#c9ccd1','#f2c14e','#f0a03c','#e8762f','#d9512c','#b8322a','#8e1f24'];for(let k=1;k<C.samp.length;k++){const a=C.samp[k-1],b=C.samp[k];const d=((a.g-a.inv)+(b.g-b.inv))/2;if(!isFinite(d))continue;ctx.fillStyle=BC[Math.min(twBrIdx(Math.max(0,d),C.B),6)];ctx.fillRect(X(a.s),H-Bm+3,Math.max(1,X(b.s)-X(a.s)+0.5),8)}
+  // ground lines
+  const line=(zs,col,w,dash)=>{ctx.strokeStyle=col;ctx.lineWidth=w;ctx.setLineDash(dash||[]);ctx.beginPath();let pen=false;C.samp.forEach((p,k)=>{const z=zs[k];if(z==null||!isFinite(z)){pen=false;return}const x=X(p.s),y=Y(z);pen?ctx.lineTo(x,y):ctx.moveTo(x,y);pen=true});ctx.stroke();ctx.setLineDash([])};
+  others.forEach(o=>line(o.z,o.s.color,1,[5,4]));line(C.samp.map(p=>p.g),C.gs?C.gs.color:'#8a6d3b',2,C.gs?null:[6,3]);
+  // pipes: invert to crown
+  const col=(twSurf(it.sid)||{}).color||'#2f6fd6';C.segs.forEach(g=>{if(g.iu==null||g.id==null)return;const a=C.st[g.i],b=C.st[g.i+1];const D=(g.d||0)/12;ctx.fillStyle=col;ctx.globalAlpha=0.25;ctx.beginPath();ctx.moveTo(X(a),Y(g.iu));ctx.lineTo(X(b),Y(g.id));ctx.lineTo(X(b),Y(g.id+D));ctx.lineTo(X(a),Y(g.iu+D));ctx.closePath();ctx.fill();ctx.globalAlpha=1;
+    ctx.strokeStyle=col;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(X(a),Y(g.iu));ctx.lineTo(X(b),Y(g.id));ctx.stroke();ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(X(a),Y(g.iu+D));ctx.lineTo(X(b),Y(g.id+D));ctx.stroke();
+    const lab=`${fmtN(g.L,0)}′ ${g.d?g.d+'″ ':''}${g.m||''} @ ${g.s!=null?g.s.toFixed(2)+'%':'?'}`;ctx.font='10px system-ui';const tw2=ctx.measureText(lab).width;if(X(b)-X(a)>tw2+8){const xm=(X(a)+X(b))/2,ym=Y((g.iu+g.id)/2+D)-6;ctx.fillStyle=g.s<0?K.warn:K.ink;ctx.fillText(lab,xm-tw2/2,ym)}});
+  // structures
+  let lastX=-99;C.nodes.forEach(nd=>{const x=X(nd.st);if(twNoStr(nd.k)){ctx.strokeStyle=K.mute;ctx.setLineDash([2,3]);ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,H-Bm);ctx.stroke();ctx.setLineDash([]);return}
+    const top=nd.rim!=null?nd.rim:null,bot=nd.low!=null?nd.low-0.5:top!=null?top-4:null;if(top!=null&&bot!=null){ctx.fillStyle=K.bg;ctx.strokeStyle=K.ink;ctx.lineWidth=1.5;const y0=Y(top),y1=Y(bot);ctx.fillRect(x-4,y0,8,y1-y0);ctx.strokeRect(x-4,y0,8,y1-y0)}
+    else{ctx.strokeStyle=K.ink;ctx.setLineDash([3,3]);ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,H-Bm);ctx.stroke();ctx.setLineDash([])}
+    if(x-lastX>46){ctx.fillStyle=K.ink;ctx.font='bold 10px system-ui';const t=nd.n||nd.k||'';ctx.fillText(t,Math.min(W-Rr-ctx.measureText(t).width,Math.max(L,x-ctx.measureText(t).width/2)),T-8);lastX=x}});
+  // hover readout
+  if(R.phs!=null&&R.phs>=0&&R.phs<=C.total){const x=X(R.phs);ctx.strokeStyle=K.warn;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(x,T);ctx.lineTo(x,H-Bm);ctx.stroke()}
+  ctx.fillStyle=K.mute;ctx.font='10px system-ui';ctx.fillText(`${C.gs?C.gs.name:'Rim to rim'} ground · ${fmtN(((H-T-Bm)/(hi-lo))/((W-L-Rr)/C.total),1)}× vertical`,L,H-4)}
+function twProfAt(s){const C=twR().pcalc;if(!C)return null;let best=C.samp[0];for(const p of C.samp){if(Math.abs(p.s-s)<Math.abs(best.s-s))best=p}return best}
+document.addEventListener('pointermove',e=>{if(e.target.id!=='tw-pcv')return;const R=twR();const m=R.pmap;if(!m||!m.total)return;const r=e.target.getBoundingClientRect();const s=(e.clientX-r.left-m.L)/(m.W-m.L-m.Rr)*m.total;
+  if(s<0||s>m.total){R.phs=null;R.phw=null}else{R.phs=s;const p=twProfAt(s);R.phw=p?[p.x,p.y]:null;const el=document.getElementById('tw-pread');if(el&&p){const d=p.g-p.inv;el.textContent=`Sta ${twSta(s)} · ground ${isFinite(p.g)?fmtN(p.g,2):'—'} · invert ${isFinite(p.inv)?fmtN(p.inv,2):'—'}${isFinite(d)?` · depth ${fmtN(d,2)} ft (${R.pcalc.B[twBrIdx(Math.max(0,d),R.pcalc.B)].lab})`:''}`}}twDraw()});
+document.addEventListener('pointerleave',e=>{if(e.target.id!=='tw-pcv')return;const R=twR();R.phs=null;R.phw=null;const el=document.getElementById('tw-pread');if(el)el.textContent='';twDraw()},true);
+document.addEventListener('click',e=>{if(e.target.id!=='tw-pcv')return;const R=twR();const C=R.pcalc,m=R.pmap;if(!C||!m||R.phs==null)return;let bi=-1,bd=Infinity;C.nodes.forEach((n,i)=>{const d=Math.abs(n.st-R.phs);if(d<bd){bd=d;bi=i}});
+  if(bi>=0&&bd/m.total*(m.W-m.L-m.Rr)<14){const f=document.querySelector(`[data-pf="${C.nodes[bi].rimSet?'ii':'rim'}|${bi}"]`);if(f){f.focus();f.select();f.closest('tr').scrollIntoView({block:'nearest'})}}});
+
+/* ---------- editing the table ---------- */
+function twPipeSet(it,f,i,v){const s=twSurf(it.sid);const nd=(it.nodes||[])[i];const sg=(it.segs||[])[i];const same=fn=>{const nm=String(nd&&nd.n||'').trim().toLowerCase();if(!nm)return;S.tw.items.forEach(x=>{if(x.t==='pipe'&&x.sid===it.sid)(x.nodes||[]).forEach(y=>{if(y!==nd&&String(y.n||'').trim().toLowerCase()===nm)fn(y)})})};
+  switch(f){
+    case 'name':it.name=v.trim();break;case 'sys':it.sys=v;break;case 'gnd':it.gnd=v;break;
+    case 'tw':case 'bb':case 'sc':it[f]=twN(v)!=null?twN(v):'';break;
+    case 'dbr':{const b=v.split(/[^0-9.]+/).map(Number).filter(x=>x>0);S.tw.dbr=b.length?[...new Set(b)].sort((a,c)=>a-c):null;break}
+    case 'n':if(nd){const was=nd.n;nd.n=v.trim();const twin=S.tw.items.flatMap(x=>x.t==='pipe'&&x.sid===it.sid?x.nodes||[]:[]).find(y=>y!==nd&&y.n&&y.n.trim().toLowerCase()===nd.n.toLowerCase());if(twin&&twN(nd.rim)==null&&twN(twin.rim)!=null)nd.rim=twin.rim;if(twin&&!nd.k)nd.k=twin.k}break;
+    case 'k':if(nd){nd.k=v.trim();same(y=>y.k=nd.k);if(s&&nd.k)s.nk=nd.k;if(!twNoStr(nd.k)&&!nd.n)nd.n=twNextName(it.sid,nd.k)}break;
+    case 'rim':if(nd){nd.rim=twN(v)!=null?twN(v):'';same(y=>y.rim=nd.rim)}break;
+    case 'ii':case 'io':if(nd)nd[f]=twN(v)!=null?twN(v):'';break;
+    case 'd':if(sg)sg.d=twN(v)!=null?twN(v):'';break;case 'm':if(sg)sg.m=v.trim();break;
+    case 's':{const sl=twN(v);if(sl==null||!sg)break;const a=it.nodes[i],b=it.nodes[i+1];const L=Math.hypot(it.pts[i+1][0]-it.pts[i][0],it.pts[i+1][1]-it.pts[i][1]);const iu=twN(a.io)!=null?twN(a.io):twN(a.ii),id=twN(b.ii)!=null?twN(b.ii):twN(b.io);
+      if(iu!=null){b.ii=+(iu-sl/100*L).toFixed(2)}else if(id!=null){a.io=+(id+sl/100*L).toFixed(2)}else toast('Type one invert first; the slope sets the other.');break}
+  }}
+document.addEventListener('change',e=>{const t=e.target;const pf=t.dataset&&t.dataset.pf;if(pf==null||!S.tw)return;const P=twProfItem();if(!P||P.drawing||twRo())return;const [f,i]=pf.split('|');twSnap();twPipeSet(P.it,f,+i,t.value);twTouch();
+  setTimeout(()=>{twPanels();twDraw()},0)});
+document.addEventListener('keydown',e=>{const t=e.target;if(!t.dataset||t.dataset.pf==null||e.key!=='Enter')return;e.preventDefault();const all=[...document.querySelectorAll('#tw-prof [data-pf]')].filter(x=>x.tagName==='INPUT');const k=all.indexOf(t);const col=t.dataset.pf.split('|')[0];
+  const next=all.slice(k+1).find(x=>x.dataset.pf.split('|')[0]===col)||all[k+1];t.blur();if(next)setTimeout(()=>{const b=document.querySelector(`[data-pf="${next.dataset.pf}"]`);if(b){b.focus();try{b.select()}catch(x){}}},10)});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!S.tw)return;const a=t.dataset.act;const R=twR();
+  if(a==='tw-ptrench'){R.ptrench=!R.ptrench;twPanels();twDraw();return}
+  if(a==='tw-topipe'){const it=S.tw.items.find(x=>x.id===t.dataset.id);if(it)twToPipe(it);return}
+  const P=twProfItem();if(!P||P.drawing||twRo())return;const it=P.it;
+  if(a==='tw-prev'){twSnap();it.pts.reverse();it.nodes.reverse().forEach(n=>{const x=n.ii;n.ii=n.io;n.io=x});it.segs.reverse();twTouch();twPanels();twDraw()}
+  else if(a==='tw-pndel'){const i=+t.dataset.v;if(it.pts.length<=2)return;twSnap();it.pts.splice(i,1);it.nodes.splice(i,1);it.segs.splice(Math.min(i,it.segs.length-1),1);twTouch();twPanels();twDraw()}});
+// drag the top edge of the profile to make it taller or shorter
+document.addEventListener('pointerdown',e=>{if(!e.target.classList||!e.target.classList.contains('tw-pgrip'))return;const main=document.getElementById('tw-main');const pr=document.getElementById('tw-prof');if(!main||!pr)return;const r0=pr.getBoundingClientRect();e.preventDefault();const R=twR();
+  const mv=ev=>{const h=Math.max(150,Math.min(main.getBoundingClientRect().height-180,r0.bottom-ev.clientY));R.profH=h;main.style.setProperty('--tw-profh',h+'px');twDraw()};const up=()=>{document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);twUiSave({profH:R.profH})};
+  document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up)});
+
+/* ---------- quantities ---------- */
+function twPipeQty(s,add){const runs=S.tw.items.filter(i=>i.sid===s.id&&i.t==='pipe');if(!runs.length)return;const g=s.name;const sysN=new Set(runs.map(r=>r.sys||'Storm Drain'));const tag=sys=>sysN.size>1?` (${twSysShort(sys)})`:'';
+  const pipe=new Map(),dp=new Map(),str=new Map(),seen=new Set(),ex=new Map(),stn=new Map(),unk=new Map();const bump=(m,k,o,q)=>{const e=m.get(k);if(e)e.q+=q;else m.set(k,{...o,q})};
+  runs.forEach(it=>{const C=twPipeCalc(it);const sys=it.sys||'Storm Drain';
+    C.segs.forEach(sg=>{const nm=`${sg.d?sg.d+'" ':''}${sg.m||'Pipe'}`;bump(pipe,sys+'|'+nm,{sys,nm},sg.L);sg.br.forEach((lf,bi)=>{if(bi>0&&lf>0)bump(dp,sys+'|'+bi,{sys,b:C.B[bi]},lf)});bump(ex,sys,{sys},sg.exc);bump(stn,sys,{sys},sg.stone);if(sg.unk>0)bump(unk,sys+'|'+nm,{},sg.unk)});
+    C.nodes.forEach((nd,i)=>{if(twNoStr(nd.k))return;const key=String(nd.n||'').trim().toLowerCase()||(it.id+'#'+i);if(seen.has(key))return;seen.add(key);let nm=nd.k;
+      if(/end section|headwall/i.test(nm)){const sg=C.segs[i]||C.segs[i-1];if(sg&&sg.d)nm=`${sg.d}" ${nm}`}bump(str,sys+'|'+nm,{sys,nm,vf:0},1);const e=str.get(sys+'|'+nm);if(nd.depth!=null)e.vf+=nd.depth})});
+  pipe.forEach((o,k)=>{const u=(unk.get(k)||{}).q||0;add(g,o.nm+tag(o.sys),o.q,'LF','twp|'+normH(o.sys)+'|'+normH(o.nm),u>0.5?`${fmtN(u,0)} LF without a depth`:'',{cls:o.sys,fz:1})});
+  [...dp.values()].sort((a,b)=>a.b.lo-b.b.lo).forEach(o=>add(g,`Depth premium ${o.b.lab} ft${tag(o.sys)}`,o.q,'LF','dp|'+normH(o.sys)+'|'+o.b.dg,'',{cls:o.sys,dp:o.b.dg}));
+  str.forEach((o,k)=>{add(g,o.nm+tag(o.sys),o.q,'EA','tws|'+normH(o.sys)+'|'+normH(o.nm),'',{cls:o.sys,fz:1});if(/manhole/i.test(o.nm)&&o.vf>0)add(g,o.nm+' depth'+tag(o.sys),o.vf,'VF','tws|'+normH(o.sys)+'|'+normH(o.nm)+'|vf','rim to lowest invert',{cls:o.sys})});
+  ex.forEach(o=>add(g,'Trench excavation'+tag(o.sys),o.q,'CY','twt|'+normH(o.sys)+'|exc','',{cls:o.sys}));stn.forEach(o=>add(g,'Bedding stone'+tag(o.sys),o.q,'CY','twt|'+normH(o.sys)+'|stone','',{cls:o.sys}))}
+function twPipeSheets(X,wb){const runs=S.tw.items.filter(i=>i.t==='pipe');if(!runs.length)return;const B=twBrs();
+  const ps=[['Surface','Run','From','To','Size in','Material','Length LF','Slope %','Invert up','Invert down','Depth min','Depth max','Depth avg',...B.map(b=>b.lab+' ft LF'),'No depth LF','Trench CY','Stone CY']];
+  const ss=[['Surface','Run','Structure','Type','Station','Rim','Rim from','Invert in','Invert out','Depth']];
+  runs.forEach(it=>{const s=twSurf(it.sid);const C=twPipeCalc(it);const r2=v=>v==null||!isFinite(v)?'':+v.toFixed(2);
+    C.segs.forEach(g=>{const a=C.nodes[g.i],b=C.nodes[g.i+1];ps.push([s?s.name:'',it.name||'',a.n||a.k,b.n||b.k,g.d||'',g.m,r2(g.L),r2(g.s),r2(g.iu),r2(g.id),r2(g.min),r2(g.max),r2(g.avg),...g.br.map(r2),r2(g.unk),r2(g.exc),r2(g.stone)])});
+    C.nodes.forEach(n=>{if(twNoStr(n.k))return;ss.push([s?s.name:'',it.name||'',n.n,n.k,twSta(n.st),r2(n.rim),n.rimSet?'typed':n.rim!=null?(C.gs?C.gs.name:''):'',r2(n.ii),r2(n.io),r2(n.depth)])})});
+  X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet(ps),'Pipes');X.utils.book_append_sheet(wb,X.utils.aoa_to_sheet(ss),'Structures')}
+function twPipeReport(){const runs=S.tw.items.filter(i=>i.t==='pipe');if(!runs.length)return '';
+  return `<h2 style="font-size:15px">Pipe runs</h2><table><thead><tr><th>Run</th><th>From → To</th><th>Pipe</th><th class="r">LF</th><th class="r">Slope</th><th class="r">Inverts</th><th class="r">Depth</th></tr></thead><tbody>${runs.map(it=>{const C=twPipeCalc(it);return C.segs.map(g=>{const a=C.nodes[g.i],b=C.nodes[g.i+1];
+    return `<tr><td>${esc(it.name||'')}</td><td>${esc(a.n||a.k||'')} → ${esc(b.n||b.k||'')}</td><td>${g.d?g.d+'″ ':''}${esc(g.m||'')}</td><td class="r">${fmtN(g.L,1)}</td><td class="r">${g.s!=null?g.s.toFixed(2)+'%':''}</td><td class="r">${g.iu!=null?g.iu.toFixed(2):'?'} → ${g.id!=null?g.id.toFixed(2):'?'}</td><td class="r">${g.min!=null?fmtN(g.min,1)+'–'+fmtN(g.max,1)+' ft':''}</td></tr>`}).join('')}).join('')}</tbody></table>`}
+function twPipeCard(it){const ro=twRo();return `<div class="tw-card tw-item"><div class="tw-ih"><b>Pipe run${it.name?': '+esc(it.name):''}</b><button class="x" data-act="tw-desel" aria-label="Close">×</button></div><div class="small dim">${esc(twItemText(it))}</div>
+  <p class="small" style="margin:4px 0">Rims, inverts, sizes and the profile are in the panel under the drawing.</p>${ro?'':`<div class="adders"><select class="field sm" data-twmove="${it.id}"><option value="">Move to…</option>${S.tw.surfaces.filter(x=>x.id!==it.sid&&x.kind==='util').map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="tw-del" data-id="${it.id}">Delete</button></div>`}</div>`}
