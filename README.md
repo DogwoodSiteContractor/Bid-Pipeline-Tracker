@@ -622,10 +622,10 @@ Needs `supabase/update-34-takeoffs.sql` to save (you can work without it, but no
 **The plan file** stays on each computer (a 60+ MB PDF is too big to keep in the database). It's remembered in the browser, so it reopens by itself on the same computer. On another computer the takeoff asks for the file; everything done so far is already there.
 
 **Placing sheets.**
-1. **Scale** the first sheet: click both ends of the bar scale and type the distance. That sheet sets the job's coordinates.
+1. **Scale** each sheet: pick its scale from the list (1" = 10' to 200', for full-size sheets) or click both ends of its bar scale and type the distance. Every sheet keeps its own scale, shown under its thumbnail. The first sheet you scale sets the job's coordinates (the reference sheet).
 2. **Alignment points (◎):** click two or three spots that appear on every sheet (property corners, a benchmark, a building corner) and name them.
    - **New plan set, or deleted the points?** Scaling a sheet while there are fewer than two alignment points makes it the new reference. On a sheet that already has a scale, **Make this the reference sheet** (in the Align card) does the same. Then add points on it and line the others up again.
-3. **Align sheet** on every other sheet: click each named point where it sits. Two points fix position, scale and rotation; a third checks the fit and the app reports how far off it is. A sheet whose bar scale disagrees with its alignment is flagged. Markers can be hidden.
+3. **Align sheet** on every other sheet: click each named point where it sits. Lining up moves and turns the sheet but keeps its own scale. One point is enough to place a scaled sheet (no turn); two set its angle; more check the fit, and the app reports how far off they are and flags a sheet whose points suggest a different scale. A sheet with no scale of its own takes its scale from two or more points. Changing a lined-up sheet's scale re-fits it at the new scale. Markers can be hidden.
 
 **Surfaces.** Make as many as you like, with any name and color: **Elevation** (contours and spot elevations), **Takeoff** (lines, areas, counts) or **Utility** (pipe tools come later). Show, hide or lock each one; the active one is where new work goes.
 
@@ -638,4 +638,6 @@ Needs `supabase/update-34-takeoffs.sql` to save (you can work without it, but no
 
 Keys: V move, S select, P pick, D draw, A area, C count, W sweep, Esc cancel.
 
-Not built yet: crossing / out-of-sequence contour checks, DXF and LandXML into a surface, cut and fill between surfaces, the tool chest (sectional areas, curb templates, pipe runs with profile) and the finish step (apply to the estimate, or export).
+**Cut / fill** (toolbar). Pick the two elevation surfaces (From, usually Existing; To, usually Design), and optionally an area on any takeoff surface as the limits. Gives cut, fill, fill with compaction, export or import, area, and deepest cut and fill, with a cut / fill map on the model; hover the model to read both elevations and the cut or fill depth. **Strip “From” by** lowers the From surface (topsoil) and reports the stripping. **Don't bridge gaps over** stops the surface being stretched across open ground between separate areas (default 150 ft). Contours without an elevation are left out and counted. The result is saved with the takeoff.
+
+Not built yet: crossing / out-of-sequence contour checks, DXF and LandXML into a surface, the tool chest (sectional areas, curb templates, pipe runs with profile) and the finish step (apply to the estimate, or export).

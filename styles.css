@@ -1797,3 +1797,16 @@ tr.eo-sec.eo-drop>td{box-shadow:inset 0 0 0 2px var(--accent)}
 .tw-kind{display:flex;gap:8px;align-items:baseline;border:1px solid var(--line);border-radius:8px;padding:8px 10px;cursor:pointer}
 .tw-kind span{flex:1}
 @media(max-width:900px){.tw-main{grid-template-columns:1fr;grid-template-rows:auto 50vh 6px 50vh;height:auto}.tw-side{max-height:260px;border-right:0;border-bottom:1px solid var(--line)}}
+.tw-cf .tw-cfg{display:grid;gap:6px;margin:8px 0}
+.tw-cf .tw-cfg label{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:12px}
+.tw-cf .tw-cfg select{max-width:170px}
+.tw-cf .tw-cfg input{width:64px}
+.tw-cf .tw-cfg span{display:inline-flex;align-items:center;gap:4px}
+.tw-cft{width:100%;margin:8px 0 4px;font-size:13px}
+.tw-cft td{padding:3px 0;border-bottom:1px solid var(--line)}
+.tw-cflg{font-size:11px;margin-top:6px;display:flex;align-items:center;gap:5px}
+.tw-cflg i{width:10px;height:10px;border-radius:2px;display:inline-block}
+.tw-cflg i.c{background:#d64028}.tw-cflg i.f{background:#2566c0}
+.tw-tbar .btn.on{background:var(--ink);color:var(--surface)}
+.tw-hud{width:330px}
+.tw-top .tw-name{width:260px;max-width:40vw;font-weight:700}
