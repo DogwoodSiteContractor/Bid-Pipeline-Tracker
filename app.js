@@ -46,7 +46,9 @@ const DEFAULT_LIB={scopes:[
 const TRADE_GROUP={'Pipe & utility supply':'Underground utilities','Precast structures':'Underground utilities','Utility sub':'Underground utilities','Erosion control':'Erosion control','Landscaping & grassing':'Erosion control','Demolition':'Site prep & demo','Clearing & grubbing':'Site prep & demo','Asphalt paving':'Paving & concrete','Concrete & curb':'Paving & concrete','Grading sub':'Earthwork','Dewatering':'Earthwork','Trucking & hauling':'Trucking','Stone & aggregate':'Materials','Testing & inspection':'Testing'};
 const FILE_CATS=['Plans','Specs','Addenda','Geotech report','Takeoff','Proposal','Bid form','Photos','Other'];
 const TRADES=['Pipe & utility supply','Precast structures','Stone & aggregate','Trucking & hauling','Asphalt paving','Concrete & curb','Erosion control','Demolition','Clearing & grubbing','Grading sub','Utility sub','Dewatering','Fencing','Landscaping & grassing','Surveying','Testing & inspection','Equipment rental','Other'];
-const CLIENT_TYPES=['General contractor','Developer','Owner','Municipality / public','Other'];
+const CLIENT_TYPES=['General contractor','Developer','Owner','Municipality / public','Engineer','Designer / architect','Other'];
+// engineers and designers are kept apart from the owners and GCs you bid to
+const isDesignCo=c=>/engineer|designer|architect/i.test(String(c&&c.type||''));const gcClients=()=>S.clients.filter(c=>!isDesignCo(c));
 const PROJECT_TYPES=['Industrial','Commercial','Residential','Single Family','Townhomes','Single Family & Townhomes','Apartments','Public / municipal','Institutional','Other'];
 // older names and common variations → current project type
 const PROJECT_TYPE_ALIASES={singlefamily:'Single Family',sfr:'Single Family',singlefamilyhomes:'Single Family',multifamily:'Apartments',apartment:'Apartments',apartments:'Apartments',townhome:'Townhomes',townhouses:'Townhomes',townhouse:'Townhomes',townhomes:'Townhomes',
@@ -285,14 +287,14 @@ function renderNow(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
-  const views={fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const views={fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
   main.innerHTML=(estsTabFor()?estsTabs(estsTabFor()):subNav())+views[S.view]();
   keep.forEach(([id,top])=>{const e=id&&document.getElementById(id);if(e)e.scrollTop=top});
   if(fid){const n=document.getElementById(fid);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});try{n.setSelectionRange(pos,pe??pos)}catch(e){}if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
-  loadThumbs();if(S.view==='calc'&&$('#tk-canvas'))tkMount();
+  loadThumbs();if(S.view==='calc'&&$('#tk-canvas'))tkMount();if(S.view==='tw')twMount();
   // the page content can add a scrollbar after the top bar was fitted, so fit it again once laid out
   requestAnimationFrame(()=>{const nav=$('#top .nav');if(nav&&nav.scrollWidth>nav.clientWidth+1)navFit()});
 }
@@ -729,7 +731,7 @@ function filterPanel(est){
   return `<div class="panel pad pv-filters">
     <div class="pvf-grid">
       ${est?'':`<label class="f">Estimator<select class="field" data-pvf="est"><option value="">Anyone</option>${S.estimators.slice().sort((a,b)=>a.name.localeCompare(b.name)).map(e=>`<option value="${e.id}"${f.est===e.id?' selected':''}>${esc(e.name)}</option>`).join('')}</select></label>`}
-      <label class="f">GC / client<select class="field" data-pvf="client"><option value="">Any</option>${S.clients.slice().sort((a,b)=>a.company.localeCompare(b.company)).map(c=>`<option value="${c.id}"${f.client===c.id?' selected':''}>${esc(c.company)}</option>`).join('')}</select></label>
+      <label class="f">GC / client<select class="field" data-pvf="client"><option value="">Any</option>${gcClients().sort((a,b)=>a.company.localeCompare(b.company)).map(c=>`<option value="${c.id}"${f.client===c.id?' selected':''}>${esc(c.company)}</option>`).join('')}</select></label>
       <label class="f">Due date<select class="field" data-pvf="due">${DUE_PRESETS.map(([k,l])=>`<option value="${k}"${f.due===k?' selected':''}>${l}</option>`).join('')}</select></label>
       ${f.due==='custom'?`<label class="f">From<input type="date" class="field" id="pvf-from" data-pvf="from" value="${esc(f.from)}"></label><label class="f">To<input type="date" class="field" id="pvf-to" data-pvf="to" value="${esc(f.to)}"></label>`:''}
       <label class="f">Bid value from<input type="number" min="0" step="1000" class="field" id="pvf-min" data-pvf="min" value="${esc(f.min)}" placeholder="$ min"></label>
@@ -878,13 +880,13 @@ function vEstimators(){
   ||`<tr><td colspan="8"><div class="empty"><b>No estimators yet</b>Add the people who price your work.</div></td></tr>`}</tbody></table></div>`;
 }
 function vClients(){
-  const q=(S.q.cl||'').toLowerCase();const list=S.clients.filter(c=>!q||[c.company,c.type,...(c.contacts||[]).map(x=>x.name)].join(' ').toLowerCase().includes(q)).sort((a,b)=>a.company.localeCompare(b.company));
+  const q=(S.q.cl||'').toLowerCase();const eng=S.q.clKind==='eng';const nEng=S.clients.filter(isDesignCo).length;const list=S.clients.filter(c=>isDesignCo(c)===eng).filter(c=>!q||[c.company,c.type,...(c.contacts||[]).map(x=>x.name)].join(' ').toLowerCase().includes(q)).sort((a,b)=>a.company.localeCompare(b.company));
   const showStats=bidsAll()&&can('bids');
-  return dbHead('Clients & GCs',S.clients.length+' companies','new-client','+ Add client or GC','clients')+`<div class="bar"><input id="q-cl" class="field search" data-q="cl" placeholder="Search companies or contacts" value="${esc(S.q.cl||'')}"></div>
+  return dbHead(eng?'Engineers & designers':'Clients & GCs',list.length+' companies','new-client',eng?'+ Add engineer or designer':'+ Add client or GC','clients')+`<div class="bar"><div class="seg"><button class="${eng?'':'on'}" data-act="cl-kind" data-v="gc">Owners & GCs ${S.clients.length-nEng}</button><button class="${eng?'on':''}" data-act="cl-kind" data-v="eng">Engineers & designers ${nEng}</button></div><input id="q-cl" class="field search" data-q="cl" placeholder="Search companies or contacts" value="${esc(S.q.cl||'')}"></div>
   <div class="panel scroll"><table><thead><tr><th>Company</th><th>Type</th><th>Contacts</th>${showStats?'<th class="r">Bids</th><th class="r">$ bid</th><th class="r">Won</th><th class="r">Win rate</th>':'<th>Phone</th>'}</tr></thead><tbody>
   ${list.map(c=>{const bs=S.bids.filter(b=>(b.client_ids||[]).includes(c.id));const w=bs.filter(b=>clientWon(b,c.id)).length,l=bs.filter(b=>clientLost(b,c.id)).length;
    return `<tr class="click" data-act="open-client" data-id="${c.id}"><td class="proj">${esc(c.company)}</td><td>${esc(c.type)}</td><td class="small">${(c.contacts||[]).map(x=>esc(x.name)).filter(Boolean).join(', ')||'<span class="dim">—</span>'}</td>${showStats?`<td class="r num">${bs.length}</td><td class="r num">${moneyK(bs.reduce((s,b)=>s+clientAmount(b,c.id),0))}</td><td class="r num">${w}</td><td class="r num">${w+l?Math.round(w/(w+l)*100)+'%':'—'}</td>`:`<td class="small">${esc(c.phone)}</td>`}</tr>`}).join('')
-  ||`<tr><td colspan="7"><div class="empty"><b>No clients yet</b>${isAdmin()?'Add the GCs, developers and owners you bid to.':''}</div></td></tr>`}</tbody></table></div>`;
+  ||`<tr><td colspan="7"><div class="empty"><b>${eng?'No engineers or designers yet':'No clients yet'}</b>${isAdmin()?(eng?'Add the engineering and design firms on your projects. Set the type to Engineer or Designer / architect.':'Add the GCs, developers and owners you bid to.'):''}</div></td></tr>`}</tbody></table></div>`;
 }
 function vendorStats(id){const qs=S.quotes.filter(q=>q.vendor_id===id).map(q=>({q,b:byId(S.bids,q.bid_id)})).filter(x=>x.b);
   const asked=qs.filter(x=>x.q.status!=='Not requested');const rec=qs.filter(x=>x.q.status==='Received');
@@ -936,7 +938,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  const html={twsurf:twSurfModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -2111,7 +2113,7 @@ function jobModal(){
   return mhead(isNew?'New job':d.name||'Job',bid?'Created from bid: '+bid.name:'')+`<div class="mbody"><fieldset><legend>Job</legend><div class="fg">
     <label class="f">Job number${jf('job_number','','e.g. 26-014')}</label>
     <label class="f s3">Job name <span class="req">required</span>${jf('name','','e.g. Riverside Commerce Park')}</label>
-    <label class="f s2">GC / client<select class="field" data-jobf="client_id"><option value="">—</option>${S.clients.slice().sort((a,b)=>a.company.localeCompare(b.company)).map(c=>`<option value="${c.id}"${d.client_id===c.id?' selected':''}>${esc(c.company)}</option>`).join('')}</select></label>
+    <label class="f s2">GC / client<select class="field" data-jobf="client_id"><option value="">—</option>${gcClients().sort((a,b)=>a.company.localeCompare(b.company)).map(c=>`<option value="${c.id}"${d.client_id===c.id?' selected':''}>${esc(c.company)}</option>`).join('')}</select></label>
     <label class="f s2">Location${jf('location','','City, county or address')}</label>
     <label class="f s2">Project manager<select class="field" data-jobf="pm_user_id"><option value="">Unassigned</option>${pms.map(p=>`<option value="${p.id}"${d.pm_user_id===p.id?' selected':''}>${esc(p.full_name||p.email)}${p.role==='admin'?' (admin)':''}</option>`).join('')}</select></label>
     <label class="f">Status<select class="field" data-jobf="status">${JOB_ST.map(s=>`<option${d.status===s?' selected':''}>${s}</option>`).join('')}</select></label>
@@ -3077,7 +3079,7 @@ function supDiff(){const b=M.draft,d=M.sup.draft;return SUP_FIELDS.map(([k,label
 function supView(){
   const b=M.draft,S2=M.sup,d=S2.draft;const ch=supDiff();const inp=(k,type='text',ph='')=>`<input class="field" type="${type}" id="sup-${k}" data-sup="${k}" value="${esc(d[k]??'')}"${ph?` placeholder="${esc(ph)}"`:''}>`;
   const selx=(k,opts)=>`<select class="field" id="sup-${k}" data-sup="${k}">${opts.map(o=>`<option${d[k]===o?' selected':''}>${esc(o)}</option>`).join('')}</select>`;
-  const avail=S.clients.filter(c=>!d.client_ids.includes(c.id)).sort((a,c)=>a.company.localeCompare(c.company));
+  const avail=gcClients().filter(c=>!d.client_ids.includes(c.id)).sort((a,c)=>a.company.localeCompare(c.company));
   return mhead('Supersede this project',`Replaces the project details on “${b.name}”. Quotes, files, scopes and the estimator log stay with it.`)+`<div class="mbody">
   <div class="notice" style="margin-bottom:14px">Originally entered <b>${b.created_at?esc(fmtDate(String(b.created_at).slice(0,10))):'—'}</b>${supHistory(b).length?` · superseded ${supHistory(b).length} time${supHistory(b).length===1?'':'s'} before`:''}. Change whatever is new — only the fields you change are recorded.</div>
   <fieldset><legend>New project details</legend><div class="fg">
@@ -3553,11 +3555,9 @@ function tkSimplify(pts,tol){if(pts.length<3)return pts;const keep=new Uint8Arra
   return pts.filter((_,i)=>keep[i])}
 const tkPolyLen=pts=>{let L=0;for(let i=1;i<pts.length;i++)L+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]);return L};
 const tkVKey=pts=>{const a=pts[0],b=pts[pts.length-1];const k=p=>Math.round(p[0])+','+Math.round(p[1]);return [k(a),k(b)].sort().join('|')+'|'+Math.round(tkPolyLen(pts))};
-async function tkVectorize(n){
-  const t=S.tk;if(!t.pdf){toast('Vectorize works on PDF sheets.');return}
-  t.vecBusy=true;tkUI();
-  try{const lib=await tkPdfLib();const O=lib.OPS;const page=await t.pdf.getPage(n);const vp=page.getViewport({scale:1});
-    const ol=await page.getOperatorList();let cfg=null;try{cfg=await t.pdf.getOptionalContentConfig()}catch(e){}
+// every stroked line on a PDF page, joined into whole lines and grouped by CAD layer (or line style), plus numeric labels
+async function pdfVectors(pdf,n,usedKeys){const lib=await tkPdfLib();const O=lib.OPS;const page=await pdf.getPage(n);const vp=page.getViewport({scale:1});
+    const ol=await page.getOperatorList();let cfg=null;try{cfg=await pdf.getOptionalContentConfig()}catch(e){}
     const ocName=p=>{if(!p)return null;const id=p.id||(Array.isArray(p.ids)?p.ids[0]:null);if(!id||!cfg)return null;try{return cfg.getGroup(id)?.name||null}catch(e){return null}};
     let ctm=[...vp.transform],stroke='#000000',lw=1,dash=false;const stack=[],mc=[];let pending=[];
     const STROKE=new Set([O.stroke,O.closeStroke,O.fillStroke,O.eoFillStroke,O.closeFillStroke,O.closeEOFillStroke].filter(x=>x!=null));
@@ -3611,7 +3611,7 @@ async function tkVectorize(n){
       }
     }
     // join pieces that meet end to end (CAD exports often break contours into short segments), then simplify
-    const groups=[],paths=[];const used=new Set(t.lines.filter(l=>l.page===n&&l.vkey).map(l=>l.vkey));
+    const groups=[],paths=[];const used=new Set(usedKeys||[]);
     [...raw.values()].forEach((g,gi)=>{const segs=g.segs;const key=p=>Math.round(p[0]*2)+','+Math.round(p[1]*2);const ends=new Map();const add=(k,i)=>{let a=ends.get(k);if(!a)ends.set(k,a=[]);a.push(i)};
       segs.forEach((s,i)=>{add(key(s[0]),i);add(key(s[s.length-1]),i)});const done=new Uint8Array(segs.length);
       const take=(k,self)=>{const a=ends.get(k);if(!a)return -1;for(const j of a)if(!done[j]&&j!==self)return j;return -1};
@@ -3619,14 +3619,29 @@ async function tkVectorize(n){
         for(let dir=0;dir<2;dir++){for(let guard=0;guard<5000;guard++){const endK=key(line[line.length-1]);if(endK===key(line[0])&&line.length>2)break;const j=take(endK,i);if(j<0)break;done[j]=1;let s=segs[j];if(key(s[0])!==endK)s=s.slice().reverse();line=line.concat(s.slice(1))}line.reverse()}
         chains.push(line)}
       // bridge small gaps (dashed linetypes are often exported as separate short strokes): join ends within ~4 pt that keep going the same way
-      const GAP=4;for(let pass=0;pass<3;pass++){let merged=0;const cellK=p=>Math.floor(p[0]/GAP)+','+Math.floor(p[1]/GAP);const E=new Map();
+      // dashed linetypes (existing contours are often dashed) come in as hundreds of equal dashes: measure the dash gap and bridge it
+      let GAP=4;if(chains.length>40){const lens=chains.map(c=>tkPolyLen(c)).sort((x,y)=>x-y);const q=f=>lens[Math.floor(lens.length*f)];if(q(.1)>0&&q(.9)/q(.1)<1.4&&q(.5)<40){const E0=[];chains.forEach((c,ci)=>{E0.push([c[0],ci]);E0.push([c[c.length-1],ci])});const step=Math.max(1,Math.floor(E0.length/300));const gs=[];
+        const cellK0=p=>Math.floor(p[0]/20)+','+Math.floor(p[1]/20);const G0=new Map();E0.forEach(o=>{const k=cellK0(o[0]);let a=G0.get(k);if(!a)G0.set(k,a=[]);a.push(o)});
+        for(let k=0;k<E0.length;k+=step){const [e,ci]=E0[k];const cx=Math.floor(e[0]/20),cy=Math.floor(e[1]/20);let bd=1e9;for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++)(G0.get((cx+i)+','+(cy+j))||[]).forEach(([f,cj])=>{if(cj!==ci){const d=Math.hypot(e[0]-f[0],e[1]-f[1]);if(d<bd)bd=d}});if(bd<1e9)gs.push(bd)}
+        gs.sort((x,y)=>x-y);const gm=gs[Math.floor(gs.length/2)];if(gm>0)GAP=Math.min(15,Math.max(4,gm*1.6))}}
+      for(let pass=0;pass<6;pass++){let merged=0;const cellK=p=>Math.floor(p[0]/GAP)+','+Math.floor(p[1]/GAP);const E=new Map();
         chains.forEach((c,ci)=>{if(!c)return;[0,1].forEach(end=>{const q=end?c[c.length-1]:c[0];const k=cellK(q);let a=E.get(k);if(!a)E.set(k,a=[]);a.push([ci,end])})});
         const dirAt=(c,end)=>{const a=end?c[c.length-1]:c[0];let b=null;for(let k=1;k<c.length;k++){const q=end?c[c.length-1-k]:c[k];if(Math.hypot(q[0]-a[0],q[1]-a[1])>1){b=q;break}}if(!b)return null;const L=Math.hypot(a[0]-b[0],a[1]-b[1]);return [(a[0]-b[0])/L,(a[1]-b[1])/L]};
-        for(let ci=0;ci<chains.length;ci++){let c=chains[ci];if(!c)continue;for(let guard=0;guard<2000;guard++){const q=c[c.length-1];const d0=dirAt(c,1);if(!d0)break;const [cx,cy]=[Math.floor(q[0]/GAP),Math.floor(q[1]/GAP)];let best=null,bd=GAP;
-            for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++)(E.get((cx+di)+','+(cy+dj))||[]).forEach(([cj,end])=>{if(cj===ci||!chains[cj])return;const o=chains[cj];const r=end?o[o.length-1]:o[0];const dx=r[0]-q[0],dy=r[1]-q[1];const d=Math.hypot(dx,dy);if(d>=bd||d<1e-9&&false)return;
-              if(d>0.3&&(dx*d0[0]+dy*d0[1])/d<0.8)return;const d1=dirAt(o,end);if(d1&&(d0[0]*-d1[0]+d0[1]*-d1[1])<0.8)return;bd=d;best=[cj,end]});
+        for(let ci=0;ci<chains.length;ci++){let c=chains[ci];if(!c)continue;for(let guard=0;guard<2000;guard++){const q=c[c.length-1];const d0=dirAt(c,1);if(!d0)break;const [cx,cy]=[Math.floor(q[0]/GAP),Math.floor(q[1]/GAP)];let best=null,bd=GAP,bs=1e9;const loose=[];
+            for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++)(E.get((cx+di)+','+(cy+dj))||[]).forEach(([cj,end])=>{if(cj===ci||!chains[cj])return;const o=chains[cj];const r=end?o[o.length-1]:o[0];const dx=r[0]-q[0],dy=r[1]-q[1];const d=Math.hypot(dx,dy);if(d>=GAP)return;loose.push([cj,end,d,dx,dy]);
+              if(d>0.3&&(dx*d0[0]+dy*d0[1])/d<0.7)return;const lat=Math.abs(dx*d0[1]-dy*d0[0]);if(d>0.3&&lat>0.6+0.35*d)return;const d1=dirAt(o,end);if(d1&&(d0[0]*-d1[0]+d0[1]*-d1[1])<0.7)return;const sc=d+3*lat;if(sc>=bs)return;bs=sc;bd=Math.max(d,1e-6);best=[cj,end]});
+            // a sharp bend in a dashed line: take the one end that's close, if it's the only one and doesn't double back
+            if(!best&&GAP>4&&loose.length===1){const [cj,end,d,dx,dy]=loose[0];if(d<1e-6||(dx*d0[0]+dy*d0[1])/d>-0.3)best=[cj,end]}
             if(!best)break;const [cj,end]=best;let o=chains[cj];chains[cj]=null;if(end)o=o.slice().reverse();c=c.concat(o);merged++}
           chains[ci]=c}if(!merged)break}
+      // label gaps: a contour interrupted by its elevation label, up to ~30 pt; only straight-ahead and only when there's one clear candidate
+      {const G2=30;const live=()=>chains.map((c,i)=>c?i:-1).filter(i=>i>=0);for(let pass=0;pass<3;pass++){let merged=0;const E=new Map();const ck=p=>Math.floor(p[0]/G2)+','+Math.floor(p[1]/G2);
+        live().forEach(ci=>{const c=chains[ci];if(tkPolyLen(c)<20)return;[0,1].forEach(end=>{const q=end?c[c.length-1]:c[0];const k=ck(q);let a=E.get(k);if(!a)E.set(k,a=[]);a.push([ci,end])})});
+        const dirN=(c,end,span)=>{const a=end?c[c.length-1]:c[0];let b=null;for(let k=1;k<c.length;k++){const q=end?c[c.length-1-k]:c[k];if(Math.hypot(q[0]-a[0],q[1]-a[1])>span){b=q;break}}if(!b)b=end?c[0]:c[c.length-1];const L=Math.hypot(a[0]-b[0],a[1]-b[1])||1;return [(a[0]-b[0])/L,(a[1]-b[1])/L]};
+        for(const ci of live()){let c=chains[ci];if(!c||tkPolyLen(c)<20)continue;for(let guard=0;guard<200;guard++){const q=c[c.length-1];const d0=dirN(c,1,8);const [cx,cy]=[Math.floor(q[0]/G2),Math.floor(q[1]/G2)];const cand=[];
+            for(let di=-1;di<=1;di++)for(let dj=-1;dj<=1;dj++)(E.get((cx+di)+','+(cy+dj))||[]).forEach(([cj,end])=>{if(cj===ci||!chains[cj])return;const o=chains[cj];const r=end?o[o.length-1]:o[0];const dx=r[0]-q[0],dy=r[1]-q[1];const d=Math.hypot(dx,dy);if(d>=G2||d<GAP*0.5)return;
+              if((dx*d0[0]+dy*d0[1])/d<0.9)return;const lat=Math.abs(dx*d0[1]-dy*d0[0]);if(lat>1.2+0.06*d)return;const d1=dirN(o,end,8);if((d0[0]*-d1[0]+d0[1]*-d1[1])<0.9)return;cand.push({cj,end,sc:d+4*lat})});
+            if(!cand.length)break;cand.sort((x,y)=>x.sc-y.sc);if(cand.length>1&&cand[1].sc<cand[0].sc*1.6)break;const {cj,end}=cand[0];let o=chains[cj];chains[cj]=null;if(end)o=o.slice().reverse();c=c.concat(o);merged++}chains[ci]=c}if(!merged)break}}
       chains.forEach(line=>{if(!line)return;line=tkSimplify(line,0.2);if(tkPolyLen(line)<6)return;const vkey=tkVKey(line);
         paths.push({g:gi,pts:line,used:used.has(vkey),vkey,bb:[Math.min(...line.map(p=>p[0])),Math.min(...line.map(p=>p[1])),Math.max(...line.map(p=>p[0])),Math.max(...line.map(p=>p[1]))]})});
       groups[gi]={id:gi,layer:g.layer,color:g.color,width:g.width,dash:g.dash,hidden:false}});
@@ -3634,7 +3649,12 @@ async function tkVectorize(n){
     // numeric text on the sheet — contour labels, used to fill in elevations
     const labels=[];try{const tc=await page.getTextContent();tc.items.forEach(it=>{const s=String(it.str||'').trim().replace(/,/g,'');if(!/^-?\d{1,5}(\.\d{1,2})?$/.test(s))return;const m=it.transform;const ang=Math.atan2(m[1],m[0]);const h=Math.hypot(m[2],m[3])||it.height||8;const w=it.width||h*s.length*0.5;
       const cx=m[4]+Math.cos(ang)*w/2-Math.sin(ang)*h*0.35,cy=m[5]+Math.sin(ang)*w/2+Math.cos(ang)*h*0.35;const [x,y]=tkMatApply(vp.transform,cx,cy);labels.push({x,y,v:+s})})}catch(e){}
-    t.vec=t.vec||{};t.vec[n]={groups:groups.filter(g=>g.count),paths,labels};t.vecSel=new Set();t.showVec=true;
+  return {groups:groups.filter(g=>g.count),paths,labels}}
+async function tkVectorize(n){
+  const t=S.tk;if(!t.pdf){toast('Vectorize works on PDF sheets.');return}
+  t.vecBusy=true;tkUI();
+  try{const V=await pdfVectors(t.pdf,n,t.lines.filter(l=>l.page===n&&l.vkey).map(l=>l.vkey));const {paths,groups,labels}=V;
+    t.vec=t.vec||{};t.vec[n]=V;t.vecSel=new Set();t.showVec=true;
     const nn=paths.filter(p=>!p.used).length;toast(nn?`Found ${fmtN(nn,0)} lines in ${t.vec[n].groups.length} groups${groups.some(g=>g.layer)?' (by CAD layer)':' (by line style)'}${labels.length?` and ${fmtN(labels.length,0)} number labels`:''}. Send whole groups to Existing / Proposed, or pick lines.`:'No line work found on this sheet — it may be a scanned image. Trace it by hand instead.');
     if(nn)t.tool='pick';
   }catch(e){toast(errMsg(e))}finally{t.vecBusy=false;tkDraw();tkUI()}
@@ -3813,7 +3833,7 @@ document.addEventListener('click',e=>{
     case 'bid-archive':case 'bid-restore':{const on=a==='bid-archive';const id=M.draft.id;setArchived([id],on).then(()=>{closeModal();render()});break}
     case 'new-est':M={kind:'est',isNew:true,draft:{id:newId(),name:'',title:'',email:'',phone:'',active:true}};showModal();break;
     case 'open-est':M={kind:'est',draft:clone(byId(S.estimators,t.dataset.id))};showModal();break;
-    case 'new-client':M={kind:'client',isNew:true,draft:{id:newId(),company:'',type:'General contractor',phone:'',email:'',address:'',notes:'',contacts:[{name:'',title:'',phone:'',email:''}]}};showModal();break;
+    case 'new-client':M={kind:'client',isNew:true,draft:{id:newId(),company:'',type:S.view==='clients'&&S.q.clKind==='eng'?'Engineer':'General contractor',phone:'',email:'',address:'',notes:'',contacts:[{name:'',title:'',phone:'',email:''}]}};showModal();break;
     case 'open-client':M={kind:'client',draft:clone(byId(S.clients,t.dataset.id))};showModal();break;
     case 'new-vendor':M={kind:'vendor',isNew:true,draft:{id:newId(),company:'',vendor_type:S.q.vtype||'',scopes:S.q.vscope?[S.q.vscope]:[],trade:S.q.trade||TRADES[0],contact_name:'',phone:'',email:'',area:'',preferred:false,notes:''}};showModal();break;
     case 'open-vendor':{const vd=clone(byId(S.vendors,t.dataset.id));vd.scopes=vendorScopes(vd);vd.vendor_type=vd.vendor_type||'';M={kind:'vendor',draft:vd};showModal();break}
@@ -5330,8 +5350,8 @@ async function estTplSave(){const x=M;const E=S.est,d=E.data;if(!String(x.name||
 
 /* ---------- Estimates page ---------- */
 // Estimates page tabs: the list, master templates, and (admins) the bid-building settings
-function estsTabs(on){return `<div class="subnav">${[...(can('estimates')?[['list','Estimates']]:[]),...(can('estimates')||can('codebook')?[['tpl','Master templates']]:[]),...(can('codebook')?[['cb','Codebooks']]:[]),...(can('codebook','edit')?[['scopes','Scopes & templates'],['set','Bid settings']]:[])].map(([k,l])=>`<button class="${on===k?'on':''}" data-act="ests-tab" data-v="${k}">${l}</button>`).join('')}</div>`}
-const estsTabFor=()=>({estimates:S.estsTab==='tpl'?'tpl':'list',settings:'set',cb:'cb',scopes:'scopes'})[S.view];
+function estsTabs(on){return `<div class="subnav">${[...(can('estimates')?[['list','Estimates'],['tw','Takeoff']]:[]),...(can('estimates')||can('codebook')?[['tpl','Master templates']]:[]),...(can('codebook')?[['cb','Codebooks']]:[]),...(can('codebook','edit')?[['scopes','Scopes & templates'],['set','Bid settings']]:[])].map(([k,l])=>`<button class="${on===k?'on':''}" data-act="ests-tab" data-v="${k}">${l}</button>`).join('')}</div>`}
+const estsTabFor=()=>({estimates:S.estsTab==='tpl'?'tpl':'list',settings:'set',cb:'cb',scopes:'scopes',tw:'tw'})[S.view];
 function vEstimates(){const tab=S.estsTab||'list';const canNew=can('bids','edit')&&can('estimates','edit');
   const tabs='';
   const head=`<div class="head"><div><h1>Estimates</h1><p>${S.estIndex.length} estimate${S.estIndex.length===1?'':'s'} · ${cbList('estimate').length} master template${cbList('estimate').length===1?'':'s'}</p></div><div class="tools">${canNew?'<button class="btn primary" data-act="ests-new">+ New estimate</button>':''}</div></div>`;
@@ -5362,7 +5382,7 @@ function estNewModal(){const x=M;const bids=S.bids.filter(b=>!b.archived_at&&!DE
     <fieldset><legend>Project</legend><div class="seg" style="margin-bottom:12px"><button class="${x.mode==='existing'?'on':''}" data-act="estnew-mode" data-v="existing">A bid in the pipeline</button><button class="${x.mode==='new'?'on':''}" data-act="estnew-mode" data-v="new">New project</button></div>
       ${x.mode==='existing'?`<label class="f">Bid<select class="field" data-estnew="bidId"><option value="">${bids.length?'Pick a bid…':'No open bids without an estimate'}</option>${bids.map(b=>`<option value="${b.id}"${x.bidId===b.id?' selected':''}>${esc(b.name)}${b.due_date?' — due '+fmtShort(b.due_date):''}</option>`).join('')}</select></label>`
       :`<div class="fg"><label class="f s2">Project name<input class="field" id="estnew-name" data-estnew="name" value="${esc(x.name)}" placeholder="e.g. Riverside Commerce Park"></label><label class="f s2">Location<input class="field" data-estnew="location" value="${esc(x.location)}" placeholder="City or address"></label>
-        <label class="f s2">GC / client<select class="field" data-estnew="client"><option value="">None yet</option>${S.clients.slice().sort((a,c)=>a.company.localeCompare(c.company)).map(c=>`<option value="${c.id}"${x.client===c.id?' selected':''}>${esc(c.company)}</option>`).join('')}</select></label>
+        <label class="f s2">GC / client<select class="field" data-estnew="client"><option value="">None yet</option>${gcClients().sort((a,c)=>a.company.localeCompare(c.company)).map(c=>`<option value="${c.id}"${x.client===c.id?' selected':''}>${esc(c.company)}</option>`).join('')}</select></label>
         <label class="f">Bid due<input class="field" type="date" data-estnew="due" value="${esc(x.due)}"></label><label class="f">Bid type<select class="field" data-estnew="type">${BID_TYPES.map(t=>`<option${x.type===t?' selected':''}>${t}</option>`).join('')}</select></label></div>
         <p class="hint">This adds the project to the pipeline too${isAdmin()?'':', with you as lead estimator'}, so dashboards and the bid log stay in sync.</p>`}</fieldset>
     <fieldset><legend>Start from</legend><div class="est-sopts">
@@ -5418,7 +5438,7 @@ document.addEventListener('click',e=>{
     case 'estrev-del':{if(M.arm2!==t.dataset.id){M.arm2=t.dataset.id;renderModal();break}const id=t.dataset.id;M.arm2=null;run(sb.from('estimate_versions').delete().eq('id',id)).then(()=>loadEstVers()).then(()=>{renderModal();render()}).catch(e=>toast(errMsg(e)));break}
     case 'est-verback':estOpen(S.est.bidId);break;
     case 'est-verrestore':{if(!S.est.ver)break;if(!S.est.armR){S.est.armR=true;render();break}estRevRestore();break}
-    case 'ests-tab':{const v=t.dataset.v;if(v==='set')S.view='settings';else if(v==='cb'||v==='scopes')S.view=v;else{S.estsTab=v;S.view='estimates'}render();window.scrollTo(0,0);break}
+    case 'ests-tab':{const v=t.dataset.v;if(v==='set')S.view='settings';else if(v==='tw'){S.view='tw';if(S.tw&&S.twr&&S.twr.pop&&!S.twr.pop.closed){}else{S.tw=null;S.twr=null}}else if(v==='cb'||v==='scopes')S.view=v;else{S.estsTab=v;S.view='estimates'}render();window.scrollTo(0,0);break}
     case 'ests-open':estOpen(t.dataset.id,'estimates');break;
     case 'ests-opentpl':S.estFrom='estimates';estOpenTpl(t.dataset.id);break;
     case 'ests-newtpl':estNewTpl(t.dataset.v);break;
@@ -5776,7 +5796,7 @@ document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='simchec
 
 function estBidBlock(b,work){if(b._new||!['admin','estimator','board'].includes(role()))return '';const x=estOf(b.id);
   if(S.estMissing)return `<fieldset><legend>Estimate</legend><p class="hint" style="margin:0">Estimates need a one-time database update (update-14-estimates.sql).</p></fieldset>`;
-  return `<fieldset><legend>Estimate</legend>${x?`<div class="est-bidblock"><div class="est-isum"><div><span>Cost</span><b>${money(x.total_cost)}</b></div><div><span>Bid total</span><b>${money(x.total_price)}</b></div><div><span>Margin</span><b>${num(x.total_price)?fmtN((x.total_price-x.total_cost)/x.total_price*100,1)+'%':'—'}</b></div></div>
+  return `<fieldset><legend>Estimate</legend>${can('estimates')?`<div class="adders" style="margin:0 0 8px"><button class="btn sm" data-act="tw-open" data-id="${b.id}">⛰ Takeoff</button></div>`:''}${x?`<div class="est-bidblock"><div class="est-isum"><div><span>Cost</span><b>${money(x.total_cost)}</b></div><div><span>Bid total</span><b>${money(x.total_price)}</b></div><div><span>Margin</span><b>${num(x.total_price)?fmtN((x.total_price-x.total_cost)/x.total_price*100,1)+'%':'—'}</b></div></div>
     <div><button class="btn primary" data-act="est-open" data-id="${b.id}">Open estimate</button><div class="dim small" style="margin-top:4px">Updated ${x.updated_at?new Date(x.updated_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):''}${x.updated_by_name?' by '+esc(x.updated_by_name):''}</div></div></div>`
     :`<div class="est-bidblock"><p class="dim small" style="margin:0">No estimate yet. Build it from bid items, activities, crews and your codebook prices.</p>${work?`<button class="btn primary" data-act="est-open" data-id="${b.id}">Start estimate</button>`:''}</div>`}
     <p class="hint">Opening the estimate closes this window — save your changes here first.</p></fieldset>`}
@@ -6409,7 +6429,7 @@ const pAv=p=>`<span class="av" style="background:${avColor(p.id)}" title="${esc(
 function navGroups(){const g=[];
   if(can('dash'))g.push(['dashboard',onlyMine()?'My dashboard':scopeView()?'Dashboard':role()==='board'?'Board dashboard':'Dashboard',['dashboard']]);
   if(can('bids'))g.push(['pipeline',onlyMine()?'My bids':'Pipeline',['pipeline']]);
-  const est=[...(can('estimates')?['estimates','estimate']:[]),...(can('codebook')?['cb']:[]),...(can('codebook','edit')?['settings','scopes']:[])];
+  const est=[...(can('estimates')?['estimates','estimate','tw']:[]),...(can('codebook')?['cb']:[]),...(can('codebook','edit')?['settings','scopes']:[])];
   if(est.length)g.push([est[0],'Estimates',est.includes('cb')&&!est.includes('estimates')?[...est]:est]);
   if(can('jobs'))g.push(['jobs','Jobs',['jobs','job']]);
   if(can('acct'))g.push(['acct','Accounting',['acct']]);
@@ -8341,21 +8361,23 @@ document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='peimp')
 const INFO_STATES=['','AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX','UT','VT','VA','WA','WV','WI','WY'];
 const INFO_PARTIES=[['owner','Owner'],['engineer','Engineer'],['designer','Designer']];
 function estInfo(d,b){if(!d.info||typeof d.info!=='object')d.info={location:(b&&b.location)||'',projectType:(b&&b.project_type)||''};const I=d.info;INFO_PARTIES.forEach(([k])=>{if(!I[k]||typeof I[k]!=='object')I[k]={}});if(!I.addr||typeof I.addr!=='object')I.addr={};return I}
+const infoList=k=>S.clients.filter(c=>k==='owner'?!isDesignCo(c):k==='engineer'?/engineer/i.test(c.type||''):isDesignCo(c)).sort((a,b)=>String(a.company).localeCompare(String(b.company)));
 const infoClient=name=>{const n=normH(name);return n?S.clients.find(c=>normH(c.company)===n):null};
 function estInfoView(d,b,ro){const I=estInfo(d,b);const dis=ro?' disabled':'';const lead=byId(S.estimators,b.lead_estimator_id);
   const dt=(p,v)=>`<input type="date" class="field" id="${epId(p)}" data-ep="${p}" value="${esc(v||'')}"${dis}>`;const st=(p,v)=>epSel(p,v||'',INFO_STATES.map(x=>[x,x||'State']));
   const fixed=(l,v)=>`<label class="f">${l}<div class="info-fixed">${v?esc(v):'<span class="dim">Not set</span>'}</div></label>`;
   const party=([k,l])=>{const P=I[k];const c=infoClient(P.name);const p='info.'+k;
     return `<fieldset class="info-party"><legend>${l}</legend><div class="fg">
-      <label class="f s4">Name<input class="field" id="${epId(p+'.name')}" data-ep="${p}.name" data-infoparty="${k}" list="info-cl" value="${esc(P.name||'')}" placeholder="Pick from Contacts or type a new one"${dis}></label>
+      <label class="f s4">Name<input class="field" id="${epId(p+'.name')}" data-ep="${p}.name" data-infoparty="${k}" list="info-cl-${k}" value="${esc(P.name||'')}" placeholder="Pick from Contacts or type a new one"${dis}></label>
       <label class="f s4">Address${epIn(p+'.address',P.address)}</label>
       <label class="f">City${epIn(p+'.city',P.city)}</label><label class="f">State${st(p+'.state',P.state)}</label><label class="f">Zip${epIn(p+'.zip',P.zip)}</label><span></span>
       <label class="f s2">Contact<input class="field" id="${epId(p+'.contact')}" data-ep="${p}.contact" data-infocontact="${k}" list="info-ct-${k}" value="${esc(P.contact||'')}"${dis}></label>
       <label class="f">Phone${epIn(p+'.phone',P.phone)}</label><label class="f">Mobile${epIn(p+'.mobile',P.mobile)}</label>
       <label class="f s2">Email${epIn(p+'.email',P.email)}</label></div>
       <datalist id="info-ct-${k}">${((c&&c.contacts)||[]).map(x=>`<option value="${esc(x.name||'')}">`).join('')}</datalist>
-      ${P.name&&!c?`<p class="hint" style="margin:6px 0 0">Not in Contacts. It is kept on this estimate only.</p>`:''}</fieldset>`};
-  return `<div class="panel info-wrap"><datalist id="info-cl">${S.clients.slice().sort((a,b)=>String(a.company).localeCompare(String(b.company))).map(c=>`<option value="${esc(c.company)}">`).join('')}</datalist>
+      <datalist id="info-cl-${k}">${infoList(k).map(x=>`<option value="${esc(x.company)}">`).join('')}</datalist>
+      ${P.name&&!c?`<p class="hint" style="margin:6px 0 0">Not in Contacts. It is kept on this estimate only.${ro||!isAdmin()?'':` <button class="linkbtn" data-act="info-addco" data-k="${k}">Add to Contacts as ${k==='owner'?'an owner':k==='engineer'?'an engineer':'a designer'}</button>`}</p>`:''}</fieldset>`};
+  return `<div class="panel info-wrap">
     <fieldset><legend>General</legend><div class="fg">
       <label class="f s2">Location${epIn('info.location',I.location,{ph:'County, state'})}</label><label class="f">Project #${epIn('info.projectNo',I.projectNo)}</label><label class="f">Internal project #${epIn('info.internalNo',I.internalNo)}</label>
       <label class="f s2">Project type${epIn('info.projectType',I.projectType)}</label>${fixed('Bid date',b.due_date?fmtShort(b.due_date)+(b.due_time?' · '+String(b.due_time).slice(0,5):''):'')}${fixed('Estimator',lead?lead.name:'')}
@@ -8370,3 +8392,420 @@ function estInfoView(d,b,ro){const I=estInfo(d,b);const dis=ro?' disabled':'';co
 document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data||S.view!=='estimate'||EC().ro)return;const d=S.est.data;
   if(t.dataset.infoparty){const P=estInfo(d,{})[t.dataset.infoparty];const c=infoClient(t.value);if(c){P.name=c.company;if(c.address&&!P.address)P.address=c.address;if(c.phone&&!P.phone)P.phone=c.phone;if(c.email&&!P.email)P.email=c.email;const one=(c.contacts||[])[0];if(one&&!P.contact&&(c.contacts||[]).length===1){P.contact=one.name||'';if(one.phone&&!P.mobile)P.mobile=one.phone;if(one.email&&!P.email)P.email=one.email}}estTouch();render();return}
   if(t.dataset.infocontact){const P=estInfo(d,{})[t.dataset.infocontact];const c=infoClient(P.name);const x=c&&(c.contacts||[]).find(o=>normH(o.name)===normH(t.value));if(x){if(x.phone)P.mobile=x.phone;if(x.email)P.email=x.email;estTouch();render()}}});
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
+  if(a==='cl-kind'){S.q.clKind=t.dataset.v;render();return}
+  if(a==='info-addco'){if(!S.est||!S.est.data||!isAdmin())return;const k=t.dataset.k;const P=estInfo(S.est.data,{})[k];if(!P.name||infoClient(P.name))return;t.disabled=true;
+    const row={company:P.name.trim(),type:k==='owner'?'Owner':k==='engineer'?'Engineer':'Designer / architect',phone:P.phone||'',email:P.email||'',address:[P.address,P.city,[P.state,P.zip].filter(Boolean).join(' ')].filter(Boolean).join(', '),notes:'',contacts:P.contact?[{name:P.contact,title:'',phone:P.mobile||'',email:P.email||''}]:[]};
+    try{await run(sb.from('clients').insert(row));await loadTable('clients');toast(`${row.company} added to Contacts`)}catch(er){toast(errMsg(er))}render()}});
+
+/* ===================================================================================================
+   TAKEOFF WORKSPACE — plans on one side, a clean model on the other.
+   Saved data (S.tw, one per bid in public.takeoffs):
+     sheets  {page: {s: feet per PDF point, rot, tx, ty, w, h, scaled, aligned, ref}}   page point → job feet
+     apts    [{id, name, x, y}]            named alignment points, in job feet
+     surfaces[{id, name, kind: elev|take|util, color, vis, lock}]
+     items   [{id, sid, t: contour|spot|line|area|count, pts:[[x,y]] job feet, z, page, vkey}]
+   Runtime (S.twr, not saved): the PDF, page images, vectors, views, tool state, undo.
+   =================================================================================================== */
+const TW_KINDS={elev:['Elevation','Contours, spot elevations. Used for cut and fill.'],take:['Takeoff','Lines, areas and counts. Erosion, demo, striping, anything.'],util:['Utility','Pipe runs and structures. Drawing tools for these come next.']};
+const TW_COLORS=['#8a6d3b','#2f6fd6','#d1462f','#2e9e5b','#c78a16','#8e44ad','#16a2b8','#e0457b','#6b7c2f','#555555'];
+const TW_TOOLS=[
+  ['pan','✋','Move','both','Drag to move, scroll to zoom. Drag works in every tool.'],
+  ['select','➚','Select','both','Click a line to select it. Delete removes it; the card lets you change its elevation.'],
+  ['scale','📏','Scale','plan','Click two points a known distance apart (the bar scale), then type the distance.'],
+  ['apt','◎','Alignment point','plan','Click a spot that shows on every sheet (property corner, grid tick, benchmark) and name it.'],
+  ['align','⤧','Align sheet','plan','Click each alignment point where it sits on this sheet. Two points place the sheet; a third checks it.'],
+  ['pick','⌖','Pick','plan','Click a plan line to add it to the active surface. Shift-click or Shift-drag to collect several, then Add.'],
+  ['draw','✎','Draw','both','Click along a line; Enter, double-click or right-click to finish. Snaps to plan linework.'],
+  ['area','⬠','Area','both','Click around an area; click the first point or press Enter to close it.'],
+  ['count','✚','Count / spot','both','Click to place a count (takeoff surface) or a spot elevation (elevation surface).'],
+  ['sweep','⇢','Sweep','both','Click before the first contour, then past the last. Contours crossed get elevations one interval apart.']];
+const TW_UIKEY='bp-tw-ui';
+function twUiPrefs(){try{return JSON.parse(localStorage.getItem(TW_UIKEY)||'{}')}catch(e){return {}}}
+function twUiSave(o){try{localStorage.setItem(TW_UIKEY,JSON.stringify({...twUiPrefs(),...o}))}catch(e){}}
+function twBlank(bidId){return {v:1,bidId,file:null,page:1,sheets:{},apts:[],surfaces:[{id:newId(),name:'Existing',kind:'elev',color:TW_COLORS[0],vis:true,lock:false},{id:newId(),name:'Design',kind:'elev',color:TW_COLORS[1],vis:true,lock:false}],items:[],active:null,interval:1,dir:-1}}
+function twR(){return S.twr||(S.twr={pdf:null,imgs:{},thumbs:{},vec:{},pv:{},mv:null,tool:'pan',cur:[],sel:new Set(),selItem:null,hi:null,ask:null,undo:[],redo:[],split:twUiPrefs().split||0.5,showApts:twUiPrefs().showApts!==false,under:twUiPrefs().under||false,hidden:{}})}
+const twSheet=n=>S.tw&&S.tw.sheets[n]||null;
+const twPlaced=n=>{const s=twSheet(n);return !!(s&&s.scaled&&s.aligned)};
+function twP2W(sh,p){const f=sh.s||1,r=sh.rot||0,c=Math.cos(r),s=Math.sin(r);return [(sh.tx||0)+f*(p[0]*c-p[1]*s),(sh.ty||0)+f*(p[0]*s+p[1]*c)]}
+function twW2P(sh,w){const f=sh.s||1,r=sh.rot||0,c=Math.cos(r),s=Math.sin(r);const dx=(w[0]-(sh.tx||0))/f,dy=(w[1]-(sh.ty||0))/f;return [dx*c+dy*s,-dx*s+dy*c]}
+const twSurf=id=>(S.tw.surfaces||[]).find(s=>s.id===id)||null;
+const twActive=()=>twSurf(S.tw.active)||null;
+const twRo=()=>{const b=byId(S.bids,S.tw&&S.tw.bidId);return !(b&&canWork(b)&&can('estimates','edit'))||!!(S.twr&&S.twr.conflict)};
+const twLen=pts=>{let L=0;for(let i=1;i<pts.length;i++)L+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]);return L};
+const twArea=pts=>{let a=0;for(let i=0,j=pts.length-1;i<pts.length;j=i++)a+=(pts[j][0]+pts[i][0])*(pts[j][1]-pts[i][1]);return Math.abs(a/2)};
+const twHasZ=it=>typeof it.z==='number'&&isFinite(it.z);
+function twBB(it){if(it._bb&&it._bbn===it.pts.length)return it._bb;let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;it.pts.forEach(p=>{x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1])});Object.defineProperty(it,'_bb',{value:[x0,y0,x1,y1],writable:true,configurable:true,enumerable:false});Object.defineProperty(it,'_bbn',{value:it.pts.length,writable:true,configurable:true,enumerable:false});return it._bb}
+
+/* ---------- the plan file lives on this computer (IndexedDB), keyed by bid ---------- */
+const twIdb=()=>new Promise((res,rej)=>{const r=indexedDB.open('bp-plans',1);r.onupgradeneeded=()=>r.result.createObjectStore('f');r.onsuccess=()=>res(r.result);r.onerror=()=>rej(r.error)});
+async function twIdbPut(k,v){try{const db=await twIdb();await new Promise((res,rej)=>{const tx=db.transaction('f','readwrite');tx.objectStore('f').put(v,k);tx.oncomplete=res;tx.onerror=()=>rej(tx.error)})}catch(e){}}
+async function twIdbGet(k){try{const db=await twIdb();return await new Promise(res=>{const q=db.transaction('f').objectStore('f').get(k);q.onsuccess=()=>res(q.result||null);q.onerror=()=>res(null)})}catch(e){return null}}
+
+/* ---------- open / save ---------- */
+async function twOpen(bidId){const b=byId(S.bids,bidId);if(!b){toast('That bid isn’t available.');return}
+  S.view='tw';S.twBid=bidId;S.tw=null;S.twr=null;twR().loading='Opening the takeoff…';render();
+  let row=null;try{const r=await sb.from('takeoffs').select('*').eq('bid_id',bidId).maybeSingle();if(r.error){if(/takeoffs|does not exist|schema cache/i.test(errMsg(r.error)))S.twMissing=true;else throw r.error}else{row=r.data;S.twMissing=false}}catch(e){toast(errMsg(e))}
+  if(S.twBid!==bidId)return;
+  S.tw=row&&row.data&&row.data.v?row.data:twBlank(bidId);S.tw.bidId=bidId;const R=twR();R.row=row?{id:row.id,version:row.version}:null;R.loading=null;
+  if(!S.tw.active||!twSurf(S.tw.active))S.tw.active=(S.tw.surfaces[0]||{}).id||null;
+  if(S.tw.file){const f=await twIdbGet(bidId);if(f&&f.name===S.tw.file.name&&f.size===S.tw.file.size)await twLoadPdf(f.blob,f.name,true)}
+  render()}
+function twTouch(){const R=twR();if(twRo())return;R.dirty=true;R.saveErr=null;clearTimeout(R._t);R._t=setTimeout(twSave,1800);twStatus()}
+async function twSave(){const R=twR();if(!S.tw||!R.dirty||R.saving||S.twMissing||twRo())return;R.saving=true;R.dirty=false;twStatus();
+  const data=JSON.parse(JSON.stringify(S.tw));const ver=(R.row&&R.row.version||0)+1;
+  try{let r;if(R.row){r=await sb.from('takeoffs').update({data,version:ver,updated_by_name:myName()}).eq('id',R.row.id).eq('version',R.row.version).select('id,version');if(!r.error&&(!r.data||!r.data.length)){const chk=await sb.from('takeoffs').select('id,version').eq('id',R.row.id).maybeSingle();if(chk.data&&chk.data.version===ver){r={data:[chk.data],error:null}}}
+    if(R.row&&!r.error&&(!r.data||!r.data.length)){R.conflict=true;toast('Someone else saved this takeoff after you opened it. Reopen it to see their changes; your edits here are not saved.');R.saving=false;render();return}}
+    else r=await sb.from('takeoffs').insert({bid_id:S.tw.bidId,data,version:1,updated_by_name:myName()}).select('id,version');
+    if(r.error)throw r.error;let x=(r.data||[])[0];if(!x){const c=await sb.from('takeoffs').select('id,version').eq('bid_id',S.tw.bidId).maybeSingle();x=c.data}if(x)R.row={id:x.id,version:x.version};R.savedAt=new Date()}
+  catch(e){R.dirty=true;R.saveErr=errMsg(e);if(/takeoffs|does not exist|schema cache/i.test(R.saveErr))S.twMissing=true}
+  R.saving=false;twStatus();if(R.dirty&&!R.saveErr)twTouch()}
+function twStatus(){const n=$('#tw-save');if(!n)return;const R=twR();n.textContent=S.twMissing?'Not saved: needs update-34':R.conflict?'Not saved: changed elsewhere':R.saveErr?'Not saved: '+R.saveErr:R.saving?'Saving…':R.dirty?'Unsaved changes':R.savedAt?'Saved '+R.savedAt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';n.className='small '+(R.saveErr||S.twMissing||R.conflict?'warn-t':'dim')}
+function twSnap(){const R=twR();R.undo.push(JSON.stringify({items:S.tw.items,sheets:S.tw.sheets,apts:S.tw.apts,surfaces:S.tw.surfaces}));if(R.undo.length>12)R.undo.shift();R.redo=[]}
+function twUndo(redo){const R=twR();const from=redo?R.redo:R.undo,to=redo?R.undo:R.redo;const x=from.pop();if(!x)return;to.push(JSON.stringify({items:S.tw.items,sheets:S.tw.sheets,apts:S.tw.apts,surfaces:S.tw.surfaces}));Object.assign(S.tw,JSON.parse(x));R.selItem=null;R.sel.clear();R.ask=null;twVecUsed();twTouch();render()}
+
+/* ---------- the PDF ---------- */
+async function twLoadPdf(blob,name,quiet){const R=twR();R.loading='Opening '+name+'…';twPanels();
+  try{const lib=await tkPdfLib();const pdf=await lib.getDocument({data:new Uint8Array(await blob.arrayBuffer())}).promise;R.pdf=pdf;R.imgs={};R.thumbs={};R.vec={};R.det=null;
+    const same=S.tw.file&&S.tw.file.name===name&&S.tw.file.size===blob.size;if(S.tw.file&&!same&&!quiet)toast('A different plan file than last time. Sheets keep their scale and alignment by page number; check them.');
+    S.tw.file={name,size:blob.size,pages:pdf.numPages};S.tw.page=Math.min(S.tw.page||1,pdf.numPages);if(!quiet)twTouch();twIdbPut(S.tw.bidId,{name,size:blob.size,blob});
+    await twRenderPage(S.tw.page);R.pv[S.tw.page]=null}
+  catch(e){toast(errMsg(e))}finally{R.loading=null}render()}
+async function twRenderPage(n){const R=twR();if(R.imgs[n])return R.imgs[n];if(!R.pdf)return null;const page=await R.pdf.getPage(n);const v1=page.getViewport({scale:1});
+  const rs=Math.min(3200/Math.max(v1.width,v1.height),3);const vp=page.getViewport({scale:rs});const cv=document.createElement('canvas');cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);
+  await page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;const e={cv,w:v1.width,h:v1.height,rs};R.imgs[n]=e;const sh=S.tw.sheets[n];if(sh){sh.w=v1.width;sh.h=v1.height}
+  Object.keys(R.imgs).forEach(k=>{if(+k!==n&&+k!==S.tw.page&&Object.keys(R.imgs).length>4)delete R.imgs[k]});return e}
+async function twThumb(n){const R=twR();if(R.thumbs[n]||!R.pdf||R.thumbBusy)return;R.thumbBusy=true;try{const page=await R.pdf.getPage(n);const v1=page.getViewport({scale:1});const vp=page.getViewport({scale:180/v1.width});const cv=document.createElement('canvas');cv.width=Math.round(vp.width);cv.height=Math.round(vp.height);
+  await page.render({canvasContext:cv.getContext('2d'),viewport:vp}).promise;R.thumbs[n]=cv.toDataURL('image/jpeg',0.7);const im=document.querySelector(`[data-twthumb="${n}"]`);if(im)im.src=R.thumbs[n]}catch(e){}finally{R.thumbBusy=false}
+  const next=[...document.querySelectorAll('[data-twthumb]')].find(x=>!R.thumbs[+x.dataset.twthumb]);if(next)setTimeout(()=>twThumb(+next.dataset.twthumb),30)}
+async function twGoPage(n){const R=twR();if(!R.pdf||n<1||n>R.pdf.numPages)return;S.tw.page=n;R.cur=[];R.ask=null;R.sel.clear();R.alignRun=null;R.scaleRun=null;R.loading='Loading sheet '+n+'…';twPanels();
+  try{await twRenderPage(n)}catch(e){toast(errMsg(e))}R.loading=null;R.det=null;twTouchUi();render()}
+function twTouchUi(){if(!twRo())twTouch()}
+async function twVectors(n){const R=twR();if(R.vec[n]||!R.pdf)return R.vec[n]||null;if(R.vecBusy)return null;R.vecBusy=true;twPanels();
+  try{const V=await pdfVectors(R.pdf,n,[]);const cell=40;V.grid=new Map();V.paths.forEach((P,i)=>{const b=P.bb;for(let x=Math.floor(b[0]/cell);x<=Math.floor(b[2]/cell);x++)for(let y=Math.floor(b[1]/cell);y<=Math.floor(b[3]/cell);y++){const k=x+','+y;let a=V.grid.get(k);if(!a)V.grid.set(k,a=[]);a.push(i)}});V.cell=cell;R.vec[n]=V;twVecUsed()}
+  catch(e){toast(errMsg(e))}finally{R.vecBusy=false}twPanels();twDraw();return R.vec[n]}
+function twVecUsed(){const R=twR();Object.entries(R.vec||{}).forEach(([n,V])=>{const used=new Set(S.tw.items.filter(i=>i.page===+n&&i.vkey).map(i=>i.vkey));V.paths.forEach(p=>p.used=used.has(p.vkey))})}
+
+/* ---------- views ---------- */
+function twPane(which){const R=twR();const doc=which==='plan'&&R.pop&&!R.pop.closed?R.pop.document:document;return doc.getElementById(which==='plan'?'tw-plan':'tw-model')}
+function twFitPlan(){const R=twR();const c=twPane('plan');const im=R.imgs[S.tw.page];if(!c||!im)return;const W=c.clientWidth,H=c.clientHeight;const z=Math.min(W/im.w,H/im.h)*0.96;R.pv[S.tw.page]={z,ox:(W-im.w*z)/2,oy:(H-im.h*z)/2}}
+function twFitModel(){const R=twR();const c=twPane('model');if(!c)return;const W=c.clientWidth,H=c.clientHeight;let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;
+  S.tw.items.forEach(it=>{if(!twVisible(it))return;const b=twBB(it);x0=Math.min(x0,b[0]);y0=Math.min(y0,b[1]);x1=Math.max(x1,b[2]);y1=Math.max(y1,b[3])});
+  if(!isFinite(x0)){const sh=twSheet(S.tw.page),im=R.imgs[S.tw.page];if(sh&&sh.scaled&&im){[[0,0],[im.w,im.h]].forEach(p=>{const w=twP2W(sh,p);x0=Math.min(x0,w[0]);x1=Math.max(x1,w[0]);y0=Math.min(y0,w[1]);y1=Math.max(y1,w[1])})}}
+  if(!isFinite(x0)){R.mv={z:1,ox:W/2,oy:H/2};return}const bw=Math.max(x1-x0,20),bh=Math.max(y1-y0,20);const z=Math.min(W/bw,H/bh)*0.9;R.mv={z,ox:(W-bw*z)/2-x0*z,oy:(H-bh*z)/2-y0*z}}
+const twVisible=it=>{const s=twSurf(it.sid);return !!(s&&s.vis)};
+function twSize(c){const dpr=(c.ownerDocument.defaultView.devicePixelRatio)||1;const W=c.clientWidth,H=c.clientHeight;if(c.width!==Math.round(W*dpr)||c.height!==Math.round(H*dpr)){c.width=Math.round(W*dpr);c.height=Math.round(H*dpr)}return dpr}
+let twRaf=0;function twDraw(){if(twRaf)return;twRaf=requestAnimationFrame(()=>{twRaf=0;try{twDrawPlan();twDrawModel()}catch(e){console.warn(e)}})}
+function twColors(){const cs=getComputedStyle(document.documentElement);return {bg:cs.getPropertyValue('--surface').trim()||'#fff',ink:cs.getPropertyValue('--ink').trim()||'#222',mute:cs.getPropertyValue('--ink-3').trim()||'#888',line:cs.getPropertyValue('--line').trim()||'#ddd',warn:'#d93025',hi:'#ff8c00',sel:'#00a8e8'}}
+function twPath(ctx,pts,f,close){ctx.beginPath();pts.forEach((p,i)=>{const q=f(p);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1])});if(close)ctx.closePath()}
+function twDrawItems(ctx,f,scale,cull,C,onPage){const R=twR();const sel=R.selItem,hi=R.hi;const showZ=scale>0.6;
+  S.tw.surfaces.forEach(s=>{if(!s.vis)return;const xs=S.tw.items.filter(it=>it.sid===s.id&&(!onPage||onPage(it)));const act=s.id===S.tw.active;
+    xs.forEach(it=>{if(cull&&!cull(twBB(it)))return;const miss=s.kind==='elev'&&it.t!=='count'&&!twHasZ(it);const on=it.id===sel||it.id===hi;
+      ctx.strokeStyle=on?(it.id===sel?C.sel:C.hi):miss?C.warn:s.color;ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=on?3:act?1.6:1.1;ctx.globalAlpha=act||on?1:0.75;ctx.setLineDash(miss&&!on?[5,3]:[]);
+      if(it.t==='count'||it.t==='spot'){const q=f(it.pts[0]);ctx.beginPath();ctx.arc(q[0],q[1],on?6:4,0,7);ctx.fill();if(it.t==='spot'&&showZ&&twHasZ(it)){ctx.font='11px system-ui';ctx.fillText(qtyFmt(it.z),q[0]+6,q[1]-6)}return}
+      twPath(ctx,it.pts,f,it.t==='area');if(it.t==='area'){ctx.globalAlpha=0.12;ctx.fill();ctx.globalAlpha=act||on?1:0.75}ctx.stroke();
+      if(showZ&&twHasZ(it)&&it.pts.length>1){const m=it.pts[Math.floor(it.pts.length/2)];const q=f(m);ctx.font='10px system-ui';ctx.fillText(qtyFmt(it.z),q[0]+3,q[1]-3)}})});
+  ctx.globalAlpha=1;ctx.setLineDash([])}
+function twDrawPlan(){const R=twR();const c=twPane('plan');if(!c||!S.tw)return;const dpr=twSize(c);const ctx=c.getContext('2d');const C=twColors();ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#f4f4f1';ctx.fillRect(0,0,c.width,c.height);
+  const n=S.tw.page,im=R.imgs[n];if(!im)return;if(!R.pv[n])twFitPlan();const v=R.pv[n];if(!v)return;ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.imageSmoothingEnabled=true;ctx.drawImage(im.cv,v.ox,v.oy,im.w*v.z,im.h*v.z);
+  const D=R.det;if(D&&D.n===n){const k=v.z/D.z;ctx.drawImage(D.cv,v.ox-D.ox*k,v.oy-D.oy*k,D.cv.width/D.dpr*k,D.cv.height/D.dpr*k)}
+  twDetail();
+  const P=p=>[v.ox+p[0]*v.z,v.oy+p[1]*v.z];const sh=twSheet(n);const W=c.clientWidth,H=c.clientHeight;
+  // what's already on a surface, drawn back over the plan
+  if(sh&&sh.scaled){const toS=w=>P(twW2P(sh,w));const vis=b=>{const a=toS([b[0],b[1]]),z=toS([b[2],b[3]]),x0=Math.min(a[0],z[0]),x1=Math.max(a[0],z[0]),y0=Math.min(a[1],z[1]),y1=Math.max(a[1],z[1]);return x1>=0&&x0<=W&&y1>=0&&y0<=H};
+    twDrawItems(ctx,toS,v.z,vis,C,it=>it.page===n||(sh.aligned&&twPlaced(it.page)))}
+  // vector candidates: hover and selection
+  const V=R.vec[n];if(V&&R.tool==='pick'){ctx.lineWidth=2.5;ctx.strokeStyle=C.sel;R.sel.forEach(i=>{const p=V.paths[i];if(p){twPath(ctx,p.pts,P);ctx.stroke()}});if(R.vhov!=null&&V.paths[R.vhov]){ctx.strokeStyle=C.hi;ctx.lineWidth=3;twPath(ctx,V.paths[R.vhov].pts,P);ctx.stroke()}}
+  if(R.box){const a=P(R.box[0]),b=P(R.box[1]);ctx.strokeStyle=C.sel;ctx.setLineDash([4,3]);ctx.lineWidth=1;ctx.strokeRect(a[0],a[1],b[0]-a[0],b[1]-a[1]);ctx.setLineDash([])}
+  // alignment points
+  if(R.showApts&&sh&&sh.scaled&&sh.aligned){S.tw.apts.forEach(a=>{const q=P(twW2P(sh,[a.x,a.y]));twMark(ctx,q,a.name,'#d1462f')})}
+  if(R.alignRun&&R.alignRun.n===n)R.alignRun.clicks.forEach(k=>{const a=S.tw.apts.find(x=>x.id===k.id);twMark(ctx,P(k.p),a?a.name:'?','#2e9e5b')});
+  // in-progress line
+  const cur=R.curPane==='plan'?R.cur:[];if(cur.length){ctx.strokeStyle=C.hi;ctx.lineWidth=2;twPath(ctx,R.hover&&R.hoverPane==='plan'?[...cur,R.snap||R.hover]:cur,P);ctx.stroke()}
+  if(R.scaleRun&&R.scaleRun.a){const a=P(R.scaleRun.a),b=P(R.scaleRun.b||R.hover||R.scaleRun.a);ctx.strokeStyle='#c78a16';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke()}
+  if(R.sweepA&&R.curPane==='plan'&&sh&&sh.scaled){const a=P(twW2P(sh,R.sweepA)),b=R.hover&&R.hoverPane==='plan'?P(R.hover):a;ctx.strokeStyle='#8e44ad';ctx.lineWidth=2;ctx.setLineDash([6,4]);ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke();ctx.setLineDash([])}
+  if(R.snap&&R.hoverPane==='plan'){const q=P(R.snap);ctx.strokeStyle=C.hi;ctx.lineWidth=1.5;ctx.strokeRect(q[0]-4,q[1]-4,8,8)}}
+function twMark(ctx,q,label,color){ctx.strokeStyle=color;ctx.fillStyle=color;ctx.lineWidth=2;ctx.beginPath();ctx.arc(q[0],q[1],7,0,7);ctx.stroke();ctx.beginPath();ctx.moveTo(q[0]-11,q[1]);ctx.lineTo(q[0]+11,q[1]);ctx.moveTo(q[0],q[1]-11);ctx.lineTo(q[0],q[1]+11);ctx.stroke();ctx.font='bold 12px system-ui';ctx.fillText(label,q[0]+9,q[1]-9)}
+// sharp detail: once the view settles, render just what's on screen at full resolution
+function twDetail(){const R=twR();clearTimeout(R._detT);R._detT=setTimeout(async()=>{const n=S.tw&&S.tw.page;const v=R.pv[n],im=R.imgs[n],c=twPane('plan');if(!v||!im||!c||!R.pdf)return;const dpr=c.ownerDocument.defaultView.devicePixelRatio||1;
+    if(v.z*dpr<=im.rs*1.05){R.det=null;return}const D=R.det;if(D&&D.n===n&&D.z===v.z&&D.ox===v.ox&&D.oy===v.oy)return;
+    try{if(R.detTask)R.detTask.cancel()}catch(e){}const page=await R.pdf.getPage(n);const cv=document.createElement('canvas');cv.width=Math.round(c.clientWidth*dpr);cv.height=Math.round(c.clientHeight*dpr);const ctx=cv.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,cv.width,cv.height);
+    const vp=page.getViewport({scale:v.z*dpr});const task=page.render({canvasContext:ctx,viewport:vp,transform:[1,0,0,1,v.ox*dpr,v.oy*dpr]});R.detTask=task;
+    try{await task.promise;R.det={n,z:v.z,ox:v.ox,oy:v.oy,dpr,cv};twDrawPlanOnly()}catch(e){}},260)}
+function twDrawPlanOnly(){try{twDrawPlan()}catch(e){}}
+function twDrawModel(){const R=twR();const c=twPane('model');if(!c||!S.tw)return;const dpr=twSize(c);const ctx=c.getContext('2d');const C=twColors();ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=C.bg;ctx.fillRect(0,0,c.width,c.height);
+  if(!R.mv)twFitModel();const v=R.mv;if(!v)return;ctx.setTransform(dpr,0,0,dpr,0,0);const W=c.clientWidth,H=c.clientHeight;const M=p=>[v.ox+p[0]*v.z,v.oy+p[1]*v.z];
+  // grid every 10/50/100/500 ft depending on zoom
+  const step=[10,50,100,500,1000].find(g=>g*v.z>60)||1000;ctx.strokeStyle=C.line;ctx.lineWidth=1;ctx.globalAlpha=0.5;ctx.beginPath();const gx0=Math.floor(-v.ox/v.z/step)*step,gy0=Math.floor(-v.oy/v.z/step)*step;
+  for(let x=gx0;x*v.z+v.ox<W;x+=step){const sx=Math.round(x*v.z+v.ox)+0.5;ctx.moveTo(sx,0);ctx.lineTo(sx,H)}for(let y=gy0;y*v.z+v.oy<H;y+=step){const sy=Math.round(y*v.z+v.oy)+0.5;ctx.moveTo(0,sy);ctx.lineTo(W,sy)}ctx.stroke();ctx.globalAlpha=1;
+  // faint plan underneath, if asked for
+  const n=S.tw.page,sh=twSheet(n),im=R.imgs[n];if(R.under&&sh&&sh.scaled&&im){const f=sh.s,r=sh.rot||0;ctx.save();ctx.globalAlpha=0.22;ctx.transform(v.z*f*Math.cos(r),v.z*f*Math.sin(r),-v.z*f*Math.sin(r),v.z*f*Math.cos(r),v.ox+v.z*sh.tx,v.oy+v.z*sh.ty);ctx.drawImage(im.cv,0,0,im.w,im.h);ctx.restore()}
+  const vis=b=>{const x0=b[0]*v.z+v.ox,x1=b[2]*v.z+v.ox,y0=b[1]*v.z+v.oy,y1=b[3]*v.z+v.oy;return x1>=0&&x0<=W&&y1>=0&&y0<=H};
+  twDrawItems(ctx,M,v.z,vis,C,null);
+  if(R.showApts)S.tw.apts.forEach(a=>twMark(ctx,M([a.x,a.y]),a.name,'#d1462f'));
+  const cur=R.curPane==='model'?R.cur:[];if(cur.length){ctx.strokeStyle=C.hi;ctx.lineWidth=2;twPath(ctx,R.hover&&R.hoverPane==='model'?[...cur,R.hover]:cur,M);ctx.stroke()}
+  if(R.sweepA&&R.curPane==='model'){const a=M(R.sweepA),b=R.hover&&R.hoverPane==='model'?M(R.hover):a;ctx.strokeStyle='#8e44ad';ctx.lineWidth=2;ctx.setLineDash([6,4]);ctx.beginPath();ctx.moveTo(...a);ctx.lineTo(...b);ctx.stroke();ctx.setLineDash([])}
+  // scale bar
+  const bar=[10,20,50,100,200,500,1000].find(g=>g*v.z>80)||1000;ctx.fillStyle=C.ink;ctx.strokeStyle=C.ink;ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(14,H-16);ctx.lineTo(14+bar*v.z,H-16);ctx.stroke();ctx.font='11px system-ui';ctx.fillText(bar+' ft',14,H-22)}
+
+/* ---------- pointer handling (attached to each canvas, so it also works in the pop-out window) ---------- */
+function twToPt(which,e){const R=twR();const c=e.currentTarget||twPane(which);const r=c.getBoundingClientRect();const sx=e.clientX-r.left,sy=e.clientY-r.top;const v=which==='plan'?R.pv[S.tw.page]:R.mv;if(!v)return [0,0];return [(sx-v.ox)/v.z,(sy-v.oy)/v.z]}
+function twAttach(c,which){if(!c||c._tw)return;c._tw=1;let drag=null;const R=()=>twR();
+  c.addEventListener('pointerdown',e=>{c.focus({preventScroll:true});const v=which==='plan'?R().pv[S.tw.page]:R().mv;if(!v)return;drag={x:e.clientX,y:e.clientY,ox:v.ox,oy:v.oy,moved:false,btn:e.button,box:e.shiftKey&&e.button===0&&R().tool==='pick'&&which==='plan'?twToPt(which,e):null};c.setPointerCapture(e.pointerId)});
+  c.addEventListener('pointermove',e=>{const r=R();const v=which==='plan'?r.pv[S.tw.page]:r.mv;if(!v)return;
+    if(drag){const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.abs(dx)+Math.abs(dy)>4)drag.moved=true;if(drag.moved){if(drag.box)r.box=[drag.box,twToPt(which,e)];else{v.ox=drag.ox+dx;v.oy=drag.oy+dy}twDraw()}return}
+    r.hover=twToPt(which,e);r.hoverPane=which;twHover(which,r.hover);twDraw()});
+  c.addEventListener('pointerup',e=>{if(!drag)return;const d=drag;drag=null;const r=R();if(d.box){const b=r.box;r.box=null;if(d.moved&&b)twBoxPick(b[0],b[1]);else twClick(which,twToPt(which,e),e);twDraw();return}
+    if(d.btn===2){if(!d.moved)twFinish(which);return}if(!d.moved&&d.btn===0)twClick(which,twToPt(which,e),e)});
+  c.addEventListener('contextmenu',e=>e.preventDefault());
+  c.addEventListener('dblclick',e=>{const r=R();if(r.cur.length>1){r.cur.pop()}twFinish(which)});
+  c.addEventListener('pointerleave',()=>{const r=R();r.hover=null;r.vhov=null;if(r.hi&&!r.selItem)r.hi=null;twDraw()});
+  c.addEventListener('wheel',e=>{e.preventDefault();const r=R();const v=which==='plan'?r.pv[S.tw.page]:r.mv;if(!v)return;const b=c.getBoundingClientRect();const mx=e.clientX-b.left,my=e.clientY-b.top;const f=Math.exp(-e.deltaY*0.0015);const z=Math.max(0.005,Math.min(200,v.z*f));v.ox=mx-(mx-v.ox)*z/v.z;v.oy=my-(my-v.oy)*z/v.z;v.z=z;twDraw()},{passive:false})}
+function twKey(e){if(S.view!=='tw'||!S.tw)return;const R=twR();const tag=(e.target&&e.target.tagName)||'';
+  if(e.target&&e.target.id==='tw-askv'){if(e.key==='Enter'){e.preventDefault();twAskOk()}else if(e.key==='Escape'){e.preventDefault();R.ask=null;twPanels();twDraw()}return}
+  if(['INPUT','TEXTAREA','SELECT'].includes(tag))return;
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();twUndo(e.shiftKey);return}
+  if(e.key==='Enter'){if(R.cur.length){e.preventDefault();twFinish(R.curPane)}else if(R.tool==='pick'&&R.sel.size){e.preventDefault();twPickAdd([...R.sel])}}
+  else if(e.key==='Escape'){R.cur=[];R.sweepA=null;R.scaleRun=null;R.sel.clear();R.ask=null;R.alignRun=null;twPanels();twDraw()}
+  else if((e.key==='Delete'||e.key==='Backspace')&&R.cur.length){e.preventDefault();R.cur.pop();twDraw()}
+  else if((e.key==='Delete'||e.key==='Backspace')&&R.selItem&&!twRo()){e.preventDefault();twDelItem(R.selItem)}
+  else if(!e.ctrlKey&&!e.metaKey&&!e.altKey){const k={v:'pan',s:'select',p:'pick',d:'draw',a:'area',c:'count',w:'sweep'}[e.key.toLowerCase()];if(k){twTool(k)}}}
+document.addEventListener('keydown',twKey);
+
+/* ---------- hover, pick, snap ---------- */
+function twNearPath(V,q,tol){let best=-1,bd=tol;const cx=Math.floor(q[0]/V.cell),cy=Math.floor(q[1]/V.cell);const seen=new Set();
+  for(let i=-1;i<=1;i++)for(let j=-1;j<=1;j++)(V.grid.get((cx+i)+','+(cy+j))||[]).forEach(pi=>{if(seen.has(pi))return;seen.add(pi);const P=V.paths[pi];const g=V.groups.find(x=>x.id===P.g);if(g&&twR().hidden[S.tw.page+'|'+g.id])return;
+    for(let k=1;k<P.pts.length;k++){const d=tkSegDist(q,P.pts[k-1],P.pts[k]);if(d<bd){bd=d;best=pi}}});return best}
+function twSnapPt(q,tol){const V=twR().vec[S.tw.page];if(!V)return null;const pi=twNearPath(V,q,tol);if(pi<0)return null;const P=V.paths[pi];let best=null,bd=tol;
+  P.pts.forEach(p=>{const d=Math.hypot(p[0]-q[0],p[1]-q[1]);if(d<bd*0.6){bd=d;best=[p[0],p[1]]}});if(best)return best;
+  for(let k=1;k<P.pts.length;k++){const a=P.pts[k-1],b=P.pts[k];const dx=b[0]-a[0],dy=b[1]-a[1];const L=dx*dx+dy*dy||1;let t=((q[0]-a[0])*dx+(q[1]-a[1])*dy)/L;t=Math.max(0,Math.min(1,t));const p=[a[0]+t*dx,a[1]+t*dy];const d=Math.hypot(p[0]-q[0],p[1]-q[1]);if(d<bd){bd=d;best=p}}return best}
+function twItemAt(which,q){const R=twR();const v=which==='plan'?R.pv[S.tw.page]:R.mv;if(!v)return null;const sh=twSheet(S.tw.page);let w=q;if(which==='plan'){if(!sh||!sh.scaled)return null;w=twP2W(sh,q)}
+  const tol=8/v.z*(which==='plan'?sh.s:1);let best=null,bd=tol;
+  S.tw.items.forEach(it=>{if(!twVisible(it))return;if(which==='plan'&&!(it.page===S.tw.page||(sh.aligned&&twPlaced(it.page))))return;const b=twBB(it);if(w[0]<b[0]-tol||w[0]>b[2]+tol||w[1]<b[1]-tol||w[1]>b[3]+tol)return;
+    if(it.pts.length===1){const d=Math.hypot(w[0]-it.pts[0][0],w[1]-it.pts[0][1]);if(d<bd){bd=d;best=it}return}
+    const pts=it.t==='area'?[...it.pts,it.pts[0]]:it.pts;for(let k=1;k<pts.length;k++){const d=tkSegDist(w,pts[k-1],pts[k]);if(d<bd){bd=d;best=it}}});return best}
+function twHover(which,q){const R=twR();R.snap=null;R.vhov=null;
+  if(which==='plan'&&(R.tool==='pick')){const V=R.vec[S.tw.page];const v=R.pv[S.tw.page];if(V&&v){const pi=twNearPath(V,q,8/v.z);R.vhov=pi>=0&&!V.paths[pi].used?pi:null}}
+  if(which==='plan'&&['draw','area','count','scale','apt','align'].includes(R.tool)){const v=R.pv[S.tw.page];if(v)R.snap=twSnapPt(q,9/v.z)}
+  if(['select','pan','sweep'].includes(R.tool)&&!R.cur.length){const it=twItemAt(which,q);const id=it?it.id:null;if(id!==R.hi){R.hi=id||R.selItem;const h=twPane(which)?.parentElement?.querySelector('.tw-hint');if(h&&it)h.textContent=twItemText(it)}}}
+function twItemText(it){const s=twSurf(it.sid);const L=it.t==='area'?`${fmtN(twArea(it.pts),0)} SF`:it.t==='count'||it.t==='spot'?'':`${fmtN(twLen(it.pts),1)} LF`;return [s?s.name:'',{contour:'Contour',spot:'Spot elevation',line:'Line',area:'Area',count:'Count'}[it.t],twHasZ(it)?'elev '+qtyFmt(it.z):(s&&s.kind==='elev'&&it.t!=='count'?'no elevation yet':''),L,it.page?'sheet '+it.page:''].filter(Boolean).join(' · ')}
+
+/* ---------- clicks by tool ---------- */
+function twNeedPlaced(){const sh=twSheet(S.tw.page);if(!sh||!sh.scaled){toast('Set the scale on this sheet first (Scale tool), or align it to your alignment points.');twTool(S.tw.apts.length>=2?'align':'scale');return false}if(!sh.aligned){toast('Line this sheet up with the alignment points first (Align sheet).');twTool('align');return false}return true}
+function twNeedSurface(kinds){const s=twActive();if(!s){toast('Make a surface first.');return null}if(kinds&&!kinds.includes(s.kind)){toast(`The active surface “${s.name}” is a ${TW_KINDS[s.kind][0].toLowerCase()} surface. Pick or make a ${kinds.map(k=>TW_KINDS[k][0].toLowerCase()).join(' or ')} surface for this tool.`);return null}if(s.lock){toast(`“${s.name}” is locked.`);return null}if(!s.vis){s.vis=true}return s}
+function twClick(which,q,e){const R=twR();R.lastPane=which;if(twRo()&&!['pan','select'].includes(R.tool)){toast('This takeoff is read-only for you.');return}const n=S.tw.page;
+  switch(R.tool){
+    case 'pan':case 'select':{const it=twItemAt(which,q);R.selItem=it?it.id:null;R.hi=R.selItem;twPanels();twDraw();return}
+    case 'scale':{if(which!=='plan')return;const p=R.snap||q;const SR=R.scaleRun=R.scaleRun&&!R.scaleRun.b?R.scaleRun:{a:null};if(!SR.a){SR.a=p;twDraw();return}SR.b=p;twDraw();
+      const d=Math.hypot(SR.b[0]-SR.a[0],SR.b[1]-SR.a[1]);if(d<2){R.scaleRun=null;return}R.ask={type:'scale',def:'',label:'Distance between the two points, in feet',d};twPanels();return}
+    case 'apt':{if(which!=='plan')return;if(!twNeedPlaced())return;const sh=twSheet(n);const p=R.snap||q;R.ask={type:'apt',p:twP2W(sh,p),def:String.fromCharCode(65+S.tw.apts.length%26)+(S.tw.apts.length>=26?Math.floor(S.tw.apts.length/26):''),label:'Name this alignment point'};twPanels();return}
+    case 'align':{if(which!=='plan')return;if(S.tw.apts.length<2){toast('Make at least two alignment points on a sheet that already has its scale.');return}const A=R.alignRun&&R.alignRun.n===n?R.alignRun:(R.alignRun={n,i:0,clicks:[]});const ap=S.tw.apts[A.i];if(!ap)return;
+      A.clicks=A.clicks.filter(k=>k.id!==ap.id);A.clicks.push({id:ap.id,p:R.snap||q});A.i++;if(A.i>=S.tw.apts.length)twAlignSolve();twPanels();twDraw();return}
+    case 'pick':{if(which!=='plan')return;if(!twNeedPlaced())return;const V=R.vec[n];if(!V){twVectors(n);return}const v=R.pv[n];const pi=twNearPath(V,q,8/v.z);
+      if(e&&e.shiftKey){if(pi>=0&&!V.paths[pi].used){R.sel.has(pi)?R.sel.delete(pi):R.sel.add(pi)}twPanels();twDraw();return}
+      if(pi<0){R.sel.clear();twPanels();twDraw();return}if(V.paths[pi].used){const it=S.tw.items.find(x=>x.vkey===V.paths[pi].vkey&&x.page===n);if(it){R.selItem=it.id;R.hi=it.id;twPanels();twDraw()}return}twPickAdd([pi]);return}
+    case 'draw':case 'area':{const s=twNeedSurface(R.tool==='area'?['take','util']:['elev','take','util']);if(!s)return;let w=q;if(which==='plan'){if(!twNeedPlaced())return;w=R.snap||q}
+      if(R.cur.length&&R.curPane!==which)R.cur=[];R.curPane=which;if(R.tool==='area'&&R.cur.length>2){const f=which==='plan'?R.pv[n].z:R.mv.z;if(Math.hypot(w[0]-R.cur[0][0],w[1]-R.cur[0][1])*f<8){twFinish(which);return}}R.cur.push(w);twDraw();return}
+    case 'count':{const s=twNeedSurface(['elev','take','util']);if(!s)return;let w=q;if(which==='plan'){if(!twNeedPlaced())return;w=twP2W(twSheet(n),R.snap||q)}
+      if(s.kind==='elev'){R.ask={type:'spot',w,page:which==='plan'?n:null,def:'',label:'Spot elevation'};twPanels();return}
+      twSnap();S.tw.items.push({id:newId(),sid:s.id,t:'count',pts:[w],page:which==='plan'?n:null});twTouch();twPanels();twDraw();return}
+    case 'sweep':{const s=twNeedSurface(['elev']);if(!s)return;let w=q;if(which==='plan'){if(!twNeedPlaced())return;w=twP2W(twSheet(n),q)}
+      if(!R.sweepA||R.curPane!==which){R.sweepA=w;R.curPane=which;twDraw();return}const a=R.sweepA;R.sweepA=null;twSweep(a,w);return}
+  }}
+function twFinish(which){const R=twR();if(!R.cur.length)return;const n=S.tw.page;const s=twActive();let pts=R.cur.slice();R.cur=[];
+  if(R.tool==='area'&&pts.length<3){twDraw();return}if(pts.length<2&&R.tool!=='area'){twDraw();return}
+  if(which==='plan'){const sh=twSheet(n);pts=pts.map(p=>twP2W(sh,p))}
+  const t=R.tool==='area'?'area':s.kind==='elev'?'contour':'line';twSnap();const it={id:newId(),sid:s.id,t,pts,page:which==='plan'?n:null};S.tw.items.push(it);R.selItem=it.id;
+  if(t==='contour')twAskZ([it.id]);twTouch();twPanels();twDraw()}
+function twPickAdd(idxs,whole){const R=twR();const n=S.tw.page;const V=R.vec[n];const sh=twSheet(n);const s=twNeedSurface(['elev','take','util']);if(!s||!V)return;
+  let add=idxs.map(i=>V.paths[i]).filter(p=>p&&!p.used);let short=0;if(whole&&s.kind==='elev'){const k=add.length;add=add.filter(p=>tkPolyLen(p.pts)>=30);short=k-add.length}if(!add.length){if(short)toast(`Only short pieces on that layer (${short}); pick them one at a time if you want them.`);return}twSnap();
+  const ids=[];add.forEach(P=>{const closed=P.pts.length>3&&Math.hypot(P.pts[0][0]-P.pts[P.pts.length-1][0],P.pts[0][1]-P.pts[P.pts.length-1][1])<0.5;
+    const t=s.kind==='elev'?'contour':closed?'area':'line';const pts=P.pts.map(p=>twP2W(sh,p));if(t==='area')pts.pop();
+    const it={id:newId(),sid:s.id,t,pts,page:n,vkey:P.vkey};const z=s.kind==='elev'?twLabelZ(V,P):null;if(z!=null)it.z=z;S.tw.items.push(it);ids.push(it.id);P.used=true});
+  R.sel.clear();twTouch();const need=ids.filter(id=>{const it=S.tw.items.find(x=>x.id===id);return s.kind==='elev'&&!twHasZ(it)});
+  if(need.length===1&&ids.length===1)twAskZ(need);else if(ids.length>1)toast(`${ids.length} lines added to ${s.name}.${short?` ${short} short pieces (symbols, ticks) left out; pick them by hand if they belong.`:''}${need.length?` ${need.length} need an elevation: use Sweep, or Next missing.`:''}`);
+  R.selItem=ids[ids.length-1];twPanels();twDraw()}
+function twBoxPick(a,b){const R=twR();const V=R.vec[S.tw.page];if(!V)return;const x0=Math.min(a[0],b[0]),x1=Math.max(a[0],b[0]),y0=Math.min(a[1],b[1]),y1=Math.max(a[1],b[1]);
+  V.paths.forEach((P,i)=>{if(P.used)return;const g=V.groups.find(x=>x.id===P.g);if(g&&R.hidden[S.tw.page+'|'+g.id])return;const bb=P.bb;if(bb[0]>=x0&&bb[2]<=x1&&bb[1]>=y0&&bb[3]<=y1)R.sel.add(i)});twPanels()}
+// a contour label next to the line, if the PDF kept its text
+function twLabelZ(V,P){let best=null,bd=10;(V.labels||[]).forEach(L=>{const b=P.bb;if(L.x<b[0]-10||L.x>b[2]+10||L.y<b[1]-10||L.y>b[3]+10)return;for(let k=1;k<P.pts.length;k++){const d=tkSegDist([L.x,L.y],P.pts[k-1],P.pts[k]);if(d<bd){bd=d;best=L.v}}});return best}
+function twAskZ(ids){const R=twR();const last=R.lastZ;const def=last!=null?+(last+(+S.tw.interval||1)*(S.tw.dir||1)).toFixed(2):'';R.ask={type:'z',ids,def,label:ids.length>1?`Elevation for ${ids.length} lines`:'Elevation'};twPanels()}
+function twAskOk(){const R=twR();const A=R.ask;if(!A)return;const raw=(twAskDoc().getElementById('tw-askv')||{}).value;const v=String(raw||'').trim();R.ask=null;
+  if(A.type==='z'){const z=num(v);if(z==null){twPanels();return}twSnap();A.ids.forEach(id=>{const it=S.tw.items.find(x=>x.id===id);if(it)it.z=z});R.lastZ=z;twTouch()}
+  else if(A.type==='spot'){const z=num(v);if(z!=null){twSnap();const s=twActive();S.tw.items.push({id:newId(),sid:s.id,t:'spot',pts:[A.w],z,page:A.page});R.lastZ=z;twTouch()}}
+  else if(A.type==='scale'){const ft=num(v);if(ft>0)twSetScale(ft/A.d);R.scaleRun=null}
+  else if(A.type==='apt'){if(v){twSnap();S.tw.apts.push({id:newId(),name:v,x:A.p[0],y:A.p[1]});twTouch()}}
+  else if(A.type==='sweep'){const z=num(v);if(z!=null)twSweepApply(A.ids,z)}
+  else if(A.type==='surf'){const s=twSurf(A.id);if(s&&v){s.name=v;twTouch()}}
+  twPanels();twDraw()}
+const twAskDoc=()=>{const R=twR();return R.lastPane!=='model'&&R.pop&&!R.pop.closed&&R.pop.document.getElementById('tw-askv')?R.pop.document:document};
+
+/* ---------- scale and alignment ---------- */
+function twSetScale(ftPerPt){const n=S.tw.page;const R=twR();const old=S.tw.sheets[n]?{...S.tw.sheets[n]}:null;const im=R.imgs[n];twSnap();
+  const placedAny=Object.entries(S.tw.sheets).some(([k,x])=>+k!==n&&x.scaled&&x.aligned);
+  const sh=S.tw.sheets[n]={...(old||{}),s:ftPerPt,scaled:true,w:im?im.w:old&&old.w,h:im?im.h:old&&old.h};
+  if(!placedAny||(old&&old.ref)){sh.rot=sh.rot||0;sh.tx=sh.tx||0;sh.ty=sh.ty||0;sh.aligned=true;sh.ref=true}
+  else if(old&&old.aligned&&old.s){const k=ftPerPt/old.s;if(Math.abs(k-1)>0.02)toast(`This sheet's bar scale is ${((k-1)*100).toFixed(1)}% off from how it was aligned. Check the scale, or re-align it.`);sh.s=old.s}
+  else sh.aligned=false;
+  if(old&&old.scaled&&old.aligned&&(sh.s!==old.s))S.tw.items.forEach(it=>{if(it.page===n)it.pts=it.pts.map(p=>twP2W(sh,twW2P(old,p)))});
+  twTouch();R.mv=null;toast(sh.aligned?'Scale set. This sheet sets the job’s coordinates; add alignment points next so other sheets can line up with it.':'Scale set. Now line this sheet up with the alignment points (Align sheet).');if(!sh.aligned)twTool('align');twPanels();twDraw()}
+// best fit of page points onto the named points: rotation + uniform scale + shift
+function twAlignSolve(){const R=twR();const A=R.alignRun;if(!A||A.clicks.length<2){toast('Click at least two of the alignment points.');return}const n=A.n;
+  const pr=A.clicks.map(k=>({p:k.p,w:(a=>[a.x,a.y])(S.tw.apts.find(x=>x.id===k.id))}));const m=pr.length;
+  const pc=[pr.reduce((s,o)=>s+o.p[0],0)/m,pr.reduce((s,o)=>s+o.p[1],0)/m],wc=[pr.reduce((s,o)=>s+o.w[0],0)/m,pr.reduce((s,o)=>s+o.w[1],0)/m];
+  let a=0,b=0,d=0;pr.forEach(o=>{const px=o.p[0]-pc[0],py=o.p[1]-pc[1],wx=o.w[0]-wc[0],wy=o.w[1]-wc[1];a+=px*wx+py*wy;b+=px*wy-py*wx;d+=px*px+py*py});if(!d){toast('Those points are on top of each other.');return}
+  const s=Math.hypot(a,b)/d,rot=Math.atan2(b,a);const c=Math.cos(rot),si=Math.sin(rot);const tx=wc[0]-s*(pc[0]*c-pc[1]*si),ty=wc[1]-s*(pc[0]*si+pc[1]*c);
+  const old=S.tw.sheets[n]?{...S.tw.sheets[n]}:null;twSnap();const im=R.imgs[n];const sh=S.tw.sheets[n]={...(old||{}),s,rot,tx,ty,scaled:true,aligned:true,w:im?im.w:old&&old.w,h:im?im.h:old&&old.h};
+  if(old&&old.scaled&&old.aligned)S.tw.items.forEach(it=>{if(it.page===n)it.pts=it.pts.map(p=>twP2W(sh,twW2P(old,p)))});
+  const res=pr.map(o=>{const w=twP2W(sh,o.p);return Math.hypot(w[0]-o.w[0],w[1]-o.w[1])});const worst=Math.max(...res);
+  const scaleNote=old&&old.scaled&&old.s&&Math.abs(old.s/s-1)>0.02?` Its bar scale disagrees by ${((old.s/s-1)*100).toFixed(1)}%: check the sheet's stated scale.`:'';
+  R.alignRun=null;R.mv=null;twTouch();twTool('select');toast(m<3?`Sheet ${n} lined up on 2 points.${scaleNote} Add a third point to check the fit.`:worst>2?`Sheet ${n} lined up, but one point is ${worst.toFixed(1)} ft off. Check you clicked the right spots.${scaleNote}`:`Sheet ${n} lined up. Points agree within ${worst.toFixed(2)} ft.${scaleNote}`);twPanels();twDraw()}
+
+/* ---------- sweep: elevations one interval apart along a line ---------- */
+function twSegHit(a,b,p,q){const d=(b[0]-a[0])*(q[1]-p[1])-(b[1]-a[1])*(q[0]-p[0]);if(!d)return null;const t=((p[0]-a[0])*(q[1]-p[1])-(p[1]-a[1])*(q[0]-p[0]))/d,u=((p[0]-a[0])*(b[1]-a[1])-(p[1]-a[1])*(b[0]-a[0]))/d;return t>=0&&t<=1&&u>=0&&u<=1?t:null}
+function twSweep(a,b){const R=twR();const s=twActive();const hits=[];
+  S.tw.items.forEach(it=>{if(it.sid!==s.id||it.t!=='contour')return;const bb=twBB(it);if(Math.max(a[0],b[0])<bb[0]||Math.min(a[0],b[0])>bb[2]||Math.max(a[1],b[1])<bb[1]||Math.min(a[1],b[1])>bb[3])return;let tmin=null;
+    for(let k=1;k<it.pts.length;k++){const t=twSegHit(a,b,it.pts[k-1],it.pts[k]);if(t!=null&&(tmin==null||t<tmin))tmin=t}if(tmin!=null)hits.push([tmin,it.id])});
+  hits.sort((x,y)=>x[0]-y[0]);const ids=hits.map(h=>h[1]);if(!ids.length){toast(`The sweep line didn’t cross any contours on ${s.name}.`);twDraw();return}
+  const first=S.tw.items.find(x=>x.id===ids[0]);if(twHasZ(first)){twSweepApply(ids,first.z);return}
+  R.ask={type:'sweep',ids,def:R.lastZ!=null?R.lastZ:'',label:`Elevation of the first contour crossed (${ids.length} crossed, ${S.tw.dir>0?'rising':'falling'} by ${S.tw.interval})`};twPanels();twDraw()}
+function twSweepApply(ids,z0){const R=twR();twSnap();const step=(+S.tw.interval||1)*(S.tw.dir||1);ids.forEach((id,k)=>{const it=S.tw.items.find(x=>x.id===id);if(it)it.z=+(z0+k*step).toFixed(3)});R.lastZ=+(z0+(ids.length-1)*step).toFixed(3);twTouch();
+  toast(`${ids.length} contour${ids.length===1?'':'s'}: ${qtyFmt(z0)} to ${qtyFmt(R.lastZ)}. Ctrl+Z undoes.`);twPanels();twDraw()}
+function twNextMissing(){const R=twR();const s=twActive();const xs=S.tw.items.filter(it=>it.sid===(s&&s.id)&&it.t==='contour'&&!twHasZ(it));if(!xs.length){toast(s?`Every contour on ${s.name} has an elevation.`:'Pick a surface.');return}
+  const it=xs.find(x=>x.page===S.tw.page)||xs[0];if(it.page&&it.page!==S.tw.page){twGoPage(it.page).then(()=>twNextMissing());return}
+  R.selItem=it.id;R.hi=it.id;const sh=twSheet(S.tw.page);const c=twPane('plan');if(sh&&c&&it.page){const pp=it.pts.map(p=>twW2P(sh,p));const xs2=pp.map(p=>p[0]),ys=pp.map(p=>p[1]);const bx=Math.min(...xs2),by=Math.min(...ys),bw=Math.max(...xs2)-bx||20,bh=Math.max(...ys)-by||20;const z=Math.min(c.clientWidth/bw,c.clientHeight/bh)*0.5;R.pv[S.tw.page]={z,ox:(c.clientWidth-bw*z)/2-bx*z,oy:(c.clientHeight-bh*z)/2-by*z}}
+  twAskZ([it.id]);twDraw()}
+function twDelItem(id){const R=twR();twSnap();S.tw.items=S.tw.items.filter(x=>x.id!==id);if(R.selItem===id)R.selItem=null;R.hi=null;twVecUsed();twTouch();twPanels();twDraw()}
+function twTool(k){const R=twR();R.tool=k;R.cur=[];R.sweepA=null;R.scaleRun=null;if(k!=='align')R.alignRun=null;if(k!=='pick')R.sel.clear();if(k==='pick'&&!R.vec[S.tw.page])twVectors(S.tw.page);twPanels();twDraw()}
+
+/* ---------- panels ---------- */
+function twSurfStats(s){const xs=S.tw.items.filter(i=>i.sid===s.id);if(s.kind==='elev'){const c=xs.filter(i=>i.t==='contour'),sp=xs.filter(i=>i.t==='spot');const miss=c.filter(i=>!twHasZ(i)).length;return `${fmtN(c.length,0)} contour${c.length===1?'':'s'}${sp.length?` · ${sp.length} spot${sp.length===1?'':'s'}`:''}${miss?` · <span class="warn-t">${fmtN(miss,0)} need elevation</span>`:''}`}
+  const L=xs.filter(i=>i.t==='line').reduce((a,i)=>a+twLen(i.pts),0),A=xs.filter(i=>i.t==='area').reduce((a,i)=>a+twArea(i.pts),0),C=xs.filter(i=>i.t==='count').length;return [L?fmtN(L,0)+' LF':'',A?fmtN(A,0)+' SF':'',C?C+' EA':''].filter(Boolean).join(' · ')||'Nothing yet'}
+function twSideHtml(){const R=twR();const ro=twRo();const T=S.tw;const n=R.pdf?R.pdf.numPages:(T.file&&T.file.pages)||0;
+  return `<div class="tw-h">Surfaces${ro?'':`<button class="btn sm" data-act="tw-newsurf">+ New</button>`}</div>
+    <div class="tw-surfs">${T.surfaces.map(s=>`<div class="tw-surf${s.id===T.active?' on':''}" data-act="tw-surf" data-id="${s.id}"><span class="tw-sw" style="background:${esc(s.color)}"></span><div class="tw-sn"><b>${esc(s.name)}</b><small>${TW_KINDS[s.kind][0]} · ${twSurfStats(s)}</small></div>
+      <button class="tw-ic" data-act="tw-vis" data-id="${s.id}" title="${s.vis?'Hide':'Show'}">${s.vis?'◉':'○'}</button>${ro?'':`<button class="tw-ic" data-act="tw-lock" data-id="${s.id}" title="${s.lock?'Unlock':'Lock'}">${s.lock?'🔒':'🔓'}</button><button class="tw-ic" data-act="tw-surfmenu" data-id="${s.id}" title="Rename, color, delete">⋯</button>`}</div>`).join('')}</div>
+    <div class="tw-h">Alignment points <button class="tw-ic" data-act="tw-apts" title="${R.showApts?'Hide':'Show'} markers">${R.showApts?'◉':'○'}</button></div>
+    <div class="tw-apl">${T.apts.length?T.apts.map(a=>`<span class="tw-apt">${esc(a.name)}${ro?'':`<button class="x" data-act="tw-aptdel" data-id="${a.id}" aria-label="Remove">×</button>`}</span>`).join(''):'<span class="dim small">None yet. Use the ◎ tool on a scaled sheet.</span>'}</div>
+    <div class="tw-h">Sheets${n?` <span class="dim small">${n}</span>`:''}</div>
+    <div class="tw-pages" id="tw-pages" data-keepscroll>${n?Array.from({length:n},(_,i)=>i+1).map(p=>{const sh=T.sheets[p];const used=[...new Set(T.items.filter(it=>it.page===p).map(it=>it.sid))].map(id=>twSurf(id)).filter(Boolean);
+      return `<button class="tw-pg${p===T.page?' on':''}" data-act="tw-page" data-v="${p}"><img data-twthumb="${p}" alt="" ${R.thumbs[p]?`src="${R.thumbs[p]}"`:''}><span><b>${p}</b>${sh&&sh.aligned?' <i class="ok">aligned</i>':sh&&sh.scaled?' <i>scaled</i>':''}</span><span class="tw-dots">${used.map(s=>`<i style="background:${esc(s.color)}" title="${esc(s.name)}"></i>`).join('')}</span></button>`}).join(''):'<span class="dim small">Open the plan PDF to see its sheets.</span>'}</div>`}
+function twToolbarHtml(){const R=twR();const T=S.tw;const s=twActive();const ro=twRo();
+  return `<div class="seg tw-tools">${TW_TOOLS.filter(t=>!ro||['pan','select'].includes(t[0])).map(([k,ic,l,,h])=>`<button class="${R.tool===k?'on':''}" data-act="tw-tool" data-v="${k}" title="${esc(l+': '+h)}"><span>${ic}</span> ${l}</button>`).join('')}</div>
+    <label class="tw-iv">Interval <input class="field sm num" id="tw-int" data-twint value="${esc(T.interval)}" inputmode="decimal"${ro?' disabled':''}></label><button class="btn sm" data-act="tw-dir" title="Which way the sweep counts"${ro?' disabled':''}>${T.dir>0?'↑ Rising':'↓ Falling'}</button>
+    ${s&&s.kind==='elev'?`<button class="btn sm" data-act="tw-missing">Next missing</button>`:''}<button class="btn sm" data-act="tw-undo" title="Undo (Ctrl+Z)"${R.undo.length?'':' disabled'}>↶</button><button class="btn sm" data-act="tw-redo" title="Redo (Ctrl+Shift+Z)"${R.redo.length?'':' disabled'}>↷</button>`}
+function twAskHtml(){const R=twR();const A=R.ask;if(!A)return '';return `<div class="tw-ask"><span>${esc(A.label)}</span><input class="field" id="tw-askv" value="${esc(A.def??'')}" ${A.type==='apt'||A.type==='surf'?'':'inputmode="decimal"'} autocomplete="off"><button class="btn sm primary" data-act="tw-askok">OK</button><button class="btn sm" data-act="tw-askno">Cancel</button></div>`}
+function twPlanSideHtml(){const R=twR();const n=S.tw.page;const V=R.vec[n];const sh=twSheet(n);const ro=twRo();
+  let card='';
+  if(R.tool==='align'){const A=R.alignRun&&R.alignRun.n===n?R.alignRun:null;const ap=S.tw.apts[A?A.i:0];card=`<div class="tw-card"><b>Align sheet ${n}</b>${S.tw.apts.length<2?'<p class="small">You need two alignment points first. Set the scale on one sheet, then place points with ◎.</p>':`<p class="small">${ap?`Click <b>${esc(ap.name)}</b> where it sits on this sheet.`:'All points clicked.'}</p><div class="small dim">${S.tw.apts.map((a,i)=>`${A&&A.clicks.some(k=>k.id===a.id)?'✓':i===(A?A.i:0)?'→':'·'} ${esc(a.name)}`).join('  ')}</div>
+    <div class="adders">${ap?`<button class="btn sm" data-act="tw-askip">Skip ${esc(ap.name)}</button>`:''}<button class="btn sm primary" data-act="tw-alignok"${A&&A.clicks.length>=2?'':' disabled'}>Line it up</button></div>`}</div>`}
+  else if(R.tool==='pick'){const s=twActive();card=`<div class="tw-card tw-layers"><b>Plan lines${s?` → ${esc(s.name)}`:''}</b>${!V?`<p class="small">${R.vecBusy?'Reading the lines on this sheet…':'<button class="btn sm" data-act="tw-vec">Read this sheet’s lines</button>'}</p>`:`
+    ${R.sel.size?`<div class="adders"><button class="btn sm primary" data-act="tw-addsel"${ro?' disabled':''}>Add ${R.sel.size} selected</button><button class="btn sm" data-act="tw-clearsel">Clear</button></div>`:'<p class="small dim">Click a line, or Shift-drag a box. Or send a whole CAD layer:</p>'}
+    <div class="tw-lyl">${V.groups.map(g=>({g,left:V.paths.filter(p=>p.g===g.id&&!p.used).length})).filter(o=>o.left).sort((a,b)=>b.left-a.left).map(({g,left})=>{const hid=R.hidden[n+'|'+g.id];return `<div class="tw-ly${hid?' off':''}"><span class="tw-sw" style="background:${esc(g.color)}"></span><span class="tw-lyn" title="${esc(g.layer||'')}">${esc(g.layer||((g.dash?'Dashed ':'Solid ')+g.width+' pt'))}</span><span class="dim small">${fmtN(left,0)}</span><button class="tw-ic" data-act="tw-lyhide" data-v="${g.id}" title="${hid?'Show':'Hide'} on the plan">${hid?'○':'◉'}</button>${ro?'':`<button class="btn xs" data-act="tw-lysend" data-v="${g.id}">Add</button>`}</div>`}).join('')}</div>`}</div>`}
+  else if(R.tool==='scale'){card=`<div class="tw-card"><b>Scale sheet ${n}</b><p class="small">Click both ends of the bar scale (or any known distance), then type the distance in feet.${sh&&sh.scaled?` Currently 1" = ${fmtN(sh.s*72,1)}' on paper.`:''}</p></div>`}
+  else if(!sh||!sh.scaled)card=R.pdf?`<div class="tw-card"><b>Sheet ${n} isn’t placed yet</b><p class="small">${S.tw.apts.length>=2?'Line it up with <button class="linkbtn" data-act="tw-tool" data-v="align">Align sheet</button>.':'Start with <button class="linkbtn" data-act="tw-tool" data-v="scale">Scale</button> on your first sheet; it sets the job’s coordinates.'}</p></div>`:'';
+  else if(!sh.aligned)card=`<div class="tw-card"><b>Sheet ${n} has a scale but isn’t lined up</b><p class="small"><button class="linkbtn" data-act="tw-tool" data-v="align">Align sheet</button> to the alignment points.</p></div>`;
+  return card+(R.lastPane==='model'?'':twAskHtml())}
+function twItemCard(){const R=twR();const it=S.tw.items.find(x=>x.id===R.selItem);if(!it)return '';const s=twSurf(it.sid);const ro=twRo();
+  return `<div class="tw-card tw-item"><div class="tw-ih"><b>${esc({contour:'Contour',spot:'Spot elevation',line:'Line',area:'Area',count:'Count'}[it.t])}</b><button class="x" data-act="tw-desel" aria-label="Close">×</button></div>
+    <div class="small dim">${esc(twItemText(it))}</div>
+    ${s&&s.kind==='elev'&&it.t!=='count'?`<label class="f">Elevation <input class="field sm num" data-twz="${it.id}" id="twz-${it.id}" value="${twHasZ(it)?it.z:''}" inputmode="decimal"${ro?' disabled':''}></label>`:''}
+    ${ro?'':`<div class="adders"><select class="field sm" data-twmove="${it.id}"><option value="">Move to…</option>${S.tw.surfaces.filter(x=>x.id!==it.sid&&(x.kind==='elev')===(s&&s.kind==='elev')).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="tw-del" data-id="${it.id}">Delete</button></div>`}</div>`}
+function twPanels(){if(S.view!=='tw'||!S.tw)return;const R=twR();const set=(id,h,doc)=>{const e=(doc||document).getElementById(id);if(e&&e._h!==h){e.innerHTML=h;e._h=h}};
+  set('tw-side',twSideHtml());set('tw-tbar',twToolbarHtml());set('tw-mhud',twItemCard()+(R.ask&&R.lastPane==='model'?twAskHtml():''));const pd=R.pop&&!R.pop.closed?R.pop.document:document;set('tw-phud',twPlanSideHtml(),pd);
+  const ld=$('#tw-load');if(ld)ld.textContent=R.loading||'';const pl=pd.getElementById('tw-pload');if(pl)pl.textContent=R.loading||(R.vecBusy?'Reading lines…':'');
+  const hint=(TW_TOOLS.find(t=>t[0]===R.tool)||[])[4]||'';[document.getElementById('tw-mhint'),pd.getElementById('tw-phint')].forEach(h=>{if(h&&!R.hover)h.textContent=hint});
+  twStatus();const a=twAskDoc().getElementById('tw-askv');if(a&&a.ownerDocument.activeElement!==a&&R.ask&&!R.ask._f){R.ask._f=1;setTimeout(()=>{a.focus();a.select()},0)}
+  setTimeout(()=>{const t=document.querySelector('[data-twthumb]:not([src])');if(t&&R.pdf)twThumb(+t.dataset.twthumb)},50)}
+
+/* ---------- page ---------- */
+function vTw(){if(!S.tw){if(S.twr&&S.twr.loading)return `<div class="panel"><div class="empty">${dozerLoader(S.twr.loading)}</div></div>`;return twPickerView()}
+  const R=twR();const b=byId(S.bids,S.tw.bidId);const ro=twRo();const pop=R.pop&&!R.pop.closed;
+  return `<div class="tw">${S.twMissing?`<div class="notice">Saving takeoffs needs a one-time database update: run <b>supabase/update-34-takeoffs.sql</b> in the Supabase SQL Editor. You can work now, but nothing is saved until then.</div>`:''}
+    <div class="tw-top"><button class="linkbtn" data-act="tw-back">← ${esc(b?b.name:'Back')}</button><b class="tw-title">Takeoff</b>
+      <label class="btn sm">${R.pdf?'Change plan file':'Open plan PDF'}<input type="file" accept=".pdf,application/pdf" data-twfile hidden></label>
+      <span class="small dim">${S.tw.file?esc(S.tw.file.name)+(R.pdf?'':' · not open on this computer'):''}</span><span id="tw-load" class="small dim"></span><span style="flex:1"></span>
+      <label class="check small"><input type="checkbox" data-twunder${R.under?' checked':''}> Plan under model</label>
+      <button class="btn sm" data-act="tw-pop">${pop?'Bring plans back':'⧉ Plans in new window'}</button><span id="tw-save" class="small dim"></span>${ro?'<span class="pill">Read only</span>':''}</div>
+    <div class="tw-tbar" id="tw-tbar"></div>
+    <div class="tw-main${pop?' popped':''}" id="tw-main" style="--tw-split:${R.split}">
+      <aside class="tw-side" id="tw-side"></aside>
+      <section class="tw-pane"><canvas id="tw-model" tabindex="0"></canvas><div class="tw-hud" id="tw-mhud"></div><div class="tw-hint" id="tw-mhint"></div><span class="tw-tag">Model</span></section>
+      ${pop?'':`<div class="tw-div" id="tw-div" title="Drag to resize"></div>${twPlanPaneHtml()}`}
+    </div></div>`}
+function twPlanPaneHtml(){const R=twR();return `<section class="tw-pane tw-planp">${R.pdf?'':`<div class="tw-empty">${S.tw.file?`<b>Open ${esc(S.tw.file.name)}</b><p>The plan file stays on each computer. Open it here to keep working; everything you've done is saved with the bid.</p>`:'<b>Open the plan PDF</b><p>Then set the scale on your first sheet. That sheet sets the job’s coordinates; every other sheet lines up to it.</p>'}<label class="btn primary">Choose PDF<input type="file" accept=".pdf,application/pdf" data-twfile hidden></label></div>`}
+  <canvas id="tw-plan" tabindex="0"></canvas><div class="tw-hud tw-phud" id="tw-phud"></div><div class="tw-hint" id="tw-phint"></div><span class="tw-tag">Plan · sheet ${S.tw.page}<span id="tw-pload"></span></span></section>`}
+function twPickerView(){const bids=S.bids.filter(b=>!b.archived_at).sort((a,c)=>String(a.name).localeCompare(String(c.name)));
+  return `<div class="panel" style="padding:18px"><h2 style="margin-top:0">Takeoff</h2><p class="dim">Each bid has one takeoff: its plan sheets lined up, and surfaces built from them. Pick a bid to open it.</p>
+    <input class="field search" id="q-tw" data-q="tw" placeholder="Search bids" value="${esc(S.q.tw||'')}">
+    <div class="scroll" style="margin-top:10px"><table><thead><tr><th>Bid</th><th>Status</th><th>Due</th><th></th></tr></thead><tbody>${bids.filter(b=>!S.q.tw||String(b.name).toLowerCase().includes(S.q.tw.toLowerCase())).slice(0,200).map(b=>`<tr><td class="proj">${esc(b.name)}</td><td>${esc(b.status||'')}</td><td>${b.due_date?fmtShort(b.due_date):''}</td><td class="r"><button class="btn sm primary" data-act="tw-open" data-id="${b.id}">Open takeoff</button></td></tr>`).join('')||'<tr><td colspan="4"><div class="empty">No bids.</div></td></tr>'}</tbody></table></div></div>`}
+function twMount(){if(S.view!=='tw'||!S.tw)return;const R=twR();twPanels();const m=$('#tw-model');twAttach(m,'model');
+  const p=twPane('plan');twAttach(p,'plan');if(!R._ro){R._ro=new ResizeObserver(()=>{twDraw();twDetail()});}[m,p].forEach(c=>{if(c&&!c._obs){c._obs=1;R._ro.observe(c)}});
+  if(R.pdf&&!R.imgs[S.tw.page])twRenderPage(S.tw.page).then(()=>twDraw());twDraw()}
+// pop the plan pane out into its own window for a second monitor; both sides stay live
+function twPopOut(){const R=twR();if(R.pop&&!R.pop.closed){R.pop.close();R.pop=null;render();return}
+  const w=window.open('','bp-tw-plans','width=1400,height=900');if(!w){toast('Your browser blocked the new window. Allow pop-ups for this site and try again.');return}
+  const d=w.document;d.open();d.write(`<!doctype html><html><head><meta charset="utf-8"><title>Plans · ${esc((byId(S.bids,S.tw.bidId)||{}).name||'Takeoff')}</title></head><body class="tw-popbody"></body></html>`);d.close();
+  [...document.styleSheets].forEach(sh=>{let css=null;try{css=[...sh.cssRules].map(r=>r.cssText).join('\n')}catch(e){}if(css!=null){const st=d.createElement('style');st.textContent=css;d.head.appendChild(st)}else if(sh.href){const l=d.createElement('link');l.rel='stylesheet';l.href=sh.href;d.head.appendChild(l)}});d.documentElement.setAttribute('data-theme',document.documentElement.getAttribute('data-theme')||'');
+  d.body.innerHTML=`<div class="tw-main popped-win">${twPlanPaneHtml()}</div>`;R.pop=w;
+  w.addEventListener('keydown',twKey);w.addEventListener('click',e=>twDocClick(e));w.addEventListener('change',e=>twDocChange(e));w.addEventListener('input',e=>twDocInput(e));
+  w.addEventListener('beforeunload',()=>{R.pop=null;setTimeout(render,0)});w.addEventListener('resize',()=>{twDraw();twDetail()});
+  render();setTimeout(()=>{twAttach(d.getElementById('tw-plan'),'plan');twPanels();twFitPlan();twDraw()},60)}
+
+/* ---------- clicks, changes ---------- */
+function twDocClick(e){const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('tw-'))return;const R=S.twr?twR():null;
+  switch(a){
+    case 'tw-open':if(M)closeModal();twOpen(t.dataset.id);return;
+  }
+  if(!S.tw||!R)return;const id=t.dataset.id;const s=id?twSurf(id):null;
+  switch(a){
+    case 'tw-back':{const b=S.tw.bidId;if(R.pop&&!R.pop.closed)R.pop.close();twSave();S.tw=null;S.twr=null;S.view='pipeline';render();openBid&&openBid(b);break}
+    case 'tw-tool':twTool(t.dataset.v);break;
+    case 'tw-page':twGoPage(+t.dataset.v);break;
+    case 'tw-surf':if(e.target.closest('.tw-ic'))break;S.tw.active=id;twTouchUi();twPanels();twDraw();break;
+    case 'tw-vis':if(s){s.vis=!s.vis;twTouchUi();twPanels();twDraw()}break;
+    case 'tw-lock':if(s){s.lock=!s.lock;twTouch();twPanels()}break;
+    case 'tw-surfmenu':if(s){M={kind:'twsurf',id:s.id,draft:{name:s.name,kind:s.kind,color:s.color}};showModal()}break;
+    case 'tw-newsurf':M={kind:'twsurf',id:null,draft:{name:'',kind:'take',color:TW_COLORS[S.tw.surfaces.length%TW_COLORS.length]}};showModal();break;
+    case 'tw-apts':R.showApts=!R.showApts;twUiSave({showApts:R.showApts});twPanels();twDraw();break;
+    case 'tw-aptdel':twSnap();S.tw.apts=S.tw.apts.filter(x=>x.id!==id);twTouch();twPanels();twDraw();break;
+    case 'tw-dir':S.tw.dir=-(S.tw.dir||1);twTouch();twPanels();break;
+    case 'tw-missing':twNextMissing();break;
+    case 'tw-undo':twUndo(false);break;case 'tw-redo':twUndo(true);break;
+    case 'tw-askok':twAskOk();break;case 'tw-askno':R.ask=null;R.scaleRun=null;twPanels();twDraw();break;
+    case 'tw-askip':{const A=R.alignRun&&R.alignRun.n===S.tw.page?R.alignRun:(R.alignRun={n:S.tw.page,i:0,clicks:[]});A.i++;twPanels();break}
+    case 'tw-alignok':twAlignSolve();break;
+    case 'tw-vec':twVectors(S.tw.page);break;
+    case 'tw-addsel':twPickAdd([...R.sel]);break;case 'tw-clearsel':R.sel.clear();twPanels();twDraw();break;
+    case 'tw-lyhide':{const k=S.tw.page+'|'+t.dataset.v;R.hidden[k]=!R.hidden[k];twPanels();twDraw();break}
+    case 'tw-lysend':{const V=R.vec[S.tw.page];if(!V)break;const g=+t.dataset.v;twPickAdd(V.paths.map((p,i)=>p.g===g&&!p.used?i:-1).filter(i=>i>=0),true);break}
+    case 'tw-desel':R.selItem=null;R.hi=null;twPanels();twDraw();break;
+    case 'tw-del':twDelItem(id);break;
+    case 'tw-pop':twPopOut();break;
+    case 'tw-surfok':twSurfSave();break;case 'tw-surfdel':twSurfDel();break;
+  }}
+document.addEventListener('click',twDocClick);
+function twDocChange(e){const t=e.target;if(t.dataset.twfile!=null){const f=t.files&&t.files[0];t.value='';if(f)twLoadPdf(f,f.name,false);return}if(!S.tw)return;const R=twR();
+  if(t.dataset.twunder!=null){R.under=t.checked;twUiSave({under:R.under});twDraw();return}
+  if(t.dataset.twz){const it=S.tw.items.find(x=>x.id===t.dataset.twz);if(it){twSnap();const z=num(t.value);if(z==null)delete it.z;else{it.z=z;R.lastZ=z}twTouch();twPanels();twDraw()}return}
+  if(t.dataset.twmove){const it=S.tw.items.find(x=>x.id===t.dataset.twmove);if(it&&t.value){twSnap();it.sid=t.value;twTouch();twPanels();twDraw()}return}
+  if(t.dataset.twint!=null){const v=num(t.value);if(v>0){S.tw.interval=v;twTouch()}return}}
+function twDocInput(e){}
+document.addEventListener('change',twDocChange);
+// the divider between model and plan
+document.addEventListener('pointerdown',e=>{if(e.target.id!=='tw-div')return;const main=$('#tw-main');if(!main)return;e.preventDefault();const R=twR();const side=$('#tw-side').getBoundingClientRect().width;const r=main.getBoundingClientRect();
+  const mv=ev=>{const x=ev.clientX-r.left-side;R.split=Math.max(0.2,Math.min(0.8,x/(r.width-side)));main.style.setProperty('--tw-split',R.split);twDraw()};const up=()=>{document.removeEventListener('pointermove',mv);document.removeEventListener('pointerup',up);twUiSave({split:R.split});twDetail()};
+  document.addEventListener('pointermove',mv);document.addEventListener('pointerup',up)});
+// new / edit surface
+function twSurfModal(){const x=M;const d=x.draft;const ed=x.id?twSurf(x.id):null;const n=ed?S.tw.items.filter(i=>i.sid===ed.id).length:0;
+  return mhead(ed?'Surface':'New surface','Name it anything: Existing, Storm, Silt fence, Demo…')+`<div class="mbody"><div class="fg">
+    <label class="f s2">Name<input class="field" id="tws-name" value="${esc(d.name)}" placeholder="e.g. Storm, Erosion control, Stripped"></label>
+    <label class="f">Color<input type="color" class="field" id="tws-color" value="${esc(d.color)}"></label><span></span>
+    <div class="f s4">Kind${ed?`<div class="info-fixed">${TW_KINDS[d.kind][0]} <span class="dim">· ${esc(TW_KINDS[d.kind][1])}</span></div>`:`<div class="tw-kinds">${Object.entries(TW_KINDS).map(([k,[l,h]])=>`<label class="tw-kind"><input type="radio" name="tws-kind" value="${k}"${d.kind===k?' checked':''}> <b>${l}</b><span class="small dim">${h}</span></label>`).join('')}</div>`}</div></div>
+    ${ed?`<p class="hint">${n} item${n===1?'':'s'} on this surface.</p>`:''}</div>
+    <div class="mfoot"><div>${ed?`<button class="btn danger" data-act="tw-surfdel">${M.armDel?'Click again to delete it and its '+n+' items':'Delete surface'}</button>`:''}</div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="tw-surfok">${ed?'Save':'Create'}</button></div></div>`}
+function twSurfSave(){const x=M;const name=($('#tws-name')||{}).value.trim();if(!name){toast('Give the surface a name.');return}const color=($('#tws-color')||{}).value||'#2f6fd6';twSnap();
+  if(x.id){const s=twSurf(x.id);if(s){s.name=name;s.color=color}}else{const kind=(document.querySelector('[name=tws-kind]:checked')||{}).value||'take';const s={id:newId(),name,kind,color,vis:true,lock:false};S.tw.surfaces.push(s);S.tw.active=s.id}
+  twTouch();closeModal();twPanels();twDraw()}
+function twSurfDel(){const x=M;if(!M.armDel){M.armDel=true;renderModal();return}twSnap();S.tw.items=S.tw.items.filter(i=>i.sid!==x.id);S.tw.surfaces=S.tw.surfaces.filter(s=>s.id!==x.id);if(S.tw.active===x.id)S.tw.active=(S.tw.surfaces[0]||{}).id||null;twVecUsed();twTouch();closeModal();twPanels();twDraw()}

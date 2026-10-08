@@ -608,3 +608,31 @@ The checklist is the five AGTEK reports: **Earthwork, Structure measures, Materi
 ## Estimate: Project info
 
 The first tab of an estimate. **General** holds location, project numbers, project type, plan revision date, estimated start and completion, and notes; bid date, estimator and status are shown from the bid. **Owner, Engineer and Designer** each take a name, address, contact, phone, mobile and email: start typing a company from Contacts and its details fill in, or type a new one, which is kept on this estimate only. **Project address** sits below. Everything saves with the estimate; no SQL needed.
+
+## Takeoff workspace
+
+Needs `supabase/update-34-takeoffs.sql` to save (you can work without it, but nothing is kept).
+
+**Estimates → Takeoff**, or **⛰ Takeoff** in a bid's Estimate section. One takeoff per bid, saved with the bid.
+
+**Layout.** Surfaces, alignment points and sheet thumbnails on the left; the model in the middle; the plan on the right. Drag the divider between them. **⧉ Plans in new window** moves the plan to its own window for a second monitor; both stay live, and closing that window brings the plan back. **Plan under model** shows the current sheet faintly under the model.
+
+**The plan file** stays on each computer (a 60+ MB PDF is too big to keep in the database). It's remembered in the browser, so it reopens by itself on the same computer. On another computer the takeoff asks for the file; everything done so far is already there.
+
+**Placing sheets.**
+1. **Scale** the first sheet: click both ends of the bar scale and type the distance. That sheet sets the job's coordinates.
+2. **Alignment points (◎):** click two or three spots that appear on every sheet (property corners, a benchmark, a building corner) and name them.
+3. **Align sheet** on every other sheet: click each named point where it sits. Two points fix position, scale and rotation; a third checks the fit and the app reports how far off it is. A sheet whose bar scale disagrees with its alignment is flagged. Markers can be hidden.
+
+**Surfaces.** Make as many as you like, with any name and color: **Elevation** (contours and spot elevations), **Takeoff** (lines, areas, counts) or **Utility** (pipe tools come later). Show, hide or lock each one; the active one is where new work goes.
+
+**Tools.**
+- **Pick:** reads the sheet's linework with its CAD layers. Click a line to add it, Shift-click or Shift-drag to collect several, or **Add** a whole layer. Dashed contours and contours broken by their labels are joined into whole lines first. Sending a layer to an elevation surface leaves out short symbols. A contour label next to a line is used as its elevation when the PDF kept it as text.
+- **Draw** and **Area:** click along a line (Enter, double-click or right-click to finish); snaps to plan linework. Works on the plan or the model.
+- **Count / spot:** a count on a takeoff surface, a spot elevation on an elevation surface.
+- **Sweep:** set the interval and Rising / Falling, click before the first contour and past the last. Every contour crossed gets an elevation one interval apart, starting from the first one's elevation (asked for if it has none).
+- **Next missing** jumps to the next contour without an elevation. **Select** a line to change its elevation, move it to another surface, or delete it. Ctrl+Z / Ctrl+Shift+Z undo and redo.
+
+Keys: V move, S select, P pick, D draw, A area, C count, W sweep, Esc cancel.
+
+Not built yet: crossing / out-of-sequence contour checks, DXF and LandXML into a surface, cut and fill between surfaces, the tool chest (sectional areas, curb templates, pipe runs with profile) and the finish step (apply to the estimate, or export).
