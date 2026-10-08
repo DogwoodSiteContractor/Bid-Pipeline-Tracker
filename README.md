@@ -640,4 +640,13 @@ Keys: V move, S select, P pick, D draw, A area, C count, W sweep, Esc cancel.
 
 **Cut / fill** (toolbar). Pick the two elevation surfaces (From, usually Existing; To, usually Design), and optionally an area on any takeoff surface as the limits. Gives cut, fill, fill with compaction, export or import, area, and deepest cut and fill, with a cut / fill map on the model; hover the model to read both elevations and the cut or fill depth. **Strip “From” by** lowers the From surface (topsoil) and reports the stripping. **Don't bridge gaps over** stops the surface being stretched across open ground between separate areas (default 150 ft). Contours without an elevation are left out and counted. The result is saved with the takeoff.
 
+**Sections (subgrade).** Select an area and give it a **Section depth** in inches (paving, building pad, sidewalk). It lowers the surface you choose (normally Design) by that depth inside the area, so cut / fill runs to subgrade; where areas overlap the smallest one wins. Cut / fill shows how many sections it used, and they can be switched off there. The area also reports its section volume.
+
+**Quantities** (toolbar). Everything the takeoff measured: cut, fill, fill with compaction, export or import, stripping and site area from the last Cut / fill, and for each takeoff surface its total LF, SF, EA and section CY. Untick what you don't want, then:
+- **Excel:** a Quantities sheet, an Items sheet (every line, area and count) and the Cut / fill settings and results.
+- **PDF:** a printable page with the quantities and a picture of the model.
+- **Apply to the estimate** (a bid's takeoff only): opens the bid's estimate and puts the quantities into **Import takeoff** as a “Takeoff workspace” report, with the same matching screen and remembered matches as the AGTEK import. Earthwork lines use the same names as AGTEK's (Cut, Fill, Export…), so matches made for AGTEK carry over. If the bid has no estimate yet, start one and the quantities are waiting.
+
+Automatic suggestions in Import takeoff now only offer a bid item in the same unit, so a count is never added to a length.
+
 Not built yet: crossing / out-of-sequence contour checks, DXF and LandXML into a surface, the tool chest (sectional areas, curb templates, pipe runs with profile) and the finish step (apply to the estimate, or export).
