@@ -615,6 +615,8 @@ Needs `supabase/update-34-takeoffs.sql` to save (you can work without it, but no
 
 **Estimates → Takeoff**, or **⛰ Takeoff** in a bid's Estimate section. One takeoff per bid, saved with the bid.
 
+**Without a bid:** Calculators → **Takeoff workspace** → **+ New takeoff**. It works the same, is saved to your account (only you, and admins, can see it) and opens on any computer. Name it at the top. **Move to a bid…** makes it that bid's takeoff, if the bid doesn't have one yet; it then follows the bid's rules like any other.
+
 **Layout.** Surfaces, alignment points and sheet thumbnails on the left; the model in the middle; the plan on the right. Drag the divider between them. **⧉ Plans in new window** moves the plan to its own window for a second monitor; both stay live, and closing that window brings the plan back. **Plan under model** shows the current sheet faintly under the model.
 
 **The plan file** stays on each computer (a 60+ MB PDF is too big to keep in the database). It's remembered in the browser, so it reopens by itself on the same computer. On another computer the takeoff asks for the file; everything done so far is already there.

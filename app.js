@@ -2694,6 +2694,9 @@ const CALCS=[
  {id:'takeoff',group:'Earthwork',name:'Cut / fill from plans',icon:'⛰',
   desc:'Upload the grading plan, set the scale, draw the perimeter, then trace the existing and proposed contours. Gives rough cut, fill and import / export, with a cut / fill map on the plan.',
   fields:[],calc:()=>null,view:()=>tkView()},
+ {id:'tw',group:'Earthwork',name:'Takeoff workspace',icon:'🗺',
+  desc:'Plans beside a clean model: line up sheets, build surfaces from contours, take off lines, areas and counts. Not tied to a bid; move it onto one later if you want.',
+  fields:[],calc:()=>null,view:()=>twCalcView()},
  {id:'volume',group:'Earthwork',name:'Cut / fill volume',icon:'▱',
   desc:'Volume from an area and a depth, adjusted for shrink (fill) or swell (haul).',
   fields:[{k:'area',label:'Area',def:1},{k:'au',label:'Area in',type:'select',options:AREA_UNITS,def:'ac'},{k:'depth',label:'Average depth',def:1},{k:'du',label:'Depth in',type:'select',options:[['ft','Feet'],['in','Inches']],def:'ft'},
@@ -5351,7 +5354,7 @@ async function estTplSave(){const x=M;const E=S.est,d=E.data;if(!String(x.name||
 /* ---------- Estimates page ---------- */
 // Estimates page tabs: the list, master templates, and (admins) the bid-building settings
 function estsTabs(on){return `<div class="subnav">${[...(can('estimates')?[['list','Estimates'],['tw','Takeoff']]:[]),...(can('estimates')||can('codebook')?[['tpl','Master templates']]:[]),...(can('codebook')?[['cb','Codebooks']]:[]),...(can('codebook','edit')?[['scopes','Scopes & templates'],['set','Bid settings']]:[])].map(([k,l])=>`<button class="${on===k?'on':''}" data-act="ests-tab" data-v="${k}">${l}</button>`).join('')}</div>`}
-const estsTabFor=()=>({estimates:S.estsTab==='tpl'?'tpl':'list',settings:'set',cb:'cb',scopes:'scopes',tw:'tw'})[S.view];
+const estsTabFor=()=>({estimates:S.estsTab==='tpl'?'tpl':'list',settings:'set',cb:'cb',scopes:'scopes',tw:S.twBid&&!byId(S.bids,S.twBid)?undefined:'tw'})[S.view];
 function vEstimates(){const tab=S.estsTab||'list';const canNew=can('bids','edit')&&can('estimates','edit');
   const tabs='';
   const head=`<div class="head"><div><h1>Estimates</h1><p>${S.estIndex.length} estimate${S.estIndex.length===1?'':'s'} · ${cbList('estimate').length} master template${cbList('estimate').length===1?'':'s'}</p></div><div class="tools">${canNew?'<button class="btn primary" data-act="ests-new">+ New estimate</button>':''}</div></div>`;
@@ -5438,7 +5441,7 @@ document.addEventListener('click',e=>{
     case 'estrev-del':{if(M.arm2!==t.dataset.id){M.arm2=t.dataset.id;renderModal();break}const id=t.dataset.id;M.arm2=null;run(sb.from('estimate_versions').delete().eq('id',id)).then(()=>loadEstVers()).then(()=>{renderModal();render()}).catch(e=>toast(errMsg(e)));break}
     case 'est-verback':estOpen(S.est.bidId);break;
     case 'est-verrestore':{if(!S.est.ver)break;if(!S.est.armR){S.est.armR=true;render();break}estRevRestore();break}
-    case 'ests-tab':{const v=t.dataset.v;if(v==='set')S.view='settings';else if(v==='tw'){S.view='tw';if(S.tw&&S.twr&&S.twr.pop&&!S.twr.pop.closed){}else{S.tw=null;S.twr=null}}else if(v==='cb'||v==='scopes')S.view=v;else{S.estsTab=v;S.view='estimates'}render();window.scrollTo(0,0);break}
+    case 'ests-tab':{const v=t.dataset.v;if(v==='set')S.view='settings';else if(v==='tw'){S.view='tw';if(S.twr&&S.twr.pop&&!S.twr.pop.closed)S.twr.pop.close();S.tw=null;S.twr=null;S.twBid=null}else if(v==='cb'||v==='scopes')S.view=v;else{S.estsTab=v;S.view='estimates'}render();window.scrollTo(0,0);break}
     case 'ests-open':estOpen(t.dataset.id,'estimates');break;
     case 'ests-opentpl':S.estFrom='estimates';estOpenTpl(t.dataset.id);break;
     case 'ests-newtpl':estNewTpl(t.dataset.v);break;
@@ -6429,12 +6432,12 @@ const pAv=p=>`<span class="av" style="background:${avColor(p.id)}" title="${esc(
 function navGroups(){const g=[];
   if(can('dash'))g.push(['dashboard',onlyMine()?'My dashboard':scopeView()?'Dashboard':role()==='board'?'Board dashboard':'Dashboard',['dashboard']]);
   if(can('bids'))g.push(['pipeline',onlyMine()?'My bids':'Pipeline',['pipeline']]);
-  const est=[...(can('estimates')?['estimates','estimate','tw']:[]),...(can('codebook')?['cb']:[]),...(can('codebook','edit')?['settings','scopes']:[])];
+  const twFree=!!(S.twBid&&!byId(S.bids,S.twBid));const est=[...(can('estimates')?['estimates','estimate',...(twFree?[]:['tw'])]:[]),...(can('codebook')?['cb']:[]),...(can('codebook','edit')?['settings','scopes']:[])];
   if(est.length)g.push([est[0],'Estimates',est.includes('cb')&&!est.includes('estimates')?[...est]:est]);
   if(can('jobs'))g.push(['jobs','Jobs',['jobs','job']]);
   if(can('acct'))g.push(['acct','Accounting',['acct']]);
   if(can('contacts'))g.push(['clients','Contacts',['clients','vendors']]);
-  if(can('calc'))g.push(['calc','Calculators',['calc']]);
+  if(can('calc'))g.push(['calc','Calculators',['calc',...(twFree?['tw']:[])]]);
   if(isAdmin())g.push(['team','Team',['team','estimators','teampm','teamoffice','access']]);
   if(!tabOff('fun'))g.push(['fun','Break room',['fun']]);
   if(!tabOff('help'))g.push(['help','Help',['help']]);
@@ -8426,12 +8429,13 @@ function twUiSave(o){try{localStorage.setItem(TW_UIKEY,JSON.stringify({...twUiPr
 function twBlank(bidId){return {v:1,bidId,file:null,page:1,sheets:{},apts:[],surfaces:[{id:newId(),name:'Existing',kind:'elev',color:TW_COLORS[0],vis:true,lock:false},{id:newId(),name:'Design',kind:'elev',color:TW_COLORS[1],vis:true,lock:false}],items:[],active:null,interval:1,dir:-1}}
 function twR(){return S.twr||(S.twr={pdf:null,imgs:{},thumbs:{},vec:{},pv:{},mv:null,tool:'pan',cur:[],sel:new Set(),selItem:null,hi:null,ask:null,undo:[],redo:[],split:twUiPrefs().split||0.5,showApts:twUiPrefs().showApts!==false,under:twUiPrefs().under||false,hidden:{}})}
 const twSheet=n=>S.tw&&S.tw.sheets[n]||null;
+const twFileKey=()=>S.tw.bidId||('free:'+((S.twr&&S.twr.row&&S.twr.row.id)||(S.twr&&S.twr.newId)));
 const twPlaced=n=>{const s=twSheet(n);return !!(s&&s.scaled&&s.aligned)};
 function twP2W(sh,p){const f=sh.s||1,r=sh.rot||0,c=Math.cos(r),s=Math.sin(r);return [(sh.tx||0)+f*(p[0]*c-p[1]*s),(sh.ty||0)+f*(p[0]*s+p[1]*c)]}
 function twW2P(sh,w){const f=sh.s||1,r=sh.rot||0,c=Math.cos(r),s=Math.sin(r);const dx=(w[0]-(sh.tx||0))/f,dy=(w[1]-(sh.ty||0))/f;return [dx*c+dy*s,-dx*s+dy*c]}
 const twSurf=id=>(S.tw.surfaces||[]).find(s=>s.id===id)||null;
 const twActive=()=>twSurf(S.tw.active)||null;
-const twRo=()=>{const b=byId(S.bids,S.tw&&S.tw.bidId);return !(b&&canWork(b)&&can('estimates','edit'))||!!(S.twr&&S.twr.conflict)};
+const twRo=()=>{if(S.tw&&!S.tw.bidId)return !can('calc')||!!(S.twr&&S.twr.conflict);const b=byId(S.bids,S.tw&&S.tw.bidId);return !(b&&canWork(b)&&can('estimates','edit'))||!!(S.twr&&S.twr.conflict)};
 const twLen=pts=>{let L=0;for(let i=1;i<pts.length;i++)L+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]);return L};
 const twArea=pts=>{let a=0;for(let i=0,j=pts.length-1;i<pts.length;j=i++)a+=(pts[j][0]+pts[i][0])*(pts[j][1]-pts[i][1]);return Math.abs(a/2)};
 const twHasZ=it=>typeof it.z==='number'&&isFinite(it.z);
@@ -8443,21 +8447,24 @@ async function twIdbPut(k,v){try{const db=await twIdb();await new Promise((res,r
 async function twIdbGet(k){try{const db=await twIdb();return await new Promise(res=>{const q=db.transaction('f').objectStore('f').get(k);q.onsuccess=()=>res(q.result||null);q.onerror=()=>res(null)})}catch(e){return null}}
 
 /* ---------- open / save ---------- */
-async function twOpen(bidId){const b=byId(S.bids,bidId);if(!b){toast('That bid isn’t available.');return}
-  S.view='tw';S.twBid=bidId;S.tw=null;S.twr=null;twR().loading='Opening the takeoff…';render();
-  let row=null;try{const r=await sb.from('takeoffs').select('*').eq('bid_id',bidId).maybeSingle();if(r.error){if(/takeoffs|does not exist|schema cache/i.test(errMsg(r.error)))S.twMissing=true;else throw r.error}else{row=r.data;S.twMissing=false}}catch(e){toast(errMsg(e))}
-  if(S.twBid!==bidId)return;
-  S.tw=row&&row.data&&row.data.v?row.data:twBlank(bidId);S.tw.bidId=bidId;const R=twR();R.row=row?{id:row.id,version:row.version}:null;R.loading=null;
+async function twOpen(bidId){const b=byId(S.bids,bidId);if(!b){toast('That bid isn’t available.');return}await twOpenWith(bidId,null)}
+// a stand-alone takeoff (Calculators); id null makes a new one
+async function twOpenFree(id){await twOpenWith(null,id||'new')}
+async function twOpenWith(bidId,freeId){const key=bidId||freeId;
+  S.view='tw';S.twBid=key;S.tw=null;S.twr=null;twR().loading='Opening the takeoff…';render();
+  let row=null;if(freeId!=='new'){try{const q=sb.from('takeoffs').select('*');const r=await (bidId?q.eq('bid_id',bidId):q.eq('id',freeId)).maybeSingle();if(r.error){if(/takeoffs|does not exist|schema cache/i.test(errMsg(r.error)))S.twMissing=true;else throw r.error}else{row=r.data;S.twMissing=false}}catch(e){toast(errMsg(e))}}
+  if(S.twBid!==key)return;
+  S.tw=row&&row.data&&row.data.v?row.data:twBlank(bidId);S.tw.bidId=bidId;S.tw.name=(row&&row.name)||S.tw.name||(bidId?'':'Untitled takeoff');const R=twR();R.row=row?{id:row.id,version:row.version}:null;R.free=!bidId;R.newId=row?null:newId();R.loading=null;
   if(!S.tw.active||!twSurf(S.tw.active))S.tw.active=(S.tw.surfaces[0]||{}).id||null;
-  if(S.tw.file){const f=await twIdbGet(bidId);if(f&&f.name===S.tw.file.name&&f.size===S.tw.file.size)await twLoadPdf(f.blob,f.name,true)}
+  if(S.tw.file){const f=await twIdbGet(twFileKey());if(f&&f.name===S.tw.file.name&&f.size===S.tw.file.size)await twLoadPdf(f.blob,f.name,true)}
   render()}
 function twTouch(){const R=twR();if(twRo())return;R.dirty=true;R.saveErr=null;clearTimeout(R._t);R._t=setTimeout(twSave,1800);twStatus()}
 async function twSave(){const R=twR();if(!S.tw||!R.dirty||R.saving||S.twMissing||twRo())return;R.saving=true;R.dirty=false;twStatus();
   const data=JSON.parse(JSON.stringify(S.tw));const ver=(R.row&&R.row.version||0)+1;
-  try{let r;if(R.row){r=await sb.from('takeoffs').update({data,version:ver,updated_by_name:myName()}).eq('id',R.row.id).eq('version',R.row.version).select('id,version');if(!r.error&&(!r.data||!r.data.length)){const chk=await sb.from('takeoffs').select('id,version').eq('id',R.row.id).maybeSingle();if(chk.data&&chk.data.version===ver){r={data:[chk.data],error:null}}}
+  try{let r;if(R.row){r=await sb.from('takeoffs').update({data,name:S.tw.name||'',version:ver,updated_by_name:myName()}).eq('id',R.row.id).eq('version',R.row.version).select('id,version');if(!r.error&&(!r.data||!r.data.length)){const chk=await sb.from('takeoffs').select('id,version').eq('id',R.row.id).maybeSingle();if(chk.data&&chk.data.version===ver){r={data:[chk.data],error:null}}}
     if(R.row&&!r.error&&(!r.data||!r.data.length)){R.conflict=true;toast('Someone else saved this takeoff after you opened it. Reopen it to see their changes; your edits here are not saved.');R.saving=false;render();return}}
-    else r=await sb.from('takeoffs').insert({bid_id:S.tw.bidId,data,version:1,updated_by_name:myName()}).select('id,version');
-    if(r.error)throw r.error;let x=(r.data||[])[0];if(!x){const c=await sb.from('takeoffs').select('id,version').eq('bid_id',S.tw.bidId).maybeSingle();x=c.data}if(x)R.row={id:x.id,version:x.version};R.savedAt=new Date()}
+    else{const id=R.newId||newId();r=await sb.from('takeoffs').insert({id,bid_id:S.tw.bidId||null,name:S.tw.name||'',data,version:1,updated_by_name:myName()}).select('id,version');if(!r.error&&!(r.data||[]).length)r={data:[{id,version:1}],error:null}}
+    if(r.error)throw r.error;const x=(r.data||[])[0];if(x)R.row={id:x.id,version:x.version};R.savedAt=new Date()}
   catch(e){R.dirty=true;R.saveErr=errMsg(e);if(/takeoffs|does not exist|schema cache/i.test(R.saveErr))S.twMissing=true}
   R.saving=false;twStatus();if(R.dirty&&!R.saveErr)twTouch()}
 function twStatus(){const n=$('#tw-save');if(!n)return;const R=twR();n.textContent=S.twMissing?'Not saved: needs update-34':R.conflict?'Not saved: changed elsewhere':R.saveErr?'Not saved: '+R.saveErr:R.saving?'Saving…':R.dirty?'Unsaved changes':R.savedAt?'Saved '+R.savedAt.toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}):'';n.className='small '+(R.saveErr||S.twMissing||R.conflict?'warn-t':'dim')}
@@ -8468,7 +8475,7 @@ function twUndo(redo){const R=twR();const from=redo?R.redo:R.undo,to=redo?R.undo
 async function twLoadPdf(blob,name,quiet){const R=twR();R.loading='Opening '+name+'…';twPanels();
   try{const lib=await tkPdfLib();const pdf=await lib.getDocument({data:new Uint8Array(await blob.arrayBuffer())}).promise;R.pdf=pdf;R.imgs={};R.thumbs={};R.vec={};R.det=null;
     const same=S.tw.file&&S.tw.file.name===name&&S.tw.file.size===blob.size;if(S.tw.file&&!same&&!quiet)toast('A different plan file than last time. Sheets keep their scale and alignment by page number; check them.');
-    S.tw.file={name,size:blob.size,pages:pdf.numPages};S.tw.page=Math.min(S.tw.page||1,pdf.numPages);if(!quiet)twTouch();twIdbPut(S.tw.bidId,{name,size:blob.size,blob});
+    S.tw.file={name,size:blob.size,pages:pdf.numPages};S.tw.page=Math.min(S.tw.page||1,pdf.numPages);if(!quiet)twTouch();twIdbPut(twFileKey(),{name,size:blob.size,blob});
     await twRenderPage(S.tw.page);R.pv[S.tw.page]=null}
   catch(e){toast(errMsg(e))}finally{R.loading=null}render()}
 async function twRenderPage(n){const R=twR();if(R.imgs[n])return R.imgs[n];if(!R.pdf)return null;const page=await R.pdf.getPage(n);const v1=page.getViewport({scale:1});
@@ -8723,7 +8730,7 @@ function twPanels(){if(S.view!=='tw'||!S.tw)return;const R=twR();const set=(id,h
 function vTw(){if(!S.tw){if(S.twr&&S.twr.loading)return `<div class="panel"><div class="empty">${dozerLoader(S.twr.loading)}</div></div>`;return twPickerView()}
   const R=twR();const b=byId(S.bids,S.tw.bidId);const ro=twRo();const pop=R.pop&&!R.pop.closed;
   return `<div class="tw">${S.twMissing?`<div class="notice">Saving takeoffs needs a one-time database update: run <b>supabase/update-34-takeoffs.sql</b> in the Supabase SQL Editor. You can work now, but nothing is saved until then.</div>`:''}
-    <div class="tw-top"><button class="linkbtn" data-act="tw-back">← ${esc(b?b.name:'Back')}</button><b class="tw-title">Takeoff</b>
+    <div class="tw-top"><button class="linkbtn" data-act="tw-back">← ${esc(b?b.name:S.tw.bidId?'Back':'Calculators')}</button>${S.tw.bidId?'<b class="tw-title">Takeoff</b>':`<input class="field tw-name" id="tw-name" data-twname value="${esc(S.tw.name||'')}" placeholder="Name this takeoff"${ro?' disabled':''}>${ro?'':`<select class="field sm" data-twtobid title="Make this the takeoff for a bid"><option value="">Move to a bid…</option>${S.bids.filter(x=>!x.archived_at&&canWork(x)).sort((a,c)=>String(a.name).localeCompare(String(c.name))).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select>`}`}
       <label class="btn sm">${R.pdf?'Change plan file':'Open plan PDF'}<input type="file" accept=".pdf,application/pdf" data-twfile hidden></label>
       <span class="small dim">${S.tw.file?esc(S.tw.file.name)+(R.pdf?'':' · not open on this computer'):''}</span><span id="tw-load" class="small dim"></span><span style="flex:1"></span>
       <label class="check small"><input type="checkbox" data-twunder${R.under?' checked':''}> Plan under model</label>
@@ -8760,7 +8767,7 @@ function twDocClick(e){const t=e.target.closest('[data-act]');if(!t)return;const
   }
   if(!S.tw||!R)return;const id=t.dataset.id;const s=id?twSurf(id):null;
   switch(a){
-    case 'tw-back':{const b=S.tw.bidId;if(R.pop&&!R.pop.closed)R.pop.close();twSave();S.tw=null;S.twr=null;S.view='pipeline';render();openBid&&openBid(b);break}
+    case 'tw-back':{const b=S.tw.bidId;if(R.pop&&!R.pop.closed)R.pop.close();twSave();S.tw=null;S.twr=null;if(!b){S.view='calc';S.calcState.id='tw';S.twFree=null;render();break}S.view='pipeline';render();openBid&&openBid(b);break}
     case 'tw-tool':twTool(t.dataset.v);break;
     case 'tw-page':twGoPage(+t.dataset.v);break;
     case 'tw-surf':if(e.target.closest('.tw-ic'))break;S.tw.active=id;twTouchUi();twPanels();twDraw();break;
@@ -8790,7 +8797,9 @@ function twDocChange(e){const t=e.target;if(t.dataset.twfile!=null){const f=t.fi
   if(t.dataset.twunder!=null){R.under=t.checked;twUiSave({under:R.under});twDraw();return}
   if(t.dataset.twz){const it=S.tw.items.find(x=>x.id===t.dataset.twz);if(it){twSnap();const z=num(t.value);if(z==null)delete it.z;else{it.z=z;R.lastZ=z}twTouch();twPanels();twDraw()}return}
   if(t.dataset.twmove){const it=S.tw.items.find(x=>x.id===t.dataset.twmove);if(it&&t.value){twSnap();it.sid=t.value;twTouch();twPanels();twDraw()}return}
-  if(t.dataset.twint!=null){const v=num(t.value);if(v>0){S.tw.interval=v;twTouch()}return}}
+  if(t.dataset.twint!=null){const v=num(t.value);if(v>0){S.tw.interval=v;twTouch()}return}
+  if(t.dataset.twname!=null){S.tw.name=t.value.trim()||'Untitled takeoff';twTouch();return}
+  if(t.dataset.twtobid!=null){const bid=t.value;t.value='';if(bid)twToBid(bid);return}}
 function twDocInput(e){}
 document.addEventListener('change',twDocChange);
 // the divider between model and plan
@@ -8809,3 +8818,20 @@ function twSurfSave(){const x=M;const name=($('#tws-name')||{}).value.trim();if(
   if(x.id){const s=twSurf(x.id);if(s){s.name=name;s.color=color}}else{const kind=(document.querySelector('[name=tws-kind]:checked')||{}).value||'take';const s={id:newId(),name,kind,color,vis:true,lock:false};S.tw.surfaces.push(s);S.tw.active=s.id}
   twTouch();closeModal();twPanels();twDraw()}
 function twSurfDel(){const x=M;if(!M.armDel){M.armDel=true;renderModal();return}twSnap();S.tw.items=S.tw.items.filter(i=>i.sid!==x.id);S.tw.surfaces=S.tw.surfaces.filter(s=>s.id!==x.id);if(S.tw.active===x.id)S.tw.active=(S.tw.surfaces[0]||{}).id||null;twVecUsed();twTouch();closeModal();twPanels();twDraw()}
+// stand-alone takeoffs, listed in Calculators
+async function twFreeLoad(){S.twFree={loading:true,rows:[]};try{const r=await sb.from('takeoffs').select('id,name,bid_id,owner,updated_at,updated_by_name');if(r.error){if(/takeoffs|does not exist|schema cache/i.test(errMsg(r.error)))S.twMissing=true;else throw r.error}
+  S.twFree={rows:(r.data||[]).filter(x=>!x.bid_id&&(!x.owner||x.owner===(S.session&&S.session.user&&S.session.user.id)||isAdmin())).sort((a,b)=>String(b.updated_at||'').localeCompare(String(a.updated_at||'')))}}catch(e){S.twFree={rows:[],err:errMsg(e)}}if(S.view==='calc')render()}
+function twCalcView(){if(!S.twFree){twFreeLoad();return '<div class="dim">Loading…</div>'}const F=S.twFree;const me=S.session&&S.session.user&&S.session.user.id;
+  return `<div class="tw-free">${S.twMissing?'<div class="notice">Saving takeoffs needs a one-time database update: run <b>supabase/update-34-takeoffs.sql</b>.</div>':''}
+    <div class="adders" style="margin-bottom:12px"><button class="btn primary" data-act="tw-newfree"${can('calc')?'':' disabled'}>+ New takeoff</button><span class="small dim">Saved to your account, so it opens on any computer. Only you see it. The plan PDF stays on each computer.</span></div>
+    ${F.loading?'<div class="dim">Loading…</div>':`<div class="panel scroll"><table><thead><tr><th>Takeoff</th><th>Last saved</th><th></th></tr></thead><tbody>${F.rows.map(x=>`<tr><td class="proj">${esc(x.name||'Untitled takeoff')}${x.owner&&x.owner!==me?' <span class="dim small">(someone else’s)</span>':''}</td><td class="small">${x.updated_at?fmtShort(String(x.updated_at).slice(0,10)):''}${x.updated_by_name?' · '+esc(x.updated_by_name):''}</td>
+      <td class="r nowrap"><button class="btn sm primary" data-act="tw-openfree" data-id="${x.id}">Open</button> <button class="btn sm" data-act="tw-delfree" data-id="${x.id}">${S.twDelArm===x.id?'Click again to delete':'Delete'}</button></td></tr>`).join('')||'<tr><td colspan="3"><div class="empty"><b>No takeoffs yet</b>Start one with + New takeoff. To do one for a bid, use the bid’s ⛰ Takeoff button instead.</div></td></tr>'}</tbody></table></div>`}
+    <p class="hint">A takeoff made here can be moved onto a bid later with “Move to a bid…” at the top of the workspace, if that bid doesn’t have one yet.</p></div>`}
+async function twToBid(bid){const R=twR();const b=byId(S.bids,bid);if(!b)return;if(!R.row){await twSave();if(!R.row){toast('Save the takeoff first.');return}}
+  try{const ex=await sb.from('takeoffs').select('id').eq('bid_id',bid).maybeSingle();if(ex.data){toast(`${b.name} already has a takeoff. Open that one from the bid instead.`);return}
+    const old=twFileKey();const r=await sb.from('takeoffs').update({bid_id:bid}).eq('id',R.row.id).select('id');if(r.error)throw r.error;S.tw.bidId=bid;S.twBid=bid;R.free=false;
+    if(S.tw.file){const f=await twIdbGet(old);if(f)await twIdbPut(bid,f)}twTouch();toast(`This is now the takeoff for ${b.name}.`);render()}catch(e){toast(/duplicate|unique/i.test(errMsg(e))?`${b.name} already has a takeoff.`:errMsg(e))}}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
+  if(a==='tw-newfree'){twOpenFree(null);return}
+  if(a==='tw-openfree'){twOpenFree(t.dataset.id);return}
+  if(a==='tw-delfree'){const id=t.dataset.id;if(S.twDelArm!==id){S.twDelArm=id;render();return}S.twDelArm=null;try{await run(sb.from('takeoffs').delete().eq('id',id));toast('Takeoff deleted.')}catch(er){toast(errMsg(er))}S.twFree=null;render()}});
