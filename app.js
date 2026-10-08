@@ -8754,7 +8754,7 @@ function twSideHtml(){const R=twR();const ro=twRo();const T=S.tw;const n=R.pdf?R
 function twToolbarHtml(){const R=twR();const T=S.tw;const s=twActive();const ro=twRo();
   return `<div class="seg tw-tools">${TW_TOOLS.filter(t=>!ro||['pan','select'].includes(t[0])).map(([k,ic,l,,h])=>`<button class="${R.tool===k?'on':''}" data-act="tw-tool" data-v="${k}" title="${esc(l+': '+h)}"><span>${ic}</span> ${l}</button>`).join('')}</div>
     <label class="tw-iv">Interval <input class="field sm num" id="tw-int" data-twint value="${esc(T.interval)}" inputmode="decimal"${ro?' disabled':''}></label><button class="btn sm" data-act="tw-dir" title="Which way the sweep counts"${ro?' disabled':''}>${T.dir>0?'↑ Rising':'↓ Falling'}</button>
-    ${s&&s.kind==='elev'?`<button class="btn sm" data-act="tw-missing">Next missing</button><button class="btn sm${R.chk?' on':''}" data-act="tw-chkrun" title="Find contours that cross, and elevations that jump (typos)">✓ Check contours</button>`:''}<button class="btn sm${R.cfOpen?' on':''}" data-act="tw-cfopen">⛰ Cut / fill</button><button class="btn sm" data-act="tw-qty">📋 Quantities</button><button class="btn sm" data-act="tw-undo" title="Undo (Ctrl+Z)"${R.undo.length?'':' disabled'}>↶</button><button class="btn sm" data-act="tw-redo" title="Redo (Ctrl+Shift+Z)"${R.redo.length?'':' disabled'}>↷</button>`}
+    ${s&&s.kind==='elev'?`<button class="btn sm" data-act="tw-missing">Next missing</button><button class="btn sm${R.chk?' on':''}" data-act="tw-chkrun" title="Find contours that cross, and elevations that jump (typos)">✓ Check contours</button>`:''}<button class="btn sm${R.cfOpen?' on':''}" data-act="tw-cfopen">⛰ Cut / fill</button><button class="btn sm" data-act="tw-qty">📋 Quantities</button><button class="btn sm" data-act="tw-3d" title="See the surfaces, linework and pipes in 3D">🧊 3D</button><button class="btn sm" data-act="tw-undo" title="Undo (Ctrl+Z)"${R.undo.length?'':' disabled'}>↶</button><button class="btn sm" data-act="tw-redo" title="Redo (Ctrl+Shift+Z)"${R.redo.length?'':' disabled'}>↷</button>`}
 function twAskHtml(){const R=twR();const A=R.ask;if(!A)return '';return `<div class="tw-ask"><span>${esc(A.label)}</span><input class="field" id="tw-askv" value="${esc(A.def??'')}" ${A.type==='apt'||A.type==='surf'?'':'inputmode="decimal"'} autocomplete="off"><button class="btn sm primary" data-act="tw-askok">OK</button><button class="btn sm" data-act="tw-askno">Cancel</button></div>`}
 function twPlanSideHtml(){const R=twR();const n=S.tw.page;const V=R.vec[n];const sh=twSheet(n);const ro=twRo();
   let card='';
@@ -9500,3 +9500,118 @@ function twCheckGo(i){const R=twR();const x=R.chk&&R.chk.issues[i];if(!x)return;
 function twCheckMarks(ctx,f){const R=twR();const C=R.chk;if(!C||C.sid!==S.tw.active&&!twSurf(C.sid))return;C.issues.forEach((x,i)=>{const q=f(x.p);ctx.strokeStyle=x.k==='cross'?'#d93025':'#e8762f';ctx.lineWidth=i===R.chkI?3:2;ctx.beginPath();ctx.arc(q[0],q[1],i===R.chkI?11:8,0,7);ctx.stroke()})}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!S.tw)return;const a=t.dataset.act;const R=twR();
   if(a==='tw-chkrun')twCheckRun();else if(a==='tw-chkclose'){R.chk=null;R.chkI=null;twPanels();twDraw()}else if(a==='tw-chkgo')twCheckGo(+t.dataset.v)});
+
+/* ---------- the takeoff in 3D ----------
+   Elevation surfaces from their own triangles (solid, contours or both), the "To" surface colored by cut / fill,
+   the plan sheet draped on a surface, linework laid on the ground, and pipe runs as pipes at their inverts with
+   structures from rim to invert. Same controls as the calculator's 3D: drag to turn, right/Shift-drag to move, scroll to zoom. */
+const W3={open:false,yaw:-0.7,pitch:0.62,dist:null,pan:[0,0],exag:null,mode:{},cf:true,lines:true,pipes:true,see:false,drape:'',gl:null};
+function w3Open(){if(!S.tw)return;const R=twR();const el=S.tw.surfaces.filter(s=>s.kind==='elev');const C=el.length?twCfDefaults():{};
+  const tins=el.map(s=>({s,t:twTin(s.id,+C.maxEdge||150)})).filter(o=>o.t);if(!tins.length){toast('3D needs an elevation surface with contours, spots or a TIN.');return}
+  el.forEach(s=>{if(!W3.mode[s.id])W3.mode[s.id]=s.id===C.a&&el.length>1?'lines':'solid'});
+  let w=document.getElementById('tw3d-wrap');if(!w){w=document.createElement('div');w.id='tw3d-wrap';document.body.appendChild(w)}W3.open=true;W3.key=null;w3Head();w3Build();w3Sync();w3Draw()}
+function w3Sync(){const e=document.querySelector('[data-w3exag]');if(e)e.value=W3.exag;const v=document.getElementById('w3-exv');if(v)v.textContent=W3.exag}
+function w3Close(){W3.open=false;const w=document.getElementById('tw3d-wrap');if(w)w.innerHTML='';if(W3.gl&&W3.gl.lose)W3.gl.lose.loseContext();W3.gl=null}
+function w3Head(){const R=twR();const w=document.getElementById('tw3d-wrap');if(!w)return;const el=S.tw.surfaces.filter(s=>s.kind==='elev');const C=S.tw.cf||{};const hasCf=!!(R.cf&&S.tw.cfRes);const hasPipe=S.tw.items.some(i=>i.t==='pipe');
+  const sheets=Object.entries(S.tw.sheets).filter(([n,sh])=>sh.scaled&&sh.aligned&&R.imgs[n]).map(([n])=>+n);const X=S.tw.cfRes;
+  w.innerHTML=`<div class="t3-box" role="dialog" aria-label="3D view"><div class="t3-head"><b>3D · ${esc(S.tw.name||((byId(S.bids,S.tw.bidId)||{}).name)||'Takeoff')}</b>
+    ${el.map(s=>`<label class="t3-ex"><span class="tw-sw" style="background:${esc(s.color)}"></span>${esc(s.name)} <select class="field sm" data-w3mode="${s.id}">${[['solid','Solid'],['lines','Contours'],['both','Both'],['off','Hidden']].map(([k,l])=>`<option value="${k}"${W3.mode[s.id]===k?' selected':''}>${l}</option>`).join('')}</select></label>`).join('')}
+    ${hasCf?`<label class="check small"><input type="checkbox" data-w3="cf"${W3.cf?' checked':''}> Cut / fill colors</label>`:''}
+    <label class="check small"><input type="checkbox" data-w3="lines"${W3.lines?' checked':''}> Linework</label>${hasPipe?`<label class="check small"><input type="checkbox" data-w3="pipes"${W3.pipes?' checked':''}> Pipes</label>`:''}
+    <label class="check small"><input type="checkbox" data-w3="see"${W3.see?' checked':''}> See-through ground</label>
+    ${sheets.length?`<label class="t3-ex">Drape <select class="field sm" data-w3drape><option value="">No plan</option>${sheets.map(n=>`<option value="${n}"${String(W3.drape)===String(n)?' selected':''}>Sheet ${n}</option>`).join('')}</select></label>`:''}
+    <label class="t3-ex">Vertical × <input type="range" min="1" max="20" step="1" value="${W3.exag||1}" data-w3exag> <b id="w3-exv">${W3.exag||1}</b></label>
+    <button class="btn sm" data-act="w3-reset">Reset view</button><button class="btn sm" data-act="w3-close">Close</button></div>
+    <div class="t3-stage"><canvas id="tw3d"></canvas><div class="t3-legend">${hasCf&&W3.cf?`<span><i style="background:#D64028"></i>Cut</span><span><i style="background:#2566C0"></i>Fill</span><span class="dim">${esc(X.a)} → ${esc(X.b)} · cut ${fmtN(X.cut,0)} CY · fill ${fmtN(X.fill,0)} CY</span>`:el.filter(s=>W3.mode[s.id]!=='off').map(s=>`<span><i style="background:${esc(s.color)}"></i>${esc(s.name)}</span>`).join('')}${hasPipe&&W3.pipes?`<span><i style="background:#555"></i>Structures</span>${W3.see?'':'<span class="dim">pipes are underground: tick See-through ground</span>'}`:''}</div>
+    <div class="t3-help" id="w3-read">Drag to turn · right-drag or Shift-drag to move · scroll to zoom</div></div></div>`;
+  const ex=w.querySelector('[data-w3exag]');if(ex)ex.value=W3.exag||1}
+const w3hex=h=>{const m=/^#?([0-9a-f]{6})$/i.exec(String(h||'').trim());const v=m?parseInt(m[1],16):0x888888;return [(v>>16&255)/255,(v>>8&255)/255,(v&255)/255]};
+function w3Build(){const cv=document.getElementById('tw3d');if(!cv)return;const R=twR();const dpr=window.devicePixelRatio||1;cv.width=cv.clientWidth*dpr;cv.height=cv.clientHeight*dpr;
+  const gl=cv.getContext('webgl',{antialias:true,premultipliedAlpha:false});if(!gl){cv.parentNode.insertAdjacentHTML('beforeend','<div class="empty">3D needs WebGL, which this browser has turned off.</div>');return}
+  const u32=!!gl.getExtension('OES_element_index_uint');const C=S.tw.cf||{};const me=+C.maxEdge||150;
+  const el=S.tw.surfaces.filter(s=>s.kind==='elev'&&s.vis!==false);const T=el.map(s=>({s,t:twTin(s.id,me)})).filter(o=>o.t);
+  // frame: centre and lowest point of everything with elevations
+  let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity,z0=Infinity,z1=-Infinity;T.forEach(({t})=>{const P=t.pts;for(let i=0;i<P.length;i+=3){const x=P[i],y=P[i+1],z=P[i+2];if(x<x0)x0=x;if(x>x1)x1=x;if(y<y0)y0=y;if(y>y1)y1=y;if(z<z0)z0=z;if(z>z1)z1=z}});
+  S.tw.items.forEach(it=>{if(it.t!=='pipe')return;(it.nodes||[]).forEach(n=>{[n.ii,n.io].forEach(v=>{const z=twN(v);if(z!=null)z0=Math.min(z0,z)})})});
+  const ext=Math.max(x1-x0,y1-y0,10),relief=Math.max(z1-z0,0.5);if(W3.exag==null||W3.forExt!==Math.round(ext)){W3.exag=Math.max(1,Math.min(20,Math.round(ext*0.12/relief)));W3.forExt=Math.round(ext);W3.dist=null;W3.pan=[0,0]}
+  const ex=W3.exag;const cx=(x0+x1)/2,cy=(y0+y1)/2;const V=(x,y,z)=>[x-cx,(z-z0)*ex,y-cy];W3.frame={cx,cy,z0,ex,ext,mid:relief*ex/2};
+  // cut / fill at a point, from the last run
+  const F=R.cf;const dzAt=(x,y)=>{if(!F)return NaN;const i=Math.floor((x-F.x0)/F.cell),j=Math.floor((y-F.y0)/F.cell);if(i<0||j<0||i>=F.nx||j>=F.ny)return NaN;return F.dz[j*F.nx+i]};const mC=F?Math.max(F.maxC,F.maxF,0.5):1;
+  const mix=(a,b,u)=>[a[0]+(b[0]-a[0])*u,a[1]+(b[1]-a[1])*u,a[2]+(b[2]-a[2])*u];const NEU=[0.9,0.9,0.87],RED=[0.84,0.2,0.12],BLU=[0.1,0.36,0.78];
+  const sh=W3.drape?S.tw.sheets[W3.drape]:null,im=W3.drape?R.imgs[W3.drape]:null;const drapeOn=sh&&im?((T.find(o=>o.s.id===C.b&&W3.mode[o.s.id]!=='off'&&W3.mode[o.s.id]!=='lines')||T.find(o=>W3.mode[o.s.id]==='solid'||W3.mode[o.s.id]==='both')||{}).s||{}).id:null;
+  const meshes=[],lines=[],tubes=[];
+  T.forEach(({s,t})=>{const md=W3.mode[s.id]||'solid';if(md==='off')return;
+    if(md==='solid'||md==='both'){const P=t.pts,n=P.length/3,tr=t.tris;const pos=new Float32Array(n*3),nrm=new Float32Array(n*3),col=new Float32Array(n*4);const uv=s.id===drapeOn?new Float32Array(n*2):null;
+      const base=mix(w3hex(s.color),[1,1,1],0.35);const cfOn=W3.cf&&F&&s.id===C.b;
+      for(let i=0;i<n;i++){const v=V(P[i*3],P[i*3+1],P[i*3+2]);pos[i*3]=v[0];pos[i*3+1]=v[1];pos[i*3+2]=v[2];let c=base;
+        if(cfOn){const d=dzAt(P[i*3],P[i*3+1]);if(isFinite(d))c=Math.abs(d)<0.05?NEU:mix(NEU,d<0?RED:BLU,0.25+0.75*Math.min(1,Math.sqrt(Math.abs(d)/mC)))}col[i*4]=c[0];col[i*4+1]=c[1];col[i*4+2]=c[2];col[i*4+3]=1;
+        if(uv){const q=twW2P(sh,[P[i*3],P[i*3+1]]);uv[i*2]=q[0]/im.w;uv[i*2+1]=q[1]/im.h}}
+      for(let k=0;k<tr.length;k+=3){const a=tr[k]*3,b=tr[k+1]*3,c=tr[k+2]*3;const e1=[pos[b]-pos[a],pos[b+1]-pos[a+1],pos[b+2]-pos[a+2]],e2=[pos[c]-pos[a],pos[c+1]-pos[a+1],pos[c+2]-pos[a+2]];const f=cross3(e1,e2);[a,b,c].forEach(q=>{nrm[q]+=f[0];nrm[q+1]+=f[1];nrm[q+2]+=f[2]})}
+      meshes.push({pos,nrm,col,uv,idx:tr,n,tex:!!uv})}
+    if(md==='lines'||md==='both'){const L=[],cl=w3hex(s.color);const add=(a,b)=>{L.push(...a,...b)};const iv=+S.tw.interval||1;
+      // lots of contours: only the index ones (every 5th), or it turns into a blur
+      const many=S.tw.items.filter(it=>it.sid===s.id&&it.t==='contour').length>150;const idx=z=>!many||Math.abs(Math.round(z/(5*iv))*5*iv-z)<1e-6;
+      S.tw.items.forEach(it=>{if(it.sid!==s.id)return;if(it.t==='contour'&&twHasZ(it)&&(it.zs||idx(it.z))){const zz=k=>it.zs&&it.zs.length===it.pts.length?it.zs[k]:it.z;for(let k=1;k<it.pts.length;k++)add(V(it.pts[k-1][0],it.pts[k-1][1],zz(k-1)+0.02),V(it.pts[k][0],it.pts[k][1],zz(k)+0.02))}
+        else if(it.t==='tin'){const TL=twTinLines(it);(TL.seg.length>400000?[TL.maj]:[TL.seg,TL.maj]).forEach(a=>{for(let k=0;k<a.length;k+=4){const za=tinZ(t,a[k],a[k+1]),zb=tinZ(t,a[k+2],a[k+3]);if(isFinite(za)&&isFinite(zb))add(V(a[k],a[k+1],za),V(a[k+2],a[k+3],zb))}})}
+        else if(it.t==='spot'&&twHasZ(it)){const p=it.pts[0];add(V(p[0],p[1],it.z),V(p[0],p[1],it.z+ext*0.004/ex))}});
+      if(L.length)lines.push({pos:new Float32Array(L),c:cl})}});
+  // linework on the ground: the top surface (cut / fill "To", else the first one shown)
+  const top=(T.find(o=>o.s.id===C.b&&W3.mode[o.s.id]!=='off')||T.find(o=>W3.mode[o.s.id]!=='off')||{}).t;
+  if(W3.lines&&top){const step=Math.max(1,ext/500);S.tw.surfaces.forEach(s=>{if(s.kind==='elev'||!s.vis)return;const L=[];const cl=w3hex(s.color);
+    S.tw.items.forEach(it=>{if(it.sid!==s.id||!['line','area','count'].includes(it.t))return;if(it.t==='count'){const p=it.pts[0];const z=tinZ(top,p[0],p[1]);if(isFinite(z))L.push(...V(p[0],p[1],z),...V(p[0],p[1],z+ext*0.006/ex));return}
+      const pts=it.t==='area'?[...it.pts,it.pts[0]]:it.pts;for(let k=1;k<pts.length;k++){const a=pts[k-1],b=pts[k];const m=Math.max(1,Math.ceil(Math.hypot(b[0]-a[0],b[1]-a[1])/step));let pv=null;
+        for(let j=0;j<=m;j++){const x=a[0]+(b[0]-a[0])*j/m,y=a[1]+(b[1]-a[1])*j/m;const z=tinZ(top,x,y);const q=isFinite(z)?V(x,y,z+0.15):null;if(pv&&q)L.push(...pv,...q);pv=q}}});
+    if(L.length)lines.push({pos:new Float32Array(L),c:cl})})}
+  // pipes at their inverts, structures from rim to the lowest invert
+  if(W3.pipes)S.tw.items.forEach(it=>{if(it.t!=='pipe'||!twVisible(it))return;const Cc=twPipeCalc(it);const cl=w3hex((twSurf(it.sid)||{}).color);
+    Cc.segs.forEach(g=>{if(g.iu==null||g.id==null)return;const r=Math.max((g.d||12)/24,ext/700);const a=Cc.nodes[g.i].p,b=Cc.nodes[g.i+1].p;tubes.push({a:V(a[0],a[1],g.iu),b:V(b[0],b[1],g.id),r,lift:r,c:cl})});
+    Cc.nodes.forEach(n=>{if(twNoStr(n.k)||n.rim==null)return;const lo=n.low!=null?n.low-0.5:n.rim-4;const r=Math.max(2,ext/400);tubes.push({a:V(n.p[0],n.p[1],lo),b:V(n.p[0],n.p[1],n.rim),r,vert:true,c:[0.35,0.35,0.35]})})});
+  // GL plumbing
+  const vs=`attribute vec3 p;attribute vec3 n;attribute vec4 c;attribute vec2 uv;uniform mat4 M;uniform vec3 L;varying vec4 vc;varying float vl;varying vec2 vu;void main(){gl_Position=M*vec4(p,1.0);vc=c;vu=uv;vec3 nn=length(n)>0.0?normalize(n):vec3(0.0,1.0,0.0);vl=0.42+0.58*abs(dot(nn,L));}`;
+  const fs=`precision mediump float;varying vec4 vc;varying float vl;varying vec2 vu;uniform float A;uniform float U;uniform float FL;uniform vec3 K;uniform sampler2D T;void main(){vec4 col=vc;if(U>0.5&&vu.x>=0.0&&vu.x<=1.0&&vu.y>=0.0&&vu.y<=1.0){col=texture2D(T,vu);}if(FL>0.5){col=vec4(K,1.0);gl_FragColor=vec4(col.rgb,A);return;}gl_FragColor=vec4(col.rgb*vl,A*col.a);}`;
+  const shd=(ty,src)=>{const o=gl.createShader(ty);gl.shaderSource(o,src);gl.compileShader(o);return o};const pr=gl.createProgram();gl.attachShader(pr,shd(gl.VERTEX_SHADER,vs));gl.attachShader(pr,shd(gl.FRAGMENT_SHADER,fs));gl.linkProgram(pr);gl.useProgram(pr);
+  const loc={p:gl.getAttribLocation(pr,'p'),n:gl.getAttribLocation(pr,'n'),c:gl.getAttribLocation(pr,'c'),uv:gl.getAttribLocation(pr,'uv'),M:gl.getUniformLocation(pr,'M'),L:gl.getUniformLocation(pr,'L'),A:gl.getUniformLocation(pr,'A'),U:gl.getUniformLocation(pr,'U'),FL:gl.getUniformLocation(pr,'FL'),K:gl.getUniformLocation(pr,'K'),T:gl.getUniformLocation(pr,'T')};
+  const ab=a=>{const b=gl.createBuffer();gl.bindBuffer(gl.ARRAY_BUFFER,b);gl.bufferData(gl.ARRAY_BUFFER,a,gl.STATIC_DRAW);return b};
+  const M=meshes.map(m=>{let idx=null,cnt=m.idx.length,pos=m.pos,nrm=m.nrm,col=m.col,uv=m.uv;
+    if(m.n>65535&&!u32){// no 32-bit indices: unroll
+      const k=m.idx.length;const P2=new Float32Array(k*3),N2=new Float32Array(k*3),C2=new Float32Array(k*4),U2=uv?new Float32Array(k*2):null;for(let q=0;q<k;q++){const v=m.idx[q];P2.set(pos.subarray(v*3,v*3+3),q*3);N2.set(nrm.subarray(v*3,v*3+3),q*3);C2.set(col.subarray(v*4,v*4+4),q*4);if(U2)U2.set(uv.subarray(v*2,v*2+2),q*2)}pos=P2;nrm=N2;col=C2;uv=U2}
+    else{idx=gl.createBuffer();gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,idx);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,m.n>65535?Uint32Array.from(m.idx):Uint16Array.from(m.idx),gl.STATIC_DRAW)}
+    return {pos:ab(pos),nrm:ab(nrm),col:ab(col),uv:uv?ab(uv):null,idx,big:m.n>65535,cnt,tex:m.tex}});
+  const Ln=lines.map(l=>({pos:ab(l.pos),n:l.pos.length/3,c:l.c}));
+  // tubes: 10-sided cylinders, closed at the ends
+  const tp=[],tn=[],tc=[];tubes.forEach(t=>{const d=norm3([t.b[0]-t.a[0],t.b[1]-t.a[1],t.b[2]-t.a[2]]);const up=Math.abs(d[1])>0.9?[1,0,0]:[0,1,0];const u=norm3(cross3(d,up)),w=norm3(cross3(d,u));const a=t.vert?t.a:[t.a[0],t.a[1]+t.r,t.a[2]],b=t.vert?t.b:[t.b[0],t.b[1]+t.r,t.b[2]];const S2=10;
+    for(let k=0;k<S2;k++){const a0=k/S2*Math.PI*2,a1=(k+1)/S2*Math.PI*2;const o=g=>[u[0]*Math.cos(g)+w[0]*Math.sin(g),u[1]*Math.cos(g)+w[1]*Math.sin(g),u[2]*Math.cos(g)+w[2]*Math.sin(g)];const n0=o(a0),n1=o(a1);
+      const P=(c,nv)=>[c[0]+nv[0]*t.r,c[1]+nv[1]*t.r,c[2]+nv[2]*t.r];const q=[[P(a,n0),n0],[P(b,n0),n0],[P(b,n1),n1],[P(a,n0),n0],[P(b,n1),n1],[P(a,n1),n1]];q.forEach(([pp,nv])=>{tp.push(...pp);tn.push(...nv);tc.push(...t.c,1)});
+      [[b,d],[a,d.map(x=>-x)]].forEach(([c,nv])=>{[c,P(c,n0),P(c,n1)].forEach(pp=>{tp.push(...pp);tn.push(...nv);tc.push(...t.c,1)})})}});
+  const Tb=tp.length?{pos:ab(new Float32Array(tp)),nrm:ab(new Float32Array(tn)),col:ab(new Float32Array(tc)),n:tp.length/3}:null;
+  let tex=null;if(drapeOn&&im){tex=gl.createTexture();gl.bindTexture(gl.TEXTURE_2D,tex);let src=im.cv;const mx=gl.getParameter(gl.MAX_TEXTURE_SIZE);if(src.width>mx||src.height>mx){const k=mx/Math.max(src.width,src.height);const c2=document.createElement('canvas');c2.width=Math.floor(src.width*k);c2.height=Math.floor(src.height*k);c2.getContext('2d').drawImage(src,0,0,c2.width,c2.height);src=c2}
+    gl.texImage2D(gl.TEXTURE_2D,0,gl.RGBA,gl.RGBA,gl.UNSIGNED_BYTE,src);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MIN_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_MAG_FILTER,gl.LINEAR);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_S,gl.CLAMP_TO_EDGE);gl.texParameteri(gl.TEXTURE_2D,gl.TEXTURE_WRAP_T,gl.CLAMP_TO_EDGE)}
+  W3.gl={gl,pr,loc,M,Ln,Tb,tex,ext,lose:gl.getExtension('WEBGL_lose_context'),stats:{tris:meshes.reduce((a,m)=>a+m.idx.length/3,0),lines:lines.reduce((a,l)=>a+l.pos.length/6,0),tubes:tubes.length,drape:!!tex}};if(W3.dist==null)W3.dist=ext*1.25}
+function w3Draw(){const G=W3.gl;if(!G)return;const {gl,loc}=G;const cv=gl.canvas;gl.viewport(0,0,cv.width,cv.height);
+  const bg=getComputedStyle(document.documentElement).getPropertyValue('--surface-2').trim()||'#f3f4f1';const hx=/^#[0-9a-f]{6}$/i.test(bg)?bg:'#f3f4f1';gl.clearColor(parseInt(hx.slice(1,3),16)/255,parseInt(hx.slice(3,5),16)/255,parseInt(hx.slice(5,7),16)/255,1);gl.clear(gl.COLOR_BUFFER_BIT|gl.DEPTH_BUFFER_BIT);gl.enable(gl.DEPTH_TEST);
+  const d=W3.dist,F=W3.frame||{mid:0};const tgt=[W3.pan[0],F.mid,W3.pan[1]];const eye=[tgt[0]+d*Math.cos(W3.pitch)*Math.sin(W3.yaw),tgt[1]+d*Math.sin(W3.pitch),tgt[2]+d*Math.cos(W3.pitch)*Math.cos(W3.yaw)];
+  const P=m4.persp(0.8,cv.width/cv.height,Math.max(0.5,d*0.01),d*20+G.ext*4),Vw=m4.look(eye,tgt,[0,1,0]);gl.uniformMatrix4fv(loc.M,false,new Float32Array(m4.mul(P,Vw)));gl.uniform3fv(loc.L,norm3([0.4,0.9,0.3]));gl.uniform1i(loc.T,0);
+  const bind=(b,k,a,s)=>{if(!b[k]||loc[a]<0){if(loc[a]>=0)gl.disableVertexAttribArray(loc[a]);return}gl.bindBuffer(gl.ARRAY_BUFFER,b[k]);gl.enableVertexAttribArray(loc[a]);gl.vertexAttribPointer(loc[a],s,gl.FLOAT,false,0,0)};
+  gl.uniform1f(loc.FL,0);gl.uniform1f(loc.U,0);gl.disable(gl.BLEND);gl.depthMask(true);gl.uniform1f(loc.A,1);
+  if(G.Tb){bind(G.Tb,'pos','p',3);bind(G.Tb,'nrm','n',3);bind(G.Tb,'col','c',4);bind({},'uv','uv',2);gl.drawArrays(gl.TRIANGLES,0,G.Tb.n)}
+  // lines: flat colour
+  G.Ln.forEach(l=>{bind(l,'pos','p',3);bind({},'nrm','n',3);bind({},'col','c',4);bind({},'uv','uv',2);gl.uniform1f(loc.FL,1);gl.uniform3fv(loc.K,l.c);gl.drawArrays(gl.LINES,0,l.n)});gl.uniform1f(loc.FL,0);
+  if(W3.see){gl.enable(gl.BLEND);gl.blendFunc(gl.SRC_ALPHA,gl.ONE_MINUS_SRC_ALPHA);gl.depthMask(false);gl.uniform1f(loc.A,0.5)}
+  G.M.forEach(m=>{bind(m,'pos','p',3);bind(m,'nrm','n',3);bind(m,'col','c',4);bind(m,'uv','uv',2);gl.uniform1f(loc.U,m.tex&&G.tex?1:0);if(m.tex&&G.tex){gl.activeTexture(gl.TEXTURE0);gl.bindTexture(gl.TEXTURE_2D,G.tex)}
+    if(m.idx){gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,m.idx);gl.drawElements(gl.TRIANGLES,m.cnt,m.big?gl.UNSIGNED_INT:gl.UNSIGNED_SHORT,0)}else gl.drawArrays(gl.TRIANGLES,0,m.cnt)});
+  gl.depthMask(true);gl.disable(gl.BLEND);gl.uniform1f(loc.A,1);gl.uniform1f(loc.U,0)}
+(function(){let d=null;
+  document.addEventListener('pointerdown',e=>{if(e.target.id!=='tw3d')return;d={x:e.clientX,y:e.clientY,pan:e.button===2||e.shiftKey};e.target.setPointerCapture(e.pointerId)});
+  document.addEventListener('pointermove',e=>{if(!d||!W3.open)return;const dx=e.clientX-d.x,dy=e.clientY-d.y;d.x=e.clientX;d.y=e.clientY;
+    if(d.pan){const s=W3.dist/700,c=Math.cos(W3.yaw),n=Math.sin(W3.yaw);W3.pan[0]+=(-c*dx-n*dy)*s;W3.pan[1]+=(n*dx-c*dy)*s}else{W3.yaw-=dx*0.008;W3.pitch=Math.max(0.05,Math.min(1.55,W3.pitch+dy*0.006))}w3Draw()});
+  document.addEventListener('pointerup',()=>{d=null});
+  document.addEventListener('contextmenu',e=>{if(e.target.id==='tw3d')e.preventDefault()});
+  document.addEventListener('wheel',e=>{if(e.target.id!=='tw3d')return;e.preventDefault();W3.dist=Math.max(1,W3.dist*Math.exp(e.deltaY*0.0012));w3Draw()},{passive:false});
+  document.addEventListener('keydown',e=>{if(W3.open&&e.key==='Escape'){e.stopPropagation();w3Close()}},true);
+  window.addEventListener('resize',()=>{if(W3.open){w3Build();w3Draw()}});
+  document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
+    if(a==='tw-3d')w3Open();else if(a==='w3-close')w3Close();else if(a==='w3-reset'){W3.yaw=-0.7;W3.pitch=0.62;W3.pan=[0,0];W3.dist=null;w3Build();w3Draw()}});
+  document.addEventListener('change',e=>{const t=e.target;if(!W3.open)return;
+    if(t.dataset.w3mode){W3.mode[t.dataset.w3mode]=t.value}else if(t.dataset.w3){W3[t.dataset.w3]=t.checked}else if(t.dataset.w3drape!=null){W3.drape=t.value}else return;
+    const keep={yaw:W3.yaw,pitch:W3.pitch,pan:W3.pan,dist:W3.dist};w3Head();w3Build();Object.assign(W3,keep);w3Sync();w3Draw()});
+  document.addEventListener('input',e=>{const t=e.target;if(t.dataset.w3exag==null||!W3.open)return;const v=+t.value;W3.exag=v;const ev=document.getElementById('w3-exv');if(ev)ev.textContent=v;const keep={yaw:W3.yaw,pitch:W3.pitch,pan:W3.pan,dist:W3.dist};w3Build();Object.assign(W3,keep);w3Draw()})})();

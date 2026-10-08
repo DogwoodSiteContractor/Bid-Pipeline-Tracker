@@ -644,6 +644,14 @@ Keys: V move, S select, P pick, D draw, A area, C count, W sweep, Esc cancel.
 
 **Subgrade surface (one surface, every section).** **+ New** surface → kind **Subgrade**. The left panel then lists its **section types**: **+ Section type** for each one (Standard duty paving 12″, Heavy duty paving 16″, Building pad 6″, Sidewalk 4″…), each with a name, depth and color. Click a type to make it the one you're drawing, then use **Area** or **Pick**; every area you add gets that type and is filled with its color. Change a type's depth once and every area of that type follows. To change an area's type, select it and pick another under **Section type** on its card; it can still have its own depth. **Lowers** sets which surface the sections cut into (normally Design). Quantities lists SF and section CY per type.
 
+**3D view.** **🧊 3D** (toolbar) opens the takeoff in 3D. Drag to turn, right-drag or Shift-drag to move, scroll to zoom, Esc to close.
+- Each elevation surface can be **Solid** (its real triangles, the same ones cut / fill uses), **Contours**, **Both** or **Hidden**. Existing starts as contours over a solid Design; with lots of contours only every 5th (index) one is drawn.
+- **Cut / fill colors** (after a cut / fill run) paint the "To" surface red where it cuts and blue where it fills, darker = deeper, sections included.
+- **Linework** lays takeoff, subgrade and utility lines, areas and counts on the ground (curb, silt fence, pad outlines…).
+- **Pipes** are drawn at their inverts with their real size, structures from rim to the lowest invert; tick **See-through ground** to see them under the surface.
+- **Drape** lays a lined-up plan sheet (one that's been opened on this computer) over the top surface, so you can see the plans on the terrain.
+- **Vertical ×** exaggerates the elevations so flat sites still read; it starts at a sensible value for the site.
+
 **Curb, gutter, sidewalk and other item types (takeoff surfaces).** Select a takeoff surface (say "Concrete") and use **+ Add a type…** in the left panel: 24″ / 30″ / 18″ curb & gutter, 6″ header curb, 24″ valley gutter, 4″ / 6″ sidewalk, 8″ heavy duty concrete, or your own line or area item. Click a type to draw it (Draw or Pick for line types, Area or Pick for area types); each item takes the type's color, and curb draws as a band as wide as the curb.
 - **Line types** have a width (″) and the concrete in the section (SF per LF); **area types** a thickness (″). Both can have a stone base (″ deep, under the curb's width or the whole area). The built-in sections are typical (24″ C&G ≈ 1.58 SF/LF ≈ 0.059 CY/LF): check them against the job's detail sheet and change them; every item of that type follows.
 - **Quantities** per type: LF (or SF), concrete CY and stone base CY. Lines and areas with no type are still totalled for the surface. Change an item's type on its card.
