@@ -644,6 +644,21 @@ Keys: V move, S select, P pick, D draw, A area, C count, W sweep, Esc cancel.
 
 **Subgrade surface (one surface, every section).** **+ New** surface → kind **Subgrade**. The left panel then lists its **section types**: **+ Section type** for each one (Standard duty paving 12″, Heavy duty paving 16″, Building pad 6″, Sidewalk 4″…), each with a name, depth and color. Click a type to make it the one you're drawing, then use **Area** or **Pick**; every area you add gets that type and is filled with its color. Change a type's depth once and every area of that type follows. To change an area's type, select it and pick another under **Section type** on its card; it can still have its own depth. **Lowers** sets which surface the sections cut into (normally Design). Quantities lists SF and section CY per type.
 
+**Edit lines (F5–F9).** The **✂ Edit lines** tool (or just press the key, on the plan or the model):
+- **F5 Break:** click a line where it should break; it becomes two lines (at a point, or anywhere along it). A closed area breaks open into a line that starts and ends there.
+- **F6 Add point:** click on a line to add a point there.
+- **F7 Move point:** click a point (they show as squares), then click where it goes; it snaps to the plan linework and to other lines' points. Esc cancels.
+- **F8 Delete point:** click a point to take it out.
+- **F9 Join:** click near the end of one line, then near the end of another; they become one. Contours must have the same elevation (or be 3D lines).
+It works on lines, contours (flat, sloped, conformed and 3D), areas and pipe runs. Elevations go with the points: a new point on a 3D line gets the elevation in between, sloped lines stay graded end to end, and joining two 3D lines keeps every elevation. On a pipe run a new point is a bend (change its type in the profile table to make it a structure), and breaking a run makes two runs. Ctrl+Z undoes any edit. F5 no longer reloads the page while the takeoff is open.
+
+**Lines on an elevation surface: flat, sloped, conformed or annotation.** A line's card on an elevation surface (Existing, Design…) has four choices:
+- **Flat:** one elevation (a contour).
+- **Sloped:** a start and an end elevation; it's graded evenly between them (flowlines, top of curb, ridges, swales). Start is the end you began drawing at.
+- **Conform:** takes its elevations from another surface plus an offset (+0.5 for top of curb, −0.67 for subgrade…), a point every few feet so it follows the ground. **All N annotations too** does every annotation line on the surface the same way. A conformed line doesn't follow later changes to that surface: **Conform again**.
+- **Annotation:** no elevation. It's shown (dashed) and kept, but not used in the surface and never counted as missing. Give it an elevation any time.
+Sloped and conformed lines are 3D breaklines: the surface, cut / fill and the 3D view use their elevation at every point. When you draw a line on an elevation surface, the elevation prompt has an **Annotation** button; **Check contours** has **Make them annotations** for every line still without one; and flat CAD lines sent to an elevation surface come in as annotations.
+
 **3D view.** **🧊 3D** (toolbar) opens the takeoff in 3D. Drag to turn, right-drag or Shift-drag to move, scroll to zoom, Esc to close.
 - Each elevation surface can be **Solid** (its real triangles, the same ones cut / fill uses), **Contours**, **Both** or **Hidden**. Existing starts as contours over a solid Design; with lots of contours only every 5th (index) one is drawn.
 - **Cut / fill colors** (after a cut / fill run) paint the "To" surface red where it cuts and blue where it fills, darker = deeper, sections included.

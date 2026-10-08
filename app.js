@@ -8456,6 +8456,7 @@ const TW_TOOLS=[
   ['draw','✎','Draw','both','Click along a line; Enter, double-click or right-click to finish. Snaps to plan linework.'],
   ['area','⬠','Area','both','Click around an area; click the first point or press Enter to close it.'],
   ['count','✚','Count / spot','both','Click to place a count (takeoff surface) or a spot elevation (elevation surface).'],
+  ['edit','✂','Edit lines','both','F5 break · F6 add point · F7 move point · F8 delete point · F9 join. Works on lines, contours, areas and pipe runs.'],
   ['pipe','⦿','Pipe','both','Utility surface: click each structure along the run; Enter or double-click finishes. Click an existing structure to connect to it. Rims and inverts go in the table below.'],
   ['sweep','⇢','Sweep','both','Click before the first contour, then past the last. Contours crossed get elevations one interval apart.']];
 const TW_UIKEY='bp-tw-ui';
@@ -8474,6 +8475,7 @@ const twRo=()=>{if(S.tw&&!S.tw.bidId)return !can('calc')||!!(S.twr&&S.twr.confli
 const twLen=pts=>{let L=0;for(let i=1;i<pts.length;i++)L+=Math.hypot(pts[i][0]-pts[i-1][0],pts[i][1]-pts[i-1][1]);return L};
 const twArea=pts=>{let a=0;for(let i=0,j=pts.length-1;i<pts.length;j=i++)a+=(pts[j][0]+pts[i][0])*(pts[j][1]-pts[i][1]);return Math.abs(a/2)};
 const twHasZ=it=>typeof it.z==='number'&&isFinite(it.z);
+const twNeedZ=it=>!twHasZ(it)&&it.em!=='anno';
 function twBB(it){if(it._bb&&it._bbn===it.pts.length)return it._bb;let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;it.pts.forEach(p=>{x0=Math.min(x0,p[0]);y0=Math.min(y0,p[1]);x1=Math.max(x1,p[0]);y1=Math.max(y1,p[1])});Object.defineProperty(it,'_bb',{value:[x0,y0,x1,y1],writable:true,configurable:true,enumerable:false});Object.defineProperty(it,'_bbn',{value:it.pts.length,writable:true,configurable:true,enumerable:false});return it._bb}
 
 /* ---------- the plan file lives on this computer (IndexedDB), keyed by bid ---------- */
@@ -8542,13 +8544,13 @@ function twColors(){const cs=getComputedStyle(document.documentElement);return {
 function twPath(ctx,pts,f,close){ctx.beginPath();pts.forEach((p,i)=>{const q=f(p);i?ctx.lineTo(q[0],q[1]):ctx.moveTo(q[0],q[1])});if(close)ctx.closePath()}
 function twDrawItems(ctx,f,scale,cull,C,onPage){const R=twR();const sel=R.selItem,hi=R.hi;const showZ=scale>0.6;
   S.tw.surfaces.forEach(s=>{if(!s.vis)return;const xs=S.tw.items.filter(it=>it.sid===s.id&&(!onPage||onPage(it)));const act=s.id===S.tw.active;
-    xs.forEach(it=>{if(cull&&!cull(twBB(it)))return;const miss=s.kind==='elev'&&it.t!=='count'&&!twHasZ(it);const on=it.id===sel||it.id===hi;
-      const ty=s.kind==='sub'?twType(it):s.kind==='take'?twCtOf(it):null;ctx.strokeStyle=on?(it.id===sel?C.sel:C.hi):miss?C.warn:ty&&ty.color||s.color;ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=on?3:act?1.6:1.1;ctx.globalAlpha=act||on?1:0.75;ctx.setLineDash(miss&&!on?[5,3]:[]);
+    xs.forEach(it=>{if(cull&&!cull(twBB(it)))return;const miss=s.kind==='elev'&&it.t!=='count'&&twNeedZ(it);const on=it.id===sel||it.id===hi;
+      const ty=s.kind==='sub'?twType(it):s.kind==='take'?twCtOf(it):null;ctx.strokeStyle=on?(it.id===sel?C.sel:C.hi):miss?C.warn:ty&&ty.color||s.color;ctx.fillStyle=ctx.strokeStyle;ctx.lineWidth=on?3:act?1.6:1.1;ctx.globalAlpha=act||on?1:0.75;ctx.setLineDash(miss&&!on?[5,3]:[]);if(it.em==='anno'){ctx.setLineDash([8,5]);if(!on)ctx.globalAlpha*=0.6;ctx.lineWidth=on?2:1}
       if(it.t==='tin'){twDrawTin(ctx,it,f,scale,s.color,on);return}
       if(it.t==='count'||it.t==='spot'){const q=f(it.pts[0]);ctx.beginPath();ctx.arc(q[0],q[1],on?6:4,0,7);ctx.fill();if(it.t==='spot'&&showZ&&twHasZ(it)){ctx.font='11px system-ui';ctx.fillText(qtyFmt(it.z),q[0]+6,q[1]-6)}return}
       twPath(ctx,it.pts,f,it.t==='area');if(it.t==='area'){const sc=twSecOf(it);ctx.globalAlpha=sc?0.22:0.12;ctx.fill();ctx.globalAlpha=act||on?1:0.75}ctx.stroke();if(it.t==='line'&&ty&&s.kind==='take')twCtBand(ctx,it,f,ty);if(it.t==='pipe')twDrawPipeItem(ctx,it,f,scale,ctx.strokeStyle,on);if(it.t==='area'&&scale>0.15){const sc=twSecOf(it);if(sc){const b=twBB(it);const q=f([(b[0]+b[2])/2,(b[1]+b[3])/2]);ctx.font='bold 11px system-ui';const ty=twType(it);const lab=(ty&&scale>0.5?ty.name+' ':'')+'−'+sc.d+'″';ctx.fillText(lab,q[0]-ctx.measureText(lab).width/2,q[1]+4)}}
-      if(showZ&&twHasZ(it)&&it.pts.length>1){const m=it.pts[Math.floor(it.pts.length/2)];const q=f(m);ctx.font='10px system-ui';ctx.fillText(qtyFmt(it.z),q[0]+3,q[1]-3)}})});
-  ctx.globalAlpha=1;ctx.setLineDash([]);twDrawMarks(ctx,f);twCheckMarks(ctx,f)}
+      if(showZ&&twHasZ(it)&&it.pts.length>1){const m=it.pts[Math.floor(it.pts.length/2)];const q=f(m);ctx.font='10px system-ui';ctx.fillText(it.zs&&it.zs.length?qtyFmt(it.zs[0])+' → '+qtyFmt(it.zs[it.zs.length-1]):qtyFmt(it.z),q[0]+3,q[1]-3)}})});
+  ctx.globalAlpha=1;ctx.setLineDash([]);twDrawMarks(ctx,f);twCheckMarks(ctx,f);twEditMarks(ctx,f)}
 function twDrawPlan(){const R=twR();const c=twPane('plan');if(!c||!S.tw)return;const dpr=twSize(c);const ctx=c.getContext('2d');const C=twColors();ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle='#f4f4f1';ctx.fillRect(0,0,c.width,c.height);
   const n=S.tw.page,im=R.imgs[n];if(!im)return;if(!R.pv[n])twFitPlan();const v=R.pv[n];if(!v)return;ctx.setTransform(dpr,0,0,dpr,0,0);
   ctx.imageSmoothingEnabled=true;ctx.drawImage(im.cv,v.ox,v.oy,im.w*v.z,im.h*v.z);
@@ -8608,13 +8610,15 @@ function twAttach(c,which){if(!c||c._tw)return;c._tw=1;let drag=null;const R=()=
   c.addEventListener('wheel',e=>{e.preventDefault();const r=R();const v=which==='plan'?r.pv[S.tw.page]:r.mv;if(!v)return;const b=c.getBoundingClientRect();const mx=e.clientX-b.left,my=e.clientY-b.top;const f=Math.exp(-e.deltaY*0.0015);const z=Math.max(0.005,Math.min(200,v.z*f));v.ox=mx-(mx-v.ox)*z/v.z;v.oy=my-(my-v.oy)*z/v.z;v.z=z;twDraw()},{passive:false})}
 function twKey(e){if(S.view!=='tw'||!S.tw)return;const R=twR();const tag=(e.target&&e.target.tagName)||'';
   if(e.target&&e.target.id==='tw-askv'){if(e.key==='Enter'){e.preventDefault();twAskOk()}else if(e.key==='Escape'){e.preventDefault();R.ask=null;twPanels();twDraw()}return}
+  // AGTEK-style line editing keys (and keep F5 from reloading the page)
+  const fk={F5:'brk',F6:'add',F7:'mv',F8:'del',F9:'join'}[e.key];if(fk){e.preventDefault();if(twRo())return;twTool('edit');R.emode=fk;twPanels();twDraw();return}
   if(['INPUT','TEXTAREA','SELECT'].includes(tag))return;
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();twUndo(e.shiftKey);return}
   if(e.key==='Enter'){if(R.cur.length){e.preventDefault();twFinish(R.curPane)}else if(R.tool==='pick'&&R.sel.size){e.preventDefault();twPickAdd([...R.sel])}}
-  else if(e.key==='Escape'){R.cur=[];R.sweepA=null;R.scaleRun=null;R.sel.clear();R.ask=null;R.alignRun=null;twPanels();twDraw()}
+  else if(e.key==='Escape'){R.cur=[];R.emv=null;R.ejoin=null;R.sweepA=null;R.scaleRun=null;R.sel.clear();R.ask=null;R.alignRun=null;twPanels();twDraw()}
   else if((e.key==='Delete'||e.key==='Backspace')&&R.cur.length){e.preventDefault();R.cur.pop();twDraw()}
   else if((e.key==='Delete'||e.key==='Backspace')&&R.selItem&&!twRo()){e.preventDefault();twDelItem(R.selItem)}
-  else if(!e.ctrlKey&&!e.metaKey&&!e.altKey){const k={v:'pan',s:'select',p:'pick',d:'draw',a:'area',c:'count',w:'sweep',u:'pipe'}[e.key.toLowerCase()];if(k){twTool(k)}}}
+  else if(!e.ctrlKey&&!e.metaKey&&!e.altKey){const k={v:'pan',s:'select',p:'pick',d:'draw',a:'area',c:'count',w:'sweep',u:'pipe',e:'edit'}[e.key.toLowerCase()];if(k){twTool(k)}}}
 document.addEventListener('keydown',twKey);
 
 /* ---------- hover, pick, snap ---------- */
@@ -8631,10 +8635,11 @@ function twItemAt(which,q){const R=twR();const v=which==='plan'?R.pv[S.tw.page]:
     const pts=it.t==='area'?[...it.pts,it.pts[0]]:it.pts;for(let k=1;k<pts.length;k++){const d=tkSegDist(w,pts[k-1],pts[k]);if(d<bd){bd=d;best=it}}});return best}
 function twHover(which,q){const R=twR();R.snap=null;R.vhov=null;
   if(which==='plan'&&(R.tool==='pick')){const V=R.vec[S.tw.page];const v=R.pv[S.tw.page];if(V&&v){const pi=twNearPath(V,q,8/v.z);R.vhov=pi>=0&&!V.paths[pi].used?pi:null}}
-  if(which==='plan'&&['draw','area','count','scale','apt','align','pipe'].includes(R.tool)){const v=R.pv[S.tw.page];if(v)R.snap=twSnapPt(q,9/v.z)}
+  if(which==='plan'&&['draw','area','count','scale','apt','align','pipe','edit'].includes(R.tool)){const v=R.pv[S.tw.page];if(v)R.snap=twSnapPt(q,9/v.z)}
+  if(R.tool==='edit'){R.ehov=twEditHit(which,q,R.emv&&R.emv.id);const sh=twSheet(S.tw.page);R.ehw=which==='plan'?(sh&&sh.scaled?twP2W(sh,R.snap||q):null):q;if(R.emv&&R.ehov&&R.ehov.dv<=R.ehov.tol)R.ehw=R.ehov.it.pts[R.ehov.k].slice()}else{R.ehov=null;R.ehw=null}
   R.nsnap=null;if(R.tool==='apt'&&which==='model'&&R.mv)R.nsnap=twVertNear(q,10/R.mv.z);if(R.tool==='pipe'){const s=twActive();const nk=s&&s.kind==='util'?twNodeNear(which,q,s.id):null;R.nsnap=nk?nk.w:null}
   if(['select','pan','sweep'].includes(R.tool)&&!R.cur.length){const it=twItemAt(which,q);const id=it?it.id:null;if(id!==R.hi){R.hi=id||R.selItem;const h=twPane(which)?.parentElement?.querySelector('.tw-hint');if(h&&it)h.textContent=twItemText(it)}}}
-function twItemText(it){const s=twSurf(it.sid);const sc0=twSecOf(it);const ty0=twType(it);const sec=sc0?`${ty0?ty0.name+', ':''}${sc0.d}″ section`:ty0?ty0.name+' (no depth yet)':'';const L=it.t==='area'?`${fmtN(twArea(it.pts),0)} SF`:it.t==='count'||it.t==='spot'?'':`${fmtN(twLen(it.pts),1)} LF`;return [s?s.name:'',twCtOf(it)?twCtOf(it).name:'',(it.t==='pipe'&&it.name?it.name+' · ':'')+{contour:it.zs?'3D line':'Contour',spot:'Spot elevation',line:'Line',area:'Area',count:'Count',pipe:'Pipe run',tin:'TIN'}[it.t],it.t==='pipe'?(it.nodes||[]).filter(n=>!twNoStr(n.k)).length+' structures':'',twHasZ(it)?'elev '+qtyFmt(it.z):(s&&s.kind==='elev'&&it.t!=='count'?'no elevation yet':''),L,sec,it.page?'sheet '+it.page:''].filter(Boolean).join(' · ')}
+function twItemText(it){const s=twSurf(it.sid);const sc0=twSecOf(it);const ty0=twType(it);const sec=sc0?`${ty0?ty0.name+', ':''}${sc0.d}″ section`:ty0?ty0.name+' (no depth yet)':'';const L=it.t==='area'?`${fmtN(twArea(it.pts),0)} SF`:it.t==='count'||it.t==='spot'?'':`${fmtN(twLen(it.pts),1)} LF`;return [s?s.name:'',twCtOf(it)?twCtOf(it).name:'',(it.t==='pipe'&&it.name?it.name+' · ':'')+{contour:it.em==='anno'?'Line':it.zs?'3D line':'Contour',spot:'Spot elevation',line:'Line',area:'Area',count:'Count',pipe:'Pipe run',tin:'TIN'}[it.t],it.t==='pipe'?(it.nodes||[]).filter(n=>!twNoStr(n.k)).length+' structures':'',twZText(it,s)||(twHasZ(it)?'elev '+qtyFmt(it.z):''),L,sec,it.page?'sheet '+it.page:''].filter(Boolean).join(' · ')}
 
 /* ---------- clicks by tool ---------- */
 function twNeedPlaced(){const sh=twSheet(S.tw.page);if(!sh||!sh.scaled){toast('Set the scale on this sheet first (Scale tool), or align it to your alignment points.');twTool(S.tw.apts.length>=2?'align':'scale');return false}if(!sh.aligned){if(S.tw.apts.length<2){toast('There aren’t two alignment points to line this sheet up with. Use “Make this the reference sheet”, then add points here.');twPanels()}else{toast('Line this sheet up with the alignment points first (Align sheet).');twTool('align')}return false}return true}
@@ -8659,6 +8664,7 @@ function twClick(which,q,e){const R=twR();R.lastPane=which;if(twRo()&&!['pan','s
       if(s.kind==='elev'){R.ask={type:'spot',w,page:which==='plan'?n:null,def:'',label:'Spot elevation'};twPanels();return}
       twSnap();S.tw.items.push({id:newId(),sid:s.id,t:'count',pts:[w],page:which==='plan'?n:null});twTouch();twPanels();twDraw();return}
     case 'pipe':twPipeClick(which,q);return;
+    case 'edit':twEditClick(which,q,e);return;
     case 'sweep':{const s=twNeedSurface(['elev']);if(!s)return;let w=q;if(which==='plan'){if(!twNeedPlaced())return;w=twP2W(twSheet(n),q)}
       if(!R.sweepA||R.curPane!==which){R.sweepA=w;R.curPane=which;twDraw();return}const a=R.sweepA;R.sweepA=null;twSweep(a,w);return}
   }}
@@ -8673,7 +8679,7 @@ function twPickAdd(idxs,whole){const R=twR();const n=S.tw.page;const V=R.vec[n];
   const ids=[];add.forEach(P=>{const gapC=Math.hypot(P.pts[0][0]-P.pts[P.pts.length-1][0],P.pts[0][1]-P.pts[P.pts.length-1][1]);const closed=P.pts.length>3&&(gapC<0.5||gapC<Math.min(3,tkPolyLen(P.pts)*0.01));
     const t=s.kind==='elev'?'contour':closed||s.kind==='sub'?'area':'line';const pts=P.pts.map(p=>twP2W(sh,p));if(t==='area'&&closed)pts.pop();
     const it={id:newId(),sid:s.id,t,pts,page:n,vkey:P.vkey};if(s.kind==='sub'){const ty=twSubType(s);if(ty)it.sec=ty.id}twCtStamp(s,it);const z=s.kind==='elev'?twLabelZ(V,P):null;if(z!=null)it.z=z;S.tw.items.push(it);ids.push(it.id);P.used=true});
-  R.sel.clear();twTouch();const need=ids.filter(id=>{const it=S.tw.items.find(x=>x.id===id);return s.kind==='elev'&&!twHasZ(it)});
+  R.sel.clear();twTouch();const need=ids.filter(id=>{const it=S.tw.items.find(x=>x.id===id);return s.kind==='elev'&&twNeedZ(it)});
   if(need.length===1&&ids.length===1)twAskZ(need);else if(ids.length>1)toast(`${ids.length} lines added to ${s.name}.${short?` ${short} short pieces (symbols, ticks) left out; pick them by hand if they belong.`:''}${need.length?` ${need.length} need an elevation: use Sweep, or Next missing.`:''}`);
   R.selItem=ids[ids.length-1];twPanels();twDraw()}
 function twBoxPick(a,b){const R=twR();const V=R.vec[S.tw.page];if(!V)return;const x0=Math.min(a[0],b[0]),x1=Math.max(a[0],b[0]),y0=Math.min(a[1],b[1]),y1=Math.max(a[1],b[1]);
@@ -8723,22 +8729,22 @@ const twScaleText=sh=>sh&&sh.scaled?(sh.bar?`1" = ${fmtN(sh.bar*72,(sh.bar*72)%1
 /* ---------- sweep: elevations one interval apart along a line ---------- */
 function twSegHit(a,b,p,q){const d=(b[0]-a[0])*(q[1]-p[1])-(b[1]-a[1])*(q[0]-p[0]);if(!d)return null;const t=((p[0]-a[0])*(q[1]-p[1])-(p[1]-a[1])*(q[0]-p[0]))/d,u=((p[0]-a[0])*(b[1]-a[1])-(p[1]-a[1])*(b[0]-a[0]))/d;return t>=0&&t<=1&&u>=0&&u<=1?t:null}
 function twSweep(a,b){const R=twR();const s=twActive();const hits=[];
-  S.tw.items.forEach(it=>{if(it.sid!==s.id||it.t!=='contour')return;const bb=twBB(it);if(Math.max(a[0],b[0])<bb[0]||Math.min(a[0],b[0])>bb[2]||Math.max(a[1],b[1])<bb[1]||Math.min(a[1],b[1])>bb[3])return;let tmin=null;
+  S.tw.items.forEach(it=>{if(it.sid!==s.id||it.t!=='contour'||it.em==='anno'||it.zs)return;const bb=twBB(it);if(Math.max(a[0],b[0])<bb[0]||Math.min(a[0],b[0])>bb[2]||Math.max(a[1],b[1])<bb[1]||Math.min(a[1],b[1])>bb[3])return;let tmin=null;
     for(let k=1;k<it.pts.length;k++){const t=twSegHit(a,b,it.pts[k-1],it.pts[k]);if(t!=null&&(tmin==null||t<tmin))tmin=t}if(tmin!=null)hits.push([tmin,it.id])});
   hits.sort((x,y)=>x[0]-y[0]);const ids=hits.map(h=>h[1]);if(!ids.length){toast(`The sweep line didn’t cross any contours on ${s.name}.`);twDraw();return}
   const first=S.tw.items.find(x=>x.id===ids[0]);if(twHasZ(first)){twSweepApply(ids,first.z);return}
   R.ask={type:'sweep',ids,def:R.lastZ!=null?R.lastZ:'',label:`Elevation of the first contour crossed (${ids.length} crossed, ${S.tw.dir>0?'rising':'falling'} by ${S.tw.interval})`};twPanels();twDraw()}
 function twSweepApply(ids,z0){const R=twR();twSnap();const step=(+S.tw.interval||1)*(S.tw.dir||1);ids.forEach((id,k)=>{const it=S.tw.items.find(x=>x.id===id);if(it)it.z=+(z0+k*step).toFixed(3)});R.lastZ=+(z0+(ids.length-1)*step).toFixed(3);twTouch();
   toast(`${ids.length} contour${ids.length===1?'':'s'}: ${qtyFmt(z0)} to ${qtyFmt(R.lastZ)}. Ctrl+Z undoes.`);twPanels();twDraw()}
-function twNextMissing(){const R=twR();const s=twActive();const xs=S.tw.items.filter(it=>it.sid===(s&&s.id)&&it.t==='contour'&&!twHasZ(it));if(!xs.length){toast(s?`Every contour on ${s.name} has an elevation.`:'Pick a surface.');return}
+function twNextMissing(){const R=twR();const s=twActive();const xs=S.tw.items.filter(it=>it.sid===(s&&s.id)&&it.t==='contour'&&twNeedZ(it));if(!xs.length){toast(s?`Every contour on ${s.name} has an elevation.`:'Pick a surface.');return}
   const it=xs.find(x=>x.page===S.tw.page)||xs[0];if(it.page&&it.page!==S.tw.page){twGoPage(it.page).then(()=>twNextMissing());return}
   R.selItem=it.id;R.hi=it.id;const sh=twSheet(S.tw.page);const c=twPane('plan');if(sh&&c&&it.page){const pp=it.pts.map(p=>twW2P(sh,p));const xs2=pp.map(p=>p[0]),ys=pp.map(p=>p[1]);const bx=Math.min(...xs2),by=Math.min(...ys),bw=Math.max(...xs2)-bx||20,bh=Math.max(...ys)-by||20;const z=Math.min(c.clientWidth/bw,c.clientHeight/bh)*0.5;R.pv[S.tw.page]={z,ox:(c.clientWidth-bw*z)/2-bx*z,oy:(c.clientHeight-bh*z)/2-by*z}}
   twAskZ([it.id]);twDraw()}
 function twDelItem(id){const R=twR();twSnap();S.tw.items=S.tw.items.filter(x=>x.id!==id);if(R.selItem===id)R.selItem=null;R.hi=null;twVecUsed();twTouch();twPanels();twDraw()}
-function twTool(k){const R=twR();R.tool=k;R.cur=[];R.sweepA=null;R.scaleRun=null;if(k!=='align')R.alignRun=null;if(k!=='pick')R.sel.clear();if(k==='pick'&&!R.vec[S.tw.page])twVectors(S.tw.page);twPanels();twDraw()}
+function twTool(k){const R=twR();R.tool=k;R.cur=[];R.emv=null;R.ejoin=null;R.ehov=null;R.sweepA=null;R.scaleRun=null;if(k!=='align')R.alignRun=null;if(k!=='pick')R.sel.clear();if(k==='pick'&&!R.vec[S.tw.page])twVectors(S.tw.page);twPanels();twDraw()}
 
 /* ---------- panels ---------- */
-function twSurfStats(s){const xs=S.tw.items.filter(i=>i.sid===s.id);if(s.kind==='sub'){const A=xs.filter(i=>i.t==='area');return `${A.length} area${A.length===1?'':'s'} · ${(s.types||[]).length} type${(s.types||[]).length===1?'':'s'}${A.some(i=>!twSecOf(i))?' · <span class="warn-t">some without a depth</span>':''}`}if(s.kind==='elev'){const c=xs.filter(i=>i.t==='contour'),sp=xs.filter(i=>i.t==='spot');const tn=xs.filter(i=>i.t==='tin');const miss=c.filter(i=>!twHasZ(i)).length;return `${tn.length?`TIN ${fmtN(tn.reduce((a,i)=>a+i.pts.length,0),0)} pts`:''}${tn.length&&!c.length?'':`${tn.length?' · ':''}${fmtN(c.length,0)} contour${c.length===1?'':'s'}`}${sp.length?` · ${sp.length} spot${sp.length===1?'':'s'}`:''}${miss?` · <span class="warn-t">${fmtN(miss,0)} need elevation</span>`:''}`}
+function twSurfStats(s){const xs=S.tw.items.filter(i=>i.sid===s.id);if(s.kind==='sub'){const A=xs.filter(i=>i.t==='area');return `${A.length} area${A.length===1?'':'s'} · ${(s.types||[]).length} type${(s.types||[]).length===1?'':'s'}${A.some(i=>!twSecOf(i))?' · <span class="warn-t">some without a depth</span>':''}`}if(s.kind==='elev'){const c=xs.filter(i=>i.t==='contour'),sp=xs.filter(i=>i.t==='spot');const tn=xs.filter(i=>i.t==='tin');const miss=c.filter(i=>twNeedZ(i)).length;return `${tn.length?`TIN ${fmtN(tn.reduce((a,i)=>a+i.pts.length,0),0)} pts`:''}${tn.length&&!c.length?'':`${tn.length?' · ':''}${fmtN(c.filter(i=>i.em!=='anno').length,0)} contour${c.filter(i=>i.em!=='anno').length===1?'':'s'}${c.some(i=>i.em==='anno')?` · ${c.filter(i=>i.em==='anno').length} annotation${c.filter(i=>i.em==='anno').length===1?'':'s'}`:''}`}${sp.length?` · ${sp.length} spot${sp.length===1?'':'s'}`:''}${miss?` · <span class="warn-t">${fmtN(miss,0)} need elevation</span>`:''}`}
   const pr=xs.filter(i=>i.t==='pipe');const PL=pr.reduce((a,i)=>a+twLen(i.pts),0);const PS=new Set();pr.forEach(i=>(i.nodes||[]).forEach((n,k)=>{if(!twNoStr(n.k))PS.add(String(n.n||'').trim().toLowerCase()||i.id+'#'+k)}));
   const L=xs.filter(i=>i.t==='line').reduce((a,i)=>a+twLen(i.pts),0),A=xs.filter(i=>i.t==='area').reduce((a,i)=>a+twArea(i.pts),0),C=xs.filter(i=>i.t==='count').length;return [pr.length?`${pr.length} run${pr.length===1?'':'s'} · ${fmtN(PL,0)} LF pipe · ${PS.size} structure${PS.size===1?'':'s'}`:'',L?fmtN(L,0)+' LF':'',A?fmtN(A,0)+' SF':'',C?C+' EA':''].filter(Boolean).join(' · ')||'Nothing yet'}
 function twSideHtml(){const R=twR();const ro=twRo();const T=S.tw;const n=R.pdf?R.pdf.numPages:(T.file&&T.file.pages)||0;
@@ -8755,7 +8761,7 @@ function twToolbarHtml(){const R=twR();const T=S.tw;const s=twActive();const ro=
   return `<div class="seg tw-tools">${TW_TOOLS.filter(t=>!ro||['pan','select'].includes(t[0])).map(([k,ic,l,,h])=>`<button class="${R.tool===k?'on':''}" data-act="tw-tool" data-v="${k}" title="${esc(l+': '+h)}"><span>${ic}</span> ${l}</button>`).join('')}</div>
     <label class="tw-iv">Interval <input class="field sm num" id="tw-int" data-twint value="${esc(T.interval)}" inputmode="decimal"${ro?' disabled':''}></label><button class="btn sm" data-act="tw-dir" title="Which way the sweep counts"${ro?' disabled':''}>${T.dir>0?'↑ Rising':'↓ Falling'}</button>
     ${s&&s.kind==='elev'?`<button class="btn sm" data-act="tw-missing">Next missing</button><button class="btn sm${R.chk?' on':''}" data-act="tw-chkrun" title="Find contours that cross, and elevations that jump (typos)">✓ Check contours</button>`:''}<button class="btn sm${R.cfOpen?' on':''}" data-act="tw-cfopen">⛰ Cut / fill</button><button class="btn sm" data-act="tw-qty">📋 Quantities</button><button class="btn sm" data-act="tw-3d" title="See the surfaces, linework and pipes in 3D">🧊 3D</button><button class="btn sm" data-act="tw-undo" title="Undo (Ctrl+Z)"${R.undo.length?'':' disabled'}>↶</button><button class="btn sm" data-act="tw-redo" title="Redo (Ctrl+Shift+Z)"${R.redo.length?'':' disabled'}>↷</button>`}
-function twAskHtml(){const R=twR();const A=R.ask;if(!A)return '';return `<div class="tw-ask"><span>${esc(A.label)}</span><input class="field" id="tw-askv" value="${esc(A.def??'')}" ${A.type==='apt'||A.type==='surf'?'':'inputmode="decimal"'} autocomplete="off"><button class="btn sm primary" data-act="tw-askok">OK</button><button class="btn sm" data-act="tw-askno">Cancel</button></div>`}
+function twAskHtml(){const R=twR();const A=R.ask;if(!A)return '';return `<div class="tw-ask"><span>${esc(A.label)}</span><input class="field" id="tw-askv" value="${esc(A.def??'')}" ${A.type==='apt'||A.type==='surf'?'':'inputmode="decimal"'} autocomplete="off"><button class="btn sm primary" data-act="tw-askok">OK</button>${A.type==='z'?'<button class="btn sm" data-act="tw-askanno" title="Keep it with no elevation: shown, not used in the surface. Give it one later.">Annotation</button>':''}<button class="btn sm" data-act="tw-askno">Cancel</button></div>`}
 function twPlanSideHtml(){const R=twR();const n=S.tw.page;const V=R.vec[n];const sh=twSheet(n);const ro=twRo();
   let card='';
   if(R.tool==='align'){const A=R.alignRun&&R.alignRun.n===n?R.alignRun:null;const ap=S.tw.apts[A?A.i:0];card=`<div class="tw-card"><b>Align sheet ${n}</b>${S.tw.apts.length<2?`<p class="small">There aren’t two alignment points to line this sheet up with.${sh&&sh.scaled?' <button class="linkbtn" data-act="tw-mkref">Make this the reference sheet</button>, then add points on it.':' Set this sheet’s scale with <button class="linkbtn" data-act="tw-tool" data-v="scale">Scale</button>; it becomes the reference sheet.'}</p>`:`<p class="small">${ap?`Click <b>${esc(ap.name)}</b> where it sits on this sheet.`:'All points clicked.'}</p><div class="small dim">${S.tw.apts.map((a,i)=>`${A&&A.clicks.some(k=>k.id===a.id)?'✓':i===(A?A.i:0)?'→':'·'} ${esc(a.name)}`).join('  ')}</div>
@@ -8770,9 +8776,9 @@ function twPlanSideHtml(){const R=twR();const n=S.tw.page;const V=R.vec[n];const
   else if(!sh.aligned)card=`<div class="tw-card"><b>Sheet ${n} has a scale but isn’t lined up</b><p class="small">${S.tw.apts.length>=2?'<button class="linkbtn" data-act="tw-tool" data-v="align">Align sheet</button> to the alignment points, or ':''}<button class="linkbtn" data-act="tw-mkref">make this the reference sheet</button>${S.tw.apts.length>=2?'':' (there aren’t two alignment points to line it up with)'}.</p></div>`;
   return card+(R.lastPane==='model'?'':twAskHtml())}
 function twItemCard(){const R=twR();const it=S.tw.items.find(x=>x.id===R.selItem);if(!it)return '';if(it.t==='pipe')return twPipeCard(it);const s=twSurf(it.sid);const ro=twRo();
-  return `<div class="tw-card tw-item"><div class="tw-ih"><b>${esc({contour:'Contour',spot:'Spot elevation',line:'Line',area:'Area',count:'Count'}[it.t])}</b><button class="x" data-act="tw-desel" aria-label="Close">×</button></div>
+  return `<div class="tw-card tw-item"><div class="tw-ih"><b>${esc({contour:it.em==='anno'||it.zs?'Line':'Contour',spot:'Spot elevation',line:'Line',area:'Area',count:'Count'}[it.t])}</b><button class="x" data-act="tw-desel" aria-label="Close">×</button></div>
     <div class="small dim">${esc(twItemText(it))}</div>
-    ${s&&s.kind==='elev'&&it.t!=='count'?`<label class="f">Elevation <input class="field sm num" data-twz="${it.id}" id="twz-${it.id}" value="${twHasZ(it)?it.z:''}" inputmode="decimal"${ro?' disabled':''}></label>`:''}
+    ${s&&s.kind==='elev'&&it.t==='contour'?twZCard(it):''}${s&&s.kind==='elev'&&it.t==='spot'?`<label class="f">Elevation <input class="field sm num" data-twz="${it.id}" id="twz-${it.id}" value="${twHasZ(it)?it.z:''}" inputmode="decimal"${ro?' disabled':''}></label>`:''}
     ${it.t==='line'&&s&&s.kind==='util'&&!ro?`<div class="adders"><button class="btn sm" data-act="tw-topipe" data-id="${it.id}">Make it a pipe run</button><span class="small dim">ends become structures</span></div>`:''}
     ${it.t==='line'&&it.pts.length>2&&!ro?`<div class="adders"><button class="btn sm" data-act="tw-toarea" data-id="${it.id}">Make it an area</button><span class="small dim">closes the outline</span></div>`:''}
     ${it.t==='area'&&s&&s.kind==='sub'?`<div class="tw-sec"><label class="f">Section type<select class="field sm" data-twsec="${it.id}"${ro?' disabled':''}><option value="">—</option>${(s.types||[]).map(t=>`<option value="${t.id}"${it.sec===t.id?' selected':''}>${esc(t.name)} (${+t.depth>0?t.depth+'″':'no depth'})</option>`).join('')}</select></label></div>`:''}
@@ -8782,7 +8788,7 @@ function twItemCard(){const R=twR();const it=S.tw.items.find(x=>x.id===R.selItem
       ${+it.depth>0?`<label class="f">Lowers<select class="field sm" data-twon="${it.id}"${ro?' disabled':''}>${S.tw.surfaces.filter(x=>x.kind==='elev').map(x=>`<option value="${x.id}"${it.on===x.id?' selected':''}>${esc(x.name)}</option>`).join('')}</select></label><div class="small dim">${fmtN(twArea(it.pts)*it.depth/12/27,1)} CY of section. Cut / fill runs to this depth below ${esc((twSurf(it.on)||{}).name||'')} inside the area.</div>`:s&&(+s.depth>0||s.kind==='sub')?'':'<div class="small dim">Give it a depth (or give its surface one in Cut / fill → Sections) to make it a paving or pad section: cut / fill then runs to subgrade inside it.</div>'}</div>`:''}
     ${ro?'':`<div class="adders"><select class="field sm" data-twmove="${it.id}"><option value="">Move to…</option>${S.tw.surfaces.filter(x=>x.id!==it.sid&&(x.kind==='elev')===(s&&s.kind==='elev')).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="tw-del" data-id="${it.id}">Delete</button></div>`}</div>`}
 function twPanels(){if(S.view!=='tw'||!S.tw)return;const R=twR();const set=(id,h,doc)=>{const e=(doc||document).getElementById(id);if(e&&e._h!==h){e.innerHTML=h;e._h=h}};
-  set('tw-side',twSideHtml());set('tw-tbar',twToolbarHtml());set('tw-mhud',twCfCard()+twCheckCard()+twItemCard()+(R.ask&&R.lastPane==='model'?twAskHtml():''));const pd=R.pop&&!R.pop.closed?R.pop.document:document;set('tw-phud',twPlanSideHtml(),pd);
+  set('tw-side',twSideHtml());set('tw-tbar',twToolbarHtml());set('tw-mhud',twEditCard()+twCfCard()+twCheckCard()+(R.tool==='edit'?'':twItemCard())+(R.ask&&R.lastPane==='model'?twAskHtml():''));const pd=R.pop&&!R.pop.closed?R.pop.document:document;set('tw-phud',twPlanSideHtml(),pd);
   const ld=$('#tw-load');if(ld)ld.textContent=R.loading||'';const pl=pd.getElementById('tw-pload');if(pl)pl.textContent=R.loading||(R.vecBusy?'Reading lines…':'');
   const hint=(TW_TOOLS.find(t=>t[0]===R.tool)||[])[4]||'';[document.getElementById('tw-mhint'),pd.getElementById('tw-phint')].forEach(h=>{if(h&&!R.hover)h.textContent=hint});
   twProfPanel();twStatus();const a=twAskDoc().getElementById('tw-askv');if(a&&a.ownerDocument.activeElement!==a&&R.ask&&!R.ask._f){R.ask._f=1;setTimeout(()=>{a.focus();a.select()},0)}
@@ -8862,7 +8868,7 @@ function twDocClick(e){const t=e.target.closest('[data-act]');if(!t)return;const
 document.addEventListener('click',twDocClick);
 function twDocChange(e){const t=e.target;if(t.dataset.twfile!=null){const f=t.files&&t.files[0];t.value='';if(f)twLoadPdf(f,f.name,false);return}if(t.dataset.twcad!=null){const f=t.files&&t.files[0];t.value='';if(f&&S.tw&&!twRo())cadOpenFile(f);return}if(!S.tw)return;const R=twR();
   if(t.dataset.twunder!=null){R.under=t.checked;twUiSave({under:R.under});twDraw();return}
-  if(t.dataset.twz){const it=S.tw.items.find(x=>x.id===t.dataset.twz);if(it){twSnap();const z=num(t.value);if(z==null)delete it.z;else{it.z=z;R.lastZ=z}twTouch();if(R.chk){const k=R.chkI;R.chk=twCheck(R.chk.sid);R.chkI=k!=null&&k<R.chk.issues.length?k:null}twPanels();twDraw()}return}
+  if(t.dataset.twz){const it=S.tw.items.find(x=>x.id===t.dataset.twz);if(it){twSnap();const z=num(t.value);if(it.t==='contour'){twRestore(it);it.em='flat';delete it.e0;delete it.e1}if(z==null)delete it.z;else{it.z=z;R.lastZ=z}twTouch();if(R.chk){const k=R.chkI;R.chk=twCheck(R.chk.sid);R.chkI=k!=null&&k<R.chk.issues.length?k:null}twPanels();twDraw()}return}
   if(t.dataset.twmove){const it=S.tw.items.find(x=>x.id===t.dataset.twmove);if(it&&t.value){twSnap();it.sid=t.value;twTouch();twPanels();twDraw()}return}
   if(t.dataset.twint!=null){const v=num(t.value);if(v>0){S.tw.interval=v;twTouch()}return}
   if(t.dataset.twcf){const C=twCfDefaults();const k=t.dataset.twcf;C[k]=['strip','comp','maxEdge','cell'].includes(k)?(num(t.value)??0):t.value;twTouch();twPanels();return}
@@ -8933,7 +8939,7 @@ function twTin(sid,maxEdge){const R=twR();const key=sid+'|'+TW_REV+'|'+maxEdge;R
 function twCfDefaults(){const el=S.tw.surfaces.filter(s=>s.kind==='elev');const C=S.tw.cf=S.tw.cf||{};if(!twSurf(C.a)||twSurf(C.a).kind!=='elev')C.a=(el.find(s=>/exist|eg|og|topo/i.test(s.name))||el[0]||{}).id;if(!twSurf(C.b)||twSurf(C.b).kind!=='elev')C.b=(el.find(s=>s.id!==C.a&&/design|prop|fg|final/i.test(s.name))||el.find(s=>s.id!==C.a)||{}).id;
   if(C.strip==null)C.strip=0;if(C.comp==null)C.comp=0;if(C.maxEdge==null)C.maxEdge=150;if(C.limit&&!S.tw.items.some(i=>i.id===C.limit))C.limit='';return C}
 function twCfRun(){const R=twR();const C=twCfDefaults();const A=twSurf(C.a),B=twSurf(C.b);if(!A||!B||A.id===B.id){toast('Pick two different elevation surfaces.');return}
-  const miss=s=>S.tw.items.filter(i=>i.sid===s.id&&i.t==='contour'&&!twHasZ(i)).length;
+  const miss=s=>S.tw.items.filter(i=>i.sid===s.id&&i.t==='contour'&&twNeedZ(i)).length;
   R.cfBusy=true;twPanels();setTimeout(()=>{try{const t0=performance.now();const me=+C.maxEdge||150;const ta=twTin(A.id,me),tb=twTin(B.id,me);if(!ta||!tb){toast(`${!ta?A.name:B.name} needs at least three points with elevations.`);return}
     const ia=tinIndex(ta),ib=tinIndex(tb);let box={x0:Math.max(ia.x0,ib.x0),y0:Math.max(ia.y0,ib.y0),x1:Math.min(ia.x1,ib.x1),y1:Math.min(ia.y1,ib.y1)};
     const lim=C.limit?S.tw.items.find(i=>i.id===C.limit):null;if(lim){const b=twBB(lim);box={x0:Math.max(box.x0,b[0]),y0:Math.max(box.y0,b[1]),x1:Math.min(box.x1,b[2]),y1:Math.min(box.y1,b[3])}}
@@ -9398,7 +9404,7 @@ function cadImport(){const x=M;const X=cadXf();if(!X)return;const u=cadU();const
   x.P.layers.forEach(L=>{const to=x.to[L.name];if(to==='skip')return;let s;if(to.startsWith('new:')){const k=to.slice(4);s=made[L.name]||(made[L.name]={id:newId(),name:L.name,kind:k,color:L.color,vis:true,lock:false});if(!S.tw.surfaces.includes(s))S.tw.surfaces.push(s)}else s=twSurf(to);if(!s)return;
     const push=it=>{it.id=newId();it.sid=s.id;it.page=null;it.imp=imp.id;S.tw.items.push(it);nItems++};const P2=p=>{const w=X(p);return [r2(w[0]),r2(w[1])]};
     if(s.kind==='elev'){
-      L.pls.forEach(pl=>{const zs=pl.pts.map(p=>p[2]);const mn=Math.min(...zs),mx=Math.max(...zs);if(mx===0&&mn===0){left++;return}const pts=cadSimplify(pl.pts.map(p=>[...P2(p),r3(p[2]*u)]),0.05);const cl=pl.closed?[pts[0]]:[];
+      L.pls.forEach(pl=>{const zs=pl.pts.map(p=>p[2]);const mn=Math.min(...zs),mx=Math.max(...zs);if(mx===0&&mn===0){const fp=cadSimplify(pl.pts.map(p=>[...P2(p),0]),0.05).map(p=>[p[0],p[1]]);if(pl.closed&&fp.length>2)fp.push(fp[0]);if(fp.length>1)push({t:'contour',pts:fp,em:'anno'});return}const pts=cadSimplify(pl.pts.map(p=>[...P2(p),r3(p[2]*u)]),0.05);const cl=pl.closed?[pts[0]]:[];
         if(mx-mn<1e-6)push({t:'contour',pts:[...pts,...cl].map(p=>[p[0],p[1]]),z:r3(mn*u)});else{const all=[...pts,...cl];push({t:'contour',pts:all.map(p=>[p[0],p[1]]),zs:all.map(p=>p[2]),z:all[0][2]})}});
       L.pts.forEach(p=>{if(!p[2]){left++;return}push({t:'spot',pts:[P2(p)],z:r3(p[2]*u)})});
       if(L.tin&&L.tin.t.length)push({t:'tin',name:L.name,pts:L.tin.v.map(P2),zs:L.tin.v.map(p=>r3(p[2]*u)),tris:L.tin.t.slice()})}
@@ -9465,7 +9471,7 @@ function twCtQty(s,add){const ts=s.ct||[];ts.forEach(ty=>{const m=twCtSum(s,ty);
    Neighbors are found by looking straight out from each contour (at a quarter, half and three quarters along it) to the
    nearest contour on each side. The usual step between neighbors is taken from the surface itself, so it works whether
    every contour or only the index contours were picked. */
-function twCheck(sid){const s=twSurf(sid);const cs=S.tw.items.filter(i=>i.sid===sid&&i.t==='contour'&&twHasZ(i)&&!i.zs&&i.pts.length>1);const miss=S.tw.items.filter(i=>i.sid===sid&&i.t==='contour'&&!twHasZ(i)).length;
+function twCheck(sid){const s=twSurf(sid);const cs=S.tw.items.filter(i=>i.sid===sid&&i.t==='contour'&&twHasZ(i)&&!i.zs&&i.pts.length>1);const miss=S.tw.items.filter(i=>i.sid===sid&&i.t==='contour'&&twNeedZ(i)).length;
   const A=[];cs.forEach((it,ci)=>{for(let k=1;k<it.pts.length;k++)A.push([it.pts[k-1][0],it.pts[k-1][1],it.pts[k][0],it.pts[k][1],ci])});
   let x0=Infinity,y0=Infinity,x1=-Infinity,y1=-Infinity;A.forEach(g=>{x0=Math.min(x0,g[0],g[2]);x1=Math.max(x1,g[0],g[2]);y0=Math.min(y0,g[1],g[3]);y1=Math.max(y1,g[1],g[3])});
   const issues=[];if(!A.length)return {sid,name:s?s.name:'',issues,miss,step:null,n:cs.length};
@@ -9493,7 +9499,7 @@ function twCheckCard(){const R=twR();const C=R.chk;if(!C)return '';const cr=C.is
   return `<div class="tw-card tw-chk"><div class="tw-ih"><b>Contour check · ${esc(C.name)}</b><button class="x" data-act="tw-chkclose" aria-label="Close">×</button></div>
     <div class="small ${C.issues.length||C.miss?'warn-t':'ok'}">${!C.n?'No contours with elevations yet.':C.issues.length||C.miss?[cr?`${cr} crossing${cr===1?'':'s'}`:'',jp?`${jp} jump${jp===1?'':'s'}`:'',C.miss?`${C.miss} without an elevation`:''].filter(Boolean).join(' · '):`All ${fmtN(C.n,0)} contours look right.`}${C.step?` <span class="dim">· usual step ${fmtN(C.step,2)} ft</span>`:''}</div>
     ${C.issues.length?`<div class="tw-chkl">${C.issues.slice(0,80).map((x,i)=>`<button class="tw-chki${R.chkI===i?' on':''}" data-act="tw-chkgo" data-v="${i}">${x.k==='cross'?`<b>Crossing</b> ${qtyFmt(x.za)} × ${qtyFmt(x.zb)}`:`<b>Jump</b> ${qtyFmt(x.za)} next to ${qtyFmt(x.zb)} <span class="dim">(${fmtN(x.dz,2)} ft)</span>${x.sus?` · check ${qtyFmt(x.susZ)}`:''}`}</button>`).join('')}${C.issues.length>80?`<div class="small dim">…and ${C.issues.length-80} more</div>`:''}</div>`:''}
-    <div class="adders"><button class="btn sm" data-act="tw-chkrun">Check again</button>${C.miss?'<button class="btn sm" data-act="tw-missing">Next missing</button>':''}</div>
+    <div class="adders"><button class="btn sm" data-act="tw-chkrun">Check again</button>${C.miss?'<button class="btn sm" data-act="tw-missing">Next missing</button><button class="btn sm" data-act="tw-mkanno" title="Keep them with no elevation: shown, not used in the surface">Make them annotations</button>':''}</div>
     <p class="small dim" style="margin:4px 0 0">Click one to go to it; the contour to check is selected so you can fix its elevation. Two contours of the same elevation may touch.</p></div>`}
 function twCheckRun(){const s=twActive();if(!s||s.kind!=='elev'){toast('Pick an elevation surface to check.');return}const R=twR();const t0=performance.now();R.chk=twCheck(s.id);R.chk.ms=Math.round(performance.now()-t0);R.chkI=null;twPanels();twDraw()}
 function twCheckGo(i){const R=twR();const x=R.chk&&R.chk.issues[i];if(!x)return;R.chkI=i;const id=x.sus||x.a;R.selItem=id;R.hi=id;const c=twPane('model');if(c&&R.mv){const z=Math.max(R.mv.z,Math.min(8,R.mv.z*3));R.mv={z,ox:Math.max(120,(c.clientWidth-340)/2)-x.p[0]*z,oy:c.clientHeight/2-x.p[1]*z}}twPanels();twDraw();setTimeout(()=>{const f=document.getElementById('twz-'+id);if(f){f.focus();f.select()}},30)}
@@ -9615,3 +9621,113 @@ function w3Draw(){const G=W3.gl;if(!G)return;const {gl,loc}=G;const cv=gl.canvas
     if(t.dataset.w3mode){W3.mode[t.dataset.w3mode]=t.value}else if(t.dataset.w3){W3[t.dataset.w3]=t.checked}else if(t.dataset.w3drape!=null){W3.drape=t.value}else return;
     const keep={yaw:W3.yaw,pitch:W3.pitch,pan:W3.pan,dist:W3.dist};w3Head();w3Build();Object.assign(W3,keep);w3Sync();w3Draw()});
   document.addEventListener('input',e=>{const t=e.target;if(t.dataset.w3exag==null||!W3.open)return;const v=+t.value;W3.exag=v;const ev=document.getElementById('w3-exv');if(ev)ev.textContent=v;const keep={yaw:W3.yaw,pitch:W3.pitch,pan:W3.pan,dist:W3.dist};w3Build();Object.assign(W3,keep);w3Draw()})})();
+
+/* ---------- lines on elevation surfaces: flat, sloped, conformed to another surface, or annotation ----------
+   it.em = 'flat' (one elevation, it.z) | 'slope' (it.e0 → it.e1 along the line, as it.zs) | 'conf' (it.zs taken from another
+   surface + an offset; it.p0 keeps the line as drawn, it.pts is it with a point every few feet) | 'anno' (no elevation: shown,
+   kept, not used in the surface, never "missing"). */
+const twEm=it=>it.em||(it.zs?(it.conf?'conf':'3d'):'flat');
+function twZText(it,s){if(!s||s.kind!=='elev'||it.t==='count')return '';const m=twEm(it);if(m==='anno')return 'annotation (no elevation)';
+  if(it.zs&&it.zs.length){const a=it.zs[0],b=it.zs[it.zs.length-1];if(m==='3d')return `3D line ${qtyFmt(Math.min(...it.zs))}–${qtyFmt(Math.max(...it.zs))}`;if(m==='conf'){const c=it.conf||{};const src=twSurf(c.sid);return `conformed to ${src?src.name:'a surface'}${+c.off?` ${c.off>0?'+':''}${fmtN(c.off,2)} ft`:''} · ${qtyFmt(Math.min(...it.zs))}–${qtyFmt(Math.max(...it.zs))}`}return `sloped ${qtyFmt(a)} → ${qtyFmt(b)}`}
+  return twHasZ(it)?'elev '+qtyFmt(it.z):'no elevation yet'}
+function twRestore(it){if(it.p0){it.pts=it.p0;delete it.p0}delete it.zs;delete it.conf}
+function twSlope(it){const a=num(it.e0),b=num(it.e1);if(a==null||b==null)return false;const L=twLen(it.pts)||1;let d=0;it.zs=it.pts.map((p,k)=>{if(k)d+=Math.hypot(p[0]-it.pts[k-1][0],p[1]-it.pts[k-1][1]);return +(a+(b-a)*d/L).toFixed(3)});it.z=it.zs[0];return true}
+// take a line's elevations from another surface, a point every `step` feet so it follows the ground
+function twConform(it,sid,off,step,quiet){const src=twSurf(sid);if(!src||src.kind!=='elev'||sid===it.sid){if(!quiet)toast('Pick another elevation surface to conform to.');return false}
+  const tin=twTin(sid,+((S.tw.cf||{}).maxEdge)||150);if(!tin){if(!quiet)toast(`${src.name} needs elevations first.`);return false}
+  const base=it.p0||it.pts;const st=Math.max(0.5,+step||5);const pts=[];for(let k=0;k<base.length;k++){const a=base[k];pts.push([a[0],a[1]]);const b=base[k+1];if(!b)break;const L=Math.hypot(b[0]-a[0],b[1]-a[1]);const n=Math.ceil(L/st-1e-9);for(let j=1;j<n;j++){pts.push([a[0]+(b[0]-a[0])*j/n,a[1]+(b[1]-a[1])*j/n])}}
+  const o=+off||0;const zs=pts.map(p=>tinZ(tin,p[0],p[1]));const ok=zs.filter(isFinite).length;if(!ok){if(!quiet)toast(`That line is outside ${src.name}.`);return false}
+  // past the edge of the surface: carry the nearest elevation along
+  const out=zs.filter(z=>!isFinite(z)).length;let last=NaN;for(let k=0;k<zs.length;k++){if(isFinite(zs[k]))last=zs[k];else zs[k]=last}last=NaN;for(let k=zs.length-1;k>=0;k--){if(isFinite(zs[k]))last=zs[k];else zs[k]=last}
+  it.p0=base;it.pts=pts;it.zs=zs.map(z=>+(z+o).toFixed(3));it.z=it.zs[0];it.em='conf';it.conf={sid,off:o,step:st,out};delete it.e0;delete it.e1;return true}
+function twZCard(it){const ro=twRo();const m=twEm(it);const dis=ro?' disabled':'';const s=twSurf(it.sid);const others=S.tw.surfaces.filter(x=>x.kind==='elev'&&x.id!==it.sid);const c=it.conf||{};
+  const csid=c.sid&&twSurf(c.sid)?c.sid:(others.find(x=>/exist|eg|topo/i.test(x.name))||others[0]||{}).id;const nAnno=S.tw.items.filter(x=>x.sid===it.sid&&x.t==='contour'&&x.em==='anno').length;
+  return `<div class="tw-zc"><div class="seg tw-zseg">${[['flat','Flat'],['slope','Sloped'],['conf','Conform'],['anno','Annotation']].map(([k,l])=>`<button class="${m===k?'on':''}" data-act="tw-em" data-v="${k}" data-id="${it.id}"${dis}>${l}</button>`).join('')}</div>
+    ${m==='flat'?`<label class="f">Elevation <input class="field sm num" data-twz="${it.id}" id="twz-${it.id}" value="${twHasZ(it)?it.z:''}" inputmode="decimal"${dis}></label>`:''}
+    ${m==='slope'?`<div class="tw-zrow"><label class="f">Start <input class="field sm num" data-twe="0|${it.id}" id="twz-${it.id}" value="${esc(it.e0??'')}" inputmode="decimal"${dis}></label><label class="f">End <input class="field sm num" data-twe="1|${it.id}" value="${esc(it.e1??'')}" inputmode="decimal"${dis}></label></div>
+      <div class="small dim">${it.zs?`${fmtN((it.e1-it.e0)/(twLen(it.pts)||1)*100,2)}% over ${fmtN(twLen(it.pts),1)} ft. `:''}Start is the end you began drawing at. Good for flowlines, top of curb, ridge and swale lines.</div>`:''}
+    ${m==='conf'?(others.length?`<div class="tw-zrow"><label class="f">To surface<select class="field sm" data-twcfs="${it.id}"${dis}>${others.map(x=>`<option value="${x.id}"${x.id===csid?' selected':''}>${esc(x.name)}</option>`).join('')}</select></label><label class="f">Offset ft<input class="field sm num" data-twcfo="${it.id}" value="${esc(c.off??'')}" placeholder="0" inputmode="decimal"${dis}></label><label class="f">Every ft<input class="field sm num" data-twcfd="${it.id}" value="${esc(c.step??'')}" placeholder="5" inputmode="decimal"${dis}></label></div>
+      <div class="adders"><button class="btn sm primary" data-act="tw-conf" data-id="${it.id}"${dis}>${it.zs?'Conform again':'Conform'}</button>${nAnno&&!ro?`<button class="btn sm" data-act="tw-confall" data-id="${it.id}" title="Give every annotation line on ${esc(s?s.name:'')} its elevations the same way">All ${nAnno} annotation${nAnno===1?'':'s'} too</button>`:''}</div>
+      <div class="small dim">${it.zs?`${it.zs.length} points, ${qtyFmt(Math.min(...it.zs))}–${qtyFmt(Math.max(...it.zs))}${c.out?`. <span class="warn-t">${c.out} past the edge of ${esc((twSurf(c.sid)||{}).name||'')} took the nearest elevation.</span>`:''}`:'Takes its elevations from that surface (plus the offset, e.g. +0.5 for top of curb, −0.67 for subgrade) at a point every few feet.'} Conformed lines don't follow later changes to that surface: conform again.</div>`:'<div class="small dim">There’s no other elevation surface to conform to yet.</div>'):''}
+    ${m==='3d'?'<div class="small dim">A 3D line: an elevation at every point (from CAD, or lines joined together). Pick Flat, Sloped or Conform to replace them.</div>':''}
+    ${m==='anno'?`<div class="small dim">Shown and kept, but not used in ${esc(s?s.name:'the surface')} and never counted as missing. Give it elevations any time with Flat, Sloped or Conform.</div>`:''}</div>`}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!S.tw)return;const a=t.dataset.act;const R=twR();
+  if(a==='tw-em'){const it=S.tw.items.find(x=>x.id===t.dataset.id);if(!it||twRo())return;const v=t.dataset.v;if(twEm(it)===v)return;twSnap();
+    const was=twHasZ(it)&&!it.zs?it.z:null;twRestore(it);it.em=v;
+    if(v==='anno'){delete it.z;delete it.e0;delete it.e1}else if(v==='flat'){if(was==null)delete it.z;delete it.e0;delete it.e1}
+    else if(v==='slope'){if(it.e0==null&&was!=null){it.e0=was;it.e1=was}if(!twSlope(it))delete it.z}else if(v==='conf'){delete it.z}
+    TW_REV++;twTouch();twPanels();twDraw();setTimeout(()=>{const f=document.getElementById('twz-'+it.id);if(f&&(v==='flat'||v==='slope')){f.focus();f.select()}},20);return}
+  if(a==='tw-conf'||a==='tw-confall'){const it=S.tw.items.find(x=>x.id===t.dataset.id);if(!it||twRo())return;const q=k=>document.querySelector(`[data-${k}="${it.id}"]`);const sid=(q('twcfs')||{}).value;const off=num(String((q('twcfo')||{}).value||'').trim())||0;const step=num(String((q('twcfd')||{}).value||'').trim())||5;
+    twSnap();if(a==='tw-conf'){if(!twConform(it,sid,off,step))return;toast(`Conformed: ${it.zs.length} points from ${(twSurf(sid)||{}).name}${off?` ${off>0?'+':''}${off} ft`:''}.`)}
+    else{const xs=S.tw.items.filter(x=>x.sid===it.sid&&x.t==='contour'&&(x===it||x.em==='anno'));let n=0,miss=0;xs.forEach(x=>{twConform(x,sid,off,step,true)?n++:miss++});toast(`${n} line${n===1?'':'s'} conformed to ${(twSurf(sid)||{}).name}${miss?`; ${miss} outside it stay annotations`:''}.`)}
+    TW_REV++;twTouch();twPanels();twDraw();return}
+  if(a==='tw-askanno'){const A=R.ask;if(!A||A.type!=='z')return;twSnap();A.ids.forEach(id=>{const it=S.tw.items.find(x=>x.id===id);if(it){it.em='anno';delete it.z}});R.ask=null;twTouch();twPanels();twDraw();return}
+  if(a==='tw-mkanno'){const sid=R.chk&&R.chk.sid;if(!sid)return;twSnap();let n=0;S.tw.items.forEach(it=>{if(it.sid===sid&&it.t==='contour'&&twNeedZ(it)){it.em='anno';n++}});R.chk=twCheck(sid);twTouch();twPanels();twDraw();toast(`${n} line${n===1?'':'s'} made annotations.`)}});
+document.addEventListener('change',e=>{const t=e.target;if(!S.tw||twRo())return;
+  if(t.dataset.twe){const [k,id]=t.dataset.twe.split('|');const it=S.tw.items.find(x=>x.id===id);if(!it)return;twSnap();const v=num(String(t.value).trim());it['e'+k]=v;if(it.e0==null&&k==='1'&&v!=null)it.e0=v;if(it.e1==null&&k==='0'&&v!=null)it.e1=v;it.em='slope';if(!twSlope(it)){delete it.zs;delete it.z}TW_REV++;twTouch();setTimeout(()=>{twPanels();twDraw()},0)}});
+
+/* ---------- line editor (AGTEK-style keys) ----------
+   F5 break · F6 add point · F7 move point · F8 delete point · F9 join. Works on lines, contours (flat or 3D), areas and pipe runs,
+   on the plan or the model. Elevations along 3D lines go with the points (a new point gets the elevation in between). */
+const TW_EMODES=[['brk','F5','Break','Click a line where it should break into two.'],['add','F6','Add point','Click on a line to add a point there.'],['mv','F7','Move point','Click a point, then click where it goes. Esc cancels.'],['del','F8','Delete point','Click a point to take it out.'],['join','F9','Join','Click near the end of one line, then near the end of another.']];
+const twEditable=it=>it&&['line','contour','area','pipe'].includes(it.t)&&it.pts&&it.pts.length>=2;
+// what's under the cursor: nearest point and nearest spot along the line, in job feet
+function twEditHit(which,q,skip){const R=twR();const v=which==='plan'?R.pv[S.tw.page]:R.mv;if(!v)return null;const sh=twSheet(S.tw.page);let w=q,tol=9/v.z;if(which==='plan'){if(!sh||!sh.scaled||!sh.aligned)return null;w=twP2W(sh,q);tol*=sh.s}
+  let best=null;const act=S.tw.active;S.tw.items.forEach(it=>{if(!twEditable(it)||it.id===skip||!twVisible(it))return;const s=twSurf(it.sid);if(s&&s.lock)return;if(which==='plan'&&!(it.page===S.tw.page||(sh.aligned&&(it.page==null||twPlaced(it.page)))))return;
+    const b=twBB(it);if(w[0]<b[0]-tol||w[0]>b[2]+tol||w[1]<b[1]-tol||w[1]>b[3]+tol)return;const P=it.t==='area'?[...it.pts,it.pts[0]]:it.pts;
+    let k=-1,dv=Infinity;it.pts.forEach((p,i)=>{const d=Math.hypot(p[0]-w[0],p[1]-w[1]);if(d<dv){dv=d;k=i}});
+    let seg=-1,ds=Infinity,proj=null,t0=0;for(let i=1;i<P.length;i++){const a=P[i-1],c=P[i];const dx=c[0]-a[0],dy=c[1]-a[1];const L2=dx*dx+dy*dy||1e-12;let t=((w[0]-a[0])*dx+(w[1]-a[1])*dy)/L2;t=Math.max(0,Math.min(1,t));const pp=[a[0]+dx*t,a[1]+dy*t];const d=Math.hypot(pp[0]-w[0],pp[1]-w[1]);if(d<ds){ds=d;seg=i-1;proj=pp;t0=t}}
+    const d=Math.min(dv,ds);if(d>tol)return;const score=d-(it.sid===act?tol*0.3:0);if(!best||score<best.score)best={it,k,dv,seg,proj,t:t0,ds,score,w,tol}});return best}
+const twZAt=(it,i)=>it.zs&&it.zs.length===it.pts.length?it.zs[i]:null;
+function twEditFix(it){delete it.p0;if(it.em==='slope'&&it.e0!=null)twSlope(it);if(it.zs&&it.zs.length)it.z=it.zs[0];if(it._bb)it._bbn=-1}
+// a point on segment `seg` (between pts[seg] and pts[seg+1]); returns its index
+function twInsertPt(it,seg,p,t){const n=it.pts.length;const i=seg+1;const z0=twZAt(it,seg),z1=twZAt(it,(seg+1)%n);it.pts.splice(i,0,[p[0],p[1]]);if(it.zs&&z0!=null&&z1!=null)it.zs.splice(i,0,+(z0+(z1-z0)*t).toFixed(3));
+  if(it.t==='pipe'){(it.nodes=it.nodes||[]).splice(i,0,{n:'',k:'Bend',rim:'',ii:'',io:''});const sg=(it.segs||[])[seg]||{};(it.segs=it.segs||[]).splice(seg+1,0,{...sg})}return i}
+function twSplitAt(it,k){const s=twSurf(it.sid);if(it.t==='area'){// a closed area opens at that point and becomes a line
+    const pts=[...it.pts.slice(k),...it.pts.slice(0,k)];pts.push(pts[0].slice());it.pts=pts;it.t=s&&s.kind==='elev'?'contour':'line';delete it.ct;delete it.sec;delete it.depth;return [it]}
+  if(k<=0||k>=it.pts.length-1)return null;const b={...JSON.parse(JSON.stringify(it)),id:newId()};delete b.vkey;
+  it.pts=it.pts.slice(0,k+1);b.pts=b.pts.slice(k);if(it.zs){b.zs=it.zs.slice(k);it.zs=it.zs.slice(0,k+1)}
+  if(it.t==='pipe'){b.nodes=(it.nodes||[]).slice(k);it.nodes=(it.nodes||[]).slice(0,k+1);b.segs=(it.segs||[]).slice(k);it.segs=(it.segs||[]).slice(0,k);b.name=(it.name||'Run')+' (2)'}
+  if(it.em==='slope'&&it.zs){it.e1=it.zs[it.zs.length-1];b.e0=b.zs[0]}
+  S.tw.items.splice(S.tw.items.indexOf(it)+1,0,b);return [it,b]}
+function twEditClick(which,q,e){const R=twR();const m=R.emode||'brk';const sh=twSheet(S.tw.page);const toW=p=>which==='plan'?twP2W(sh,p):p;
+  if(m==='mv'&&R.emv){// second click: where the point goes (snaps to plan linework or another line's point)
+    const it=S.tw.items.find(x=>x.id===R.emv.id);if(!it){R.emv=null;return}let w=which==='plan'?twP2W(sh,R.snap||q):q;const near=twEditHit(which,q,it.id);if(near&&near.dv<=near.tol)w=near.it.pts[near.k].slice();
+    twSnap();it.pts[R.emv.k]=[w[0],w[1]];twEditFix(it);R.emv=null;R.selItem=it.id;twVecUsed();twTouch();twPanels();twDraw();return}
+  const h=twEditHit(which,q);if(!h){if(m==='join'&&R.ejoin){R.ejoin=null;twPanels()}return}const it=h.it;const s=twSurf(it.sid);const onPt=h.dv<=h.tol*0.9;
+  if(m==='brk'){if(onPt&&it.t!=='area'&&(h.k===0||h.k===it.pts.length-1)){toast('That’s the end of the line already.');return}twSnap();let k=h.k;if(!onPt){k=twInsertPt(it,h.seg,h.proj,h.t)}const r=twSplitAt(it,k);if(!r)return;r.forEach(twEditFix);R.selItem=r[r.length-1].id;twVecUsed();twTouch();twPanels();twDraw();toast(r.length>1?`Broken into two: ${fmtN(twLen(r[0].pts),1)} and ${fmtN(twLen(r[1].pts),1)} ft.`:'The area is now an open line, starting and ending there.');return}
+  if(m==='add'){twSnap();const i=twInsertPt(it,h.seg,h.proj,h.t);twEditFix(it);R.selItem=it.id;R.emv=null;twTouch();twPanels();twDraw();toast(`Point added (${it.pts.length} points now).${it.t==='pipe'?' It’s a bend; change its type in the profile table to make it a structure.':''}`);void i;return}
+  if(m==='mv'){if(!onPt){toast('Click on one of the line’s points (they show as squares).');return}R.emv={id:it.id,k:h.k};R.selItem=it.id;twPanels();twDraw();return}
+  if(m==='del'){if(!onPt){toast('Click on one of the line’s points.');return}const min=it.t==='area'?3:2;if(it.pts.length<=min){toast(it.t==='area'?'An area needs at least three points.':'A line needs at least two points. Delete the line instead.');return}
+    twSnap();const k=h.k;it.pts.splice(k,1);if(it.zs)it.zs.splice(k,1);if(it.t==='pipe'){it.nodes.splice(k,1);it.segs.splice(Math.min(k,it.segs.length-1),1)}twEditFix(it);R.selItem=it.id;twTouch();twPanels();twDraw();return}
+  if(m==='join'){if(it.t==='area'||it.t==='pipe'){toast('Join works on lines and contours.');return}const end=Math.hypot(it.pts[0][0]-h.w[0],it.pts[0][1]-h.w[1])<=Math.hypot(it.pts[it.pts.length-1][0]-h.w[0],it.pts[it.pts.length-1][1]-h.w[1])?0:1;
+    if(!R.ejoin||R.ejoin.id===it.id){R.ejoin={id:it.id,end};R.selItem=it.id;twPanels();twDraw();return}
+    const a=S.tw.items.find(x=>x.id===R.ejoin.id);const ae=R.ejoin.end;R.ejoin=null;if(!a){twPanels();return}
+    if(a.sid!==it.sid||a.t!==it.t){toast('Both lines need to be on the same surface.');twPanels();return}
+    if(a.t==='contour'&&!a.zs&&!it.zs&&twHasZ(a)&&twHasZ(it)&&Math.abs(a.z-it.z)>1e-6){toast(`Those contours have different elevations (${qtyFmt(a.z)} and ${qtyFmt(it.z)}). Make them the same first, or use Sloped.`);twPanels();return}
+    twSnap();const zsOf=x=>x.zs&&x.zs.length===x.pts.length?x.zs.slice():(twHasZ(x)?x.pts.map(()=>x.z):null);const flat=x=>!x.zs&&twHasZ(x);
+    let A=a.pts.slice(),Az=zsOf(a),B=it.pts.slice(),Bz=zsOf(it);if(ae===0){A.reverse();if(Az)Az.reverse()}if(end===1){B.reverse();if(Bz)Bz.reverse()}
+    const gap=Math.hypot(A[A.length-1][0]-B[0][0],A[A.length-1][1]-B[0][1]);if(gap<0.05){B.shift();if(Bz)Bz.shift()}
+    a.pts=[...A,...B];
+    if(flat(a)&&(flat(it)||!Bz)){delete a.zs}else if(!flat(it)&&!Az&&!Bz){delete a.zs;delete a.z}
+    else if(flat(it)&&!Az){a.z=it.z;delete a.zs}
+    else{// a 3D line: elevations at every point; a side without any takes the elevation at its end
+      const Z1=Az||A.map(()=>Bz[0]),Z2=Bz||B.map(()=>Az[Az.length-1]);a.zs=[...Z1,...Z2];a.z=a.zs[0];delete a.conf;delete a.p0;
+      a.em='3d';delete a.e0;delete a.e1}
+    S.tw.items=S.tw.items.filter(x=>x!==it);twEditFix(a);R.selItem=a.id;twVecUsed();twTouch();twPanels();twDraw();toast(`Joined: ${fmtN(twLen(a.pts),1)} ft, ${a.pts.length} points.`);return}}
+function twEditCard(){const R=twR();if(R.tool!=='edit')return '';const m=R.emode||'brk';const mv=R.emv&&S.tw.items.find(x=>x.id===R.emv.id);const jn=R.ejoin&&S.tw.items.find(x=>x.id===R.ejoin.id);
+  return `<div class="tw-card tw-edc"><div class="tw-ih"><b>Edit lines</b><button class="x" data-act="tw-tool" data-v="select" aria-label="Done">×</button></div>
+    <div class="tw-edm">${TW_EMODES.map(([k,f,l])=>`<button class="${m===k?'on':''}" data-act="tw-emode" data-v="${k}"><kbd>${f}</kbd> ${l}</button>`).join('')}</div>
+    <p class="small" style="margin:4px 0 0">${mv?`Moving point ${R.emv.k+1} of ${mv.pts.length}: click where it goes (it snaps to other lines’ points). Esc cancels.`:jn?`Now click near the end of the line to join to it. Esc cancels.`:esc((TW_EMODES.find(x=>x[0]===m)||[])[3]||'')}</p></div>`}
+// what the editor would act on, drawn on both panes
+function twEditMarks(ctx,f){const R=twR();if(R.tool!=='edit')return;const m=R.emode||'brk';const h=R.ehov;const it=R.emv?S.tw.items.find(x=>x.id===R.emv.id):h&&h.it;
+  if(it){ctx.save();ctx.setLineDash([]);ctx.fillStyle='#fff';ctx.strokeStyle='#00a8e8';ctx.lineWidth=1.5;it.pts.forEach(p=>{const q=f(p);ctx.fillRect(q[0]-3.5,q[1]-3.5,7,7);ctx.strokeRect(q[0]-3.5,q[1]-3.5,7,7)});ctx.restore()}
+  if(R.emv&&it&&R.ehw){const k=R.emv.k;const n=it.pts.length;const nb=[k-1,k+1].map(i=>it.t==='area'?(i+n)%n:i).filter(i=>i>=0&&i<n);const q=f(R.ehw);ctx.save();ctx.strokeStyle='#ff8c00';ctx.setLineDash([5,4]);ctx.lineWidth=1.5;nb.forEach(i=>{const a=f(it.pts[i]);ctx.beginPath();ctx.moveTo(a[0],a[1]);ctx.lineTo(q[0],q[1]);ctx.stroke()});ctx.setLineDash([]);ctx.beginPath();ctx.arc(q[0],q[1],5,0,7);ctx.stroke();ctx.restore();return}
+  if(R.ejoin){const a=S.tw.items.find(x=>x.id===R.ejoin.id);if(a){const p=f(a.pts[R.ejoin.end?a.pts.length-1:0]);ctx.save();ctx.strokeStyle='#2e9e5b';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(p[0],p[1],8,0,7);ctx.stroke();ctx.restore()}}
+  if(!h)return;const onPt=h.dv<=h.tol*0.9;ctx.save();ctx.lineWidth=2;
+  if((m==='mv'||m==='del')&&onPt){const q=f(h.it.pts[h.k]);ctx.strokeStyle=m==='del'?'#d93025':'#ff8c00';ctx.strokeRect(q[0]-6,q[1]-6,12,12)}
+  else if(m==='add'||(m==='brk'&&!onPt)){const q=f(h.proj);ctx.strokeStyle=m==='brk'?'#d93025':'#2e9e5b';if(m==='brk'){ctx.beginPath();ctx.moveTo(q[0]-6,q[1]-6);ctx.lineTo(q[0]+6,q[1]+6);ctx.moveTo(q[0]+6,q[1]-6);ctx.lineTo(q[0]-6,q[1]+6);ctx.stroke()}else{ctx.beginPath();ctx.arc(q[0],q[1],5,0,7);ctx.moveTo(q[0]-8,q[1]);ctx.lineTo(q[0]+8,q[1]);ctx.moveTo(q[0],q[1]-8);ctx.lineTo(q[0],q[1]+8);ctx.stroke()}}
+  else if(m==='brk'&&onPt){const q=f(h.it.pts[h.k]);ctx.strokeStyle='#d93025';ctx.beginPath();ctx.moveTo(q[0]-7,q[1]-7);ctx.lineTo(q[0]+7,q[1]+7);ctx.moveTo(q[0]+7,q[1]-7);ctx.lineTo(q[0]-7,q[1]+7);ctx.stroke()}
+  else if(m==='join'){const it2=h.it;const e0=it2.pts[0],e1=it2.pts[it2.pts.length-1];const end=Math.hypot(e0[0]-h.w[0],e0[1]-h.w[1])<=Math.hypot(e1[0]-h.w[0],e1[1]-h.w[1])?e0:e1;const q=f(end);ctx.strokeStyle='#2e9e5b';ctx.beginPath();ctx.arc(q[0],q[1],8,0,7);ctx.stroke()}
+  ctx.restore()}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!S.tw)return;if(t.dataset.act==='tw-emode'){const R=twR();R.emode=t.dataset.v;R.emv=null;R.ejoin=null;twPanels();twDraw()}});
