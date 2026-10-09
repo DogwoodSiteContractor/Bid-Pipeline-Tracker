@@ -8450,14 +8450,14 @@ const TW_TOOLS=[
   ['pan','✋','Move','both','Drag to move, scroll to zoom. Drag works in every tool.'],
   ['select','➚','Select','both','Click a line to select it. Delete removes it; the card lets you change its elevation.'],
   ['scale','📏','Scale','plan','Click two points a known distance apart (the bar scale), then type the distance.'],
-  ['apt','◎','Alignment point','both','Click a spot that shows on every sheet (property corner, grid tick, benchmark) and name it. On the model it snaps to the nearest corner (use this to tie plan sheets to a CAD import).'],
-  ['align','⤧','Align sheet','plan','Click each alignment point where it sits on this sheet. Two points place the sheet; a third checks it.'],
-  ['pick','⌖','Pick','plan','Click a plan line to add it to the active surface. Shift-click or Shift-drag to collect several, then Add.'],
-  ['draw','✎','Draw','both','Click along a line; Enter, double-click or right-click to finish. Snaps to plan linework.'],
-  ['area','⬠','Area','both','Click around an area; click the first point or press Enter to close it.'],
-  ['count','✚','Count / spot','both','Click to place a count (takeoff surface) or a spot elevation (elevation surface).'],
-  ['edit','✂','Edit lines','both','F5 break · F6 add point · F7 move point · F8 delete point · F9 join. Works on lines, contours, areas and pipe runs.'],
-  ['pipe','⦿','Pipe','both','Utility surface: click each structure along the run; Enter or double-click finishes. Click an existing structure to connect to it. Rims and inverts go in the table below.'],
+  ['apt','◎','Point','both','Click a spot that shows on every sheet (property corner, grid tick, benchmark) and name it. On the model it snaps to the nearest corner (use this to tie plan sheets to a CAD import).'],
+  ['align','⤧','Align','plan','Click each alignment point where it sits on this sheet. Two points place the sheet; a third checks it.'],
+  ['pick','⌖','Pick from plan','plan','Click a plan line or symbol to add it to the active surface. Shift-click or Shift-drag to collect several, then Add.'],
+  ['draw','─','Line','both','Click along a line (a contour on an elevation surface); Enter, double-click or right-click to finish. Snaps to plan linework.'],
+  ['area','▭','Area','both','Click around an area; click the first point or press Enter to close it.'],
+  ['count','✚','Count','both','Click to place a count (takeoff surface) or a spot elevation (elevation surface).'],
+  ['edit','✂','Edit','both','F5 break · F6 add point · F7 move point · F8 delete point · F9 join. Works on lines, contours, areas and pipe runs.'],
+  ['pipe','⦿','Pipe','both','Click each structure along the run; Enter or double-click finishes. Click an existing structure to connect to it. Rims and inverts go in the table below.'],
   ['sweep','⇢','Sweep','both','Click before the first contour, then past the last. Contours crossed get elevations one interval apart.']];
 const TW_UIKEY='bp-tw-ui';
 function twUiPrefs(){try{return JSON.parse(localStorage.getItem(TW_UIKEY)||'{}')}catch(e){return {}}}
@@ -8618,7 +8618,7 @@ function twKey(e){if(S.view!=='tw'||!S.tw)return;const R=twR();const tag=(e.targ
   if(['INPUT','TEXTAREA','SELECT'].includes(tag))return;
   if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='z'){e.preventDefault();twUndo(e.shiftKey);return}
   if(e.key==='Enter'){if(R.cur.length){e.preventDefault();twFinish(R.curPane)}else if(R.tool==='pick'&&R.sel.size){e.preventDefault();twPickAdd([...R.sel])}}
-  else if(e.key==='Escape'){R.cur=[];R.emv=null;R.ejoin=null;R.sweepA=null;R.scaleRun=null;R.sel.clear();R.ask=null;R.alignRun=null;twPanels();twDraw()}
+  else if(e.key==='Escape'){if(!R.cur.length&&!R.sel.size&&!R.ask&&R.pal){R.pal=null;twTool('select');return}R.cur=[];R.emv=null;R.ejoin=null;R.sweepA=null;R.scaleRun=null;R.sel.clear();R.ask=null;R.alignRun=null;twPanels();twDraw()}
   else if((e.key==='Delete'||e.key==='Backspace')&&R.cur.length){e.preventDefault();R.cur.pop();twDraw()}
   else if((e.key==='Delete'||e.key==='Backspace')&&R.selItem&&!twRo()){e.preventDefault();twDelItem(R.selItem)}
   else if(!e.ctrlKey&&!e.metaKey&&!e.altKey){const k={v:'pan',s:'select',p:'pick',d:'draw',a:'area',c:'count',w:'sweep',u:'pipe',e:'edit'}[e.key.toLowerCase()];if(k){twTool(k)}}}
@@ -8649,7 +8649,11 @@ function twNeedPlaced(){const sh=twSheet(S.tw.page);if(!sh||!sh.scaled){toast('S
 // start the job's coordinates over from this sheet (after a new plan set, or when the points were deleted)
 function twMakeRef(){const n=S.tw.page;const sh=S.tw.sheets[n];if(!sh||!sh.scaled){toast('Set this sheet’s scale first.');twTool('scale');return}twSnap();const old={...sh};Object.values(S.tw.sheets).forEach(x=>{delete x.ref;if(x!==sh&&S.tw.apts.length<2)x.aligned=false});
   Object.assign(sh,{rot:0,tx:0,ty:0,aligned:true,ref:true});S.tw.items.forEach(it=>{if(it.page===n&&old.aligned)it.pts=it.pts.map(p=>twP2W(sh,twW2P(old,p)))});twR().mv=null;twTouch();toast(`Sheet ${n} now sets the job’s coordinates. Add alignment points on it, then line the other sheets up to them.`);twTool('apt')}
-function twNeedSurface(kinds){const s=twActive();if(!s){toast('Make a surface first.');return null}if(kinds&&!kinds.includes(s.kind)){toast(`The active surface “${s.name}” is a ${TW_KINDS[s.kind][0].toLowerCase()} surface. Pick or make a ${kinds.map(k=>TW_KINDS[k][0].toLowerCase()).join(' or ')} surface for this tool.`);return null}if(s.lock){toast(`“${s.name}” is locked.`);return null}if(!s.vis){s.vis=true}return s}
+function twNeedSurface(kinds){const R=twR();let s=twActive();R.lastKind=R.lastKind||{};
+  if(!s||kinds&&!kinds.includes(s.kind)){const k=['take','util','elev','sub'].find(x=>!kinds||kinds.includes(x));let t=twSurf(R.lastKind[k]);if(!t||t.kind!==k||t.lock)t=S.tw.surfaces.find(x=>x.kind===k&&!x.lock&&x.vis)||S.tw.surfaces.find(x=>x.kind===k&&!x.lock);
+    if(!t){if(twRo())return null;t=twMkSurf(TW_KDEF[k],k);toast(`Made a ${TW_KINDS[k][0].toLowerCase()} surface, “${t.name}”, for this.${s?` (“${s.name}” holds ${s.kind==='elev'?'elevations':TW_KINDS[s.kind][0].toLowerCase()+' items'}.)`:''} Rename it with ⋯.`)}
+    else if(s)toast(`Went on “${t.name}”: “${s.name}” holds ${s.kind==='elev'?'elevations':TW_KINDS[s.kind][0].toLowerCase()+' items'}.${t.kind==='take'?' To name what it is, pick an item under Take off first.':''}`);if(t.kind==='take')t.act=null;S.tw.active=t.id;s=t}
+  if(s.lock){toast(`“${s.name}” is locked. Unlock it (🔓) to add to it.`);return null}if(!s.vis){s.vis=true}R.lastKind[s.kind]=s.id;return s}
 function twClick(which,q,e){const R=twR();R.lastPane=which;if(twRo()&&!['pan','select'].includes(R.tool)){toast('This takeoff is read-only for you.');return}const n=S.tw.page;
   switch(R.tool){
     case 'pan':case 'select':{const it=twItemAt(which,q);R.selItem=it?it.id:null;R.hi=R.selItem;twPanels();twDraw();return}
@@ -8661,11 +8665,11 @@ function twClick(which,q,e){const R=twR();R.lastPane=which;if(twRo()&&!['pan','s
     case 'pick':{if(which!=='plan')return;if(!twNeedPlaced())return;const V=R.vec[n];if(!V){twVectors(n);return}const v=R.pv[n];const pi=twNearPath(V,q,8/v.z);
       if(e&&e.shiftKey){if(pi>=0&&!V.paths[pi].used){R.sel.has(pi)?R.sel.delete(pi):R.sel.add(pi)}twPanels();twDraw();return}
       if(pi<0){R.sel.clear();twPanels();twDraw();return}if(V.paths[pi].used){const it=S.tw.items.find(x=>x.vkey===V.paths[pi].vkey&&x.page===n);if(it){R.selItem=it.id;R.hi=it.id;twPanels();twDraw()}return}twPickAdd([pi]);return}
-    case 'draw':case 'area':{const s=twNeedSurface(R.tool==='area'?['take','util','sub']:['elev','take','util']);if(!s)return;if(s.kind==='sub'&&!twSubType(s)){toast('Add a section type first (left panel, under the surface).');return}let w=q;if(which==='plan'){if(!twNeedPlaced())return;w=R.snap||q}
+    case 'draw':case 'area':{const s=twNeedSurface(R.tool==='area'?['take','util','sub']:['elev','take','util']);if(!s)return;if(s.kind==='sub'&&!twSubType(s)){toast('Give this subgrade surface a section type first (+ Section type, left), or pick an item under Take off.');return}let w=q;if(which==='plan'){if(!twNeedPlaced())return;w=R.snap||q}
       if(R.cur.length&&R.curPane!==which)R.cur=[];R.curPane=which;if(R.tool==='area'&&R.cur.length>2){const f=which==='plan'?R.pv[n].z:R.mv.z;if(Math.hypot(w[0]-R.cur[0][0],w[1]-R.cur[0][1])*f<8){twFinish(which);return}}R.cur.push(w);twDraw();return}
     case 'count':{const s=twNeedSurface(['elev','take','util']);if(!s)return;let w=q;if(which==='plan'){if(!twNeedPlaced())return;w=twP2W(twSheet(n),R.snap||q)}
       if(s.kind==='elev'){R.ask={type:'spot',w,page:which==='plan'?n:null,def:'',label:'Spot elevation'};twPanels();return}
-      twSnap();S.tw.items.push({id:newId(),sid:s.id,t:'count',pts:[w],page:which==='plan'?n:null});twTouch();twPanels();twDraw();return}
+      twSnap();const ci={id:newId(),sid:s.id,t:'count',pts:[w],page:which==='plan'?n:null};twCtStamp(s,ci);S.tw.items.push(ci);twTouch();twPanels();twDraw();return}
     case 'pipe':twPipeClick(which,q);return;
     case 'edit':twEditClick(which,q,e);return;
     case 'sweep':{const s=twNeedSurface(['elev']);if(!s)return;let w=q;if(which==='plan'){if(!twNeedPlaced())return;w=twP2W(twSheet(n),q)}
@@ -8680,8 +8684,9 @@ function twFinish(which){const R=twR();if(!R.cur.length)return;const n=S.tw.page
 function twPickAdd(idxs,whole){const R=twR();const n=S.tw.page;const V=R.vec[n];const sh=twSheet(n);const s=twNeedSurface(['elev','take','util','sub']);if(!s||!V)return;if(s.kind==='sub'&&!twSubType(s)){toast('Add a section type first (left panel, under the surface).');return}
   let add=idxs.map(i=>V.paths[i]).filter(p=>p&&!p.used);let short=0;if(whole&&s.kind==='elev'){const k=add.length;add=add.filter(p=>tkPolyLen(p.pts)>=30);short=k-add.length}if(!add.length){if(short)toast(`Only short pieces on that layer (${short}); pick them one at a time if you want them.`);return}twSnap();
   const ids=[];add.forEach(P=>{const gapC=Math.hypot(P.pts[0][0]-P.pts[P.pts.length-1][0],P.pts[0][1]-P.pts[P.pts.length-1][1]);const closed=P.pts.length>3&&(gapC<0.5||gapC<Math.min(3,tkPolyLen(P.pts)*0.01));
-    const t=s.kind==='elev'?'contour':closed||s.kind==='sub'?'area':'line';const pts=P.pts.map(p=>twP2W(sh,p));if(t==='area'&&closed)pts.pop();
+    const cty=s.kind==='take'?twCtActive(s):null;const t=s.kind==='elev'?'contour':cty&&cty.form==='count'?'count':closed||s.kind==='sub'||cty&&cty.form==='area'?'area':'line';let pts=P.pts.map(p=>twP2W(sh,p));if(t==='area'&&closed)pts.pop();if(t==='area'&&!closed&&s.kind==='take'){const L=tkPolyLen(pts);if(twArea(pts)<0.02*L*L){R.openSkip=(R.openSkip||0)+1;return}}if(t==='count'){const b=pts.reduce((a,p)=>[Math.min(a[0],p[0]),Math.min(a[1],p[1]),Math.max(a[2],p[0]),Math.max(a[3],p[1])],[Infinity,Infinity,-Infinity,-Infinity]);pts=[[(b[0]+b[2])/2,(b[1]+b[3])/2]]}
     const it={id:newId(),sid:s.id,t,pts,page:n,vkey:P.vkey};if(s.kind==='sub'){const ty=twSubType(s);if(ty)it.sec=ty.id}twCtStamp(s,it);const z=s.kind==='elev'?twLabelZ(V,P):null;if(z!=null)it.z=z;S.tw.items.push(it);ids.push(it.id);P.used=true});
+  if(R.openSkip){toast(`${R.openSkip===1?'That line doesn’t':R.openSkip+' lines don’t'} enclose an area. Pick the outline, or trace it with Area.`);R.openSkip=0}if(!ids.length){twPanels();twDraw();return}
   R.sel.clear();twTouch();const need=ids.filter(id=>{const it=S.tw.items.find(x=>x.id===id);return s.kind==='elev'&&twNeedZ(it)});
   if(need.length===1&&ids.length===1)twAskZ(need);else if(ids.length>1)toast(`${ids.length} lines added to ${s.name}.${short?` ${short} short pieces (symbols, ticks) left out; pick them by hand if they belong.`:''}${need.length?` ${need.length} need an elevation: use Sweep, or Next missing.`:''}`);
   R.selItem=ids[ids.length-1];twPanels();twDraw()}
@@ -8693,6 +8698,7 @@ function twAskZ(ids){const R=twR();const last=R.lastZ;const def=last!=null?+(las
 function twAskOk(){const R=twR();const A=R.ask;if(!A)return;const raw=(twAskDoc().getElementById('tw-askv')||{}).value;const v=String(raw||'').trim();R.ask=null;
   if(A.type==='z'){const z=num(v);if(z==null){twPanels();return}twSnap();A.ids.forEach(id=>{const it=S.tw.items.find(x=>x.id===id);if(it)it.z=z});R.lastZ=z;twTouch()}
   else if(A.type==='spot'){const z=num(v);if(z!=null){twSnap();const s=twActive();S.tw.items.push({id:newId(),sid:s.id,t:'spot',pts:[A.w],z,page:A.page});R.lastZ=z;twTouch()}}
+  else if(A.type==='surf1'){if(v){twSnap();const t=twMkSurf(v,'take');S.tw.one=t.id;S.tw.active=t.id;twTouch();toast(`New lines, areas and counts go on ${t.name}. Grading and pipes keep their own surfaces.`)}}
   else if(A.type==='scale'){const ft=num(v);if(ft>0)twSetScale(ft/A.d);R.scaleRun=null}
   else if(A.type==='apt'){if(v){twSnap();S.tw.apts.push({id:newId(),name:v,x:A.p[0],y:A.p[1]});twTouch()}}
   else if(A.type==='sweep'){const z=num(v);if(z!=null)twSweepApply(A.ids,z)}
@@ -8751,7 +8757,7 @@ function twSurfStats(s){const xs=S.tw.items.filter(i=>i.sid===s.id);if(s.kind===
   const pr=xs.filter(i=>i.t==='pipe');const PL=pr.reduce((a,i)=>a+twLen(i.pts),0);const PS=new Set();pr.forEach(i=>(i.nodes||[]).forEach((n,k)=>{if(!twNoStr(n.k))PS.add(String(n.n||'').trim().toLowerCase()||i.id+'#'+k)}));
   const L=xs.filter(i=>i.t==='line').reduce((a,i)=>a+twLen(i.pts),0),A=xs.filter(i=>i.t==='area').reduce((a,i)=>a+twArea(i.pts),0),C=xs.filter(i=>i.t==='count').length;return [pr.length?`${pr.length} run${pr.length===1?'':'s'} · ${fmtN(PL,0)} LF pipe · ${PS.size} structure${PS.size===1?'':'s'}`:'',L?fmtN(L,0)+' LF':'',A?fmtN(A,0)+' SF':'',C?C+' EA':''].filter(Boolean).join(' · ')||'Nothing yet'}
 function twSideHtml(){const R=twR();const ro=twRo();const T=S.tw;const n=R.pdf?R.pdf.numPages:(T.file&&T.file.pages)||0;
-  return `<div class="tw-h">Surfaces${ro?'':`<span class="tw-hb"><label class="btn sm" title="Bring in CAD (DXF), LandXML surfaces or a survey point file">Import<input type="file" accept=".dxf,.xml,.landxml,.csv,.txt,.pnt,.dwg" data-twcad hidden></label><button class="btn sm" data-act="tw-newsurf">+ New</button></span>`}</div>
+  return `${twPalHtml()}<div class="tw-h">Surfaces${ro?'':`<span class="tw-hb"><label class="btn sm" title="Bring in CAD (DXF), LandXML surfaces or a survey point file">Import<input type="file" accept=".dxf,.xml,.landxml,.csv,.txt,.pnt,.dwg" data-twcad hidden></label><button class="btn sm" data-act="tw-newsurf">+ New</button></span>`}</div>
     <div class="tw-surfs">${T.surfaces.map(s=>`<div class="tw-surf${s.id===T.active?' on':''}" data-act="tw-surf" data-id="${s.id}"><span class="tw-sw" style="background:${esc(s.color)}"></span><div class="tw-sn"><b>${esc(s.name)}</b><small>${TW_KINDS[s.kind][0]} · ${twSurfStats(s)}</small></div>
       <button class="tw-ic" data-act="tw-vis" data-id="${s.id}" title="${s.vis?'Hide':'Show'}">${s.vis?'◉':'○'}</button>${ro?'':`<button class="tw-ic" data-act="tw-lock" data-id="${s.id}" title="${s.lock?'Unlock':'Lock'}">${s.lock?'🔒':'🔓'}</button><button class="tw-ic" data-act="tw-surfmenu" data-id="${s.id}" title="Rename, color, delete">⋯</button>`}</div>`).join('')}</div>
     ${twSubPanel()}${twCtPanel()}
@@ -8760,16 +8766,19 @@ function twSideHtml(){const R=twR();const ro=twRo();const T=S.tw;const n=R.pdf?R
     ${twImportsHtml()}<div class="tw-h">Sheets${n?` <span class="dim small">${n}</span>`:''}</div>
     <div class="tw-pages" id="tw-pages" data-keepscroll>${n?Array.from({length:n},(_,i)=>i+1).map(p=>{const sh=T.sheets[p];const used=[...new Set(T.items.filter(it=>it.page===p).map(it=>it.sid))].map(id=>twSurf(id)).filter(Boolean);
       return `<button class="tw-pg${p===T.page?' on':''}" data-act="tw-page" data-v="${p}"><img data-twthumb="${p}" alt="" ${R.thumbs[p]?`src="${R.thumbs[p]}"`:''}><span><b>${p}</b>${sh&&sh.scaled?` <i>${esc(twScaleText(sh))}</i>`:''}${sh&&sh.ref?' <i class="ok">reference</i>':sh&&sh.aligned?' <i class="ok">lined up</i>':''}</span><span class="tw-dots">${used.map(s=>`<i style="background:${esc(s.color)}" title="${esc(s.name)}"></i>`).join('')}</span></button>`}).join(''):'<span class="dim small">Open the plan PDF to see its sheets.</span>'}</div>`}
-function twToolbarHtml(){const R=twR();const T=S.tw;const s=twActive();const ro=twRo();
-  return `<div class="seg tw-tools">${TW_TOOLS.filter(t=>!ro||['pan','select'].includes(t[0])).map(([k,ic,l,,h])=>`<button class="${R.tool===k?'on':''}" data-act="tw-tool" data-v="${k}" title="${esc(l+': '+h)}"><span>${ic}</span> ${l}</button>`).join('')}</div>
-    <label class="tw-iv">Interval <input class="field sm num" id="tw-int" data-twint value="${esc(T.interval)}" inputmode="decimal"${ro?' disabled':''}></label><button class="btn sm" data-act="tw-dir" title="Which way the sweep counts"${ro?' disabled':''}>${T.dir>0?'↑ Rising':'↓ Falling'}</button>
-    ${s&&s.kind==='elev'?`<button class="btn sm" data-act="tw-missing">Next missing</button><button class="btn sm${R.chk?' on':''}" data-act="tw-chkrun" title="Find contours that cross, and elevations that jump (typos)">✓ Check contours</button>`:''}<button class="btn sm${R.cfOpen?' on':''}" data-act="tw-cfopen">⛰ Cut / fill</button><button class="btn sm" data-act="tw-qty">📋 Quantities</button><button class="btn sm" data-act="tw-3d" title="See the surfaces, linework and pipes in 3D">🧊 3D</button><button class="btn sm" data-act="tw-undo" title="Undo (Ctrl+Z)"${R.undo.length?'':' disabled'}>↶</button><button class="btn sm" data-act="tw-redo" title="Redo (Ctrl+Shift+Z)"${R.redo.length?'':' disabled'}>↷</button>`}
-function twAskHtml(){const R=twR();const A=R.ask;if(!A)return '';return `<div class="tw-ask"><span>${esc(A.label)}</span><input class="field" id="tw-askv" value="${esc(A.def??'')}" ${A.type==='apt'||A.type==='surf'?'':'inputmode="decimal"'} autocomplete="off"><button class="btn sm primary" data-act="tw-askok">OK</button>${A.type==='z'?'<button class="btn sm" data-act="tw-askanno" title="Keep it with no elevation: shown, not used in the surface. Give it one later.">Annotation</button>':''}<button class="btn sm" data-act="tw-askno">Cancel</button></div>`}
+function twToolbarHtml(){const R=twR();const T=S.tw;const s=twActive();const ro=twRo();const KEY={pan:'V',select:'S',pick:'P',draw:'D',area:'A',count:'C',sweep:'W',pipe:'U',edit:'E'};
+  const tb=k=>{const t=TW_TOOLS.find(x=>x[0]===k);if(!t)return '';const [,ic,l,,h]=t;return `<button class="${R.tool===k?'on':''}" data-act="tw-tool" data-v="${k}" title="${esc(l+(KEY[k]?' ('+KEY[k]+')':'')+': '+h)}"><span>${ic}</span> ${l}</button>`};
+  const grp=(lab,ks)=>`<div class="tw-tg">${lab?`<span class="tw-tgl">${lab}</span>`:''}<div class="seg tw-tools">${ks.map(tb).join('')}</div></div>`;
+  const el=s&&s.kind==='elev';
+  return ro?grp('',['pan','select']):`${grp('',['pan','select'])}${grp('Measure',['draw','area','count','pipe'].concat(el?['sweep']:[]))}${grp('Fix',['pick','edit'])}${grp('Sheets',['scale','apt','align'])}
+    ${el?`<div class="tw-tg"><span class="tw-tgl">Contours</span><label class="tw-iv">Interval <input class="field sm num" id="tw-int" data-twint value="${esc(T.interval)}" inputmode="decimal"></label><button class="btn sm" data-act="tw-dir" title="Which way the sweep counts">${T.dir>0?'↑ Rising':'↓ Falling'}</button><button class="btn sm" data-act="tw-missing">Next missing</button><button class="btn sm${R.chk?' on':''}" data-act="tw-chkrun" title="Find contours that cross, and elevations that jump (typos)">✓ Check</button></div>`:''}
+    <span style="flex:1"></span><div class="tw-tg"><button class="btn sm${R.cfOpen?' on':''}" data-act="tw-cfopen">⛰ Cut / fill</button><button class="btn sm primary" data-act="tw-qty">📋 Quantities</button><button class="btn sm" data-act="tw-3d" title="See the surfaces, linework and pipes in 3D">🧊 3D</button><button class="btn sm" data-act="tw-undo" title="Undo (Ctrl+Z)"${R.undo.length?'':' disabled'}>↶</button><button class="btn sm" data-act="tw-redo" title="Redo (Ctrl+Shift+Z)"${R.redo.length?'':' disabled'}>↷</button></div>`}
+function twAskHtml(){const R=twR();const A=R.ask;if(!A)return '';return `<div class="tw-ask"><span>${esc(A.label)}</span><input class="field" id="tw-askv" value="${esc(A.def??'')}" ${A.type==='apt'||A.type==='surf'||A.type==='surf1'?'':'inputmode="decimal"'} autocomplete="off"><button class="btn sm primary" data-act="tw-askok">OK</button>${A.type==='z'?'<button class="btn sm" data-act="tw-askanno" title="Keep it with no elevation: shown, not used in the surface. Give it one later.">Annotation</button>':''}<button class="btn sm" data-act="tw-askno">Cancel</button></div>`}
 function twPlanSideHtml(){const R=twR();const n=S.tw.page;const V=R.vec[n];const sh=twSheet(n);const ro=twRo();
   let card='';
   if(R.tool==='align'){const A=R.alignRun&&R.alignRun.n===n?R.alignRun:null;const ap=S.tw.apts[A?A.i:0];card=`<div class="tw-card"><b>Align sheet ${n}</b>${S.tw.apts.length<2?`<p class="small">There aren’t two alignment points to line this sheet up with.${sh&&sh.scaled?' <button class="linkbtn" data-act="tw-mkref">Make this the reference sheet</button>, then add points on it.':' Set this sheet’s scale with <button class="linkbtn" data-act="tw-tool" data-v="scale">Scale</button>; it becomes the reference sheet.'}</p>`:`<p class="small">${ap?`Click <b>${esc(ap.name)}</b> where it sits on this sheet.`:'All points clicked.'}</p><div class="small dim">${S.tw.apts.map((a,i)=>`${A&&A.clicks.some(k=>k.id===a.id)?'✓':i===(A?A.i:0)?'→':'·'} ${esc(a.name)}`).join('  ')}</div>
     <div class="adders">${ap?`<button class="btn sm" data-act="tw-askip">Skip ${esc(ap.name)}</button>`:''}<button class="btn sm primary" data-act="tw-alignok"${A&&A.clicks.length>=(sh&&sh.bar?1:2)?'':' disabled'}>Line it up</button></div>${sh&&sh.scaled?'<p class="small dim" style="margin-bottom:0">New plan set or starting over? <button class="linkbtn" data-act="tw-mkref">Make this the reference sheet</button> instead.</p>':''}`}</div>`}
-  else if(R.tool==='pick'){const s=twActive();card=`<div class="tw-card tw-layers"><b>Plan lines${s?` → ${esc(s.name)}`:''}</b>${!V?`<p class="small">${R.vecBusy?'Reading the lines on this sheet…':'<button class="btn sm" data-act="tw-vec">Read this sheet’s lines</button>'}</p>`:`
+  else if(R.tool==='pick'){const s=twActive();const PA=twPalArmed();card=`<div class="tw-card tw-layers"><b>Plan lines${PA?` → ${esc(PA.p.n)}`:s?` → ${esc(s.name)}`:''}</b>${!V?`<p class="small">${R.vecBusy?'Reading the lines on this sheet…':'<button class="btn sm" data-act="tw-vec">Read this sheet’s lines</button>'}</p>`:`
     ${R.sel.size?`<div class="adders"><button class="btn sm primary" data-act="tw-addsel"${ro?' disabled':''}>Add ${R.sel.size} selected</button><button class="btn sm" data-act="tw-clearsel">Clear</button></div>`:'<p class="small dim">Click a line, or Shift-drag a box. Or send a whole CAD layer:</p>'}
     <div class="tw-lyl">${V.groups.map(g=>({g,left:V.paths.filter(p=>p.g===g.id&&!p.used).length})).filter(o=>o.left).sort((a,b)=>b.left-a.left).map(({g,left})=>{const hid=R.hidden[n+'|'+g.id];return `<div class="tw-ly${hid?' off':''}"><span class="tw-sw" style="background:${esc(g.color)}"></span><span class="tw-lyn" title="${esc(g.layer||'')}">${esc(g.layer||((g.dash?'Dashed ':'Solid ')+g.width+' pt'))}</span><span class="dim small">${fmtN(left,0)}</span><button class="tw-ic" data-act="tw-lyhide" data-v="${g.id}" title="${hid?'Show':'Hide'} on the plan">${hid?'○':'◉'}</button>${ro?'':`<button class="btn xs" data-act="tw-lysend" data-v="${g.id}">Add</button>`}</div>`}).join('')}</div>`}</div>`}
   else if(R.tool==='scale'){const cur=sh&&sh.bar?Math.round(sh.bar*72*100)/100:null;card=`<div class="tw-card"><b>Scale for sheet ${n}</b>${sh&&sh.scaled?`<div class="small dim">Now ${esc(twScaleText(sh))}</div>`:''}
@@ -8785,15 +8794,15 @@ function twItemCard(){const R=twR();const it=S.tw.items.find(x=>x.id===R.selItem
     ${it.t==='line'&&s&&s.kind==='util'&&!ro?`<div class="adders"><button class="btn sm" data-act="tw-topipe" data-id="${it.id}">Make it a pipe run</button><span class="small dim">ends become structures</span></div>`:''}
     ${it.t==='line'&&it.pts.length>2&&!ro?`<div class="adders"><button class="btn sm" data-act="tw-toarea" data-id="${it.id}">Make it an area</button><span class="small dim">closes the outline</span></div>`:''}
     ${it.t==='area'&&s&&s.kind==='sub'?`<div class="tw-sec"><label class="f">Section type<select class="field sm" data-twsec="${it.id}"${ro?' disabled':''}><option value="">—</option>${(s.types||[]).map(t=>`<option value="${t.id}"${it.sec===t.id?' selected':''}>${esc(t.name)} (${+t.depth>0?t.depth+'″':'no depth'})</option>`).join('')}</select></label></div>`:''}
-    ${(it.t==='line'||it.t==='area')&&s&&s.kind==='take'&&(s.ct||[]).length?`<div class="tw-sec"><label class="f">Type<select class="field sm" data-twcyit="${it.id}"${ro?' disabled':''}><option value="">—</option>${s.ct.filter(t=>t.form===(it.t==='area'?'area':'line')).map(t=>`<option value="${t.id}"${it.ct===t.id?' selected':''}>${esc(t.name||'unnamed')}</option>`).join('')}</select></label></div>`:''}
+    ${['line','area','count'].includes(it.t)&&s&&s.kind!=='sub'&&s.kind!=='elev'?(()=>{const {o,more}=twAsOpts(it);const cur=o.find(x=>x.on);return `<div class="tw-sec"><label class="f">Item<select class="field sm" data-twas="${it.id}"${ro?' disabled':''}>${cur?'':'<option value="">— none —</option>'}${o.map(x=>`<option value="${esc(x.v)}"${x.on?' selected':''}>${esc(x.n)}</option>`).join('')}${more.length?`<optgroup label="More items">${more.map(x=>`<option value="${esc(x.v)}">${esc(x.n)}</option>`).join('')}</optgroup>`:''}${cur?'<option value="none">— no item type —</option>':''}</select></label></div>`})():''}
     ${it.t==='area'?`<div class="tw-sec"><label class="f">Section depth <span class="small dim">in</span><input class="field sm num" data-twdepth="${it.id}" id="twd-${it.id}" value="${+it.depth>0?it.depth:''}" placeholder="${twType(it)&&+twType(it).depth>0?twType(it).depth+' (type)':s&&+s.depth>0?s.depth+' (surface)':'e.g. 8'}" inputmode="decimal"${ro?' disabled':''}></label>
       ${!(+it.depth>0)&&(twType(it)&&+twType(it).depth>0||s&&+s.depth>0)?`<div class="small dim">Uses ${esc(twType(it)&&+twType(it).depth>0?twType(it).name:s.name)}’s ${twType(it)&&+twType(it).depth>0?twType(it).depth:s.depth}″. Type a depth to override it for this area.</div>`:''}
       ${+it.depth>0?`<label class="f">Lowers<select class="field sm" data-twon="${it.id}"${ro?' disabled':''}>${S.tw.surfaces.filter(x=>x.kind==='elev').map(x=>`<option value="${x.id}"${it.on===x.id?' selected':''}>${esc(x.name)}</option>`).join('')}</select></label><div class="small dim">${fmtN(twArea(it.pts)*it.depth/12/27,1)} CY of section. Cut / fill runs to this depth below ${esc((twSurf(it.on)||{}).name||'')} inside the area.</div>`:s&&(+s.depth>0||s.kind==='sub')?'':'<div class="small dim">Give it a depth (or give its surface one in Cut / fill → Sections) to make it a paving or pad section: cut / fill then runs to subgrade inside it.</div>'}</div>`:''}
     ${ro?'':`<div class="adders"><select class="field sm" data-twmove="${it.id}"><option value="">Move to…</option>${S.tw.surfaces.filter(x=>x.id!==it.sid&&(x.kind==='elev')===(s&&s.kind==='elev')).map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="tw-del" data-id="${it.id}">Delete</button></div>`}</div>`}
 function twPanels(){if(S.view!=='tw'||!S.tw)return;const R=twR();const set=(id,h,doc)=>{const e=(doc||document).getElementById(id);if(e&&e._h!==h){e.innerHTML=h;e._h=h}};
-  set('tw-side',twSideHtml());set('tw-tbar',twToolbarHtml());set('tw-mhud',twEditCard()+twCfCard()+twCheckCard()+(R.tool==='edit'?'':twItemCard())+(R.ask&&R.lastPane==='model'?twAskHtml():''));const pd=R.pop&&!R.pop.closed?R.pop.document:document;set('tw-phud',twPlanSideHtml(),pd);
+  const fq=document.activeElement&&document.activeElement.id==='tw-palq'?[document.activeElement.selectionStart,document.activeElement.selectionEnd]:null;set('tw-side',twSideHtml());if(fq){const q=document.getElementById('tw-palq');if(q&&document.activeElement!==q){q.focus();try{q.setSelectionRange(fq[0],fq[1])}catch(e){}}}set('tw-tbar',twToolbarHtml());set('tw-mhud',twStartCard()+twEditCard()+twCfCard()+twCheckCard()+(R.tool==='edit'?'':twItemCard())+(R.ask&&R.lastPane==='model'?twAskHtml():''));const pd=R.pop&&!R.pop.closed?R.pop.document:document;set('tw-phud',twPlanSideHtml(),pd);
   const ld=$('#tw-load');if(ld)ld.textContent=R.loading||'';const pl=pd.getElementById('tw-pload');if(pl)pl.textContent=R.loading||(R.vecBusy?'Reading lines…':'');
-  const hint=(TW_TOOLS.find(t=>t[0]===R.tool)||[])[4]||'';[document.getElementById('tw-mhint'),pd.getElementById('tw-phint')].forEach(h=>{if(h&&!R.hover)h.textContent=hint});
+  const hint=twPalHint()||(TW_TOOLS.find(t=>t[0]===R.tool)||[])[4]||'';[document.getElementById('tw-mhint'),pd.getElementById('tw-phint')].forEach(h=>{if(h&&!R.hover)h.textContent=hint});
   twProfPanel();twStatus();const a=twAskDoc().getElementById('tw-askv');if(a&&a.ownerDocument.activeElement!==a&&R.ask&&!R.ask._f){R.ask._f=1;setTimeout(()=>{a.focus();a.select()},0)}
   setTimeout(()=>{const t=document.querySelector('[data-twthumb]:not([src])');if(t&&R.pdf)twThumb(+t.dataset.twthumb)},50)}
 
@@ -8922,7 +8931,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
 /* ---------- cut / fill between two elevation surfaces ---------- */
 // an area's section: its own depth if set, otherwise its surface's; it lowers the chosen elevation surface (default: the cut / fill “To”)
 const twType=it=>{const s=twSurf(it.sid);return s&&s.kind==='sub'?(s.types||[]).find(t=>t.id===it.sec)||null:null};
-function twSecOf(it){if(it.t!=='area')return null;const s=twSurf(it.sid);const ty=twType(it);const d=+it.depth>0?+it.depth:ty&&+ty.depth>0?+ty.depth:s&&+s.depth>0?+s.depth:0;if(!d)return null;const C=S.tw.cf||{};const on=it.on||(s&&s.on)||C.b||((S.tw.surfaces.find(x=>x.kind==='elev'&&x.id!==C.a)||{}).id);return {d,on}}
+function twSecOf(it){if(it.t!=='area')return null;const s=twSurf(it.sid);const ty=twType(it);const cty=twCtOf(it);const d=+it.depth>0?+it.depth:ty&&+ty.depth>0?+ty.depth:cty&&+cty.depth>0?+cty.depth:s&&+s.depth>0?+s.depth:0;if(!d)return null;const C=S.tw.cf||{};const on=it.on||(s&&s.on)||C.b||((S.tw.surfaces.find(x=>x.kind==='elev'&&x.id!==C.a)||{}).id);return {d,on}}
 let TW_REV=0;const twRev=()=>TW_REV;
 // a surface's TIN, built from its contours (sampled along each line) and spot elevations; long thin triangles that
 // bridge across gaps between separate areas are dropped so they don't invent ground
@@ -9012,7 +9021,7 @@ function twQty(){const rows=[];const add=(group,name,qty,unit,key,note,x)=>{if(!
   const SS=X&&X.secs2;if(SS&&SS.rows)SS.rows.forEach(r=>{const g=`Sections (${SS.a} − ${SS.b})`;add(g,`${r.in}″ section`,r.sf,'SF','twss|'+r.in+'|sf','',{cls:'Paving'});add(g,`${r.in}″ section`,r.cy,'CY','twss|'+r.in+'|cy','area × depth',{cls:'Paving'})});
   S.tw.surfaces.forEach(s=>{if(s.kind==='elev')return;const xs=S.tw.items.filter(i=>i.sid===s.id);const k=u=>'tw|'+normH(s.name)+'|'+u;if(s.kind==='util')twPipeQty(s,add);
     if(s.kind==='sub'){(s.types||[]).forEach(ty=>{const ar=xs.filter(i=>i.t==='area'&&i.sec===ty.id);add(s.name,ty.name,ar.reduce((a,i)=>a+twArea(i.pts),0),'SF','tw|'+normH(ty.name)+'|sf');add(s.name,ty.name+' section',ar.filter(i=>twSecOf(i)).reduce((a,i)=>a+twArea(i.pts)*twSecOf(i).d/12/27,0),'CY','tw|'+normH(ty.name)+'|seccy','area × depth')});return}
-    if(s.kind==='take')twCtQty(s,add);add(s.name,s.name,xs.filter(i=>i.t==='line'&&!twCtOf(i)).reduce((a,i)=>a+twLen(i.pts),0),'LF',k('lf'));add(s.name,s.name,xs.filter(i=>i.t==='area'&&!twCtOf(i)).reduce((a,i)=>a+twArea(i.pts),0),'SF',k('sf'));add(s.name,s.name,xs.filter(i=>i.t==='count').length,'EA',k('ea'));
+    if(s.kind==='take')twCtQty(s,add);add(s.name,s.name,xs.filter(i=>i.t==='line'&&!twCtOf(i)).reduce((a,i)=>a+twLen(i.pts),0),'LF',k('lf'));add(s.name,s.name,xs.filter(i=>i.t==='area'&&!twCtOf(i)).reduce((a,i)=>a+twArea(i.pts),0),'SF',k('sf'));add(s.name,s.name,xs.filter(i=>i.t==='count'&&!twCtOf(i)).length,'EA',k('ea'));
     const sec=xs.filter(i=>twSecOf(i));if(sec.length)add(s.name,s.name+' section',sec.reduce((a,i)=>a+twArea(i.pts)*twSecOf(i).d/12/27,0),'CY',k('seccy'),'area × section depth')});
   return rows}
 function twQtyModal(){const x=M;const rows=twQty();const b=S.tw.bidId&&byId(S.bids,S.tw.bidId);const on=rows.filter(r=>!x.off.has(r.key));const groups=[...new Set(rows.map(r=>r.group))];
@@ -9483,37 +9492,38 @@ const TW_CTPL=[
   {name:'24" Curb & Gutter',form:'line',w:24,sec:1.58},{name:'30" Curb & Gutter',form:'line',w:30,sec:1.92},{name:'18" Curb & Gutter',form:'line',w:18,sec:1.25},
   {name:'6" Header Curb',form:'line',w:6,sec:0.75},{name:'24" Valley Gutter',form:'line',w:24,sec:1.33},
   {name:'4" Concrete Sidewalk',form:'area',th:4},{name:'6" Concrete Sidewalk',form:'area',th:6},{name:'8" Heavy Duty Concrete',form:'area',th:8},
-  {name:'Other line item',form:'line',w:'',sec:''},{name:'Other area item',form:'area',th:''}];
+  {name:'Other line item',form:'line',w:'',sec:''},{name:'Other area item',form:'area',th:''},{name:'Other count item',form:'count'}];
 const TW_CTCOL=['#7f8c8d','#c0392b','#2980b9','#8e44ad','#16a085','#d35400','#2c3e50','#b8860b'];
 const twCtOf=it=>{const s=twSurf(it.sid);return s&&s.kind==='take'&&it.ct?(s.ct||[]).find(t=>t.id===it.ct)||null:null};
 const twCtActive=s=>{const ts=s.ct||[];return ts.find(t=>t.id===s.act)||null};
 // what a type's items add up to
 function twCtSum(s,ty){const xs=S.tw.items.filter(i=>i.sid===s.id&&i.ct===ty.id);
   if(ty.form==='line'){const L=xs.filter(i=>i.t==='line').reduce((a,i)=>a+twLen(i.pts),0);return {n:xs.length,q:L,u:'LF',conc:+ty.sec>0?L*ty.sec/27:0,base:+ty.base>0&&+ty.w>0?L*(ty.w/12)*(ty.base/12)/27:0}}
+  if(ty.form==='count'){const c=xs.filter(i=>i.t==='count').length;return {n:c,q:c,u:'EA',conc:0,base:0}}
   const A=xs.filter(i=>i.t==='area').reduce((a,i)=>a+twArea(i.pts),0);return {n:xs.length,q:A,u:'SF',conc:+ty.th>0?A*ty.th/12/27:0,base:+ty.base>0?A*ty.base/12/27:0}}
 function twCtPanel(){const s=twActive();if(!s||s.kind!=='take')return '';const ro=twRo();const act=twCtActive(s);const ts=s.ct||[];const dis=ro?' disabled':'';
   const f=(k,ty,v,ph,w)=>`<input class="field xs num" data-twcy="${k}|${ty.id}" value="${esc(v??'')}" placeholder="${ph}" inputmode="decimal" style="width:${w||46}px"${dis}>`;
   return `<div class="tw-h">${esc(s.name)}: item types</div><div class="tw-types">
     ${ts.map(ty=>{const m=twCtSum(s,ty);return `<div class="tw-type tw-cty${act&&act.id===ty.id?' on':''}" data-act="tw-cypick" data-id="${ty.id}" title="Click to draw this type">
       <input type="color" class="tw-tsw" data-twcy="color|${ty.id}" value="${esc(ty.color)}"${dis}><input class="field sm tw-tname" data-twcy="name|${ty.id}" value="${esc(ty.name)}" placeholder="Name"${dis}>${ro?'<span></span>':`<button class="x" data-act="tw-cydel" data-id="${ty.id}" aria-label="Remove" title="${m.n?'Remove (its items lose their type)':'Remove'}">×</button>`}
-      <span></span><div class="tw-tsub tw-cyf">${ty.form==='line'?`<label>W ${f('w',ty,ty.w,'in',38)}″</label><label>Conc ${f('sec',ty,ty.sec,'SF')}<span title="square feet of concrete per foot of curb">SF/LF</span></label>`:`<label>Thick ${f('th',ty,ty.th,'in',38)}″</label>`}<label>Base ${f('base',ty,ty.base,'in',36)}″</label></div>
-      <span></span><small class="tw-cym">${m.n?`${fmtN(m.q,0)} ${m.u}${m.conc?` · ${fmtN(m.conc,1)} CY conc`:''}${m.base?` · ${fmtN(m.base,1)} CY base`:''}`:ty.form==='line'?'line type · no items yet':'area type · no items yet'}</small></div>`}).join('')||'<p class="small dim" style="margin:2px 0">Give lines and areas a type to get LF / SF and concrete and stone by type: curb & gutter, header curb, valley gutter, sidewalk…</p>'}
-    ${ro?'':`<select class="field sm" data-twcyadd><option value="">+ Add a type…</option>${TW_CTPL.map((t,i)=>`<option value="${i}">${esc(t.name)}${t.form==='line'?` (${t.sec?t.sec+' SF/LF':'line'})`:` (${t.th?'area, '+t.th+'″':'area'})`}</option>`).join('')}</select>`}
-    ${act?`<p class="small dim" style="margin:2px 0">Drawing: <b>${esc(act.name||'unnamed')}</b> with ${act.form==='line'?'Draw or Pick':'Area or Pick'}. Click a type to switch. Concrete sections are typical; check them against the detail sheet.</p>`:ts.length?'<p class="small dim" style="margin:2px 0">Click a type to draw it. Items drawn with no type selected stay plain lines and areas.</p>':''}</div>`}
+      <span></span><div class="tw-tsub tw-cyf">${ty.form==='count'?'<span class="small dim">counted, EA</span>':`${ty.form==='line'?`<label>W ${f('w',ty,ty.w,'in',38)}″</label><label>Conc ${f('sec',ty,ty.sec,'SF')}<span title="square feet of concrete per foot of curb">SF/LF</span></label>`:`<label title="Concrete thickness (concrete CY)">Conc ${f('th',ty,ty.th,'in',38)}″</label>`}<label>Base ${f('base',ty,ty.base,'in',36)}″</label>${ty.form==='area'?`<label title="Total section depth: cut / fill runs to this depth below the finished surface inside these areas">Section ${f('depth',ty,ty.depth,'in',38)}″</label>`:''}`}</div>
+      <span></span><small class="tw-cym">${m.n?`${fmtN(m.q,0)} ${m.u}${m.conc?` · ${fmtN(m.conc,1)} CY conc`:''}${m.base?` · ${fmtN(m.base,1)} CY base`:''}`:ty.form==='line'?'line type · no items yet':ty.form==='count'?'count · none yet':'area type · no items yet'}</small></div>`}).join('')||'<p class="small dim" style="margin:2px 0">Give lines and areas a type to get LF / SF and concrete and stone by type: curb & gutter, header curb, valley gutter, sidewalk…</p>'}
+    ${ro?'':`<select class="field sm" data-twcyadd><option value="">+ Add a type…</option>${TW_CTPL.map((t,i)=>`<option value="${i}">${esc(t.name)}${t.form==='line'?` (${t.sec?t.sec+' SF/LF':'line'})`:t.form==='count'?' (count)':` (${t.th?'area, '+t.th+'″':'area'})`}</option>`).join('')}</select>`}
+    ${act?`<p class="small dim" style="margin:2px 0">Drawing: <b>${esc(act.name||'unnamed')}</b> with ${act.form==='line'?'Line or Pick':act.form==='count'?'Count or Pick':'Area or Pick'}. Click a type to switch. Concrete sections are typical; check them against the detail sheet.</p>`:ts.length?'<p class="small dim" style="margin:2px 0">Click a type to draw it. Items drawn with no type selected stay plain lines and areas.</p>':''}</div>`}
 // stamp the active type on a new item when it fits (a line type on a line, an area type on an area)
-function twCtStamp(s,it){if(!s||s.kind!=='take')return;const ty=twCtActive(s);if(ty&&ty.form===(it.t==='area'?'area':'line'))it.ct=ty.id}
+function twCtStamp(s,it){if(!s||s.kind!=='take')return;const ty=twCtActive(s);if(ty&&ty.form===(it.t==='area'?'area':it.t==='count'?'count':'line'))it.ct=ty.id}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!S.tw)return;const a=t.dataset.act;const s=twActive();if(!s||s.kind!=='take')return;
-  if(a==='tw-cypick'){if(e.target.closest('input,select')){if(s.act!==t.dataset.id){s.act=t.dataset.id;twTouchUi();document.querySelectorAll('.tw-cty').forEach(r=>r.classList.toggle('on',r.dataset.id===s.act))}return}s.act=s.act===t.dataset.id?null:t.dataset.id;twTouchUi();twPanels();const ty=twCtActive(s);if(ty&&!['pick',ty.form==='line'?'draw':'area'].includes(twR().tool))twTool(ty.form==='line'?'draw':'area')}
+  if(a==='tw-cypick'){if(e.target.closest('input,select')){if(s.act!==t.dataset.id){s.act=t.dataset.id;twTouchUi();document.querySelectorAll('.tw-cty').forEach(r=>r.classList.toggle('on',r.dataset.id===s.act))}return}s.act=s.act===t.dataset.id?null:t.dataset.id;twTouchUi();twPanels();const ty=twCtActive(s);const tl=ty&&(ty.form==='line'?'draw':ty.form==='count'?'count':'area');if(ty&&!['pick',tl].includes(twR().tool))twTool(tl)}
   else if(a==='tw-cydel'){twSnap();const id=t.dataset.id;s.ct=(s.ct||[]).filter(x=>x.id!==id);S.tw.items.forEach(i=>{if(i.sid===s.id&&i.ct===id)delete i.ct});if(s.act===id)s.act=null;twTouch();twPanels();twDraw()}});
 document.addEventListener('change',e=>{const t=e.target;if(!S.tw)return;
   if(t.dataset.twcyit!=null){const it=S.tw.items.find(x=>x.id===t.dataset.twcyit);if(it){twSnap();if(t.value)it.ct=t.value;else delete it.ct;twTouch();twPanels();twDraw()}return}
   const s=twActive();if(!s||s.kind!=='take')return;
-  if(t.dataset.twcyadd!=null){const p=TW_CTPL[+t.value];if(!p)return;twSnap();s.ct=s.ct||[];const ty={id:newId(),...p,name:/^Other/.test(p.name)?'':p.name,base:'',color:TW_CTCOL[s.ct.length%TW_CTCOL.length]};s.ct.push(ty);s.act=ty.id;twTouch();twPanels();twTool(ty.form==='line'?'draw':'area');if(!ty.name)setTimeout(()=>{const i=document.querySelector(`[data-twcy="name|${ty.id}"]`);if(i)i.focus()},0);return}
+  if(t.dataset.twcyadd!=null){const p=TW_CTPL[+t.value];if(!p)return;twSnap();s.ct=s.ct||[];const ty={id:newId(),...p,name:/^Other/.test(p.name)?'':p.name,base:'',color:TW_CTCOL[s.ct.length%TW_CTCOL.length]};s.ct.push(ty);s.act=ty.id;twTouch();twPanels();twTool(ty.form==='line'?'draw':ty.form==='count'?'count':'area');if(!ty.name)setTimeout(()=>{const i=document.querySelector(`[data-twcy="name|${ty.id}"]`);if(i)i.focus()},0);return}
   if(t.dataset.twcy){const [k,id]=t.dataset.twcy.split('|');const ty=(s.ct||[]).find(x=>x.id===id);if(!ty)return;if(k!=='color')twSnap();if(k==='name')ty.name=t.value.trim();else if(k==='color')ty.color=t.value;else{const v=num(String(t.value).trim());ty[k]=v>0?v:''}twTouch();setTimeout(()=>{twPanels();twDraw()},0)}});
 // a typed line drawn as a band as wide as the curb
 function twCtBand(ctx,it,f,ty){if(!(+ty.w>0))return;const a=f([0,0]),b=f([1,0]);const ppf=Math.hypot(b[0]-a[0],b[1]-a[1]);const wpx=ty.w/12*ppf;if(wpx<2.5)return;ctx.save();ctx.setLineDash([]);ctx.globalAlpha=0.3;ctx.strokeStyle=ty.color;ctx.lineWidth=wpx;ctx.lineJoin='round';ctx.lineCap='butt';twPath(ctx,it.pts,f,false);ctx.stroke();ctx.restore()}
 function twCtQty(s,add){const ts=s.ct||[];ts.forEach(ty=>{const m=twCtSum(s,ty);if(!m.n)return;const k='twc|'+normH(ty.name||ty.id);const nm=ty.name||'Unnamed type';
-  add(s.name,nm,m.q,m.u,k+'|'+m.u.toLowerCase(),'',{cls:'Site Concrete',fz:1});add(s.name,nm+' concrete',m.conc,'CY',k+'|conc',ty.form==='line'?`${ty.sec} SF/LF`:`${ty.th}″ thick`,{cls:'Site Concrete'});add(s.name,nm+' stone base',m.base,'CY',k+'|base',`${ty.base}″${ty.form==='line'?` × ${ty.w}″ wide`:''}`,{cls:'Site Concrete'})})}
+  add(s.name,nm,m.q,m.u,k+'|'+m.u.toLowerCase(),'',{cls:'Site Concrete',fz:1});if(ty.sy&&m.u==='SF')add(s.name,nm,m.q/9,'SY',k+'|sy','',{cls:'Site Concrete'});if(+ty.depth>0&&m.u==='SF')add(s.name,nm+' section',m.q*ty.depth/12/27,'CY',k+'|sec',`${ty.depth}″ deep`,{cls:'Site Concrete'});add(s.name,nm+' concrete',m.conc,'CY',k+'|conc',ty.form==='line'?`${ty.sec} SF/LF`:`${ty.th}″ thick`,{cls:'Site Concrete'});add(s.name,nm+' stone base',m.base,'CY',k+'|base',`${ty.base}″${ty.form==='line'?` × ${ty.w}″ wide`:''}`,{cls:'Site Concrete'})})}
 
 /* ---------- contour check: contours of different elevations that cross, and elevation jumps (a likely typo) ----------
    Neighbors are found by looking straight out from each contour (at a quarter, half and three quarters along it) to the
@@ -9983,3 +9993,101 @@ function twSurfSections(me){const el=S.tw.surfaces.filter(s=>s.kind==='elev');co
   if(!n)return null;const A=cell*cell;const peaks=[...bins.entries()].filter(([d])=>d>=1).sort((a,b)=>b[1]-a[1]);const rows=[];
   peaks.forEach(([d,c])=>{if(c<n*0.002)return;if(rows.some(r=>Math.abs(r.d-d)<=1))return;let sf=0,cy=0;bins.forEach((cc,dd)=>{if(Math.abs(dd-d)<=1){sf+=cc*A;cy+=cc*A*dd/12/27}});rows.push({d,in:+d.toFixed(1),sf:+sf.toFixed(0),cy:+cy.toFixed(1)})});
   rows.sort((a,b)=>a.d-b.d);void span;return {a:fin.name,b:sub.name,cell:+cell.toFixed(2),rows}}
+
+/* ---------- the item palette: pick what you're measuring and trace it ----------
+   Each item knows how it's measured (line, area, count, contour, spot, pipe) and where it's filed. Picking one arms the right
+   tool on the right surface, making the surface and the item type the first time. Items of one kind share a surface
+   (Concrete, Paving, Erosion control…) unless "Everything on one surface" is on; grading and pipes always keep their own. */
+const TW_PG=[{g:'grading',n:'Grading'},{g:'paving',n:'Paving & pads',surf:'Paving'},{g:'conc',n:'Concrete',surf:'Concrete'},{g:'util',n:'Pipe'},
+  {g:'ec',n:'Erosion control',surf:'Erosion control'},{g:'site',n:'Site',surf:'Site'},{g:'demo',n:'Demolition',surf:'Demolition'},{g:'mine',n:'My items',surf:'Takeoff'}];
+const TW_PAL=[
+  {k:'eg-c',g:'grading',n:'Existing contour',how:'contour',el:'ex'},{k:'fg-c',g:'grading',n:'Proposed contour',how:'contour',el:'fg'},
+  {k:'eg-s',g:'grading',n:'Existing spot',how:'spot',el:'ex'},{k:'fg-s',g:'grading',n:'Proposed spot',how:'spot',el:'fg'},
+  {k:'hd-asp',g:'paving',n:'Heavy duty asphalt',how:'area',sy:1},{k:'sd-asp',g:'paving',n:'Standard duty asphalt',how:'area',sy:1},
+  {k:'hd-conc',g:'paving',n:'Heavy duty concrete',how:'area',th:8,sy:1},{k:'pad',g:'paving',n:'Building pad',how:'area'},
+  {k:'gravel',g:'paving',n:'Gravel / stone',how:'area',sy:1},{k:'mill',g:'paving',n:'Mill & overlay',how:'area',sy:1},
+  {k:'cg24',g:'conc',n:'24" Curb & gutter',how:'line',w:24,sec:1.58},{k:'cg30',g:'conc',n:'30" Curb & gutter',how:'line',w:30,sec:1.92},
+  {k:'hc6',g:'conc',n:'6" Header curb',how:'line',w:6,sec:0.75},{k:'vg24',g:'conc',n:'24" Valley gutter',how:'line',w:24,sec:1.33},
+  {k:'sw4',g:'conc',n:'4" Sidewalk',how:'area',th:4,sy:1},{k:'sw6',g:'conc',n:'6" Sidewalk',how:'area',th:6,sy:1},
+  {k:'ramp',g:'conc',n:'Curb ramp',how:'count'},{k:'dpad',g:'conc',n:'Dumpster pad',how:'area',th:8},
+  {k:'storm',g:'util',n:'Storm pipe',how:'pipe',sys:'Storm Drain',surf:'Storm'},{k:'san',g:'util',n:'Sanitary sewer',how:'pipe',sys:'Sanitary Sewer',surf:'Sanitary'},
+  {k:'water',g:'util',n:'Water line',how:'pipe',sys:'Water',surf:'Water'},
+  {k:'silt',g:'ec',n:'Silt fence',how:'line'},{k:'tpf',g:'ec',n:'Tree protection fence',how:'line'},{k:'inprot',g:'ec',n:'Inlet protection',how:'count'},
+  {k:'cexit',g:'ec',n:'Construction exit',how:'area'},{k:'cdam',g:'ec',n:'Check dam',how:'count'},{k:'riprap',g:'ec',n:'Rip rap',how:'area',sy:1},
+  {k:'fence',g:'site',n:'Fence',how:'line'},{k:'wall',g:'site',n:'Retaining wall',how:'line'},{k:'stripe',g:'site',n:'Striping',how:'line'},
+  {k:'stall',g:'site',n:'Parking stalls',how:'count'},{k:'sign',g:'site',n:'Signs',how:'count'},{k:'bollard',g:'site',n:'Bollards',how:'count'},
+  {k:'wstop',g:'site',n:'Wheel stops',how:'count'},{k:'light',g:'site',n:'Light poles',how:'count'},
+  {k:'d-asp',g:'demo',n:'Asphalt removal',how:'area',sy:1},{k:'d-conc',g:'demo',n:'Concrete removal',how:'area',sy:1},{k:'d-curb',g:'demo',n:'Curb removal',how:'line'},
+  {k:'d-fence',g:'demo',n:'Fence removal',how:'line'},{k:'d-tree',g:'demo',n:'Tree removal',how:'count'},{k:'d-bldg',g:'demo',n:'Building demo',how:'area'}];
+const TW_HOW={line:['─','Line','LF','draw'],area:['▭','Area','SF','area'],count:['✚','Count','EA','count'],contour:['〰','Contour','','draw'],spot:['•','Spot','','count'],pipe:['⦿','Pipe','LF','pipe']};
+const TW_KDEF={take:'Takeoff',util:'Storm',elev:'Design',sub:'Paving'};
+function twPalAll(){return TW_PAL.concat((S.tw.lib||[]).map(x=>({...x,g:'mine'})))}
+function twMkSurf(name,kind){const used=new Set(S.tw.surfaces.map(s=>s.color));const color=TW_COLORS.find(c=>!used.has(c))||TW_COLORS[S.tw.surfaces.length%TW_COLORS.length];
+  const s={id:newId(),name,kind,color,vis:true,lock:false};if(kind==='sub'){s.types=[];s.atype=null}S.tw.surfaces.push(s);return s}
+const twElevOf=w=>{const el=S.tw.surfaces.filter(s=>s.kind==='elev');return w==='ex'?el.find(s=>/exist|\beg\b|\bog\b|topo|survey/i.test(s.name)):el.find(s=>/design|prop|\bfg\b|final|finish/i.test(s.name))};
+// where an item goes (made if missing, unless asked only to look)
+function twPalDest(p,look){if(p.how==='contour'||p.how==='spot'){let s=twElevOf(p.el);if(!s&&!look)s=twMkSurf(p.el==='ex'?'Existing':'Design','elev');return s}
+  if(p.how==='pipe'){let s=S.tw.surfaces.find(x=>x.kind==='util'&&twDefSys(x)===p.sys);if(!s&&!look)s=twMkSurf(p.surf,'util');return s}
+  const one=S.tw.one&&twSurf(S.tw.one);if(one&&one.kind==='take')return one;const G=TW_PG.find(g=>g.g===p.g)||{};const nm=G.surf||'Takeoff';
+  let s=S.tw.surfaces.find(x=>x.kind==='take'&&x.name.toLowerCase()===nm.toLowerCase());if(!s&&!look)s=twMkSurf(nm,'take');return s}
+const twPalForm=p=>p.how==='area'?'area':p.how==='count'?'count':'line';
+const twPalTypeIn=(s,p)=>(s.ct||[]).find(t=>t.pk===p.k)||(s.ct||[]).find(t=>(t.name||'').toLowerCase()===p.n.toLowerCase()&&t.form===twPalForm(p));
+// what's been measured so far
+function twPalSum(p){if(p.how==='contour'||p.how==='spot'){const s=twElevOf(p.el);if(!s)return null;const n=S.tw.items.filter(i=>i.sid===s.id&&i.t===(p.how==='spot'?'spot':'contour')).length;return n?`${fmtN(n,0)}`:null}
+  if(p.how==='pipe'){const L=S.tw.items.filter(i=>i.t==='pipe'&&(i.sys===p.sys||!i.sys&&twDefSys(twSurf(i.sid)||{name:''})===p.sys)).reduce((a,i)=>a+twLen(i.pts),0);return L?`${fmtN(L,0)} LF`:null}
+  let q=0,u='';S.tw.surfaces.filter(s=>s.kind==='take').forEach(s=>{const ty=twPalTypeIn(s,p);if(!ty)return;const m=twCtSum(s,ty);if(m.n){q+=m.q;u=m.u}});return q?`${fmtN(q,0)} ${u}`:null}
+function twPalArmed(){const R=twR();const A=R.pal;if(!A)return null;const p=twPalAll().find(x=>x.k===A.k);const s=twSurf(A.sid);if(!p||!s||S.tw.active!==s.id)return null;
+  if(A.tid&&s.act!==A.tid)return null;const tools=p.how==='pipe'?['pipe']:p.how==='spot'?['count']:p.how==='contour'?['draw','pick','sweep','edit']:[TW_HOW[p.how][3],'pick','edit'];if(!tools.includes(R.tool))return null;return {p,s}}
+function twPalType(s,p){let ty=twPalTypeIn(s,p);if(!ty){s.ct=s.ct||[];ty={id:newId(),name:p.n,form:twPalForm(p),w:p.w||'',sec:p.sec||'',th:p.th||'',base:'',depth:'',sy:p.sy?1:0,pk:p.k,color:TW_CTCOL[s.ct.length%TW_CTCOL.length]};s.ct.push(ty)}else if(!ty.pk)ty.pk=p.k;return ty}
+// what an item could be changed to: the item types in the job, then the rest of the list (same shape: line, area or count)
+function twAsOpts(it){const form=it.t==='area'?'area':it.t==='count'?'count':'line';const o=[];const seen=new Set();
+  S.tw.surfaces.filter(x=>x.kind==='take').forEach(x=>(x.ct||[]).filter(t=>t.form===form).forEach(t=>{o.push({v:'ct:'+x.id+'|'+t.id,n:`${t.name||'Unnamed'} (${x.name})`,on:it.sid===x.id&&it.ct===t.id});if(t.pk)seen.add(t.pk)}));
+  const more=twPalAll().filter(p=>['line','area','count'].includes(p.how)&&twPalForm(p)===form&&!seen.has(p.k)).map(p=>({v:'pk:'+p.k,n:p.n}));return {o,more}}
+document.addEventListener('change',e=>{const t=e.target;if(!S.tw||t.dataset.twas==null)return;const it=S.tw.items.find(x=>x.id===t.dataset.twas);const v=t.value;if(!it||!v)return;twSnap();
+  if(v==='none'){delete it.ct}else if(v.startsWith('ct:')){const [sid,tid]=v.slice(3).split('|');it.sid=sid;it.ct=tid}else{const p=twPalAll().find(x=>x.k===v.slice(3));if(!p)return;const d=twPalDest(p);const ty=twPalType(d,p);it.sid=d.id;it.ct=ty.id;d.vis=true}
+  twTouch();twPanels();twDraw()});
+function twPalUse(k,tool){const R=twR();if(twRo())return;const p=twPalAll().find(x=>x.k===k);if(!p)return;let s=twPalDest(p);if(s.lock){toast(`“${s.name}” is locked. Unlock it (🔓 under Surfaces) to add to it.`);return}
+  s.vis=true;S.tw.active=s.id;let tid=null;
+  if(s.kind==='take'){const ty=twPalType(s,p);s.act=ty.id;tid=ty.id}
+  R.pal={k,sid:s.id,tid};twTouch();twTool(tool||TW_HOW[p.how][3]);twPanels();twDraw()}
+function twPalHint(){const A=twPalArmed();if(!A)return '';const {p,s}=A;const R=twR();const on=` → ${s.name}`;
+  if(R.tool==='pick')return `${p.n}${on}: click its lines on the plan (Shift-click or Shift-drag for several, then Add). ${p.how==='count'?'Each symbol you click is counted.':p.how==='area'?'Each outline becomes an area.':''}`;
+  return `${p.n}${on}: `+{line:'click along it; Enter, double-click or right-click to finish.',area:'click around it; click the first point or press Enter to close it.',count:'click each one.',contour:'click along it; you’ll be asked its elevation.',spot:'click the spot; you’ll be asked its elevation.',pipe:'click each structure along the run; Enter finishes.'}[p.how]}
+function twPalHtml(){const R=twR();const ro=twRo();if(ro)return '';const A=twPalArmed();const q=(R.palQ||'').trim().toLowerCase();const open=twUiPrefs().palOpen||{};
+  const takes=S.tw.surfaces.filter(s=>s.kind==='take');const one=S.tw.one&&twSurf(S.tw.one);
+  const chip=p=>{const sum=twPalSum(p);const on=A&&A.p.k===p.k;return `<button class="tw-pc${on?' on':''}${sum?' used':''}" data-act="tw-pal" data-k="${esc(p.k)}" title="${esc(TW_HOW[p.how][1])}: ${esc(p.n)}"><i>${TW_HOW[p.how][0]}</i><span>${esc(p.n)}</span>${sum?`<small>${esc(sum)}</small>`:''}</button>`};
+  const all=twPalAll();const hit=p=>!q||p.n.toLowerCase().includes(q);
+  // types made by hand in the side panel show too, so everything in the job is one click away
+  const extra=[];takes.forEach(s=>(s.ct||[]).forEach(t=>{if(!t.pk||!all.some(p=>p.k===t.pk))extra.push({s,t})}));
+  const groups=TW_PG.map(G=>({G,ps:all.filter(p=>p.g===G.g&&hit(p))})).filter(x=>x.ps.length);
+  const gHtml=groups.map(({G,ps})=>{const used=ps.some(p=>twPalSum(p));const isOpen=q||(open[G.g]!=null?open[G.g]:(used||A&&A.p.g===G.g));
+    return `<div class="tw-pg${isOpen?' open':''}"><button class="tw-pgh" data-act="tw-palg" data-g="${G.g}"><span>${isOpen?'▾':'▸'}</span> ${esc(G.n)}${!isOpen&&used?' <i class="dot"></i>':''}${isOpen?'':`<b>${ps.length}</b>`}</button>${isOpen?`<div class="tw-pcs">${ps.map(chip).join('')}</div>`:''}</div>`}).join('');
+  const ex=extra.filter(o=>!q||(o.t.name||'').toLowerCase().includes(q));
+  const exHtml=ex.length?`<div class="tw-pg open"><div class="tw-pgh"><span>▾</span> Also in this job</div><div class="tw-pcs">${ex.map(({s,t})=>{const m=twCtSum(s,t);const on=S.tw.active===s.id&&s.act===t.id;return `<button class="tw-pc${on?' on':''}${m.n?' used':''}" data-act="tw-palct" data-sid="${s.id}" data-id="${t.id}"><i>${TW_HOW[t.form==='area'?'area':t.form==='count'?'count':'line'][0]}</i><span>${esc(t.name||'Unnamed')} <em class="dim">· ${esc(s.name)}</em></span>${m.n?`<small>${fmtN(m.q,0)} ${m.u}</small>`:''}</button>`}).join('')}</div></div>`:'';
+  const add=q&&!all.some(p=>p.n.toLowerCase()===q)?`<div class="tw-padd"><span class="small">Add “${esc(R.palQ.trim())}” as</span><button class="btn xs" data-act="tw-paladd" data-v="line">─ Line (LF)</button><button class="btn xs" data-act="tw-paladd" data-v="area">▭ Area (SF)</button><button class="btn xs" data-act="tw-paladd" data-v="count">✚ Count (EA)</button></div>`:'';
+  return `<div class="tw-h">Take off<span class="tw-hb"><select class="field xs" data-twone title="Where new lines, areas and counts go: each kind on its own surface (Concrete, Paving, Erosion control…), or everything on one surface. Grading and pipes always keep their own.">${[`<option value="">Own surfaces</option>`,...takes.map(s=>`<option value="${s.id}"${one&&one.id===s.id?' selected':''}>All on ${esc(s.name)}</option>`),`<option value="new">All on a new surface…</option>`].join('')}</select></span></div>
+    <input class="field sm" id="tw-palq" data-twpalq placeholder="Find or add an item (curb, silt fence…)" value="${esc(R.palQ||'')}" autocomplete="off">
+    ${A?`<div class="tw-parm"><b>${esc(A.p.n)}</b> <span class="dim">→ ${esc(A.s.name)}</span><span class="tw-parm-b">${A.p.how==='pipe'||A.p.how==='spot'?'':`<button class="btn xs${R.tool==='pick'?'':' on'}" data-act="tw-paltool" data-v="${TW_HOW[A.p.how][3]}">Trace</button><button class="btn xs${R.tool==='pick'?' on':''}" data-act="tw-paltool" data-v="pick" title="Click lines or symbols on the plan instead of tracing them">Pick from plan</button>`}<button class="btn xs" data-act="tw-paloff" title="Stop (Esc)">Done</button></span></div>`:''}
+    <div class="tw-pal">${gHtml}${exHtml}${!groups.length&&!ex.length&&!q?'':''}</div>${add}`}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!S.tw||S.view!=='tw')return;const a=t.dataset.act;const R=twR();
+  if(a==='tw-pal'){const A=twPalArmed();if(A&&A.p.k===t.dataset.k){R.pal=null;twTool('select');return}twPalUse(t.dataset.k);return}
+  if(a==='tw-paltool'){const A=twPalArmed();if(A)twPalUse(A.p.k,t.dataset.v);return}
+  if(a==='tw-paloff'){R.pal=null;R.cur=[];twTool('select');return}
+  if(a==='tw-palg'){const P=twUiPrefs();P.palOpen=P.palOpen||{};const el=t.closest('.tw-pg');P.palOpen[t.dataset.g]=!(el&&el.classList.contains('open'));try{localStorage.setItem(TW_UIKEY,JSON.stringify(P))}catch(err){}twPanels();return}
+  if(a==='tw-palct'){const s=twSurf(t.dataset.sid);if(!s)return;const ty=(s.ct||[]).find(x=>x.id===t.dataset.id);if(!ty)return;if(S.tw.active===s.id&&s.act===ty.id){s.act=null;twTool('select');return}S.tw.active=s.id;s.vis=true;s.act=ty.id;R.pal=null;twTouchUi();twTool(ty.form==='area'?'area':ty.form==='count'?'count':'draw');return}
+  if(a==='tw-paladd'){const nm=(R.palQ||'').trim();if(!nm)return;S.tw.lib=S.tw.lib||[];let p=S.tw.lib.find(x=>x.n.toLowerCase()===nm.toLowerCase());if(!p){p={k:'my-'+newId().slice(0,8),n:nm,how:t.dataset.v,sy:t.dataset.v==='area'?1:0};S.tw.lib.push(p)}R.palQ='';twPalUse(p.k);toast(`“${nm}” added to My items. It's saved with this takeoff.`);return}});
+document.addEventListener('input',e=>{const t=e.target;if(!S.tw||t.dataset.twpalq==null)return;twR().palQ=t.value;twPanels()});
+document.addEventListener('keydown',e=>{const t=e.target;if(!S.tw||!t||t.dataset==null||t.dataset.twpalq==null)return;const R=twR();
+  if(e.key==='Escape'){R.palQ='';t.blur();twPanels();return}
+  if(e.key==='Enter'){e.preventDefault();const q=(R.palQ||'').trim().toLowerCase();if(!q)return;const all=twPalAll();const p=all.find(x=>x.n.toLowerCase()===q)||all.find(x=>x.n.toLowerCase().includes(q));if(p){R.palQ='';twPalUse(p.k);t.blur()}}});
+document.addEventListener('change',e=>{const t=e.target;if(!S.tw||t.dataset.twone==null)return;const v=t.value;
+  if(v==='new'){const R=twR();R.ask={type:'surf1',def:'Takeoff',label:'Name the surface everything goes on'};twPanels();return}
+  S.tw.one=v||null;twTouch();twPanels();const s=twSurf(v);toast(s?`New lines, areas and counts go on ${s.name}. Grading and pipes keep their own surfaces.`:'Each kind of item goes on its own surface (Concrete, Paving, Erosion control…).')});
+// "Start here" for an empty takeoff
+function twStartCard(){if(twRo()||!S.tw)return '';const R=twR();if(S.tw.items.some(i=>!i.imp)||R.startHide)return '';const placed=Object.values(S.tw.sheets).some(s=>s&&s.aligned||s&&s.scaled);
+  const st=(ok,txt)=>`<li class="${ok?'ok':''}"><span>${ok?'✓':'•'}</span><div>${txt}</div></li>`;
+  return `<div class="tw-card tw-start"><div class="tw-ih"><b>Start here</b><button class="x" data-act="tw-starthide" aria-label="Hide">×</button></div><ol>
+    ${st(!!R.pdf,R.pdf?'Plans open.':'Open the plan PDF (top bar), and Import the CAD or LandXML if you have it.')}
+    ${st(placed,placed?'Sheets placed.':'Put the sheets to scale with the card on the plan: it reads the sheet’s scale bar, and lines sheets up to the CAD if you imported one. Or use Scale by hand.')}
+    ${st(false,'Pick what you’re measuring under <b>Take off</b> on the left, then trace it on the plan, or use <b>Pick from plan</b> to click its lines. Quantities add up as you go.')}</ol></div>`}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act="tw-starthide"]');if(t&&S.tw){twR().startHide=true;twPanels()}});

@@ -617,6 +617,20 @@ Needs `supabase/update-34-takeoffs.sql` to save (you can work without it, but no
 
 **Without a bid:** Calculators → **Takeoff workspace** → **+ New takeoff**. It works the same, is saved to your account (only you, and admins, can see it) and opens on any computer. Name it at the top. **Move to a bid…** makes it that bid's takeoff, if the bid doesn't have one yet; it then follows the bid's rules like any other.
 
+**Take off: pick what you're measuring.** The top of the left panel lists items by kind:
+- **Grading:** contours and spots, existing or proposed.
+- **Paving & pads, Concrete, Erosion control, Site, Demolition:** curb & gutter, sidewalk, silt fence, inlet protection, signs and the like.
+- **Pipe:** storm, sanitary and water.
+
+Click one and trace it on the plan, or switch to **Pick from plan** and click its lines or symbols. Each symbol you click is counted, and each outline becomes an area. You don't make surfaces or types first: the first time you use an item, it makes the surface it belongs on (Concrete, Paving, Erosion control…) and the item type, with typical widths and concrete per foot. You can change those in the item types under the surface. Totals show next to each item as you go. **Done** or Esc puts the item down.
+- Type in the search box to find an item. If it isn't listed, add it as a Line, Area or Count; it's kept under **My items** for that takeoff.
+- **Own surfaces / All on …** at the top decides where new lines, areas and counts go: each kind on its own surface, or everything on one surface. Grading and pipes always keep their own.
+- A selected line, area or count has an **Item** list on its card to change what it is, for example 24″ curb & gutter to header curb, or to move it to another surface.
+- Area items carry **Conc** and **Base** thickness for concrete and stone CY, plus a **Section** depth. With a Section depth, cut / fill runs to subgrade inside those areas. Paving items also report SY.
+- The tools never dead-end. If the active surface can't hold what you're drawing (an area on Existing, say), it goes on a surface that can, and the app says where.
+
+**Toolbar.** Move and Select; **Measure** (Line, Area, Count, Pipe, plus Sweep on an elevation surface); **Fix** (Pick from plan, Edit); **Sheets** (Scale, Point, Align). Contour interval and Check appear when an elevation surface is active. Keys: V move, S select, D line, A area, C count, U pipe, P pick, E edit, W sweep, and F5–F9 for line editing.
+
 **Layout.** Surfaces, alignment points and sheet thumbnails on the left; the model in the middle; the plan on the right. Drag the divider between them. **⧉ Plans in new window** moves the plan to its own window for a second monitor; both stay live, and closing that window brings the plan back. **Plan under model** shows the current sheet faintly under the model.
 
 **The plan file** stays on each computer (a 60+ MB PDF is too big to keep in the database). It's remembered in the browser, so it reopens by itself on the same computer. On another computer the takeoff asks for the file; everything done so far is already there.
