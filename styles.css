@@ -2071,3 +2071,31 @@ div.tw-pgh{cursor:default}
 :root[data-theme="dark"] .pl-ce.bid{background:#3a2e14;color:#f3dca5}
 @media (max-width:1000px){.pl-cols,.pl-calw{grid-template-columns:1fr}.pl-board{grid-template-columns:1fr}.pl-cd{min-height:70px}.pl-ce{font-size:10.5px}}
 .pl-add.sm{grid-template-columns:1fr}
+/* planner: steps */
+.pl-stc{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:0 8px;font:inherit;font-size:12px;color:var(--ink-2);cursor:pointer;line-height:18px}
+.pl-stc i{width:34px;height:5px;border-radius:3px;background:linear-gradient(90deg,var(--accent) var(--p),var(--line) var(--p))}
+.pl-stc.on{background:var(--accent-soft);border-color:var(--accent-2)}
+.pl-stc.add{border-style:dashed;color:var(--ink-3);opacity:0}
+.pl-row:hover .pl-stc.add,.pl-stc.add:focus{opacity:1}
+.pl-steps{margin:-2px 0 8px 40px;padding:4px 0 6px 12px;border-left:2px solid var(--accent-2);display:flex;flex-direction:column;gap:1px}
+.pl-step{display:flex;align-items:center;gap:8px;padding:3px 4px;border-radius:6px;font-size:13.5px}
+.pl-step:hover{background:var(--surface-2)}
+.pl-step.done .pl-stt{text-decoration:line-through;color:var(--ink-3)}
+.pl-ck.sm{width:18px;height:18px;font-size:11px;flex:none}
+.pl-step.done .pl-ck{background:var(--accent);border-color:var(--accent)}
+.pl-stt{flex:1;min-width:0;overflow-wrap:anywhere}
+.pl-std{font-size:11.5px;color:var(--ink-3);background:var(--surface-2);border-radius:6px;padding:0 6px;white-space:nowrap}
+.pl-std.late{color:#c0392b;font-weight:600}.pl-std.today{color:var(--accent);font-weight:600}
+.pl-sta{display:inline-flex;gap:0;opacity:0}
+.pl-step:hover .pl-sta{opacity:1}
+.pl-sta .x{font-size:13px;padding:0 4px}
+.pl-stin{margin-top:4px;max-width:520px}
+.pl-stall{font-size:13px;color:var(--accent);display:flex;align-items:center;gap:8px;margin-top:6px}
+.pl-kst{display:flex;align-items:center;gap:8px;margin-top:6px}
+.pl-bar{flex:1;height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.pl-bar i{display:block;height:100%;background:var(--accent)}
+.pl-ksl{margin-top:4px;color:var(--ink-2)}
+.pl-cli{gap:8px}
+.pl-cle{display:inline-flex;align-items:center;gap:4px;flex:none}
+.pl-cle .field.xs{width:auto}
+.pl-ce.step{border-left-style:dotted;font-style:italic}
