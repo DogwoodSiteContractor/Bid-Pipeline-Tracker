@@ -261,12 +261,12 @@ async function afterLogin(){
     await loadPms();
     await loadEstIndex();loadBidReqs();loadCOs();loadAcctInfo();
     if(channel)sb.removeChannel(channel);
-    presStart();
-    channel=sb.channel('bid-pipeline').on('postgres_changes',{event:'*',schema:'public'},p=>{if(TABLES.includes(p.table))debounceLoad(p.table);if(p.table==='estimates')estRemote(p)}).subscribe();
+    presStart();plLoad();
+    channel=sb.channel('bid-pipeline').on('postgres_changes',{event:'*',schema:'public'},p=>{if(p.table==='tasks'){plLoadSoon();return}if(TABLES.includes(p.table))debounceLoad(p.table);if(p.table==='estimates')estRemote(p)}).subscribe();
   }
   S.loading=false;schedule();
 }
-function resetData(){TABLES.forEach(t=>{if(t!=='settings')S[t]=[]});S.myFb=null;S.crew=null;S.trophy=null;if(S.fun){S.fun.loaded=false;S.fun.draft=null}S.est=null;S.estIndex=[];S.estsTab='list';S.settings={};S.profiles=[];S.profile=null;S.profileFor=null;S.view='dashboard';S.dash='precon';if(channel){sb.removeChannel(channel);channel=null}presStop()}
+function resetData(){TABLES.forEach(t=>{if(t!=='settings')S[t]=[]});S.myFb=null;S.crew=null;S.trophy=null;if(S.fun){S.fun.loaded=false;S.fun.draft=null}S.est=null;S.estIndex=[];S.estsTab='list';S.settings={};S.profiles=[];S.profile=null;S.profileFor=null;S.tasks=[];S.plLoaded=false;S.view='dashboard';S.dash='precon';if(channel){sb.removeChannel(channel);channel=null}presStop()}
 function errMsg(e){const m=(e&&(e.message||e.error_description))||'Something went wrong.';
   if(/row-level security|permission denied/i.test(m))return 'You don’t have permission to make that change.';
   if(/Failed to fetch|NetworkError/i.test(m))return 'Can’t reach the server. Check your connection and try again.';
@@ -288,7 +288,7 @@ function renderNow(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
-  const views={fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const views={plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
@@ -939,7 +939,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  const html={task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -6473,6 +6473,7 @@ function navGroups(){const g=[];
   if(can('contacts'))g.push(['clients','Contacts',['clients','vendors']]);
   if(can('calc'))g.push(['calc','Calculators',['calc',...(twFree?['tw']:[])]]);
   if(isAdmin())g.push(['team','Team',['team','estimators','teampm','teamoffice','access']]);
+  {const n=typeof plCount==='function'?plCount():0;g.push(['plan','Planner'+(n?` (${n})`:''),['plan']])}
   if(!tabOff('fun'))g.push(['fun','Break room',['fun']]);
   if(!tabOff('help'))g.push(['help','Help',['help']]);
   if(isDev()){const n=(S.feedback||[]).filter(f=>f.status==='New').length;g.push(['dev','Developer'+(n?` (${n})`:''),['dev']])}
@@ -6678,7 +6679,7 @@ const FB_STATUS=['New','Reviewing','Planned','In progress','Done','Won’t do','
 const FB_OPEN=new Set(['New','Reviewing','Planned','In progress']);
 const FB_ST_CLS={New:'hot',Reviewing:'warn',Planned:'',['In progress']:'warn',Done:'good'};
 const fbStatusDb=s=>s==='Won’t do'?"Won't do":s;const fbStatusUi=s=>s==="Won't do"?'Won’t do':s;
-const VIEW_AREA={dashboard:'Dashboard',pipeline:'Bids & pipeline',estimates:'Estimates',estimate:'Estimates',cb:'Codebooks & bid settings',settings:'Codebooks & bid settings',scopes:'Codebooks & bid settings',jobs:'Jobs',job:'Jobs',acct:'Accounting',clients:'Contacts',vendors:'Contacts',calc:'Calculators',team:'Team & logins',estimators:'Team & logins',teampm:'Team & logins',teamoffice:'Team & logins',access:'Team & logins',help:'Help'};
+const VIEW_AREA={plan:'Planner',dashboard:'Dashboard',pipeline:'Bids & pipeline',estimates:'Estimates',estimate:'Estimates',cb:'Codebooks & bid settings',settings:'Codebooks & bid settings',scopes:'Codebooks & bid settings',jobs:'Jobs',job:'Jobs',acct:'Accounting',clients:'Contacts',vendors:'Contacts',calc:'Calculators',team:'Team & logins',estimators:'Team & logins',teampm:'Team & logins',teamoffice:'Team & logins',access:'Team & logins',help:'Help'};
 async function loadMyFb(){try{const {data,error}=await sb.rpc('my_feedback');if(error)throw error;S.myFb=(data||[]).map(f=>({...f,status:fbStatusUi(f.status)}));S.fbMissing=false}catch(e){S.myFb=[];S.fbMissing=true}schedule()}
 function fbOpen(kind){const from=S.prevView&&S.prevView!=='help'?S.prevView:S.view;M={kind:'fb',draft:{kind:kind||'bug',area:VIEW_AREA[from]||'Something else',title:'',body:'',importance:'normal'},from};showModal();setTimeout(()=>$('#fb-title')?.focus(),0)}
 function fbModal(){const d=M.draft;const ph={bug:'What were you doing? What happened? What did you expect to happen?',feature:'What would you like it to do? What problem would it solve for you?',question:'What are you trying to do?',other:'Tell us what’s on your mind.'}[d.kind];
@@ -10131,3 +10132,187 @@ function presPaint(){const el=document.getElementById('pres');if(!el)return;cons
 ['mousemove','keydown','pointerdown','wheel','touchstart'].forEach(ev=>document.addEventListener(ev,()=>{const was=Date.now()-PRES.lastInput>5*60e3;PRES.lastInput=Date.now();if(was)presTrack(false)},{passive:true,capture:true}));
 document.addEventListener('visibilitychange',()=>presTrack(false));
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act="pres-open"]');if(t){S.presOpen=!S.presOpen;if(S.presOpen)presSeenLoad();presPaint();return}if(S.presOpen&&!e.target.closest('#pres')){S.presOpen=false;presPaint()}});
+
+/* ---------- Planner: everyone's own to-do list and calendar, and the team board ----------
+   A task belongs to the person who made it and is private to them (and whoever it's assigned to) until it's
+   shared; a shared task shows on the Team board and calendar for everyone, and anyone can move it along.
+   Table: tasks (supabase/update-36-planner.sql). */
+S.tasks=S.tasks||[];S.pl=S.pl||{tab:'mine',filter:'all',showDone:false,who:'',cal:null,day:null,calMine:true,calTeam:true,calBids:true,q:''};
+const PL_PRI=[['0','Normal'],['1','High'],['2','Urgent']];
+const PL_REP=[['','Doesn’t repeat'],['daily','Every day'],['weekdays','Every weekday'],['weekly','Every week'],['monthly','Every month']];
+const PL_ST=[['todo','To do'],['doing','Doing'],['done','Done']];
+let PL_T=null;
+async function plLoad(){try{const {data,error}=await sb.from('tasks').select('*').order('due_date',{ascending:true,nullsFirst:false}).limit(5000);
+    if(error){if(/relation|does not exist|schema cache/i.test(error.message||''))S.plMissing=true;else console.warn('tasks',error);schedule();return}
+    S.plMissing=false;S.tasks=data||[];schedule()}catch(e){console.warn(e)}}
+const plLoadSoon=()=>{clearTimeout(PL_T);PL_T=setTimeout(plLoad,400)};
+const plMine=t=>t.owner===myId()||t.assignee===myId();
+const plCanEdit=t=>!t.id||t.owner===myId()||t.assignee===myId()||t.shared;
+const plCanDel=t=>t.owner===myId()||isAdmin();
+const plWho=id=>{if(!id)return null;const c=crewOf(id);return c||{id,full_name:(S.tasks.find(t=>t.owner===id)||{}).owner_name||(S.tasks.find(t=>t.assignee===id)||{}).assignee_name||'Someone'}};
+const plName=id=>{const c=plWho(id);return c?c.full_name||'Someone':''};
+const plFirst=id=>String(plName(id)).split(' ')[0];
+function plAddDays(s,n){const d=parseD(s);d.setDate(d.getDate()+n);return d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate())}
+const plDs=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const PL_WD=['sun','mon','tue','wed','thu','fri','sat'];
+// "call GC about addendum fri 3pm !" → title, due Friday, 3:00 pm, high priority. #team shares it, @eddie assigns it.
+function plParse(raw){let s=' '+String(raw||'')+' ';const o={due:null,time:'',pri:0,shared:false,assignee:null};const today=todayStr();const cut=re=>{s=s.replace(re,' ')};let m;
+  if(/\s#team\b/i.test(s)){o.shared=true;cut(/\s#team\b/i)}
+  if((m=s.match(/\s@([a-z][\w.-]*)/i))){const n=m[1].toLowerCase();const c=crewList().find(x=>String(x.full_name||'').toLowerCase().split(/\s+/)[0]===n||String(x.full_name||'').toLowerCase().replace(/\s+/g,'').startsWith(n));if(c){o.assignee=c.id;cut(/\s@[a-z][\w.-]*/i)}}
+  if((m=s.match(/\s(!{1,2})(?=\s)/))){o.pri=m[1].length;cut(/\s!{1,2}(?=\s)/)}
+  if((m=s.match(/\s(?:at\s)?(\d{1,2})(?::(\d{2}))?\s?(am|pm|a|p)\b/i))){let h=+m[1]%12;if(/p/i.test(m[3]))h+=12;o.time=pad(h)+':'+(m[2]||'00');cut(/\s(?:at\s)?\d{1,2}(?::\d{2})?\s?(?:am|pm|a|p)\b/i)}
+  if(/\s(today|tod)\b/i.test(s)){o.due=today;cut(/\s(?:today|tod)\b/i)}
+  else if(/\s(tomorrow|tmrw|tmr)\b/i.test(s)){o.due=plAddDays(today,1);cut(/\s(?:tomorrow|tmrw|tmr)\b/i)}
+  else if(/\snext week\b/i.test(s)){const d=parseD(today);o.due=plAddDays(today,((8-d.getDay())%7)||7);cut(/\snext week\b/i)}
+  else if((m=s.match(/\s(?:on\s|by\s|due\s)?(sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)(?:day|nesday|sday|urday|rsday)?\b/i))){const wd=PL_WD.indexOf(m[1].slice(0,3).toLowerCase());const d=parseD(today);o.due=plAddDays(today,(wd-d.getDay()+7)%7);cut(/\s(?:on\s|by\s|due\s)?(?:sun|mon|tue|tues|wed|thu|thur|thurs|fri|sat)(?:day|nesday|sday|urday|rsday)?\b/i)}
+  else if((m=s.match(/\s(?:on\s|by\s|due\s)?(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?(?=\s)/))){const d=parseD(today);let y=m[3]?+m[3]:d.getFullYear();if(y<100)y+=2000;let ds=y+'-'+pad(+m[1])+'-'+pad(+m[2]);if(!m[3]&&ds<today&&daysUntil(ds)<-60)ds=(y+1)+'-'+pad(+m[1])+'-'+pad(+m[2]);if(!isNaN(parseD(ds)))o.due=ds;cut(/\s(?:on\s|by\s|due\s)?\d{1,2}\/\d{1,2}(?:\/\d{2,4})?(?=\s)/)}
+  if(o.time&&!o.due)o.due=today;o.title=s.replace(/\s+/g,' ').trim();return o}
+function plDueText(t){if(!t.due_date)return '';const n=daysUntil(t.due_date);const d=parseD(t.due_date);const w=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()];
+  const lab=n===0?'Today':n===1?'Tomorrow':n===-1?'Yesterday':n>1&&n<7?w:`${w} ${fmtShort(t.due_date)}`;return lab+(t.due_time?' '+fmtTime(t.due_time):'')}
+function plRowFields(t){return {id:t.id,owner:t.owner,owner_name:t.owner_name||'',assignee:t.assignee||null,assignee_name:t.assignee?plName(t.assignee):'',title:String(t.title||'').trim()||'Untitled',notes:t.notes||'',status:t.status||'todo',priority:+t.priority||0,due_date:t.due_date||null,due_time:t.due_time||'',shared:!!t.shared,bid_id:t.bid_id||null,job_id:t.job_id||null,list:t.list||'',repeat:t.repeat||'',checklist:t.checklist||[],sort:+t.sort||0,done_at:t.done_at||null,updated_at:new Date().toISOString(),updated_by_name:myName()}}
+async function plSave(t,quiet){if(S.plMissing){toast('The planner needs a one-time database update: run supabase/update-36-planner.sql.');return false}
+  const isNew=!t.id;const row=plRowFields(t);if(isNew){row.id=newId();row.owner=myId();row.owner_name=myName()}
+  const i=S.tasks.findIndex(x=>x.id===row.id);const prev=i>=0?S.tasks[i]:null;if(i>=0)S.tasks[i]={...S.tasks[i],...row};else S.tasks.push({...row,created_at:new Date().toISOString()});schedule();
+  const {error}=isNew?await sb.from('tasks').insert(row):await sb.from('tasks').update(row).eq('id',row.id);
+  if(error){if(prev)S.tasks[i]=prev;else S.tasks=S.tasks.filter(x=>x.id!==row.id);schedule();toast(errMsg(error));return false}
+  if(!quiet&&isNew)toast(row.shared?'Added to the team board.':'Added.');return row}
+async function plDel(id){const t=S.tasks.find(x=>x.id===id);if(!t)return;S.tasks=S.tasks.filter(x=>x.id!==id);schedule();const {error}=await sb.from('tasks').delete().eq('id',id);if(error){S.tasks.push(t);schedule();toast(errMsg(error))}}
+function plNextDue(t){const base=t.due_date||todayStr();const d=parseD(base);
+  if(t.repeat==='daily')return plAddDays(base,1);if(t.repeat==='weekly')return plAddDays(base,7);
+  if(t.repeat==='weekdays'){const wd=d.getDay();return plAddDays(base,wd===5?3:wd===6?2:1)}
+  if(t.repeat==='monthly'){const n=new Date(d.getFullYear(),d.getMonth()+1,Math.min(d.getDate(),28));return plDs(n)}return null}
+async function plToggle(id){const t=S.tasks.find(x=>x.id===id);if(!t||!plCanEdit(t))return;const done=t.status!=='done';
+  const r=await plSave({...t,status:done?'done':'todo',done_at:done?new Date().toISOString():null},true);
+  if(r&&done&&t.repeat){const nx={...t,id:null,status:'todo',done_at:null,due_date:plNextDue(t),checklist:(t.checklist||[]).map(c=>({...c,done:false}))};delete nx.created_at;await plSave(nx,true);toast(`Next one: ${plDueText(nx)}.`)}}
+const plCount=()=>S.tasks.filter(t=>t.status!=='done'&&plMine(t)&&t.due_date&&t.due_date<=todayStr()).length;
+
+/* ---- the page ---- */
+function vPlan(){const P=S.pl;if(!S.plLoaded){S.plLoaded=true;plLoad();if(!S.crew)funLoad()}
+  const tabs=[['mine','My tasks'],['team','Team board'],['cal','Calendar']];const n=plCount();
+  return `<div class="pl">${S.plMissing?`<div class="notice">The planner needs a one-time database update: run <b>supabase/update-36-planner.sql</b> in the Supabase SQL Editor.</div>`:''}
+    <div class="pl-top"><div class="seg">${tabs.map(([k,l])=>`<button class="${P.tab===k?'on':''}" data-act="pl-tab" data-v="${k}">${l}${k==='mine'&&n?` <span class="pl-badge">${n}</span>`:''}</button>`).join('')}</div>${plAddBar()}</div>
+    ${P.tab==='team'?plTeam():P.tab==='cal'?plCal():plMineView()}</div>`}
+function plAddBar(){const P=S.pl;const o=plParse(P.q||'');const team=S.pl.tab==='team';
+  const chips=[o.due?`📅 ${plDueText({due_date:o.due,due_time:o.time})}`:'',o.pri?(o.pri>1?'‼ Urgent':'! High'):'',o.shared||team?'👥 Team':'',o.assignee?`→ ${plFirst(o.assignee)}`:''].filter(Boolean);
+  return `<div class="pl-add"><input class="field" id="pl-q" data-plq value="${esc(P.q||'')}" placeholder="${team?'Add to the team board…':'Add a task…'} try “Send bid form to GC fri 2pm !”" autocomplete="off"><button class="btn primary" data-act="pl-add">Add</button>
+    <div class="pl-addh small dim">${P.q&&chips.length?chips.map(c=>`<span class="pl-chip">${esc(c)}</span>`).join(''):'Words like <b>today</b>, <b>fri</b>, <b>10/20</b>, <b>3pm</b> set the date. <b>!</b> high, <b>!!</b> urgent, <b>#team</b> shares it, <b>@name</b> assigns it.'} <button class="linkbtn" data-act="pl-new">More options…</button></div></div>`}
+function plRow(t,opt){opt=opt||{};const me=myId();const done=t.status==='done';const n=daysUntil(t.due_date);const late=!done&&t.due_date&&n<0;const b=t.bid_id&&byId(S.bids,t.bid_id);const j=t.job_id&&byId(S.jobs,t.job_id);
+  const cl=t.checklist||[];const cd=cl.filter(c=>c.done).length;const other=t.assignee&&t.assignee!==me?t.assignee:t.owner!==me?t.owner:null;
+  return `<div class="pl-row${done?' done':''}${late?' late':''}" data-act="pl-open" data-id="${t.id}" draggable="${plCanEdit(t)?'true':'false'}" data-pldrag="${t.id}">
+    <button class="pl-ck" data-act="pl-ck" data-id="${t.id}" aria-label="${done?'Mark not done':'Mark done'}"${plCanEdit(t)?'':' disabled'}>${done?'✓':''}</button>
+    <div class="pl-rm"><div class="pl-tt">${t.priority>1?'<span class="pl-pri u">‼</span>':t.priority?'<span class="pl-pri">!</span>':''}${esc(t.title)}${t.status==='doing'&&!done?' <span class="pl-doing">doing</span>':''}</div>
+      <div class="pl-meta">${t.due_date?`<span class="${late?'late':n===0?'today':''}">📅 ${esc(plDueText(t))}</span>`:''}${t.repeat?'<span title="Repeats">↻</span>':''}${cl.length?`<span>☑ ${cd}/${cl.length}</span>`:''}${t.notes?'<span title="Has notes">✎</span>':''}${b?`<span class="pl-link">${esc(b.name)}</span>`:j?`<span class="pl-link">${esc(j.name||j.job_number||'Job')}</span>`:''}${t.list&&!opt.noList?`<span class="pl-list">${esc(t.list)}</span>`:''}${t.shared?'<span class="pl-team" title="On the team board">👥 Team</span>':''}</div></div>
+    ${t.owner===myId()&&!done?`<button class="pl-sh${t.shared?' on':''}" data-act="pl-share" data-id="${t.id}" title="${t.shared?'On the team board. Click to take it off.':'Share with the team'}">👥</button>`:''}${other?`<span class="pl-who" title="${esc(t.assignee&&t.assignee!==me?'Assigned to '+plName(t.assignee):'From '+plName(t.owner))}">${funAv(plWho(other),24)}</span>`:''}</div>`}
+function plMineView(){const P=S.pl;const me=myId();const today=todayStr();let xs=S.tasks.filter(plMine);
+  const lists=[...new Set(xs.map(t=>t.list).filter(Boolean))].sort();
+  const f=P.filter;if(f==='me')xs=xs.filter(t=>t.assignee===me&&t.owner!==me);else if(f==='shared')xs=xs.filter(t=>t.shared);else if(f==='private')xs=xs.filter(t=>!t.shared);else if(f.startsWith('list:'))xs=xs.filter(t=>t.list===f.slice(5));
+  const open=xs.filter(t=>t.status!=='done');const wk=plAddDays(today,7-parseD(today).getDay());
+  const sort=(a,b)=>(a.due_date||'9').localeCompare(b.due_date||'9')||(a.due_time||'99').localeCompare(b.due_time||'99')||(b.priority||0)-(a.priority||0)||(a.sort||0)-(b.sort||0);
+  const G=[['Overdue',t=>t.due_date&&t.due_date<today,'late'],['Today',t=>t.due_date===today,''],['Tomorrow',t=>t.due_date===plAddDays(today,1),''],['This week',t=>t.due_date>plAddDays(today,1)&&t.due_date<=wk,''],['Later',t=>t.due_date>wk,''],['No date',t=>!t.due_date,'']];
+  const done=xs.filter(t=>t.status==='done').sort((a,b)=>String(b.done_at||'').localeCompare(String(a.done_at||'')));
+  const chip=(k,l,c)=>`<button class="pl-f${P.filter===k?' on':''}" data-act="pl-filter" data-v="${esc(k)}">${esc(l)}${c!=null?` <span>${c}</span>`:''}</button>`;
+  const assignedNew=S.tasks.filter(t=>t.assignee===me&&t.owner!==me&&t.status!=='done').length;
+  return `<div class="pl-mine"><div class="pl-filters">${chip('all','All',S.tasks.filter(t=>plMine(t)&&t.status!=='done').length)}${chip('me','Assigned to me',assignedNew||null)}${chip('private','Just mine')}${chip('shared','Shared with team')}${lists.map(l=>chip('list:'+l,l)).join('')}</div>
+    <div class="pl-cols"><div class="pl-list-main">${open.length?G.map(([l,fn,cls])=>{const g=open.filter(fn).sort(sort);return g.length?`<div class="pl-g ${cls}"><div class="pl-gh">${l} <span>${g.length}</span></div>${g.map(t=>plRow(t)).join('')}</div>`:''}).join(''):`<div class="empty">${S.tasks.length?'Nothing open here. Nice.':'No tasks yet. Type one above and press Enter.'}</div>`}
+      ${done.length?`<div class="pl-g"><button class="pl-gh linkish" data-act="pl-showdone">${P.showDone?'▾':'▸'} Done <span>${done.length}</span></button>${P.showDone?done.slice(0,60).map(t=>plRow(t)).join(''):''}</div>`:''}</div>
+      <aside class="pl-side">${plMiniCal()}${plTeamPeek()}</aside></div></div>`}
+// a small month on the side of My tasks: dots on days with something due
+function plMiniCal(){const P=S.pl;const base=P.cal?parseD(P.cal+'-01'):parseD(todayStr());const y=base.getFullYear(),m=base.getMonth();const first=new Date(y,m,1);const start=new Date(y,m,1-first.getDay());const today=todayStr();
+  const due=new Map();S.tasks.filter(t=>plMine(t)&&t.status!=='done'&&t.due_date).forEach(t=>due.set(t.due_date,(due.get(t.due_date)||0)+1));
+  let cells='';for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const ds=plDs(d);cells+=`<button class="pl-md${d.getMonth()!==m?' out':''}${ds===today?' today':''}" data-act="pl-gocal" data-v="${ds}" title="${due.get(ds)?due.get(ds)+' due':''}">${d.getDate()}${due.get(ds)?'<i></i>':''}</button>`}
+  return `<div class="pl-card"><div class="pl-mh"><button class="x" data-act="pl-mon" data-v="-1" aria-label="Previous month">‹</button><b>${MONTHS[m]} ${y}</b><button class="x" data-act="pl-mon" data-v="1" aria-label="Next month">›</button></div><div class="pl-mgrid">${'SMTWTFS'.split('').map(c=>`<span>${c}</span>`).join('')}${cells}</div></div>`}
+function plTeamPeek(){const xs=S.tasks.filter(t=>t.shared&&t.status!=='done');if(!xs.length)return '';const today=todayStr();
+  return `<div class="pl-card"><div class="pl-mh"><b>Team board</b><button class="linkbtn" data-act="pl-tab" data-v="team">Open</button></div><div class="small">${xs.length} open · ${xs.filter(t=>t.status==='doing').length} in progress${xs.some(t=>t.due_date&&t.due_date<today)?` · <span class="warn-t">${xs.filter(t=>t.due_date&&t.due_date<today).length} overdue</span>`:''}</div></div>`}
+// the team board: shared tasks in To do / Doing / Done; drag a card to move it
+function plTeam(){const P=S.pl;const today=todayStr();let xs=S.tasks.filter(t=>t.shared);const people=[...new Set(xs.flatMap(t=>[t.assignee||t.owner]))].filter(Boolean);
+  if(P.who)xs=xs.filter(t=>(t.assignee||t.owner)===P.who);
+  const wk=new Date(Date.now()-14*864e5).toISOString();
+  const col=(st,l)=>{let c=xs.filter(t=>(t.status||'todo')===st);if(st==='done')c=c.filter(t=>!t.done_at||t.done_at>wk);c.sort((a,b)=>(a.due_date||'9').localeCompare(b.due_date||'9')||(b.priority||0)-(a.priority||0));
+    return `<div class="pl-col" data-pldrop="st:${st}"><div class="pl-colh">${l} <span>${c.length}</span>${st==='todo'?'<button class="btn xs" data-act="pl-new" data-shared="1">+ Add</button>':''}</div>${c.map(t=>plCard(t)).join('')||`<div class="pl-empty small dim">${st==='todo'?'Nothing waiting.':st==='doing'?'Drag a card here when someone starts it.':'Finished work shows here for two weeks.'}</div>`}</div>`};
+  const load=people.map(id=>{const mine=S.tasks.filter(t=>t.shared&&(t.assignee||t.owner)===id&&t.status!=='done');return {id,n:mine.length,late:mine.filter(t=>t.due_date&&t.due_date<today).length}}).sort((a,b)=>b.n-a.n);
+  return `<div class="pl-team"><div class="pl-filters"><button class="pl-f${!P.who?' on':''}" data-act="pl-who" data-v="">Everyone</button>${load.map(p=>`<button class="pl-f pl-fw${P.who===p.id?' on':''}" data-act="pl-who" data-v="${p.id}">${funAv(plWho(p.id),20)} ${esc(plFirst(p.id))} <span>${p.n}</span>${p.late?`<em class="warn-t">${p.late} late</em>`:''}</button>`).join('')}</div>
+    <div class="pl-board">${PL_ST.map(([k,l])=>col(k,l)).join('')}</div>
+    <p class="small dim">Share a task from My tasks (the 👥 button on its row) to put it here. Anyone can move shared tasks along; only the person who made one can take it off the board.</p></div>`}
+function plCard(t){const n=daysUntil(t.due_date);const done=t.status==='done';const late=!done&&t.due_date&&n<0;const who=t.assignee||t.owner;const b=t.bid_id&&byId(S.bids,t.bid_id);const cl=t.checklist||[];
+  return `<div class="pl-card pl-kc${late?' late':''}${done?' done':''}" data-act="pl-open" data-id="${t.id}" draggable="true" data-pldrag="${t.id}">
+    <div class="pl-tt">${t.priority>1?'<span class="pl-pri u">‼</span>':t.priority?'<span class="pl-pri">!</span>':''}${esc(t.title)}</div>
+    <div class="pl-meta">${t.due_date?`<span class="${late?'late':n===0?'today':''}">📅 ${esc(plDueText(t))}</span>`:''}${cl.length?`<span>☑ ${cl.filter(c=>c.done).length}/${cl.length}</span>`:''}${b?`<span class="pl-link">${esc(b.name)}</span>`:''}</div>
+    <div class="pl-kf">${funAv(plWho(who),22)}<span class="small">${esc(plFirst(who))}${t.assignee&&t.assignee!==t.owner?` <span class="dim">from ${esc(plFirst(t.owner))}</span>`:''}</span>${done?'':`<button class="btn xs" data-act="pl-ck" data-id="${t.id}">✓ Done</button>`}</div></div>`}
+// the calendar: my tasks, team tasks and bid dates by day; click a day to see it and add to it, drag a task to move it
+function plCal(){const P=S.pl;const today=todayStr();const base=P.cal?parseD(P.cal+'-01'):parseD(today);const y=base.getFullYear(),m=base.getMonth();const first=new Date(y,m,1);const start=new Date(y,m,1-first.getDay());const sel=P.day||today;
+  const ev=new Map();const add=(d,e)=>{if(!d)return;d=String(d).slice(0,10);if(!ev.has(d))ev.set(d,[]);ev.get(d).push(e)};
+  S.tasks.forEach(t=>{if(!t.due_date)return;const mine=plMine(t);if(mine&&P.calMine||!mine&&t.shared&&P.calTeam||mine&&t.shared&&P.calTeam)add(t.due_date,{k:mine?'mine':'team',t})});
+  if(P.calBids)(S.bids||[]).filter(b=>!b.archived_at).forEach(b=>{[['due_date','Bid due'],['walk_date','Site walk'],['rfi_date','RFIs due']].forEach(([f,l])=>{if(b[f])add(b[f],{k:'bid',b,l})})});
+  const item=e=>e.t?`<div class="pl-ce ${e.k}${e.t.status==='done'?' done':''}" data-act="pl-open" data-id="${e.t.id}" draggable="true" data-pldrag="${e.t.id}" title="${esc(e.t.title)}">${e.t.due_time?`<b>${esc(fmtTime(e.t.due_time).replace(':00',''))}</b> `:''}${esc(e.t.title)}</div>`:`<div class="pl-ce bid" data-act="open-bid" data-id="${e.b.id}" title="${esc(e.l+': '+e.b.name)}"><b>${esc(e.l)}</b> ${esc(e.b.name)}</div>`;
+  let cells='';for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const ds=plDs(d);const es=(ev.get(ds)||[]).sort((a,b)=>(a.k==='bid'?0:1)-(b.k==='bid'?0:1)||String(a.t&&a.t.due_time||'').localeCompare(String(b.t&&b.t.due_time||'')));
+    cells+=`<div class="pl-cd${d.getMonth()!==m?' out':''}${ds===today?' today':''}${ds===sel?' sel':''}${d.getDay()%6===0?' we':''}" data-act="pl-day" data-v="${ds}" data-pldrop="day:${ds}"><div class="pl-cdn">${d.getDate()}</div>${es.slice(0,4).map(item).join('')}${es.length>4?`<div class="pl-more">+${es.length-4} more</div>`:''}</div>`}
+  const des=(ev.get(sel)||[]);const sd=parseD(sel);
+  return `<div class="pl-calw"><div class="pl-calm"><div class="pl-calh"><button class="btn sm" data-act="pl-mon" data-v="-1">‹</button><b>${MONTHS[m]} ${y}</b><button class="btn sm" data-act="pl-mon" data-v="1">›</button><button class="btn sm" data-act="pl-mon" data-v="0">Today</button><span style="flex:1"></span>
+      <label class="check small"><input type="checkbox" data-plcal="calMine"${P.calMine?' checked':''}> <i class="pl-sw mine"></i>My tasks</label><label class="check small"><input type="checkbox" data-plcal="calTeam"${P.calTeam?' checked':''}> <i class="pl-sw team"></i>Team</label><label class="check small"><input type="checkbox" data-plcal="calBids"${P.calBids?' checked':''}> <i class="pl-sw bid"></i>Bid dates</label></div>
+    <div class="pl-cgrid">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(c=>`<span class="pl-cwd">${c}</span>`).join('')}${cells}</div></div>
+    <aside class="pl-agenda pl-card"><div class="pl-mh"><b>${['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][sd.getDay()]}, ${fmtDate(sel)}</b></div>
+      ${des.length?des.map(e=>e.t?plRow(e.t):`<div class="pl-row bidrow" data-act="open-bid" data-id="${e.b.id}"><span class="pl-ck bid">◆</span><div class="pl-rm"><div class="pl-tt">${esc(e.b.name)}</div><div class="pl-meta"><span>${esc(e.l)}${e.l==='Bid due'&&e.b.due_time?' '+fmtTime(String(e.b.due_time).slice(0,5)):''}</span></div></div></div>`).join(''):'<p class="small dim">Nothing on this day.</p>'}
+      <div class="pl-add sm"><input class="field sm" id="pl-dayq" data-pldayq placeholder="Add for this day…" autocomplete="off"><label class="check small"><input type="checkbox" id="pl-dayteam"> 👥 Team</label></div></aside></div>`}
+
+/* ---- the task window ---- */
+function plOpen(t){M={kind:'task',draft:JSON.parse(JSON.stringify(t)),newItem:''};showModal();if(!t.id)setTimeout(()=>{const e=document.getElementById('pl-title');if(e)e.focus()},0)}
+function taskModal(){const d=M.draft;const me=myId();const ro=!plCanEdit(d);const dis=ro?' disabled':'';const own=!d.id||d.owner===me;const people=crewList().filter(c=>c.role!=='pending');
+  const bids=(S.bids||[]).filter(b=>!b.archived_at||b.id===d.bid_id).sort((a,b)=>String(a.name).localeCompare(String(b.name)));const jobs=(S.jobs||[]).filter(j=>!j.archived_at||j.id===d.job_id);
+  const lists=[...new Set(S.tasks.filter(plMine).map(t=>t.list).filter(Boolean))];const cl=d.checklist||[];
+  return mhead(d.id?(ro?'Task':'Edit task'):'New task',d.id?`Made by ${d.owner===me?'you':plName(d.owner)}${d.updated_by_name&&d.updated_by_name!==d.owner_name?` · last changed by ${d.updated_by_name}`:''}`:'')+`<div class="mbody">
+  <div class="fg"><label class="f s4">Task<input class="field" id="pl-title" data-plt="title" value="${esc(d.title||'')}" maxlength="200"${dis}></label>
+    <label class="f">Due<input class="field" type="date" data-plt="due_date" value="${esc(d.due_date||'')}"${dis}></label>
+    <label class="f">Time<input class="field" type="time" data-plt="due_time" value="${esc(d.due_time||'')}"${dis}></label>
+    <label class="f">Priority<select class="field" data-plt="priority"${dis}>${PL_PRI.map(([k,l])=>`<option value="${k}"${String(d.priority||0)===k?' selected':''}>${l}</option>`).join('')}</select></label>
+    <label class="f">Status<select class="field" data-plt="status"${dis}>${PL_ST.map(([k,l])=>`<option value="${k}"${(d.status||'todo')===k?' selected':''}>${l}</option>`).join('')}</select></label>
+    <label class="f">Repeats<select class="field" data-plt="repeat"${dis}>${PL_REP.map(([k,l])=>`<option value="${k}"${(d.repeat||'')===k?' selected':''}>${l}</option>`).join('')}</select></label>
+    <label class="f">Assigned to<select class="field" data-plt="assignee"${dis}><option value="">${own?'Me':plName(d.owner)}</option>${people.filter(c=>c.id!==(d.owner||me)).map(c=>`<option value="${c.id}"${d.assignee===c.id?' selected':''}>${esc(c.full_name||'')}</option>`).join('')}</select></label>
+    <label class="f">List<input class="field" data-plt="list" list="pl-lists" value="${esc(d.list||'')}" placeholder="e.g. Bids, Admin"${dis}><datalist id="pl-lists">${lists.map(l=>`<option value="${esc(l)}">`).join('')}</datalist></label>
+    <label class="f s2">Bid<select class="field" data-plt="bid_id"${dis}><option value="">—</option>${bids.map(b=>`<option value="${b.id}"${d.bid_id===b.id?' selected':''}>${esc(b.name)}</option>`).join('')}</select></label>
+    ${jobs.length?`<label class="f s2">Job<select class="field" data-plt="job_id"${dis}><option value="">—</option>${jobs.map(j=>`<option value="${j.id}"${d.job_id===j.id?' selected':''}>${esc([j.job_number,j.name].filter(Boolean).join(' · '))}</option>`).join('')}</select></label>`:''}
+    <label class="f s4">Notes<textarea class="field" data-plt="notes" rows="3"${dis}>${esc(d.notes||'')}</textarea></label></div>
+  <div class="pl-cl"><div class="pl-gh">Checklist ${cl.length?`<span>${cl.filter(c=>c.done).length}/${cl.length}</span>`:''}</div>${cl.map((c,i)=>`<div class="pl-cli"><label class="check"><input type="checkbox" data-plcli="${i}"${c.done?' checked':''}${dis}> <span${c.done?' class="dim" style="text-decoration:line-through"':''}>${esc(c.t)}</span></label>${ro?'':`<button class="x" data-act="pl-cldel" data-v="${i}" aria-label="Remove">×</button>`}</div>`).join('')}
+    ${ro?'':`<input class="field sm" id="pl-clnew" data-plclnew placeholder="Add a step and press Enter" value="${esc(M.newItem||'')}">`}</div>
+  <label class="pl-share${d.shared?' on':''}"><input type="checkbox" data-plt="shared"${d.shared?' checked':''}${ro||(d.id&&d.shared&&!own)?' disabled':''}><span><b>👥 Share with the team</b><small>${d.shared?'On the team board and calendar. Anyone can move it along.':'Only you'+(d.assignee?' and '+plFirst(d.assignee):'')+' can see it. Share it to put it on the team board and calendar.'}${d.id&&d.shared&&!own?' Only '+esc(plFirst(d.owner))+' can take it off.':''}</small></span></label></div>
+  <div class="mfoot"><div>${d.id&&plCanDel(d)?`<button class="btn danger" data-act="pl-del">${M.armDel?'Really delete?':'Delete'}</button>`:''}</div><div class="r"><button class="btn" data-act="close">${ro?'Close':'Cancel'}</button>${ro?'':`<button class="btn primary" data-act="pl-save">${d.id?'Save':'Add task'}</button>`}</div></div>`}
+
+/* ---- events ---- */
+async function plQuickAdd(raw,extra){const o=plParse(raw);if(!o.title){toast('Type what needs doing.');return}
+  const t={title:o.title,due_date:(extra&&extra.due)||o.due,due_time:o.time,priority:o.pri,shared:o.shared||!!(extra&&extra.shared),assignee:o.assignee,status:'todo',sort:Date.now()};await plSave(t)}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('pl-'))return;const P=S.pl;
+  if(a==='pl-ck'){e.stopPropagation();plToggle(t.dataset.id);return}
+  if(a==='pl-share'){e.stopPropagation();const x=S.tasks.find(y=>y.id===t.dataset.id);if(!x||x.owner!==myId())return;const r=await plSave({...x,shared:!x.shared},true);if(r)toast(r.shared?'Shared: it’s on the team board and calendar.':'Taken off the team board.');return}
+  if(a==='pl-tab'){P.tab=t.dataset.v;render();return}
+  if(a==='pl-filter'){P.filter=t.dataset.v;render();return}
+  if(a==='pl-who'){P.who=t.dataset.v;render();return}
+  if(a==='pl-showdone'){P.showDone=!P.showDone;render();return}
+  if(a==='pl-open'){const x=S.tasks.find(y=>y.id===t.dataset.id);if(x)plOpen(x);return}
+  if(a==='pl-new'){const o=plParse(P.q||'');plOpen({title:o.title||'',due_date:o.due||(P.tab==='cal'?P.day:null)||null,due_time:o.time,priority:o.pri,shared:o.shared||t.dataset.shared==='1'||P.tab==='team',assignee:o.assignee,status:'todo',checklist:[],sort:Date.now()});P.q='';return}
+  if(a==='pl-add'){const v=P.q||'';P.q='';await plQuickAdd(v,{shared:P.tab==='team'});return}
+  if(a==='pl-mon'){const v=+t.dataset.v;if(!v){P.cal=null;P.day=todayStr()}else{const b=P.cal?parseD(P.cal+'-01'):parseD(todayStr());const n=new Date(b.getFullYear(),b.getMonth()+v,1);P.cal=n.getFullYear()+'-'+pad(n.getMonth()+1)}render();return}
+  if(a==='pl-gocal'){P.tab='cal';P.day=t.dataset.v;P.cal=t.dataset.v.slice(0,7);render();return}
+  if(a==='pl-day'){if(e.target.closest('.pl-ce'))return;P.day=t.dataset.v;render();return}
+  if(!M||M.kind!=='task')return;const d=M.draft;
+  if(a==='pl-save'){if(!String(d.title||'').trim()){toast('Give the task a name.');return}const was=d.id&&S.tasks.find(x=>x.id===d.id);const r=await plSave(d);if(r){if(was&&was.status!=='done'&&d.status==='done'&&d.repeat){const nx={...d,id:null,status:'todo',done_at:null,due_date:plNextDue(d),checklist:(d.checklist||[]).map(c=>({...c,done:false}))};await plSave(nx,true)}closeModal();render()}return}
+  if(a==='pl-del'){if(!M.armDel){M.armDel=true;renderModal();return}await plDel(d.id);closeModal();render();return}
+  if(a==='pl-cldel'){d.checklist.splice(+t.dataset.v,1);renderModal();return}});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset.plq!=null){S.pl.q=t.value;const h=document.querySelector('.pl-addh');if(h){const tmp=document.createElement('div');tmp.innerHTML=plAddBar();const nh=tmp.querySelector('.pl-addh');if(nh)h.innerHTML=nh.innerHTML}return}
+  if(t.dataset.plclnew!=null&&M){M.newItem=t.value;return}
+  if(t.dataset.plt&&M&&M.kind==='task'&&['title','notes','list'].includes(t.dataset.plt)){M.draft[t.dataset.plt]=t.value}});
+document.addEventListener('change',e=>{const t=e.target;
+  if(t.dataset.plcal){S.pl[t.dataset.plcal]=t.checked;render();return}
+  if(!M||M.kind!=='task')return;const d=M.draft;
+  if(t.dataset.plt){const k=t.dataset.plt;let v=t.type==='checkbox'?t.checked:t.value;if(k==='priority')v=+v;if(['assignee','bid_id','job_id','due_date'].includes(k))v=v||null;d[k]=v;if(k==='status')d.done_at=v==='done'?(d.done_at||new Date().toISOString()):null;if(['shared','assignee','status'].includes(k))renderModal();return}
+  if(t.dataset.plcli!=null){const c=d.checklist[+t.dataset.plcli];if(c){c.done=t.checked;renderModal()}}});
+document.addEventListener('keydown',async e=>{const t=e.target;if(!t||!t.dataset)return;
+  if(t.dataset.plq!=null&&e.key==='Enter'){e.preventDefault();const v=t.value;S.pl.q='';t.value='';await plQuickAdd(v,{shared:S.pl.tab==='team'});setTimeout(()=>{const q=document.getElementById('pl-q');if(q)q.focus()},0);return}
+  if(t.dataset.pldayq!=null&&e.key==='Enter'){e.preventDefault();const v=t.value;t.value='';const sh=document.getElementById('pl-dayteam');await plQuickAdd(v,{due:S.pl.day||todayStr(),shared:sh&&sh.checked});setTimeout(()=>{const q=document.getElementById('pl-dayq');if(q)q.focus()},0);return}
+  if(t.dataset.plclnew!=null&&e.key==='Enter'&&M){e.preventDefault();const v=t.value.trim();if(!v)return;M.draft.checklist=M.draft.checklist||[];M.draft.checklist.push({t:v,done:false});M.newItem='';renderModal();setTimeout(()=>{const n=document.getElementById('pl-clnew');if(n)n.focus()},0);return}
+  if(t.id==='pl-title'&&e.key==='Enter'&&M&&M.kind==='task'){e.preventDefault();document.querySelector('[data-act="pl-save"]')?.click()}});
+// drag a task to another day or column
+document.addEventListener('dragstart',e=>{const t=e.target.closest&&e.target.closest('[data-pldrag]');if(!t)return;e.dataTransfer.setData('text/pl',t.dataset.pldrag);e.dataTransfer.effectAllowed='move';t.classList.add('dragging')});
+document.addEventListener('dragend',e=>{document.querySelectorAll('.dragging,.pl-over').forEach(x=>x.classList.remove('dragging','pl-over'))});
+document.addEventListener('dragover',e=>{const z=e.target.closest&&e.target.closest('[data-pldrop]');if(!z||![...e.dataTransfer.types].includes('text/pl'))return;e.preventDefault();document.querySelectorAll('.pl-over').forEach(x=>x!==z&&x.classList.remove('pl-over'));z.classList.add('pl-over')});
+document.addEventListener('drop',async e=>{const z=e.target.closest&&e.target.closest('[data-pldrop]');if(!z)return;const id=e.dataTransfer.getData('text/pl');if(!id)return;e.preventDefault();z.classList.remove('pl-over');const t=S.tasks.find(x=>x.id===id);if(!t||!plCanEdit(t))return;const [k,v]=z.dataset.pldrop.split(':');
+  if(k==='day'&&t.due_date!==v)await plSave({...t,due_date:v},true);
+  else if(k==='st'&&t.status!==v){if(v==='done'){await plToggle(id)}else await plSave({...t,status:v,done_at:null},true)}});

@@ -50,6 +50,7 @@ supabase/update-19-help-developer.sql      one-time update for Help feedback and
 supabase/update-20-dev-usage.sql           one-time update for the Developer tab's storage and capacity panel (run after update-19)
 supabase/update-21-break-room.sql          one-time update for the Break room: profiles, trophies, game scores (run after update-20)
 supabase/update-35-presence.sql            optional: "last seen" in the who's-online list (who's on right now works without it)
+supabase/update-36-planner.sql             one-time update for the Planner (my tasks, team board, calendar)
 ```
 
 > **Already set up before these updates?** Run each `supabase/update-*.sql` file you haven't run yet, once, in number order, in the SQL Editor. New installs only need `schema.sql`.
@@ -145,6 +146,21 @@ When the same project comes back under a new name or with new details, open the 
 
 ## Estimator log
 Every bid has an **Estimator log** under Scope takeoff. Estimators on the bid (and admins) add dated notes — site visits, takeoff notes, assumptions, clarifications, questions/RFIs, risks, pricing, calls — for the whole project or one scope, with photos or files attached. Notes save right away. You can edit, pin or delete your own notes; admins can manage any. Each scope row shows how many notes it has. When an awarded bid becomes a job, the notes show up read-only on the job's **Estimator notes** tab for the PM. Needs `supabase/update-11-estimator-log.sql`.
+
+## Planner (everyone)
+
+Needs `supabase/update-36-planner.sql`.
+
+**My tasks** is your own to-do list. Type a task in the box and press Enter. Words in it fill in the details:
+- **today**, **tomorrow**, **fri**, **next week** or **10/20** set the due date, and **3pm** sets a time.
+- **!** marks it high priority and **!!** urgent.
+- **#team** shares it with the team, and **@eddie** assigns it to Eddie.
+
+As you type, the line under the box shows what it understood. Tasks are grouped Overdue, Today, Tomorrow, This week, Later and No date. Click the circle to check one off. Click a task to open it, where you can add notes, a checklist, a bid or job, a list name (Bids, Admin…), a person it's assigned to, or a repeat (every day, weekday, week or month). When you check off a repeating task, the next one is made for you. The small month on the side marks days with something due; click a day to open it in the Calendar. **Planner (n)** in the top bar counts your tasks that are due today or overdue.
+
+**Share with the team** (the 👥 button on a task's row, or the switch in the task) puts it on the **Team board** and the team calendar. Until then, only you and the person it's assigned to can see it. The board has To do, Doing and Done columns: drag a card to move it, and click a person to see just their work, with how many are open and late. Anyone can move a shared task along, but only the person who made it can take it off the board, and only they (or an admin) can delete it.
+
+**Calendar** shows your tasks, team tasks and bid dates (bid due, site walk, RFIs) by month; each can be switched on or off. Click a day to see everything on it and add a task for that day. Drag a task to another day to move it.
 
 ## Who's online (everyone)
 
