@@ -261,11 +261,12 @@ async function afterLogin(){
     await loadPms();
     await loadEstIndex();loadBidReqs();loadCOs();loadAcctInfo();
     if(channel)sb.removeChannel(channel);
+    presStart();
     channel=sb.channel('bid-pipeline').on('postgres_changes',{event:'*',schema:'public'},p=>{if(TABLES.includes(p.table))debounceLoad(p.table);if(p.table==='estimates')estRemote(p)}).subscribe();
   }
   S.loading=false;schedule();
 }
-function resetData(){TABLES.forEach(t=>{if(t!=='settings')S[t]=[]});S.myFb=null;S.crew=null;S.trophy=null;if(S.fun){S.fun.loaded=false;S.fun.draft=null}S.est=null;S.estIndex=[];S.estsTab='list';S.settings={};S.profiles=[];S.profile=null;S.profileFor=null;S.view='dashboard';S.dash='precon';if(channel){sb.removeChannel(channel);channel=null}}
+function resetData(){TABLES.forEach(t=>{if(t!=='settings')S[t]=[]});S.myFb=null;S.crew=null;S.trophy=null;if(S.fun){S.fun.loaded=false;S.fun.draft=null}S.est=null;S.estIndex=[];S.estsTab='list';S.settings={};S.profiles=[];S.profile=null;S.profileFor=null;S.view='dashboard';S.dash='precon';if(channel){sb.removeChannel(channel);channel=null}presStop()}
 function errMsg(e){const m=(e&&(e.message||e.error_description))||'Something went wrong.';
   if(/row-level security|permission denied/i.test(m))return 'You don’t have permission to make that change.';
   if(/Failed to fetch|NetworkError/i.test(m))return 'Can’t reach the server. Check your connection and try again.';
@@ -303,12 +304,12 @@ function navItems(){return navGroups().map(g=>[g[0],g[1]])}
 const SUBNAV_LABEL={clients:'Clients & GCs',vendors:'Vendors & subs',team:'People & access',estimators:'Estimators',teampm:'Project managers',teamoffice:'Accounting & executives',access:'Access chart'};
 function subNav(){const g=navGroups().find(x=>x[2].includes(S.view));if(!g)return '';const subs=g[2].filter(v=>SUBNAV_LABEL[v]);if(subs.length<2)return '';
   return `<div class="subnav">${subs.map(v=>`<button class="${S.view===v?'on':''}" data-act="nav" data-v="${v}">${SUBNAV_LABEL[v]}</button>`).join('')}</div>`}
-function renderTop(){
+function renderTop(){setTimeout(()=>{presPaint();presTrack(false)},0);
   const company=S.settings.general?.companyName||CFG.companyName||APP_NAME;
   $('#top').innerHTML=`<button class="brand" ${isAdmin()?'data-act="company" title="Edit company name"':'tabindex="-1" style="cursor:default"'}>${BRAND.logo?`<img class="brand-logo" src="${esc(BRAND.logo)}" alt="">`:'<span class="stake"></span>'}<span><b>${esc(company)}</b><small>${esc(APP_NAME)}</small></span></button>
   <nav class="nav">${navGroups().map(([k,l,mem])=>`<button class="${mem.includes(S.view)?'on':''}" data-act="nav" data-v="${k}">${l}</button>`).join('')}</nav>
   <div class="nav-more" hidden><button class="nav-morebtn" data-act="nav-more" aria-haspopup="true" aria-expanded="false">More ▾</button><div class="nav-menu" role="menu" hidden></div></div>
-  <button class="topsearch" data-act="pal-open" aria-label="Search (Ctrl+K)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><span>Search</span><kbd>Ctrl K</kbd></button>
+  <div class="pres" id="pres"></div><button class="topsearch" data-act="pal-open" aria-label="Search (Ctrl+K)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><span>Search</span><kbd>Ctrl K</kbd></button>
   <div class="userbox"><button class="me-av" data-act="fun-me" title="My profile">${funAv(crewOf(myId()),30)}</button><span>${esc(myName())}<br><span class="rolepill">${ROLE_LABEL[role()]}</span></span>
   ${can('bids','edit')&&bidsAll()?'<button class="btn primary" data-act="new-bid">+ New bid</button>':''}<button class="btn sm" data-act="signout">Sign out</button></div>`;
   navFit();
@@ -10091,3 +10092,42 @@ function twStartCard(){if(twRo()||!S.tw)return '';const R=twR();if(S.tw.items.so
     ${st(placed,placed?'Sheets placed.':'Put the sheets to scale with the card on the plan: it reads the sheet’s scale bar, and lines sheets up to the CAD if you imported one. Or use Scale by hand.')}
     ${st(false,'Pick what you’re measuring under <b>Take off</b> on the left, then trace it on the plan, or use <b>Pick from plan</b> to click its lines. Quantities add up as you go.')}</ol></div>`}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act="tw-starthide"]');if(t&&S.tw){twR().startHide=true;twPanels()}});
+
+/* ---------- who's online: Supabase Realtime presence (no table needed), plus "last seen" when update-35 has run ----------
+   Each open tab tracks {id, name, role, avatar, where, here, idle}. Idle = tab hidden, or no mouse/keys for 5 minutes. */
+const PRES={ch:null,list:[],state:'',lastInput:Date.now(),seen:null,seenOk:null,timer:null,beat:0};
+function presWhere(){const v=S.view;let d='';try{
+    if(v==='estimate'&&S.est){const b=byId(S.bids,S.est.bidId);d=b?b.name:''}
+    else if(v==='tw'&&S.tw){const b=S.tw.bidId&&byId(S.bids,S.tw.bidId);d=b?b.name:(S.tw.name||'Takeoff')}
+    else if(v==='job'&&S.q&&S.q.job){const j=byId(S.jobs,S.q.job);d=j?j.name||j.job_number||'':''}
+    if(!d&&M&&M.kind==='bid'&&M.draft&&M.draft.name)d=M.draft.name}catch(e){}
+  const area=v==='tw'?'Takeoff':VIEW_AREA[v]||(v?v[0].toUpperCase()+v.slice(1):'');const key=v+'|'+(v==='estimate'&&S.est?S.est.bidId:v==='tw'&&S.tw?(S.tw.bidId||S.tw.id||''):d);return {area,d,key}}
+function presMe(){const c=crewOf(myId())||{};const w=presWhere();const idle=document.hidden||Date.now()-PRES.lastInput>5*60e3;
+  return {id:myId(),name:myName(),role:role(),av:(c.profile)||(S.profile&&S.profile.profile)||{},area:w.area,d:w.d,key:w.key,idle,since:PRES.since||(PRES.since=new Date().toISOString())}}
+async function presStart(){if(PRES.ch||!S.session||role()==='pending'||!sb.channel)return;
+  try{PRES.ch=sb.channel('bp-presence',{config:{presence:{key:myId()}}});
+    PRES.ch.on('presence',{event:'sync'},()=>{const st=PRES.ch.presenceState();const by=new Map();Object.values(st).flat().forEach(m=>{if(!m||!m.id)return;const o=by.get(m.id);
+        // several tabs: the active one wins
+        if(!o||o.idle&&!m.idle)by.set(m.id,m)});PRES.list=[...by.values()];presPaint()})
+      .subscribe(async s=>{if(s==='SUBSCRIBED'){PRES.state='';presTrack(true)}});
+    PRES.timer=setInterval(()=>presTrack(false),15000);presSeenLoad()}catch(e){console.warn('presence',e)}}
+function presStop(){if(PRES.timer)clearInterval(PRES.timer);PRES.timer=null;if(PRES.ch){try{sb.removeChannel(PRES.ch)}catch(e){}}PRES.ch=null;PRES.list=[];PRES.state='';PRES.since=null;presPaint()}
+function presTrack(force){if(!PRES.ch)return;const me=presMe();const k=JSON.stringify([me.area,me.d,me.key,me.idle,me.name]);if(!force&&k===PRES.state){presBeat();return}PRES.state=k;try{PRES.ch.track(me)}catch(e){}presBeat(true)}
+// "last seen" for people who aren't on now (supabase/update-35-presence.sql); quiet if it hasn't been run
+async function presBeat(now){if(PRES.seenOk===false||document.hidden)return;if(!now&&Date.now()-PRES.beat<120e3)return;PRES.beat=Date.now();const me=presMe();
+  try{const {error}=await sb.from('last_seen').upsert({user_id:me.id,name:me.name,role:me.role,area:me.area+(me.d?' · '+me.d:''),seen_at:new Date().toISOString()});if(error&&/relation|does not exist|schema cache/i.test(error.message||''))PRES.seenOk=false}catch(e){}}
+async function presSeenLoad(){if(PRES.seenOk===false)return;try{const {data,error}=await sb.from('last_seen').select('*').order('seen_at',{ascending:false}).limit(60);if(error){if(/relation|does not exist|schema cache/i.test(error.message||''))PRES.seenOk=false;return}PRES.seenOk=true;PRES.seen=data||[];presPaint()}catch(e){}}
+const presAgo=t=>{const s=(Date.now()-new Date(t))/1000;if(s<90)return 'just now';if(s<3600)return Math.round(s/60)+' min ago';if(s<86400)return Math.round(s/3600)+' h ago';const d=Math.round(s/86400);return d===1?'yesterday':d<7?d+' days ago':new Date(t).toLocaleDateString()};
+function presHtml(){if(!PRES.ch)return '';const me=myId();const here=presWhere().key;const L=PRES.list.slice().sort((a,b)=>(a.id===me)-(b.id===me)||(a.idle-b.idle)||String(a.name).localeCompare(String(b.name)));
+  const others=L.filter(m=>m.id!==me);const active=others.filter(m=>!m.idle).length;const near=others.filter(m=>m.key===here&&!m.idle);
+  const av=(m,sz)=>`<span class="pres-av${m.idle?' idle':''}">${funAv({full_name:m.name,profile:m.av},sz)}<i></i></span>`;
+  const btn=`<button class="pres-btn" data-act="pres-open" aria-expanded="${S.presOpen?'true':'false'}" title="${others.length?`${active} online${others.length>active?`, ${others.length-active} away`:''}`:'Nobody else is on right now'}">${others.slice(0,4).map(m=>av(m,26)).join('')}${others.length>4?`<span class="pres-more">+${others.length-4}</span>`:''}<span class="pres-n"><i class="${active?'on':''}"></i>${active||'0'}</span></button>`;
+  const row=m=>`<div class="pres-row">${av(m,30)}<div><b>${esc(m.name||'Someone')}${m.id===me?' <span class="dim">(you)</span>':''}</b><small>${esc(m.area||'')}${m.d?' · '+esc(m.d):''}</small><small class="dim">${m.idle?'Away':'Online'}${m.key===here&&m.id!==me?' · <span class="pres-here">on this page</span>':''}</small></div></div>`;
+  const onIds=new Set(L.map(m=>m.id));const recent=(PRES.seen||[]).filter(r=>!onIds.has(r.user_id)).slice(0,12);
+  const pop=S.presOpen?`<div class="pres-pop" role="dialog"><div class="pres-h">Online now <span class="dim">${L.length}</span></div>${L.map(row).join('')||'<p class="dim small">Just you.</p>'}
+    ${PRES.seenOk?`<div class="pres-h">Recently</div>${recent.map(r=>`<div class="pres-row off"><span class="pres-av off">${funAv({full_name:r.name,profile:(crewOf(r.user_id)||{}).profile},30)}</span><div><b>${esc(r.name||'')}</b><small>${esc(r.area||'')}</small><small class="dim">${presAgo(r.seen_at)}</small></div></div>`).join('')||'<p class="dim small">Nobody else yet.</p>'}`:isAdmin()&&PRES.seenOk===false?'<p class="dim small" style="margin:8px 0 0">Run <b>supabase/update-35-presence.sql</b> to also see when people were last on.</p>':''}</div>`:'';
+  return btn+pop+(near.length?`<span class="pres-near" title="Also on this page">👀 ${esc(near.map(m=>String(m.name||'').split(' ')[0]).join(', '))} ${near.length===1?'is':'are'} here too</span>`:'')}
+function presPaint(){const el=document.getElementById('pres');if(!el)return;const h=presHtml();if(el._h!==h){el.innerHTML=h;el._h=h}}
+['mousemove','keydown','pointerdown','wheel','touchstart'].forEach(ev=>document.addEventListener(ev,()=>{const was=Date.now()-PRES.lastInput>5*60e3;PRES.lastInput=Date.now();if(was)presTrack(false)},{passive:true,capture:true}));
+document.addEventListener('visibilitychange',()=>presTrack(false));
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act="pres-open"]');if(t){S.presOpen=!S.presOpen;if(S.presOpen)presSeenLoad();presPaint();return}if(S.presOpen&&!e.target.closest('#pres')){S.presOpen=false;presPaint()}});

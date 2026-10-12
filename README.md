@@ -49,6 +49,7 @@ supabase/update-18-team-access.sql         one-time update for Team: executive r
 supabase/update-19-help-developer.sql      one-time update for Help feedback and the developer account (run after update-18)
 supabase/update-20-dev-usage.sql           one-time update for the Developer tab's storage and capacity panel (run after update-19)
 supabase/update-21-break-room.sql          one-time update for the Break room: profiles, trophies, game scores (run after update-20)
+supabase/update-35-presence.sql            optional: "last seen" in the who's-online list (who's on right now works without it)
 ```
 
 > **Already set up before these updates?** Run each `supabase/update-*.sql` file you haven't run yet, once, in number order, in the SQL Editor. New installs only need `schema.sql`.
@@ -144,6 +145,10 @@ When the same project comes back under a new name or with new details, open the 
 
 ## Estimator log
 Every bid has an **Estimator log** under Scope takeoff. Estimators on the bid (and admins) add dated notes — site visits, takeoff notes, assumptions, clarifications, questions/RFIs, risks, pricing, calls — for the whole project or one scope, with photos or files attached. Notes save right away. You can edit, pin or delete your own notes; admins can manage any. Each scope row shows how many notes it has. When an awarded bid becomes a job, the notes show up read-only on the job's **Estimator notes** tab for the PM. Needs `supabase/update-11-estimator-log.sql`.
+
+## Who's online (everyone)
+
+The top bar shows who else has the app open, with a green dot for active and amber for away (tab hidden, or no mouse or keys for 5 minutes). If someone has the same page open as you, the bar says so ("👀 Pat is here too"); it's worth a word before you both edit one estimate or takeoff. Click it to see each person's page and bid, for example "Takeoff · High Falls 16". This uses Supabase Realtime and needs no setup. Run `supabase/update-35-presence.sql` once and the list also shows **Recently**: who was on earlier and when.
 
 ## Break room (everyone)
 A tab for morale: profiles, trophies and a few site-work games. Needs `supabase/update-21-break-room.sql`.
