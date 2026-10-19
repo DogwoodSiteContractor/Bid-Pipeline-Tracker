@@ -10725,35 +10725,51 @@ async function vpPage(tk){const main=$('#main'),top=$('#topwrap');if(top)top.hid
 function vcCounts(id){const X=S.vx||{ratings:[],prices:[],links:[]};return {q:S.quotes.filter(q=>q.vendor_id===id).length,r:X.ratings.filter(r=>r.vendor_id===id).length,p:X.prices.filter(p=>p.vendor_id===id).length}}
 function vcModal(){const C=M;const q=(C.q||'').toLowerCase();const list=S.vendors.filter(v=>!q||[v.company,v.vendor_type,v.trade,v.contact_name].join(' ').toLowerCase().includes(q)).sort((a,b)=>a.company.localeCompare(b.company));
   const sel=S.vendors.filter(v=>C.sel.has(v.id));const tot=sel.reduce((a,v)=>{const c=vcCounts(v.id);a.q+=c.q;a.r+=c.r;a.p+=c.p;return a},{q:0,r:0,p:0});const del=C.mode==='delete';const ok=sel.length&&(!del||C.typed.trim().toUpperCase()==='DELETE');const allOn=list.length&&list.every(v=>C.sel.has(v.id));
+  const what=[tot.r?tot.r+' rating'+(tot.r===1?'':'s'):'',tot.p?tot.p+' price'+(tot.p===1?'':'s'):'',C.quotes&&tot.q?`${tot.q} quote${tot.q===1?'':'s'} ${C.qdel?'deleted from':'taken off'} bids`:'',!del&&C.details?'contact details, scopes, regions and notes':''].filter(Boolean);
   return mhead('Reset or delete vendors','For test data, duplicates or companies you no longer use')+`<div class="mbody">
-    <div class="arch-modes"><label class="arch-m${!del?' on':''}"><input type="radio" name="vc-mode" value="reset" data-vcmode${!del?' checked':''}><span><b>Reset them</b><span class="small dim">Keep the vendors and their contact details. Clear their ratings, price lists, price history and update links, so their ranking starts fresh.</span></span></label>
+    <div class="arch-modes"><label class="arch-m${!del?' on':''}"><input type="radio" name="vc-mode" value="reset" data-vcmode${!del?' checked':''}><span><b>Reset them</b><span class="small dim">Keep the vendors, start their history over: ratings, price lists, price history and update links are cleared.</span></span></label>
       <label class="arch-m${del?' on':''}"><input type="radio" name="vc-mode" value="delete" data-vcmode${del?' checked':''}><span><b>Delete them</b><span class="small dim">Remove the vendors completely, along with everything above. This can’t be undone.</span></span></label></div>
     <fieldset style="margin-top:12px"><legend>Vendors · ${sel.length} picked</legend><div class="vc-bar"><input class="field sm" id="vc-q" data-vcq placeholder="Search vendors" value="${esc(C.q||'')}"><button class="btn sm" data-act="vc-all">${allOn?'Unpick':'Pick'} all ${list.length}${q?' shown':''}</button></div>
       <div class="vc-list">${list.map(v=>{const c=vcCounts(v.id);return `<label class="check vc-li"><input type="checkbox" data-vcid="${v.id}"${C.sel.has(v.id)?' checked':''}> <span><b>${esc(v.company)}</b> <span class="dim small">${esc([v.vendor_type,v.trade].filter(Boolean).join(' · '))}</span><span class="dim small vc-c">${[c.q?c.q+' quote'+(c.q===1?'':'s'):'',c.r?c.r+' rating'+(c.r===1?'':'s'):'',c.p?c.p+' price'+(c.p===1?'':'s'):''].filter(Boolean).join(' · ')||'no history'}</span></span></label>`}).join('')||'<p class="dim small">No vendors match.</p>'}</div></fieldset>
-    ${tot.q?`<label class="check" style="margin-top:10px"><input type="checkbox" data-vcquotes${C.quotes?' checked':''}> Also delete their ${tot.q} quote${tot.q===1?'':'s'} on bids <span class="dim small">(otherwise the quotes stay on the bids${del?', with no vendor':' and keep counting toward their response rate'})</span></label>`:''}
-    ${sel.length?`<p class="small" style="margin-top:10px">${del?`Deletes <b>${sel.length} vendor${sel.length===1?'':'s'}</b>`:`Resets <b>${sel.length} vendor${sel.length===1?'':'s'}</b>`}: ${[tot.r?tot.r+' rating'+(tot.r===1?'':'s'):'',tot.p?tot.p+' price'+(tot.p===1?'':'s'):'',C.quotes&&tot.q?tot.q+' quote'+(tot.q===1?'':'s')+' on bids':''].filter(Boolean).join(', ')||'nothing else attached'}.</p>`:''}
+    <fieldset style="margin-top:10px"><legend>Also</legend>
+      <label class="check"><input type="checkbox" data-vcquotes${C.quotes?' checked':''}${tot.q?'':' disabled'}> Clear their RFQ and quote history${tot.q?` <span class="dim small">(${tot.q} quote${tot.q===1?'':'s'} on bids; this is what their response rate, speed and price score come from)</span>`:' <span class="dim small">(none on file)</span>'}</label>
+      ${C.quotes&&tot.q?`<div class="vc-sub"><label class="check small"><input type="radio" name="vc-qd" data-vcqdel value="0"${C.qdel?'':' checked'}> Take the vendor off those quotes (the quotes stay on the bids)</label><label class="check small"><input type="radio" name="vc-qd" data-vcqdel value="1"${C.qdel?' checked':''}${isAdmin()?'':' disabled'}> Delete the quotes from the bids${isAdmin()?'':' (admins only)'}</label></div>`:''}
+      ${del?'':`<label class="check"><input type="checkbox" data-vcdetails${C.details?' checked':''}> Clear their details too: contact, phone, email, scopes, service regions, notes and preferred <span class="dim small">(keeps the company name and type)</span></label>`}</fieldset>
+    ${sel.length?`<p class="small" style="margin-top:10px">${del?`Deletes <b>${sel.length} vendor${sel.length===1?'':'s'}</b>`:`Resets <b>${sel.length} vendor${sel.length===1?'':'s'}</b>`}${what.length?': '+what.join(', ')+'.':del?'.':`. <span class="warn-t">Nothing is attached to clear yet${tot.q&&!C.quotes?': tick “Clear their RFQ and quote history” to reset their score':''}.</span>`}</p>`:''}
     ${del&&sel.length?`<label class="f" style="margin-top:6px"><span>Type <b>DELETE</b> to confirm</span><input class="field" data-vctype value="${esc(C.typed)}" autocomplete="off" style="max-width:220px;text-transform:uppercase"></label>`:''}</div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn ${del?'danger arm':'primary'}" data-act="vc-run"${ok&&!C.running?'':' disabled'}>${C.running?'Working…':`${del?'Delete':'Reset'} ${sel.length||''} vendor${sel.length===1?'':'s'}`}</button></div></div>`}
-async function vcRun(){const C=M;if(C.running)return;const ids=[...C.sel].filter(id=>byId(S.vendors,id));if(!ids.length)return;const del=C.mode==='delete';if(del&&C.typed.trim().toUpperCase()!=='DELETE')return;C.running=true;renderModal();const fail=[];
-  const chunks=a=>{const o=[];for(let i=0;i<a.length;i+=100)o.push(a.slice(i,i+100));return o};
+async function vcRun(){const C=M;if(C.running)return;const ids=[...C.sel].filter(id=>byId(S.vendors,id));if(!ids.length)return;const del=C.mode==='delete';if(del&&C.typed.trim().toUpperCase()!=='DELETE')return;C.running=true;renderModal();
+  const fail=[];const done={};const want={};const chunks=a=>{const o=[];for(let i=0;i<a.length;i+=100)o.push(a.slice(i,i+100));return o};
+  // every change asks for the rows it touched back, so the message says what really happened
+  const go=async(label,n,mk)=>{want[label]=(want[label]||0)+n;for(const c of chunks(ids)){const {data,error}=await mk(c).select('*');if(error){fail.push(label+': '+errMsg(error));continue}done[label]=(done[label]||0)+(data||[]).length}};
   try{
-    if(C.quotes){const qs=S.quotes.filter(q=>ids.includes(q.vendor_id));const files=qs.map(q=>q.file_path).filter(Boolean);if(files.length){try{await sb.storage.from(BUCKET).remove(files)}catch(e){}}
-      for(const c of chunks(qs.map(q=>q.id))){const {error}=await sb.from('quotes').delete().in('id',c);if(error)fail.push('quotes: '+errMsg(error))}}
-    if(del){for(const c of chunks(ids)){const {error}=await sb.from('vendors').delete().in('id',c);if(error)fail.push(errMsg(error))}}
-    else if(S.vx&&!S.vx.missing){for(const t of ['vendor_ratings','vendor_prices','vendor_links','vendor_price_log'])for(const c of chunks(ids)){const {error}=await sb.from(t).delete().in('vendor_id',c);if(error&&t!=='vendor_price_log')fail.push(t.replace('vendor_','')+': '+errMsg(error))}}
+    if(C.quotes){const qs=S.quotes.filter(q=>ids.includes(q.vendor_id));
+      if(C.qdel){const files=qs.map(q=>q.file_path).filter(Boolean);if(files.length){try{await sb.storage.from(BUCKET).remove(files)}catch(e){}}await go('quotes',qs.length,c=>sb.from('quotes').delete().in('vendor_id',c))}
+      else await go('quotes',qs.length,c=>sb.from('quotes').update({vendor_id:null}).in('vendor_id',c))}
+    if(del)await go('vendors',ids.length,c=>sb.from('vendors').delete().in('id',c));
+    else{if(S.vx&&!S.vx.missing){const X=S.vx;await go('ratings',X.ratings.filter(r=>ids.includes(r.vendor_id)).length,c=>sb.from('vendor_ratings').delete().in('vendor_id',c));await go('prices',X.prices.filter(r=>ids.includes(r.vendor_id)).length,c=>sb.from('vendor_prices').delete().in('vendor_id',c));
+        for(const t of ['vendor_links','vendor_price_log'])for(const c of chunks(ids)){await sb.from(t).delete().in('vendor_id',c)}}
+      if(C.details){const blank={contact_name:'',phone:'',email:'',area:'',notes:'',preferred:false,scopes:[]};if(ENT_COLS.vendors.includes('regions'))Object.assign(blank,{regions:[],base:''});await go('details',ids.length,c=>sb.from('vendors').update(blank).in('id',c))}}
   }catch(e){fail.push(errMsg(e))}
   await Promise.all([loadTable('vendors'),loadTable('quotes')]);if(S.vx&&!S.vx.missing)await vxLoad();if(typeof vxScoreAll==='function')vxScoreAll.k=null;
   closeModal();if(del&&S.view==='vendor'&&ids.includes(S.vendorId))S.view='vendors';render();
-  toast(fail.length?`Some of it didn’t go through: ${fail[0]}`:`${ids.length} vendor${ids.length===1?'':'s'} ${del?'deleted':'reset'}.`)}
+  const short=Object.keys(want).filter(k=>want[k]>(done[k]||0));
+  const said=[done.quotes?`${done.quotes} quote${done.quotes===1?'':'s'} ${C.qdel?'deleted':'cleared'}`:'',done.ratings?done.ratings+' rating'+(done.ratings===1?'':'s'):'',done.prices?done.prices+' price'+(done.prices===1?'':'s'):'',done.details?'details cleared':''].filter(Boolean);
+  if(fail.length)toast(`Some of it didn’t go through: ${fail[0]}`);
+  else if(short.length)toast(`Only part of it went through: ${short.map(k=>`${done[k]||0} of ${want[k]} ${k}`).join(', ')}. Your login may not be allowed to change those (quotes on bids you’re not on need an admin).`);
+  else if(del)toast(`${done.vendors||0} vendor${done.vendors===1?'':'s'} deleted${said.length?' · '+said.join(', '):''}.`);
+  else toast(said.length?`${ids.length} vendor${ids.length===1?'':'s'} reset: ${said.join(', ')}.`:`Nothing to reset: ${ids.length===1?'that vendor has':'those vendors have'} no ratings, prices or quotes attached.`)}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
-  if(a==='vc-open'){if(!can('contacts','edit'))return;M={kind:'vclean',mode:'reset',sel:new Set(t.dataset.id?[t.dataset.id]:[]),q:'',typed:'',quotes:false};showModal();return}
+  if(a==='vc-open'){if(!can('contacts','edit'))return;M={kind:'vclean',mode:'reset',sel:new Set(t.dataset.id?[t.dataset.id]:[]),q:'',typed:'',quotes:true,qdel:false,details:false};showModal();return}
   if(!M||M.kind!=='vclean')return;
   if(a==='vc-all'){const q=(M.q||'').toLowerCase();const list=S.vendors.filter(v=>!q||[v.company,v.vendor_type,v.trade,v.contact_name].join(' ').toLowerCase().includes(q));const on=list.every(v=>M.sel.has(v.id));list.forEach(v=>on?M.sel.delete(v.id):M.sel.add(v.id));renderModal();return}
   if(a==='vc-run')vcRun()});
 document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='vclean')return;
   if(t.dataset.vcmode!=null){M.mode=t.value;renderModal();return}
   if(t.dataset.vcid){t.checked?M.sel.add(t.dataset.vcid):M.sel.delete(t.dataset.vcid);renderModal();return}
-  if(t.dataset.vcquotes!=null){M.quotes=t.checked;renderModal();return}});
+  if(t.dataset.vcquotes!=null){M.quotes=t.checked;renderModal();return}
+  if(t.dataset.vcqdel!=null){M.qdel=t.value==='1';renderModal();return}
+  if(t.dataset.vcdetails!=null){M.details=t.checked;renderModal();return}});
 document.addEventListener('input',e=>{const t=e.target;if(!M||M.kind!=='vclean')return;
   if(t.dataset.vcq!=null){M.q=t.value;renderModal();return}
   if(t.dataset.vctype!=null){M.typed=t.value;const b=document.querySelector('[data-act="vc-run"]');if(b)b.disabled=!(M.sel.size&&M.typed.trim().toUpperCase()==='DELETE')}});
