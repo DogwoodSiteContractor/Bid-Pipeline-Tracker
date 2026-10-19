@@ -2231,3 +2231,21 @@ div.tw-pgh{cursor:default}
 .vx-wr b{display:block;font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vx-wr .small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .vx-wm b{font-weight:600}
+/* price sheets: one grid, even columns, no gaps */
+.vx-sheet{table-layout:fixed;border-collapse:separate;border-spacing:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;min-width:720px}
+.vx-sheet th{background:var(--surface-2);border-bottom:1px solid var(--line);padding:8px}
+.vx-sheet td{border-bottom:1px solid var(--line);border-right:1px solid var(--line);padding:0;height:38px;overflow:hidden}
+.vx-sheet td:last-child,.vx-sheet th:last-child{border-right:0}
+.vx-sheet tbody tr:last-child td{border-bottom:0}
+.vx-sheet td.small,.vx-sheet td.dim{padding:0 8px}
+.vx-sheet td:last-child{text-align:center}
+.vx-in,.vx-in.num,.vx-in.u{display:block;width:100%;min-width:0;max-width:none;height:38px;border:0;border-radius:0;background:transparent;padding:0 9px;margin:0}
+.vx-in:hover{background:var(--surface-2)}
+.vx-in:focus{background:var(--surface);box-shadow:inset 0 0 0 2px var(--accent);border:0}
+.vx-sheet tr.vx-new td{background:var(--surface-2)}
+.vx-sheet tr.vx-new .vx-in{background:transparent}
+.vx-sheet tr.vx-new .vx-in::placeholder{color:var(--ink-3)}
+.vp-empty td{padding:14px 12px!important;color:var(--ink-3);font-size:13.5px;text-align:left!important;height:auto}
+.vx-sheet .x{margin:0 auto}
+.vx-sheet th.r{text-align:right;padding-right:10px}
+.vx-sheet{background:var(--surface)}
