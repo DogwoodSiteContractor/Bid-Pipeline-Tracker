@@ -1104,6 +1104,7 @@ function bpProject(b,work,admin){
     <label class="f">Site walk / pre-bid<input type="date" class="field" ${bf('walk_date')}></label>
     <label class="f">RFI deadline<input type="date" class="field" ${bf('rfi_date')}></label>
     <label class="f" title="Shown to the client on their tracker. Blank = the bid due date.">Proposal expected by<input type="date" class="field" ${bf('proposal_eta')}></label>
+    <label class="f" title="The date on the plan set you're bidding from">Plan date<input type="date" class="field" data-bprfq="planDate" value="${esc(rfqOf(b).planDate||'')}"${work?'':' disabled'}></label>
   </div></fieldset>
   <fieldset><legend>Bidding to</legend>
     <div class="bp-gcs">${b.client_ids.map(id=>{const c=byId(S.clients,id);const cs=c?.contacts||[];return `<div class="bp-gc"><div><b>${esc(clientName(id))}</b><div class="dim small">${esc(c?.type||'')}</div></div><select class="field sm" data-cc="${id}"${work?'':' disabled'}><option value="">Contact…</option>${cs.map(x=>`<option${b.client_contacts?.[id]===x.name?' selected':''}>${esc(x.name)}</option>`).join('')}</select>${work?`<button class="rm" data-act="rm-client" data-id="${id}" aria-label="Remove">×</button>`:''}</div>`}).join('')||'<div class="dim small">No GCs yet.</div>'}</div>
@@ -11137,7 +11138,7 @@ Thank you for your participation in this bid. We look forward to receiving your 
 Sincerely,
 
 Dogwood Estimating Team`};
-const RFQ_KEYS=[['project','Project name'],['location','Location'],['quotes_due','Quotes due date'],['quotes_due_time','Quotes due time'],['note','Note for this RFQ, e.g. Phase 1 & 2 only'],['start_date','Anticipated start'],['plans_link','Plans link'],['details_table','Project address / description / engineer table'],['scopes','Scopes, comma separated'],['engineer','Engineer'],['gc','Who you’re bidding to'],['bid_due','Bid due date'],['walk_date','Site walk'],['rfi_date','RFI deadline'],['estimator','Lead estimator'],['company','Your company']];
+const RFQ_KEYS=[['project','Project name'],['location','Location'],['quotes_due','Quotes due date'],['quotes_due_time','Quotes due time'],['note','Note for this RFQ, e.g. Phase 1 & 2 only'],['start_date','Anticipated start'],['plans_link','Plans link'],['details_table','Project address / description / engineer table'],['plan_date','Plan date'],['scopes','Scopes, comma separated'],['engineer','Engineer'],['gc','Who you’re bidding to'],['bid_due','Bid due date'],['walk_date','Site walk'],['rfi_date','RFI deadline'],['estimator','Lead estimator'],['company','Your company']];
 const rfqTpl=()=>({...RFQ_DEF,...(S.settings.rfq_email||{})});
 const rfqDate=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}):'TBD';
 const rfqD=d=>{if(!d)return 'TBD';const x=new Date(d+'T12:00:00');return `${x.getMonth()+1}/${x.getDate()}/${x.getFullYear()}`};
@@ -11150,8 +11151,8 @@ const vEmail=v=>(/[^\s<>(),;]+@[^\s<>(),;]+/.exec(String(v&&v.email||''))||[''])
 function rfqScopes(b,qs){const ord=n=>{const i=b.scope_items.findIndex(x=>x.name.toLowerCase()===String(n).toLowerCase());return i<0?999:i};const names=[...new Set(qs.flatMap(qScopes))].sort((x,y)=>ord(x)-ord(y));return names.map(n=>{const it=b.scope_items.find(x=>x.name.toLowerCase()===String(n).toLowerCase());return {n,mat:it&&performOf(it)==='Self perform'}})}
 function rfqMap(b,qs){const r=rfqOf(b);const lead=byId(S.estimators,b.lead_estimator_id)||{};const co=S.settings.general?.companyName||CFG.companyName||'Dogwood Site Contractors';const sc=rfqScopes(b,qs);
   return {project:b.name||'',location:b.location||'',quotes_due:rfqD(rfqDue(b)),quotes_due_time:r.time||'5PM',note:r.note||'',note_short:r.note?' '+r.note.replace(/^\W+|\W+$/g,'').replace(/^(pricing and quotes needed are for )?only /i,''):'',start_date:r.start||'TBD',plans_link:'\u0001plans\u0001',details_table:'\u0001table\u0001',
-    scopes:sc.map(x=>x.n+(x.mat?' (material)':'')).join(', '),engineer:r.engineer||'',gc:b.client_ids.map(clientName).join(', '),bid_due:rfqD(b.due_date),walk_date:b.walk_date?rfqD(b.walk_date):'',rfi_date:b.rfi_date?rfqD(b.rfi_date):'',estimator:lead.name||myName(),company:co,
-    _sc:sc,_desc:r.desc||`This is a ${String(b.project_type||'Commercial')} Development which includes the following:`,_plans:r.plans||'',_plansLabel:r.plansLabel||''}}
+    scopes:sc.map(x=>x.n+(x.mat?' (material)':'')).join(', '),plan_date:r.planDate?rfqD(r.planDate):'',engineer:r.engineer||'',gc:b.client_ids.map(clientName).join(', '),bid_due:rfqD(b.due_date),walk_date:b.walk_date?rfqD(b.walk_date):'',rfi_date:b.rfi_date?rfqD(b.rfi_date):'',estimator:lead.name||myName(),company:co,
+    _sc:sc,_desc:r.desc||`This is a ${String(b.project_type||'Commercial')} Development which includes the following:`,_plans:r.plans||'',_plansLabel:r.plansLabel||(r.planDate?`${r.planDate.replace(/-/g,'')} - ${b.name||'Plans'} Civil Set.pdf`:'')}}
 // fill the template: drop a line when its fields came out empty and nothing else is on it
 function rfqLines(str,map){return String(str||'').split('\n').flatMap(line=>{let empty=false,any=false;const out=line.replace(/\{(\w+)\}/g,(m,k)=>{if(!(k in map))return m;any=true;const v=map[k];if(v===''||v==null)empty=true;return v??''});
   if(any&&empty&&!out.replace(/[*_\s:|–-]/g,''))return [];return [out]}).join('\n').replace(/\n{3,}/g,'\n\n').trim()}
@@ -11159,6 +11160,7 @@ const rfqEsc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt
 function rfqInline(t){return rfqEsc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/__(.+?)__/g,'<u>$1</u>').replace(/(^|[\s(])([\w.+-]+@[\w-]+\.[\w.]+)/g,'$1<a href="mailto:$2">$2</a>')}
 function rfqTableHtml(b,map){const td='border:1px solid #000;padding:6px 8px;vertical-align:top;font-family:Calibri,Arial,sans-serif;font-size:11pt';
   const rows=[['Project Address:',rfqEsc(b.location||'')],['Description:',`<b>${rfqEsc(map._desc)}</b>${map._sc.length?`<ul style="margin:8px 0 8px 18px;padding:0">${map._sc.map(x=>`<li><b>${rfqEsc(x.n)}${x.mat?' (material)':''}</b></li>`).join('')}</ul>`:''}`]];
+  if(map.plan_date)rows.push(['Plan Date',rfqEsc(map.plan_date)]);
   if(map.engineer)rows.push(['Engineer',rfqEsc(map.engineer)]);
   return `<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:3px double #000;width:620px">${rows.map(([k,v])=>`<tr><td style="${td};width:180px">${k.endsWith(':')?`<b>${k}</b>`:`<b>${k}</b>`}</td><td style="${td}">${v}</td></tr>`).join('')}</table>`}
 function rfqHtml(b,qs,tplBody){const map=rfqMap(b,qs);const text=rfqLines(tplBody,map);
@@ -11166,7 +11168,7 @@ function rfqHtml(b,qs,tplBody){const map=rfqMap(b,qs);const text=rfqLines(tplBod
   const html=text.split(/\n{2,}/).map(par=>{if(par.trim()==='\u0001table\u0001')return rfqTableHtml(b,map);return `<p style="margin:0 0 12px">${par.split('\n').map(rfqInline).join('<br>')}</p>`}).join('').replace(/\u0001plans\u0001/g,plans).replace(/\u0001table\u0001/g,'');
   return `<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#000">${html}</div>`}
 function rfqText(b,qs,tplBody){const map=rfqMap(b,qs);const text=rfqLines(tplBody,map);
-  const table=[`Project Address: ${b.location||''}`,`Description: ${map._desc}`,...map._sc.map(x=>`  • ${x.n}${x.mat?' (material)':''}`),map.engineer?`Engineer: ${map.engineer}`:''].filter(Boolean).join('\n');
+  const table=[`Project Address: ${b.location||''}`,`Description: ${map._desc}`,...map._sc.map(x=>`  • ${x.n}${x.mat?' (material)':''}`),map.plan_date?`Plan Date: ${map.plan_date}`:'',map.engineer?`Engineer: ${map.engineer}`:''].filter(Boolean).join('\n');
   return text.replace(/\*\*|__/g,'').replace(/\u0001plans\u0001/g,map._plans||'(link to plans)').replace(/\u0001table\u0001/g,table)}
 function rfqStart(){const b=M.draft;rfqOf(b);const pick=b.quotes.filter(q=>(q.status||'Not requested')==='Not requested').map(q=>q.id);
   M.rfq={sel:new Set(pick.length?pick:b.quotes.filter(q=>qOpen(q)).map(q=>q.id)),edit:false,tpl:null,copied:'',plain:false,subj:null};renderModal()}
@@ -11185,7 +11187,7 @@ function rfqView(){const b=M.draft;const R=M.rfq;const T=rfqTpl();const r=rfqOf(
      ${f('time','Due time','5PM')}
      ${f('note','Note (shows in bold, and in the subject)','e.g. Pricing and Quotes needed are for only Phase 1 & 2','s2')}
      ${f('plans','Plans link','Paste the SharePoint / Dropbox / plan room link','s2')}
-     ${f('plansLabel','Link text','e.g. 20260918 - River Hill Communities Civil Set.pdf','s2')}
+     ${f('plansLabel','Link text',r.planDate?`${r.planDate.replace(/-/g,'')} - ${b.name||'Plans'} Civil Set.pdf`:'e.g. 20260918 - River Hill Communities Civil Set.pdf','s2')}
      ${f('engineer','Engineer','e.g. LJA Engineering')}
      ${f('start','Anticipated start','TBD')}
      ${f('desc','Description line',`This is a ${b.project_type||'Commercial'} Development which includes the following:`,'s2')}
@@ -11243,3 +11245,4 @@ document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')re
   if(t.dataset.rfqdue!=null){const v=t.value;rfqOf(M.draft).due=v;M.draft.quotes.forEach(q=>{if(qOpen(q))q.due_date=v});renderModal();return}
   // putting in the date a quote came back marks it received
   if(t.dataset.qf&&t.dataset.qf.endsWith('.received_date')){const q=M.draft.quotes[+t.dataset.qf.split('.')[0]];if(q&&t.value&&q.status!=='Received'){q.status='Received';renderModal()}}});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.bprfq&&M&&M.kind==='bid'){rfqOf(M.draft)[t.dataset.bprfq]=t.value;if(!M.draft._new)bpSaveUI('Editing…')}});
