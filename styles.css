@@ -2375,3 +2375,28 @@ div.tw-pgh{cursor:default}
 @media (max-width:1000px){.bp-grid{grid-template-columns:1fr}.bp-aside{position:static}}
 @media (max-width:700px){.bidpage .bp-head{flex-wrap:wrap;padding:10px 14px}.bp-right{width:100%;justify-content:space-between}.bp-tabs{padding:6px 10px 0}.bp-tab small{display:none}.bp-body{padding:14px}.bp-gc{grid-template-columns:1fr auto}.bp-gc select{grid-column:1/-1;grid-row:2}.bp-adv{margin:0;padding:0;border:0;width:100%;justify-content:space-between}.bp-miss{max-width:60vw}}
 @media (prefers-reduced-motion:reduce){.btn.glow{animation:none}}
+/* RFQ: one due date for the whole request, and the email */
+.rfq-bar{display:flex;align-items:center;gap:14px;flex-wrap:wrap;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px;margin-bottom:14px}
+.rfq-due{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px}
+.rfq-due .field{width:170px}
+.rfq-bar .btn.primary{margin-left:auto}
+.q-rcv{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--ink-3);font-weight:600}
+.q-rcv .field{font-weight:400}
+.rfq-list{display:flex;flex-direction:column;gap:6px}
+.rfq-v{display:grid;grid-template-columns:auto minmax(0,1fr) auto auto;gap:10px;align-items:center;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);cursor:pointer}
+.rfq-v.nomail{opacity:.75}
+.rfq-hdr{display:grid;grid-template-columns:70px minmax(0,1fr);gap:8px 12px;font-size:13.5px;align-items:baseline}
+.rfq-hdr>span{color:var(--ink-3);font-weight:600;font-size:12.5px}
+.rfq-bcc{word-break:break-all}
+.rfq-body{white-space:pre-wrap;font:13.5px/1.5 inherit;font-family:inherit;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:12px 0 8px;max-height:46vh;overflow:auto}
+.rfq-ta{min-height:360px;font-family:inherit;line-height:1.5}
+.rfq-keys{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.rfq-keys .chip{font-family:ui-monospace,Menlo,monospace;font-size:12px}
+.small.good,.hint .good{color:var(--good);font-weight:600}
+.hint.bad,.small.bad{color:var(--bad)}
+@media (max-width:700px){.rfq-v{grid-template-columns:auto minmax(0,1fr)}.rfq-v .small,.rfq-v .pill{grid-column:2}}
+.rfq-cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:16px;align-items:start}
+.rfq-preview{background:#fff;color:#000;border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin:12px 0 8px;max-height:60vh;overflow:auto}
+.rfq-preview a{color:#0563c1}
+.rfq-hdr .field{width:100%}
+@media (max-width:1000px){.rfq-cols{grid-template-columns:1fr}}

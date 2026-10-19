@@ -1053,6 +1053,7 @@ function bpProgress(b,key){const Q=b.quotes||[];
 function bidModal(){
   if(M.picker)return pickerView();
   if(M.sup)return supView();
+  if(M.rfq)return rfqView();
   const b=M.draft;const admin=isAdmin();const work=canWork(b);const isNew=b._new;
   if(!M.tab)M.tab=isNew?'project':bpTabOf(b);
   const cur=bpStageIdx(b);
@@ -1123,7 +1124,11 @@ function bpRfq(b,work,admin){
   const vendorsSorted=S.vendors.slice().sort((a,c)=>a.trade.localeCompare(c.trade)||a.company.localeCompare(c.company));
   const tradesWithVendors=TRADES.filter(t=>S.vendors.some(v=>v.trade===t));
   const nr=b.quotes.filter(q=>(q.status||'Not requested')==='Not requested').length;
-  return `<fieldset><legend>Scopes, vendors & RFQs</legend>
+  const due=rfqDue(b);const mixed=!due&&new Set(b.quotes.filter(q=>qOpen(q)).map(q=>q.due_date).filter(Boolean)).size>1;
+  return `<div class="rfq-bar"><label class="rfq-due"><span>Quotes due</span><input type="date" class="field" data-rfqdue value="${esc(due)}"${work?'':' disabled'}></label>
+    <span class="small dim">${mixed?'The quotes have different due dates. Pick one to set them all.':due?`${rfqDate(due)}${b.due_date?` · ${Math.round((parseD(b.due_date)-parseD(due))/864e5)} days before the bid`:''}`:'One date for the whole RFQ. Every vendor gets the same one.'}</span>
+    ${work?`<button class="btn primary" data-act="rfq-start"${b.quotes.length?'':' disabled title="Add vendors first"'}>✉ RFQ email…</button>`:''}</div>
+  <fieldset><legend>Scopes, vendors & RFQs</legend>
     <p class="hint" style="margin:0 0 10px">Pick the scopes, then the vendors and subs to price each one. Picking the same vendor for several scopes keeps it to one quote. Mark them <b>Requested</b> as the RFQs go out.</p>
     <div class="qgs">${quoteGroupsHtml(b,work,admin,'rfq')}</div>
     ${work?bpScopeAdders(b):''}
@@ -1334,7 +1339,7 @@ function quoteRow(q,i,work,admin){
     :work?`<span class="file"><label>Upload quote<input type="file" data-upload="${i}"></label></span>`:'<span class="dim small">No file</span>';
   return `<div class="quote q2"><div class="vn">${esc(v?.company||'Removed vendor')}<small>${esc(v?.trade||'')}${v?.phone?' · '+esc(v.phone):''}${q.requested_date?' · asked '+fmtShort(q.requested_date):''}${q.received_date?' · in '+fmtShort(q.received_date):''}</small>${qCovHtml(q,i,work)}</div>
    <select class="field" data-qf="${i}.status"${d}>${QUOTE_ST.map(s=>`<option${q.status===s?' selected':''}>${s}</option>`).join('')}</select>
-   <input type="date" class="field" data-qf="${i}.due_date" value="${esc(q.due_date||'')}" title="Need quote by"${d}>
+   <label class="q-rcv" title="Date the quote came back"><span>Received</span><input type="date" class="field" data-qf="${i}.received_date" value="${esc(q.received_date||'')}"${d}></label>
    <input type="number" step="0.01" class="field" data-qf="${i}.amount" data-t="n" value="${esc(q.amount??'')}" placeholder="$"${d}>
    <div>${file}<input class="field" style="margin-top:4px" data-qf="${i}.note" value="${esc(q.note||'')}" placeholder="Note"${d}></div>
    ${admin||(work&&!M.origQuoteIds?.includes(q.id))?`<button class="rm" data-act="rm-quote" data-i="${i}" aria-label="Remove">×</button>`:'<span></span>'}</div>`;
@@ -1372,7 +1377,7 @@ function addQuote(vid,scope){const v=vendorOf(vid);if(!v)return false;
   if(M.draft.quotes.some(q=>q.vendor_id===vid&&qHas(q,scope)))return false;
   const same=M.draft.quotes.find(q=>q.vendor_id===vid&&qOpen(q)&&!q.file_path&&q.amount==null);
   if(same){qSetScopes(same,[...qScopes(same),scope]);return true}
-  M.draft.quotes.push({id:newId(),bid_id:M.draft.id,vendor_id:vid,scope,status:'Not requested',requested_date:'',due_date:'',received_date:'',amount:null,note:'',file_path:null,file_name:null});return true}
+  M.draft.quotes.push({id:newId(),bid_id:M.draft.id,vendor_id:vid,scope,status:'Not requested',requested_date:'',due_date:rfqDue(M.draft)||'',received_date:'',amount:null,note:'',file_path:null,file_name:null});return true}
 
 /* ----- directory modals ----- */
 function ef(path,ph,type){return `<input class="field" ${type?`type="${type}"`:''} data-ef="${path}" value="${esc(M.draft[path]??'')}" placeholder="${esc(ph||'')}"${DIS()}>`}
@@ -1466,6 +1471,9 @@ async function saveBid(opt={},m=M){
   d._new=false;
   // kept out of the main save so bids still save before update-28 has been run
   if(d.proposal_eta!==undefined&&(wasNew?d.proposal_eta:true)){try{await sb.from('bids').update({proposal_eta:nullIfEmpty(d.proposal_eta)}).eq('id',row.id)}catch(e){}}
+  // RFQ details (quotes due, plans link, engineer…): own column so bids still save before update-39 is run
+  if(d.rfq&&typeof d.rfq==='object'){try{localStorage.setItem('rfq:'+row.id,JSON.stringify(d.rfq))}catch(e){}
+    if(!S.rfqMissing){try{const {error}=await sb.from('bids').update({rfq:d.rfq}).eq('id',row.id);if(error)S.rfqMissing=true}catch(e){S.rfqMissing=true}}}
   if(wasNew&&(row.client_ids||[]).length&&!S.trackMissing)setTimeout(()=>{if(!M)trackOpen(row.client_ids,row.id)},400);
   if(isAdmin()){const gone=(m.origQuoteIds||[]).filter(id=>!d.quotes.some(q=>q.id===id));if(gone.length)await run(sb.from('quotes').delete().in('id',gone))}
   if(d.quotes.length)await run(sb.from('quotes').upsert(d.quotes.map(quoteRowData)));
@@ -11093,3 +11101,145 @@ document.addEventListener('keydown',async e=>{const t=e.target;if(!t.dataset||e.
     const cur=vendorScopes(M.draft);if(!cur.some(x=>x.toLowerCase()===v.toLowerCase()))M.draft.scopes=[...cur,v];renderModal();const ni=document.getElementById('vs-new');if(ni){ni.value='';ni.focus()}toast(`“${v}” added to the scope list and ticked for this vendor.`)}});
 // opening the app on a bid's link takes you straight to that bid
 setInterval(()=>{if(BPA.linked||!S.session||!S.bids||!S.bids.length)return;BPA.linked=true;const m=/^#bid=([\w-]+)/.exec(location.hash);if(m&&!M&&byId(S.bids,m[1]))openBid(m[1])},500);
+
+
+/* ----- RFQ email, in Dogwood's format -----
+   One email to every vendor on the bid: vendors in Bcc, the estimating inbox in Cc. "Open in email" fills in
+   Cc/Bcc/Subject and copies the formatted message (bold, underline, plans link, the project table), so you paste
+   once and hit send. Outlook adds your signature as usual.
+   The template is shared by the team (settings 'rfq_email'). It's plain text with a little markup:
+   **bold**  __underline__  {fields}. Whole-line fields: {details_table}. The RFQ details for each bid (quotes due,
+   plans link, engineer, start date, note) live on the bid (bids.rfq, update-39), with a copy in this browser. */
+const RFQ_DEF={cc:'Estimating@dogwoodsite.com',subject:'{project} Request for Quote{note_short}',
+  body:`**{project} | {location}**
+
+**We ask that all proposals be submitted by {quotes_due_time} on {quotes_due}. Please respond within 48hr to let us know if you will be bidding on this project. Thank you and we look forward to receiving your proposal.**
+
+**{note}**
+
+__**If submitting Bid RFI’s, please send all to:**__
+Dogwood Estimating Team: estimating@dogwoodsite.com
+Please make sure that include the Project Name and “RFI” in the subject of your email for clarification.
+
+__**Submit all bids to:**__
+Dogwood Estimating Team: estimating@dogwoodsite.com
+Please make sure that you include the Project Name, “Bid”, and your Company Name in the Subject of your email for clarification.
+
+__**Anticipated Start Date:**__ {start_date}
+
+__**FILES: Click link(s) below or Copy & Paste into your browser window to access plans:**__
+
+**Link to Plans:** {plans_link}
+
+{details_table}
+
+Thank you for your participation in this bid. We look forward to receiving your quote.
+Sincerely,
+
+Dogwood Estimating Team`};
+const RFQ_KEYS=[['project','Project name'],['location','Location'],['quotes_due','Quotes due date'],['quotes_due_time','Quotes due time'],['note','Note for this RFQ, e.g. Phase 1 & 2 only'],['start_date','Anticipated start'],['plans_link','Plans link'],['details_table','Project address / description / engineer table'],['scopes','Scopes, comma separated'],['engineer','Engineer'],['gc','Who you’re bidding to'],['bid_due','Bid due date'],['walk_date','Site walk'],['rfi_date','RFI deadline'],['estimator','Lead estimator'],['company','Your company']];
+const rfqTpl=()=>({...RFQ_DEF,...(S.settings.rfq_email||{})});
+const rfqDate=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}):'TBD';
+const rfqD=d=>{if(!d)return 'TBD';const x=new Date(d+'T12:00:00');return `${x.getMonth()+1}/${x.getDate()}/${x.getFullYear()}`};
+const rfqLS=id=>{try{return JSON.parse(localStorage.getItem('rfq:'+id)||'null')}catch(e){return null}};
+function rfqOf(b){if(!b.rfq||typeof b.rfq!=='object')b.rfq={...(rfqLS(b.id)||{})};return b.rfq}
+// the bid's "quotes due" date: set once for the whole RFQ (falls back to what the open quotes share)
+function rfqDue(b){const r=rfqOf(b);if(r.due)return r.due;const ds=[...new Set((b.quotes||[]).filter(q=>qOpen(q)).map(q=>q.due_date).filter(Boolean))];return ds.length===1?ds[0]:''}
+const vEmail=v=>(/[^\s<>(),;]+@[^\s<>(),;]+/.exec(String(v&&v.email||''))||[''])[0];
+// scopes on this RFQ; ones you self perform go out as "(material)"
+function rfqScopes(b,qs){const ord=n=>{const i=b.scope_items.findIndex(x=>x.name.toLowerCase()===String(n).toLowerCase());return i<0?999:i};const names=[...new Set(qs.flatMap(qScopes))].sort((x,y)=>ord(x)-ord(y));return names.map(n=>{const it=b.scope_items.find(x=>x.name.toLowerCase()===String(n).toLowerCase());return {n,mat:it&&performOf(it)==='Self perform'}})}
+function rfqMap(b,qs){const r=rfqOf(b);const lead=byId(S.estimators,b.lead_estimator_id)||{};const co=S.settings.general?.companyName||CFG.companyName||'Dogwood Site Contractors';const sc=rfqScopes(b,qs);
+  return {project:b.name||'',location:b.location||'',quotes_due:rfqD(rfqDue(b)),quotes_due_time:r.time||'5PM',note:r.note||'',note_short:r.note?' '+r.note.replace(/^\W+|\W+$/g,'').replace(/^(pricing and quotes needed are for )?only /i,''):'',start_date:r.start||'TBD',plans_link:'\u0001plans\u0001',details_table:'\u0001table\u0001',
+    scopes:sc.map(x=>x.n+(x.mat?' (material)':'')).join(', '),engineer:r.engineer||'',gc:b.client_ids.map(clientName).join(', '),bid_due:rfqD(b.due_date),walk_date:b.walk_date?rfqD(b.walk_date):'',rfi_date:b.rfi_date?rfqD(b.rfi_date):'',estimator:lead.name||myName(),company:co,
+    _sc:sc,_desc:r.desc||`This is a ${String(b.project_type||'Commercial')} Development which includes the following:`,_plans:r.plans||'',_plansLabel:r.plansLabel||''}}
+// fill the template: drop a line when its fields came out empty and nothing else is on it
+function rfqLines(str,map){return String(str||'').split('\n').flatMap(line=>{let empty=false,any=false;const out=line.replace(/\{(\w+)\}/g,(m,k)=>{if(!(k in map))return m;any=true;const v=map[k];if(v===''||v==null)empty=true;return v??''});
+  if(any&&empty&&!out.replace(/[*_\s:|–-]/g,''))return [];return [out]}).join('\n').replace(/\n{3,}/g,'\n\n').trim()}
+const rfqEsc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function rfqInline(t){return rfqEsc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/__(.+?)__/g,'<u>$1</u>').replace(/(^|[\s(])([\w.+-]+@[\w-]+\.[\w.]+)/g,'$1<a href="mailto:$2">$2</a>')}
+function rfqTableHtml(b,map){const td='border:1px solid #000;padding:6px 8px;vertical-align:top;font-family:Calibri,Arial,sans-serif;font-size:11pt';
+  const rows=[['Project Address:',rfqEsc(b.location||'')],['Description:',`<b>${rfqEsc(map._desc)}</b>${map._sc.length?`<ul style="margin:8px 0 8px 18px;padding:0">${map._sc.map(x=>`<li><b>${rfqEsc(x.n)}${x.mat?' (material)':''}</b></li>`).join('')}</ul>`:''}`]];
+  if(map.engineer)rows.push(['Engineer',rfqEsc(map.engineer)]);
+  return `<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:3px double #000;width:620px">${rows.map(([k,v])=>`<tr><td style="${td};width:180px">${k.endsWith(':')?`<b>${k}</b>`:`<b>${k}</b>`}</td><td style="${td}">${v}</td></tr>`).join('')}</table>`}
+function rfqHtml(b,qs,tplBody){const map=rfqMap(b,qs);const text=rfqLines(tplBody,map);
+  const plans=map._plans?`<a href="${rfqEsc(map._plans)}">${rfqEsc(map._plansLabel||map._plans)}</a>`:'<i>(add the plans link)</i>';
+  const html=text.split(/\n{2,}/).map(par=>{if(par.trim()==='\u0001table\u0001')return rfqTableHtml(b,map);return `<p style="margin:0 0 12px">${par.split('\n').map(rfqInline).join('<br>')}</p>`}).join('').replace(/\u0001plans\u0001/g,plans).replace(/\u0001table\u0001/g,'');
+  return `<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#000">${html}</div>`}
+function rfqText(b,qs,tplBody){const map=rfqMap(b,qs);const text=rfqLines(tplBody,map);
+  const table=[`Project Address: ${b.location||''}`,`Description: ${map._desc}`,...map._sc.map(x=>`  • ${x.n}${x.mat?' (material)':''}`),map.engineer?`Engineer: ${map.engineer}`:''].filter(Boolean).join('\n');
+  return text.replace(/\*\*|__/g,'').replace(/\u0001plans\u0001/g,map._plans||'(link to plans)').replace(/\u0001table\u0001/g,table)}
+function rfqStart(){const b=M.draft;rfqOf(b);const pick=b.quotes.filter(q=>(q.status||'Not requested')==='Not requested').map(q=>q.id);
+  M.rfq={sel:new Set(pick.length?pick:b.quotes.filter(q=>qOpen(q)).map(q=>q.id)),edit:false,tpl:null,copied:'',plain:false,subj:null};renderModal()}
+function rfqView(){const b=M.draft;const R=M.rfq;const T=rfqTpl();const r=rfqOf(b);const due=rfqDue(b);
+  if(R.edit)return rfqEditView();
+  const qs=b.quotes.filter(q=>R.sel.has(q.id));const vs=[...new Set(qs.map(q=>q.vendor_id))].map(vendorOf).filter(Boolean);
+  const bcc=vs.map(vEmail).filter(Boolean);const noMail=vs.filter(v=>!vEmail(v));
+  const subj=R.subj??rfqLines(T.subject,rfqMap(b,qs)).replace(/\*\*|__/g,'');const html=rfqHtml(b,qs,T.body);const text=rfqText(b,qs,T.body);
+  R.out={bcc,subj,html,text,cc:T.cc};
+  const rows=b.quotes.map(q=>{const v=vendorOf(q.vendor_id);const em=vEmail(v);return `<label class="rfq-v${em?'':' nomail'}"><input type="checkbox" data-rfqsel="${q.id}"${R.sel.has(q.id)?' checked':''}><span><b>${esc(v?.company||'Removed vendor')}</b> <span class="dim small">${esc(qScopes(q).join(', '))}</span></span><span class="small ${em?'dim':'bad'}">${em?esc(em):'No email on file'}</span>${pill(q.status||'Not requested',QUOTE_CLS[q.status||'Not requested']||'')}</label>`}).join('');
+  const f=(k,l,ph,w)=>`<label class="f${w?' '+w:''}">${l}<input class="field" data-rfqf="${k}" value="${esc(r[k]||'')}" placeholder="${esc(ph)}"></label>`;
+  return mhead('RFQ email',`${b.name} · ${qs.length} quote request${qs.length===1?'':'s'} · ${bcc.length} email${bcc.length===1?'':'s'}`).replace('data-act="close"','data-act="rfq-cancel"')+`<div class="mbody rfq-wrap">
+   <div class="rfq-cols"><div>
+   <fieldset><legend>This RFQ</legend><div class="fg">
+     <label class="f">Quotes due<input type="date" class="field" data-rfqdue value="${esc(due)}"></label>
+     ${f('time','Due time','5PM')}
+     ${f('note','Note (shows in bold, and in the subject)','e.g. Pricing and Quotes needed are for only Phase 1 & 2','s2')}
+     ${f('plans','Plans link','Paste the SharePoint / Dropbox / plan room link','s2')}
+     ${f('plansLabel','Link text','e.g. 20260918 - River Hill Communities Civil Set.pdf','s2')}
+     ${f('engineer','Engineer','e.g. LJA Engineering')}
+     ${f('start','Anticipated start','TBD')}
+     ${f('desc','Description line',`This is a ${b.project_type||'Commercial'} Development which includes the following:`,'s2')}
+   </div><p class="hint">Saved with the bid, so the next RFQ for this project starts filled in. Scopes you self perform are listed as “(material)”.</p></fieldset>
+   <fieldset><legend>Who it goes to</legend><div class="rfq-list">${rows||'<div class="dim small">Add vendors and subs on the Scopes & RFQs tab first.</div>'}</div>
+     ${noMail.length?`<p class="hint bad">${noMail.map(v=>esc(v.company)).join(', ')} ${noMail.length===1?'has':'have'} no email on file and will be left off. Add it on the Vendors page.</p>`:''}</fieldset>
+   </div><div>
+   <fieldset><legend>Email</legend>
+     <div class="rfq-hdr"><span>Cc</span><div><b>${esc(T.cc||'—')}</b></div>
+       <span>Bcc</span><div class="rfq-bcc">${bcc.map(esc).join('; ')||'<span class="dim">—</span>'} ${bcc.length?'<button class="btn xs" data-act="rfq-copy" data-v="bcc">Copy</button>':''}</div>
+       <span>Subject</span><div><input class="field" data-rfqsubj value="${esc(subj)}"></div></div>
+     <div class="rfq-preview">${html}</div>
+     <div class="adders"><button class="btn sm" data-act="rfq-copy" data-v="html">Copy message</button>${isAdmin()?'<button class="btn sm ghost" data-act="rfq-edit">✎ Edit template</button>':''}<label class="small" style="display:flex;gap:6px;align-items:center;margin-left:auto"><input type="checkbox" data-rfqplain${R.plain?' checked':''}> Put plain text in the email instead</label></div>
+     ${R.copied?`<p class="small good">✓ ${esc(R.copied)} copied</p>`:''}
+   </fieldset></div></div></div>
+  <div class="mfoot"><div><button class="btn" data-act="rfq-cancel">Back to the bid</button></div><div class="r">
+    <button class="btn" data-act="rfq-mark"${qs.some(q=>(q.status||'Not requested')==='Not requested')?'':' disabled'}>Mark ${qs.filter(q=>(q.status||'Not requested')==='Not requested').length} requested</button>
+    <button class="btn primary" data-act="rfq-open"${bcc.length?'':' disabled'}>✉ Open in email</button></div></div>`}
+function rfqEditView(){const R=M.rfq;const T=R.tpl;
+  return mhead('RFQ email template','Shared by the whole team. **bold**, __underline__, and {fields} filled in from the bid.').replace('data-act="close"','data-act="rfq-edit-cancel"')+`<div class="mbody">
+   <fieldset><legend>Template</legend>
+     <label class="f">Cc<input class="field" data-rfqt="cc" value="${esc(T.cc)}"></label>
+     <label class="f" style="margin-top:8px">Subject<input class="field" data-rfqt="subject" value="${esc(T.subject)}"></label>
+     <label class="f" style="margin-top:8px">Message<textarea class="field rfq-ta" data-rfqt="body">${esc(T.body)}</textarea></label>
+     <div class="rfq-keys">${RFQ_KEYS.map(([k,l])=>`<button class="chip" data-act="rfq-key" data-v="${k}" title="${esc(l)}">{${k}}</button>`).join('')}</div>
+     <p class="hint">Click a field to add it where your cursor is. A line whose field is blank (like {note}) is left out. {details_table} is the Project Address / Description / Engineer box. Email addresses become links. Your Outlook signature is added by Outlook.</p></fieldset></div>
+  <div class="mfoot"><div><button class="btn ghost" data-act="rfq-edit-reset">Reset to the Dogwood template</button></div><div class="r"><button class="btn" data-act="rfq-edit-cancel">Cancel</button><button class="btn primary" data-act="rfq-edit-save">Save template</button></div></div>`}
+async function rfqClip(html,text){try{if(html&&window.ClipboardItem&&navigator.clipboard?.write){await navigator.clipboard.write([new ClipboardItem({'text/html':new Blob([html],{type:'text/html'}),'text/plain':new Blob([text],{type:'text/plain'})})]);return true}
+  await navigator.clipboard.writeText(text);return true}catch(e){try{const d=document.createElement('div');d.contentEditable='true';d.style.cssText='position:fixed;left:-9999px';d.innerHTML=html||rfqEsc(text);document.body.appendChild(d);const rg=document.createRange();rg.selectNodeContents(d);const s=getSelection();s.removeAllRanges();s.addRange(rg);const ok=document.execCommand('copy');s.removeAllRanges();d.remove();return ok}catch(_){return false}}}
+function rfqMark(mailedOnly){const b=M.draft;const due=rfqDue(b);let n=0;b.quotes.forEach(q=>{if(M.rfq.sel.has(q.id)&&(q.status||'Not requested')==='Not requested'&&(!mailedOnly||vEmail(vendorOf(q.vendor_id)))){q.status='Requested';q.requested_date=todayStr();if(due&&!q.due_date)q.due_date=due;n++}});return n}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='bid')return;const a=t.dataset.act;
+  if(a==='rfq-start'){rfqStart();return}
+  if(!M.rfq||!a.startsWith('rfq-'))return;
+  if(a==='rfq-cancel'){M.rfq=null;renderModal();return}
+  if(a==='rfq-copy'){const o=M.rfq.out||{};const v=t.dataset.v;let ok;if(v==='bcc')ok=await rfqClip('',o.bcc.join('; '));else ok=await rfqClip(o.html,o.text);M.rfq.copied=ok?(v==='bcc'?'Bcc list':'Formatted message'):'';if(!ok)toast('Couldn’t copy. Select the message and copy it by hand.');renderModal();return}
+  if(a==='rfq-mark'){const n=rfqMark();toast(`${n} marked requested.`);renderModal();return}
+  if(a==='rfq-open'){const o=M.rfq.out||{};if(!(o.bcc||[]).length){toast('None of the picked vendors have an email on file.');return}
+    const plain=M.rfq.plain;let ok=true;if(!plain)ok=await rfqClip(o.html,o.text);
+    const url=`mailto:?cc=${encodeURIComponent(o.cc||'')}&bcc=${encodeURIComponent(o.bcc.join(','))}&subject=${encodeURIComponent(o.subj)}${plain||!ok?`&body=${encodeURIComponent(o.text.replace(/\r?\n/g,'\r\n'))}`:''}`;
+    const n=rfqMark(true);M.rfq=null;renderModal();location.href=url;
+    toast(plain||!ok?`Email opened${n?`, ${n} marked requested`:''}. Check it and hit send.`:`Email opened and the message is copied. Click in the body, paste (Ctrl+V), and send.${n?` ${n} marked requested.`:''}`);return}
+  if(a==='rfq-edit'){M.rfq.edit=true;M.rfq.tpl=rfqTpl();renderModal();return}
+  if(a==='rfq-edit-cancel'){M.rfq.edit=false;renderModal();return}
+  if(a==='rfq-edit-reset'){M.rfq.tpl={...RFQ_DEF};renderModal();return}
+  if(a==='rfq-key'){const ta=$('#modal [data-rfqt=body]');if(ta){const s=ta.selectionStart??ta.value.length;ta.value=ta.value.slice(0,s)+'{'+t.dataset.v+'}'+ta.value.slice(ta.selectionEnd??s);M.rfq.tpl.body=ta.value;ta.focus();const p=s+t.dataset.v.length+2;ta.setSelectionRange(p,p)}return}
+  if(a==='rfq-edit-save'){try{await run(sb.from('settings').upsert({key:'rfq_email',value:M.rfq.tpl}));await loadTable('settings');M.rfq.edit=false;M.rfq.subj=null;renderModal();toast('RFQ template saved for the team.')}catch(err){toast(errMsg(err))}return}});
+document.addEventListener('input',e=>{const t=e.target;if(!M||!M.rfq)return;
+  if(t.dataset.rfqt!=null&&M.rfq.tpl){M.rfq.tpl[t.dataset.rfqt]=t.value;return}
+  if(t.dataset.rfqsubj!=null){M.rfq.subj=t.value;if(M.rfq.out)M.rfq.out.subj=t.value;return}
+  if(t.dataset.rfqf){const r=rfqOf(M.draft);r[t.dataset.rfqf]=t.value;M.rfq.copied='';if(t.dataset.rfqf==='note')M.rfq.subj=null;clearTimeout(rfqStart._t);rfqStart._t=setTimeout(()=>renderModal(),350)}});
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')return;
+  if(t.dataset.rfqsel&&M.rfq){t.checked?M.rfq.sel.add(t.dataset.rfqsel):M.rfq.sel.delete(t.dataset.rfqsel);M.rfq.copied='';M.rfq.subj=null;renderModal();return}
+  if(t.dataset.rfqplain!=null&&M.rfq){M.rfq.plain=t.checked;return}
+  // one "quotes due" date for the whole RFQ: every open quote takes it
+  if(t.dataset.rfqdue!=null){const v=t.value;rfqOf(M.draft).due=v;M.draft.quotes.forEach(q=>{if(qOpen(q))q.due_date=v});renderModal();return}
+  // putting in the date a quote came back marks it received
+  if(t.dataset.qf&&t.dataset.qf.endsWith('.received_date')){const q=M.draft.quotes[+t.dataset.qf.split('.')[0]];if(q&&t.value&&q.status!=='Received'){q.status='Received';renderModal()}}});
