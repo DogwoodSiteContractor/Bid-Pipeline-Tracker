@@ -178,7 +178,9 @@ The window lists what will go before you confirm. Archived bids keep their estim
 
 **Contacts → Trades & scopes** has both lists in one place, and it works with the Estimates tab turned off.
 - **Trades** are the categories for vendors and subs. Admins click **Edit trades** to rename, reorder, add or remove them. Renaming a trade updates every vendor tagged with it. Removing one asks which trade its vendors move to. "Other" is always kept.
-- **Scopes** are the list your team picks from on bids and ticks on each vendor. Click **✎ Edit scopes** to rename a scope, move it to another group, set who usually performs it, remove it, or type a new one in the "+ Add a scope" box under any group, then **Save scope list**. Renaming a scope updates the vendors who quote it and your templates. Bids already using the old name keep it.
+- **Scopes** are the list your team picks from on bids and ticks on each vendor. Click **✎ Edit scopes** to rename a scope, move it to another group, set who usually performs it, remove it, or type a new one in the "+ Add a scope" box under any group, then **Save scope list**.
+- **Groups** are edited in the same place. Type over a group's name to rename it, use ↑ to move it up, and click **Remove group** to delete it (you choose which group its scopes move to). Type a name in the **New group** box and press Enter to create one, then add scopes to it or move existing scopes over with their group dropdown. "Other" is always kept. Renamed groups still feed the same scope columns on the dashboard.
+- Renaming a scope updates the vendors who quote it and your templates. Bids already using the old name keep it.
 - In a vendor's window, under **Scopes they quote**, type a scope that isn't listed and press Enter. It's added to the company list and ticked for that vendor. **✎ Edit scope list** there opens the full list and returns you to the vendor afterwards.
 - **Scope templates** apply a set of scopes to a bid in one click. Use **+ New template** to add one.
 

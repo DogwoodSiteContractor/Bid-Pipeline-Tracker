@@ -2294,3 +2294,8 @@ div.tw-pgh{cursor:default}
 .scd-row .x{justify-self:center}.scd-row.gone input{text-decoration:line-through;opacity:.55}
 .scd-quick{display:grid;grid-template-columns:minmax(0,1fr) 180px;gap:6px;margin-top:6px}
 @media (max-width:700px){.scd-rows{grid-template-columns:1fr}.scd-row{grid-template-columns:minmax(0,1fr) 110px 34px}.scd-row select[data-scd$=perform],.scd-row .small{display:none}}
+.scd-gh{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.scd-gh .scd-gname{flex:1;min-width:140px;font-weight:700}
+.scd-arm{background:var(--surface-2,rgba(0,0,0,.04));border:1px dashed var(--line);border-radius:8px;padding:6px 8px;font-size:13px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.scd-arm select{width:auto}
+.scd-gnew{border-style:dashed}
