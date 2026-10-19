@@ -51,6 +51,7 @@ supabase/update-20-dev-usage.sql           one-time update for the Developer tab
 supabase/update-21-break-room.sql          one-time update for the Break room: profiles, trophies, game scores (run after update-20)
 supabase/update-35-presence.sql            optional: "last seen" in the who's-online list (who's on right now works without it)
 supabase/update-36-planner.sql             one-time update for the Planner (my tasks, team board, calendar)
+supabase/update-37-vendor-rankings.sql    one-time update for vendor rankings, price lists and vendor update links
 ```
 
 > **Already set up before these updates?** Run each `supabase/update-*.sql` file you haven't run yet, once, in number order, in the SQL Editor. New installs only need `schema.sql`.
@@ -171,6 +172,38 @@ As you type, the line under the box shows what it understood. **Steps:** after y
 - or every decided bid (awarded, not awarded, no bid).
 
 The window lists what will go before you confirm. Archived bids keep their estimates, quotes, files and log. They leave the pipeline, the dashboards, win rates, estimator stats and the Estimates list (choose **Archived bids** there to see them), and they're under **🗄 Archived** in the Pipeline. There, each archiving run is listed with its own **Restore** button, so a whole batch comes back in one click; single bids restore from **Select**. To count archived bids in the numbers again, tick **Include archived** on the Board dashboard.
+
+## Vendor rankings and price lists
+
+Needs `supabase/update-37-vendor-rankings.sql`.
+
+**Score.** Every vendor gets a score from 0 to 100 and a grade (A 85+, B 70+, C 55+, D) made of four parts:
+- **Team ratings (40%):** anyone rates a vendor 1–5 stars on price, quality, communication and schedule, plus "would use again". Each person's latest rating counts.
+- **Response rate (25%):** RFQs answered out of RFQs sent. A request still within its due date doesn't count against them.
+- **Speed (10%):** their typical number of days from request to quote.
+- **Price (25%):** how often they're the low number when two or more vendors quote the same scope on one bid, and how far above low they usually are.
+
+Parts with no data are left out and the rest count for more. A vendor with very little history is marked "early days".
+
+**The vendor page.** Click a vendor under **Contacts → Vendors & subs**. It has four tabs:
+- **Overview:** how the score adds up.
+- **Price list:** spreadsheet-style. Suppliers have materials (item, size/spec, unit, price, lead time); subs have services (service, description, unit, rate, minimum/mobilization); a vendor that's both gets both. Click a cell and type, and changes save as you go. Enter moves down and Tab moves across. Paste rows copied from Excel into the empty Item cell. **Prices confirmed today** marks every price as checked, and **Price history** shows every change with the percent up or down.
+- **Team ratings.**
+- **Quotes.**
+
+**Service regions and home base** go in the vendor's details, and vendors can be filtered by region.
+
+**Vendor update link.** **✉ Send price link** makes a private page with only that vendor's price list, and **Email it** opens an email to them with the link. They open it without logging in, change prices, add or remove items, and click **Save prices**. Their changes are marked "vendor" with their name. Links last 60 days, and **New link** or **Turn it off** stops the old one working. You can always edit the list yourself.
+
+**Vendor rankings** (Contacts tab) is a dashboard built from cards you choose:
+- top or lowest ranked (3, 5, 10…; subs, suppliers or all),
+- lowest or highest price for an item across vendors,
+- fastest to quote,
+- needs attention.
+
+Each card can be narrowed by trade, scope and region. **+ Add a card** adds one, and ⚙ on a card changes it. Your layout is kept on your computer. Below the cards is every vendor ranked, with each part of the score.
+
+**Reminders.** A vendor's ranking is flagged when nobody has rated them in 30 days; only vendors you've used lately or marked preferred are flagged. Pricing is flagged once any of its prices are over 30 days old. Admins can change both numbers under **⚙ Reminders**. The precon dashboard shows a "Vendor upkeep" line when anything is due.
 
 ## Who's online (everyone)
 
