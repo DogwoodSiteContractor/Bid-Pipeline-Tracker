@@ -2276,3 +2276,12 @@ div.tw-pgh{cursor:default}
 .vpk-t td:nth-child(2){width:150px}.vpk-t td:nth-child(3){width:120px}.vpk-t td:last-child{width:60px;text-align:right}
 .vpk-t tr.vp-low td{background:color-mix(in srgb,var(--accent) 7%,transparent)}
 @media (max-width:700px){.vpk-bar{grid-template-columns:1fr 1fr}}
+/* trades list */
+.trd-list{display:flex;flex-wrap:wrap;gap:6px}
+.trd-p b{font-weight:600;color:var(--ink-3);margin-left:2px}
+.trd-rows{display:flex;flex-direction:column;gap:6px;max-width:720px}
+.trd-row{display:grid;grid-template-columns:minmax(0,1fr) 90px 300px;gap:8px;align-items:center}
+.trd-act{display:flex;align-items:center;gap:6px}
+.trd-act label{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.trd-act .field{max-width:170px}
+.trd-row.gone input{text-decoration:line-through;opacity:.6}

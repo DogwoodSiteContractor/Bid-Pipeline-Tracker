@@ -45,7 +45,10 @@ const DEFAULT_LIB={scopes:[
   {id:'tpl-demo',name:'Demo & clearing',scopes:['Site demolition','Clearing & grubbing','Tree protection','Erosion control']}]};
 const TRADE_GROUP={'Pipe & utility supply':'Underground utilities','Precast structures':'Underground utilities','Utility sub':'Underground utilities','Erosion control':'Erosion control','Landscaping & grassing':'Erosion control','Demolition':'Site prep & demo','Clearing & grubbing':'Site prep & demo','Asphalt paving':'Paving & concrete','Concrete & curb':'Paving & concrete','Grading sub':'Earthwork','Dewatering':'Earthwork','Trucking & hauling':'Trucking','Stone & aggregate':'Materials','Testing & inspection':'Testing'};
 const FILE_CATS=['Plans','Specs','Addenda','Geotech report','Takeoff','Proposal','Bid form','Photos','Other'];
-const TRADES=['Pipe & utility supply','Precast structures','Stone & aggregate','Trucking & hauling','Asphalt paving','Concrete & curb','Erosion control','Demolition','Clearing & grubbing','Grading sub','Utility sub','Dewatering','Fencing','Landscaping & grassing','Surveying','Testing & inspection','Equipment rental','Other'];
+const TRADES_DEF=['Pipe & utility supply','Precast structures','Stone & aggregate','Trucking & hauling','Asphalt paving','Concrete & curb','Erosion control','Demolition','Clearing & grubbing','Grading sub','Utility sub','Dewatering','Fencing','Landscaping & grassing','Surveying','Testing & inspection','Equipment rental','Other'];
+// the company's own trade list (Contacts → Trades & scopes), else the starter list; 'Other' is always there
+let TRADES=TRADES_DEF.slice();
+function tradesApply(){const L=S.settings&&S.settings.trades&&Array.isArray(S.settings.trades.list)?S.settings.trades.list.filter(Boolean):null;TRADES=L&&L.length?[...L.filter(t=>t!=='Other'),'Other']:TRADES_DEF.slice()}
 const CLIENT_TYPES=['General contractor','Developer','Owner','Municipality / public','Engineer','Designer / architect','Other'];
 // engineers and designers are kept apart from the owners and GCs you bid to
 const isDesignCo=c=>/engineer|designer|architect/i.test(String(c&&c.type||''));const gcClients=()=>S.clients.filter(c=>!isDesignCo(c));
@@ -236,7 +239,7 @@ async function loadTable(t){
   if(!error&&data.length===1000){data=[];for(let from=0;;from+=1000){r=await page(from,true);if(r.error){error=r.error;break}data=data.concat(r.data||[]);if((r.data||[]).length<1000)break}}
   if(error){console.error(t,error);if(S.tableErr&&!S.tableErr[t]){S.tableErr[t]=true;schedule()}return}
   if(S.tableErr)delete S.tableErr[t];S.lastLoaded=new Date();
-  if(t==='settings')S.settings=Object.fromEntries((data||[]).map(r=>[r.key,r.value||{}]));
+  if(t==='settings'){S.settings=Object.fromEntries((data||[]).map(r=>[r.key,r.value||{}]));tradesApply()}
   else S[t]=t==='bids'?(data||[]).map(normBid):(data||[]);
   if(t==='codebook'||t==='settings')rbRefreshAll();
   schedule();
@@ -290,7 +293,7 @@ function renderNow(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
-  const views={vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const views={lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
@@ -303,7 +306,7 @@ function renderNow(){
 }
 // top-bar tabs; related pages share a tab and get small sub-tabs inside it
 function navItems(){return navGroups().map(g=>[g[0],g[1]])}
-const SUBNAV_LABEL={clients:'Clients & GCs',vendors:'Vendors & subs',vboard:'Vendor rankings',team:'People & access',estimators:'Estimators',teampm:'Project managers',teamoffice:'Accounting & executives',access:'Access chart'};
+const SUBNAV_LABEL={lists:'Trades & scopes',clients:'Clients & GCs',vendors:'Vendors & subs',vboard:'Vendor rankings',team:'People & access',estimators:'Estimators',teampm:'Project managers',teamoffice:'Accounting & executives',access:'Access chart'};
 function subNav(){const g=navGroups().find(x=>x[2].includes(S.view));if(!g)return '';const subs=g[2].filter(v=>SUBNAV_LABEL[v]);if(subs.length<2)return '';
   return `<div class="subnav">${subs.map(v=>`<button class="${S.view===v?'on':''}" data-act="nav" data-v="${v}">${SUBNAV_LABEL[v]}</button>`).join('')}</div>`}
 function renderTop(){setTimeout(()=>{presPaint();presTrack(false)},0);
@@ -950,7 +953,7 @@ function renderModalNow(first){
   loadThumbs();
 }
 function mhead(t,s){return `<div class="mhead"><div><h2>${esc(t)}</h2>${s?`<p>${esc(s)}</p>`:''}</div><button class="x" data-act="close" aria-label="Close">×</button></div>`}
-const DIS=()=>M&&M.kind==='bid'?(canWork(M.draft)?'':' disabled'):M&&(M.kind==='client'||M.kind==='vendor')?(can('contacts','edit')?'':' disabled'):M&&(M.kind==='lib'||M.kind==='tpl')?(can('codebook','edit')?'':' disabled'):(isAdmin()?'':' disabled');
+const DIS=()=>M&&M.kind==='bid'?(canWork(M.draft)?'':' disabled'):M&&(M.kind==='client'||M.kind==='vendor')?(can('contacts','edit')?'':' disabled'):M&&(M.kind==='lib'||M.kind==='tpl')?(can('codebook','edit')||isAdmin()?'':' disabled'):(isAdmin()?'':' disabled');
 
 /* ----- bid editor ----- */
 function newBid(){return{id:newId(),name:'',location:'',project_type:'Commercial',bid_type:'Hard bid',size:'',status:'Project Created',probability:50,
@@ -6475,7 +6478,7 @@ function navGroups(){const g=[];
   if(est.length)g.push([est[0],'Estimates',est.includes('cb')&&!est.includes('estimates')?[...est]:est]);
   if(can('jobs'))g.push(['jobs','Jobs',['jobs','job']]);
   if(can('acct'))g.push(['acct','Accounting',['acct']]);
-  if(can('contacts'))g.push(['clients','Contacts',['clients','vendors','vboard','vendor']]);
+  if(can('contacts')||isAdmin())g.push(['clients','Contacts',[...(can('contacts')?['clients','vendors','vboard','vendor']:[]),...(isAdmin()||can('codebook','edit')?['lists']:[])]]);
   if(can('calc'))g.push(['calc','Calculators',['calc',...(twFree?['tw']:[])]]);
   if(isAdmin())g.push(['team','Team',['team','estimators','teampm','teamoffice','access']]);
   {const n=typeof plCount==='function'?plCount():0;g.push(['plan','Planner'+(n?` (${n})`:''),['plan']])}
@@ -6684,7 +6687,7 @@ const FB_STATUS=['New','Reviewing','Planned','In progress','Done','Won’t do','
 const FB_OPEN=new Set(['New','Reviewing','Planned','In progress']);
 const FB_ST_CLS={New:'hot',Reviewing:'warn',Planned:'',['In progress']:'warn',Done:'good'};
 const fbStatusDb=s=>s==='Won’t do'?"Won't do":s;const fbStatusUi=s=>s==="Won't do"?'Won’t do':s;
-const VIEW_AREA={vendor:'Contacts',vboard:'Contacts',plan:'Planner',dashboard:'Dashboard',pipeline:'Bids & pipeline',estimates:'Estimates',estimate:'Estimates',cb:'Codebooks & bid settings',settings:'Codebooks & bid settings',scopes:'Codebooks & bid settings',jobs:'Jobs',job:'Jobs',acct:'Accounting',clients:'Contacts',vendors:'Contacts',calc:'Calculators',team:'Team & logins',estimators:'Team & logins',teampm:'Team & logins',teamoffice:'Team & logins',access:'Team & logins',help:'Help'};
+const VIEW_AREA={lists:'Contacts',vendor:'Contacts',vboard:'Contacts',plan:'Planner',dashboard:'Dashboard',pipeline:'Bids & pipeline',estimates:'Estimates',estimate:'Estimates',cb:'Codebooks & bid settings',settings:'Codebooks & bid settings',scopes:'Codebooks & bid settings',jobs:'Jobs',job:'Jobs',acct:'Accounting',clients:'Contacts',vendors:'Contacts',calc:'Calculators',team:'Team & logins',estimators:'Team & logins',teampm:'Team & logins',teamoffice:'Team & logins',access:'Team & logins',help:'Help'};
 async function loadMyFb(){try{const {data,error}=await sb.rpc('my_feedback');if(error)throw error;S.myFb=(data||[]).map(f=>({...f,status:fbStatusUi(f.status)}));S.fbMissing=false}catch(e){S.myFb=[];S.fbMissing=true}schedule()}
 function fbOpen(kind){const from=S.prevView&&S.prevView!=='help'?S.prevView:S.view;M={kind:'fb',draft:{kind:kind||'bug',area:VIEW_AREA[from]||'Something else',title:'',body:'',importance:'normal'},from};showModal();setTimeout(()=>$('#fb-title')?.focus(),0)}
 function fbModal(){const d=M.draft;const ph={bug:'What were you doing? What happened? What did you expect to happen?',feature:'What would you like it to do? What problem would it solve for you?',question:'What are you trying to do?',other:'Tell us what’s on your mind.'}[d.kind];
@@ -10899,3 +10902,32 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     act.res.push(vpickRes(p,v));M.added=(M.added||0)+1;estTouch();render();renderModal();toast(`${[p.item,p.spec].filter(Boolean).join(' ')} at ${vxMoney(p.price)}/${p.unit||'unit'} from ${v.company} added.`)}});
 document.addEventListener('input',e=>{const t=e.target;if(t.dataset.vpkq!=null&&M&&M.kind==='vpick'){M.q=t.value;renderModal()}});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset.vpk&&M&&M.kind==='vpick'){M[t.dataset.vpk==='kind'?'kindF':t.dataset.vpk]=t.value;renderModal()}});
+
+/* ---------- Trades & scopes (Contacts tab): edit both lists without the Estimates tab ----------
+   Trades are saved in settings ('trades'); renaming one updates every vendor on it, removing one moves its vendors to
+   the trade you pick. The scope list and templates are the same ones Estimates → Scopes & templates edits. */
+function vLists(){const T=S.trd;const admin=isAdmin();const cnt=t=>S.vendors.filter(v=>v.trade===t).length;const orphan=[...new Set(S.vendors.map(v=>v.trade).filter(t=>t&&!TRADES.includes(t)))];
+  const view=`<div class="trd-list">${TRADES.map(t=>`<span class="pill trd-p">${esc(t)} <b>${cnt(t)||''}</b></span>`).join('')}</div>${orphan.length?`<p class="small warn-t">Vendors are tagged with trades that aren’t on the list: ${orphan.map(esc).join(', ')}. ${admin?'Add them to the list, or edit the list and move those vendors.':''}</p>`:''}`;
+  const edit=T?`<div class="trd-rows">${T.rows.map((r,i)=>{const n=r.orig?cnt(r.orig):0;return `<div class="trd-row${r.gone?' gone':''}"><input class="field sm" data-trd="${i}" value="${esc(r.name)}" placeholder="Trade name"${r.gone||r.orig==='Other'?' disabled':''}>
+      <span class="small dim">${n?`${n} vendor${n===1?'':'s'}`:'—'}</span><span class="trd-act">${r.orig==='Other'?'<span class="small dim">always kept</span>':r.gone?`${n?`<label class="small">move them to <select class="field xs" data-trdto="${i}">${T.rows.filter(x=>!x.gone&&x.name.trim()).map(x=>`<option${(r.to||'Other')===x.name.trim()?' selected':''}>${esc(x.name.trim())}</option>`).join('')}</select></label>`:''}<button class="btn xs" data-act="trd-undo" data-v="${i}">Undo</button>`:`<button class="btn xs ghost" data-act="trd-up" data-v="${i}" title="Move up"${i?'':' disabled'}>↑</button><button class="x" data-act="trd-del" data-v="${i}" title="Remove">×</button>`}</span></div>`}).join('')}
+      <div class="trd-row"><input class="field sm" id="trd-new" data-trdnew placeholder="+ Add a trade and press Enter"></div></div>
+      <div class="adders"><button class="btn primary" data-act="trd-save"${T.busy?' disabled':''}>${T.busy?'Saving…':'Save trades'}</button><button class="btn" data-act="trd-cancel">Cancel</button></div>
+      <p class="hint">Renaming a trade updates every vendor tagged with it. Removing one moves its vendors to the trade you pick.</p>`:'';
+  let sc='';try{sc=vScopes().replace(/<div class="head">[\s\S]*?<\/div><\/div>/,m=>m.replace('<h1>Scopes & templates</h1>','<h2 style="margin:0">Scopes & templates</h2>'))}catch(e){sc=''}
+  return `<div class="head"><div><h1>Trades & scopes</h1><p>The lists your team picks from: trades for vendors and subs, scopes for bids.</p></div></div>
+    <div class="panel pad" style="margin-bottom:16px"><div class="sec-h" style="margin-top:0"><h2>Trades</h2><span>${TRADES.length} trades · used on vendors and subs</span>${admin&&!T?'<button class="btn sm" data-act="trd-edit" style="margin-left:auto">Edit trades</button>':''}</div>${T?edit:view}${!admin?'<p class="small dim">Only admins can change the trade list.</p>':''}</div>
+    ${isAdmin()||can('codebook','edit')?sc:''}`}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('trd-'))return;
+  if(a==='trd-edit'){S.trd={rows:TRADES.map(x=>({orig:x,name:x}))};render();return}
+  if(a==='trd-cancel'){S.trd=null;render();return}const T=S.trd;if(!T)return;const i=+t.dataset.v;
+  if(a==='trd-del'){T.rows[i].gone=true;T.rows[i].to='Other';render();return}
+  if(a==='trd-undo'){T.rows[i].gone=false;render();return}
+  if(a==='trd-up'&&i>0){const r=T.rows;[r[i-1],r[i]]=[r[i],r[i-1]];render();return}
+  if(a==='trd-save'){const keep=T.rows.filter(r=>!r.gone&&r.name.trim());const names=[];const seen=new Set();keep.forEach(r=>{const n=r.name.trim();if(!seen.has(n.toLowerCase())){seen.add(n.toLowerCase());names.push(n)}});if(!names.includes('Other'))names.push('Other');
+    T.busy=true;render();try{
+      for(const r of T.rows){if(!r.orig)continue;const to=r.gone?(r.to||'Other'):r.name.trim();if(to&&to!==r.orig&&S.vendors.some(v=>v.trade===r.orig)){const {error}=await sb.from('vendors').update({trade:to}).eq('trade',r.orig);if(error)throw error}}
+      const {error}=await sb.from('settings').upsert({key:'trades',value:{list:names}});if(error)throw error;await Promise.all([loadTable('settings'),loadTable('vendors')]);S.trd=null;render();toast('Trade list saved.')}
+    catch(err){T.busy=false;render();toast(errMsg(err))}}});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset.trd!=null&&S.trd){S.trd.rows[+t.dataset.trd].name=t.value}});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset.trdto!=null&&S.trd){S.trd.rows[+t.dataset.trdto].to=t.value}});
+document.addEventListener('keydown',e=>{const t=e.target;if(t.dataset&&t.dataset.trdnew!=null&&e.key==='Enter'&&S.trd){e.preventDefault();const v=t.value.trim();if(!v)return;const oi=S.trd.rows.findIndex(r=>r.orig==='Other');S.trd.rows.splice(oi<0?S.trd.rows.length:oi,0,{orig:null,name:v});t.value='';render();setTimeout(()=>{const n=document.getElementById('trd-new');if(n)n.focus()},0)}});

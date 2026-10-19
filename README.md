@@ -174,6 +174,12 @@ As you type, the line under the box shows what it understood. **Steps:** after y
 
 The window lists what will go before you confirm. Archived bids keep their estimates, quotes, files and log. They leave the pipeline, the dashboards, win rates, estimator stats and the Estimates list (choose **Archived bids** there to see them), and they're under **🗄 Archived** in the Pipeline. There, each archiving run is listed with its own **Restore** button, so a whole batch comes back in one click; single bids restore from **Select**. To count archived bids in the numbers again, tick **Include archived** on the Board dashboard.
 
+## Trades & scopes (Contacts tab)
+
+**Contacts → Trades & scopes** has both lists in one place, and it works with the Estimates tab turned off.
+- **Trades** are the categories for vendors and subs. Admins click **Edit trades** to rename, reorder, add or remove them. Renaming a trade updates every vendor tagged with it. Removing one asks which trade its vendors move to. "Other" is always kept.
+- **Scopes & templates** are the same list and templates as Estimates → Scopes & templates. **Edit scope list** changes the scopes your team picks from on bids, and **+ New template** adds a scope template.
+
 ## Vendor rankings and price lists
 
 Needs `supabase/update-37-vendor-rankings.sql`.
