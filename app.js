@@ -27,6 +27,10 @@ const isWorking=b=>ACTIVE.includes(b.status)&&b.status!=='On Hold'&&!isSent(b);
 const QUOTE_ST=['Not requested','Requested','Received','Declined','No response'];
 const QUOTE_CLS={'Not requested':'','Requested':'warn','Received':'good','Declined':'bad','No response':'na'};
 const QUOTE_EXTRA=['Materials','Trucking','Testing','Other'];
+const qScopes=q=>Array.isArray(q?.meta?.scopes)&&q.meta.scopes.length?q.meta.scopes:(q?.scope?[q.scope]:[]);
+const qHas=(q,n)=>qScopes(q).some(x=>String(x).toLowerCase()===String(n).toLowerCase());
+const qSetScopes=(q,arr)=>{arr=[...new Set(arr.filter(Boolean))];q.meta={...(q.meta||{}),scopes:arr.length>1?arr:[]};if(arr.length<=1)delete q.meta.scopes;q.scope=arr.join(', ')};
+const qOpen=q=>['Not requested','Requested'].includes(q.status||'Not requested');
 const PERFORM=['Self perform','Sub','Both'];
 const PERF_SHORT={'Self perform':'Self','Sub':'Sub','Both':'Self + sub'};
 const DEFAULT_SUB=['Asphalt paving','Concrete paving','Curb & gutter','Sidewalks','Striping & signage','Fencing','Testing allowance','Retaining walls','Grassing & stabilization'];
@@ -71,7 +75,7 @@ const AV_COLORS=['#2C5E99','#2C7A4C','#8B5E34','#7A3E8E','#B24A2A','#2F7C83','#5
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const BUCKET='bid-files';
 const BID_COLS=['id','name','location','project_type','units','bid_type','size','status','probability','due_date','due_time','walk_date','rfi_date','lead_estimator_id','support_estimator_ids','client_ids','client_contacts','client_proposals','awarded_client_id','addenda','revisions','archived_at','scope_items','proposal_status','amount_with','amount_without','use_for','margin','follow_ups','notes','submitted_date','awarded_date','awarded_amount','awarded_to','lost_reason'];
-const Q_COLS=['id','bid_id','vendor_id','scope','status','requested_date','due_date','received_date','amount','note','file_path','file_name'];
+const Q_COLS=['id','bid_id','vendor_id','scope','status','requested_date','due_date','received_date','amount','note','file_path','file_name','meta'];
 const ENT_COLS={estimators:['id','name','title','email','phone','active'],clients:['id','company','type','phone','email','address','notes','contacts'],vendors:['id','company','vendor_type','trade','scopes','contact_name','phone','email','area','preferred','notes']};
 const VENDOR_TYPES=['Supplier','Subcontractor','Supplier & sub','Service / testing','Trucking'];
 
@@ -977,13 +981,13 @@ function sel(path,list){const v=getPath(path);return `<select class="field" data
 /* ---- vendor picker: steps through each scope on the bid ---- */
 function pickerStart(){
   const d=M.draft;
-  const sel={};d.scope_items.forEach(it=>{sel[it.name]=S.vendors.filter(v=>v.preferred&&vendorFits(v,it.name)&&!d.quotes.some(q=>q.vendor_id===v.id&&q.scope===it.name)).map(v=>v.id)});
+  const sel={};d.scope_items.forEach(it=>{sel[it.name]=S.vendors.filter(v=>v.preferred&&vendorFits(v,it.name)&&!d.quotes.some(q=>q.vendor_id===v.id&&qHas(q,it.name))).map(v=>v.id)});
   M.picker={step:0,sel,all:false,q:''};renderModal();$('#modal .mbody').scrollTop=0;
 }
 function pickerCount(){return Object.values(M.picker.sel).reduce((n,a)=>n+a.length,0)}
 function pickerView(){
   const d=M.draft,P=M.picker,items=d.scope_items,review=P.step>=items.length;
-  const chips=`<div class="pick-chips">${items.map((it,i)=>{const n=(P.sel[it.name]||[]).length,have=d.quotes.filter(q=>q.scope===it.name).length;
+  const chips=`<div class="pick-chips">${items.map((it,i)=>{const n=(P.sel[it.name]||[]).length,have=d.quotes.filter(q=>qHas(q,it.name)).length;
     return `<button class="chip${i===P.step?' on':''}" data-act="pick-go" data-i="${i}">${esc(it.name)}${n||have?`<b>${n?'+'+n:''}${n&&have?' · ':''}${have?have+' on bid':''}</b>`:''}</button>`}).join('')}<button class="chip${review?' on':''}" data-act="pick-go" data-i="${items.length}">Review<b>${pickerCount()}</b></button></div>`;
   let body;
   if(review){
@@ -992,7 +996,7 @@ function pickerView(){
       <p class="hint">Each vendor gets a quote request for that scope, marked Requested with today’s date.</p></fieldset>`;
   }else{
     const it=items[P.step];const q=P.q.toLowerCase();
-    const on=d.quotes.filter(x=>x.scope===it.name).map(x=>x.vendor_id);
+    const on=d.quotes.filter(x=>qHas(x,it.name)).map(x=>x.vendor_id);
     const fit=S.vendors.filter(v=>vendorFits(v,it.name)).sort((a,b)=>(b.preferred-a.preferred)||a.company.localeCompare(b.company));
     const rest=S.vendors.filter(v=>!vendorFits(v,it.name)&&(!q||[v.company,v.trade,v.vendor_type].join(' ').toLowerCase().includes(q))).sort((a,b)=>a.trade.localeCompare(b.trade)||a.company.localeCompare(b.company));
     const row=v=>{const already=on.includes(v.id);const checked=already||(P.sel[it.name]||[]).includes(v.id);
@@ -1056,8 +1060,7 @@ function bidModal(){
 
 
   <fieldset><legend>Vendor & sub quotes</legend>
-    ${b.quotes.length?`<div class="qhead"><span>Vendor</span><span>Scope</span><span>Status</span><span>Need by</span><span>Amount</span><span>Quote file</span><span></span></div>`:''}
-    <div class="rows">${b.quotes.map((q,i)=>quoteRow(q,i,work,admin)).join('')||'<div class="dim small">No quote requests yet.</div>'}</div>
+    <div class="qgs">${quoteGroupsHtml(b,work,admin)}</div>
     ${work&&b.quotes.some(q=>(q.status||'Not requested')==='Not requested')?`<div class="q-nr"><span>${b.quotes.filter(q=>(q.status||'Not requested')==='Not requested').length} not requested yet. Mark them Requested as the RFQs go out. Once every one is out, the bid moves past RFQ sent to Takeoff.</span><button class="btn sm" data-act="q-reqall">Mark all requested</button></div>`:''}
     ${work?`<div class="adders"><button class="btn primary sm" data-act="pick-open"${b.scope_items.length&&S.vendors.length?'':' disabled title="Add scopes and vendors first"'}>Select vendors by scope…</button><select class="field" data-act="add-quote"><option value="">+ Add a vendor or sub…</option>${vendorsSorted.map(v=>`<option value="${v.id}">${esc(v.company)} (${esc(v.trade)})</option>`).join('')}</select>
     ${tradesWithVendors.length?`<select class="field" data-act="add-trade"><option value="">+ Add every vendor in a trade…</option>${tradesWithVendors.map(t=>`<option>${esc(t)}</option>`).join('')}</select>`:''}</div>
@@ -1205,7 +1208,7 @@ function scopeSection(b,work){
 // For scopes that use a sub, show how the sub quotes for that scope are coming along
 function subQuoteNote(it){
   if(performOf(it)==='Self perform')return '';
-  const qs=(M.draft.quotes||[]).filter(q=>q.scope===it.name);
+  const qs=(M.draft.quotes||[]).filter(q=>qHas(q,it.name));
   if(!qs.length)return ' · <span style="color:var(--warn);font-weight:600">No sub quotes yet</span>';
   const rec=qs.filter(q=>q.status==='Received').length,req=qs.filter(q=>q.status==='Requested').length;
   return ` · <span style="color:var(--${rec?'good':'warn'});font-weight:600">Sub quotes: ${rec} in${req?`, ${req} waiting`:''}</span>`;
@@ -1249,18 +1252,40 @@ function quoteRow(q,i,work,admin){
   const file=q._uploading?'<span class="dim small">Uploading…</span>'
     :q.file_path?`<span class="file"><button class="linkbtn" style="font-size:13px;font-weight:600;text-align:left;word-break:break-all" data-act="dl" data-path="${esc(q.file_path)}" data-name="${esc(q.file_name||'quote')}">${esc(q.file_name||'Download quote')}</button>${work?` <button class="rm" data-act="clear-file" data-i="${i}" title="Detach file">×</button>`:''}</span>`
     :work?`<span class="file"><label>Upload quote<input type="file" data-upload="${i}"></label></span>`:'<span class="dim small">No file</span>';
-  return `<div class="quote"><div class="vn">${esc(v?.company||'Removed vendor')}<small>${esc(v?.trade||'')}${v?.phone?' · '+esc(v.phone):''}${q.requested_date?' · asked '+fmtShort(q.requested_date):''}${q.received_date?' · in '+fmtShort(q.received_date):''}</small></div>
-   <select class="field" data-qf="${i}.scope"${d}>${[...new Set([...M.draft.scope_items.map(x=>x.name),...QUOTE_EXTRA,q.scope].filter(Boolean))].map(x=>`<option${q.scope===x?' selected':''}>${esc(x)}</option>`).join('')}</select>
+  return `<div class="quote q2"><div class="vn">${esc(v?.company||'Removed vendor')}<small>${esc(v?.trade||'')}${v?.phone?' · '+esc(v.phone):''}${q.requested_date?' · asked '+fmtShort(q.requested_date):''}${q.received_date?' · in '+fmtShort(q.received_date):''}</small>${qCovHtml(q,i,work)}</div>
    <select class="field" data-qf="${i}.status"${d}>${QUOTE_ST.map(s=>`<option${q.status===s?' selected':''}>${s}</option>`).join('')}</select>
    <input type="date" class="field" data-qf="${i}.due_date" value="${esc(q.due_date||'')}" title="Need quote by"${d}>
    <input type="number" step="0.01" class="field" data-qf="${i}.amount" data-t="n" value="${esc(q.amount??'')}" placeholder="$"${d}>
    <div>${file}<input class="field" style="margin-top:4px" data-qf="${i}.note" value="${esc(q.note||'')}" placeholder="Note"${d}></div>
    ${admin||(work&&!M.origQuoteIds?.includes(q.id))?`<button class="rm" data-act="rm-quote" data-i="${i}" aria-label="Remove">×</button>`:'<span></span>'}</div>`;
 }
+// what this quote covers: one chip per scope, × to drop one, + to fold another bid scope into the same quote
+function qCovHtml(q,i,work){const sc=qScopes(q);const opts=[...new Set([...M.draft.scope_items.map(x=>x.name),...QUOTE_EXTRA])].filter(n=>!qHas(q,n));
+  return `<div class="q-cov">${sc.map(n=>`<span class="q-sc">${esc(n)}${work&&sc.length>1?`<button class="q-scx" data-act="q-unscope" data-i="${i}" data-s="${esc(n)}" title="Take ${esc(n)} off this quote">×</button>`:''}</span>`).join('')||'<span class="dim small">No scope</span>'}${work?`<select class="q-scadd" data-act="q-addscope" data-i="${i}" title="This quote also covers…"><option value="">+ scope</option>${opts.map(n=>`<option>${esc(n)}</option>`).join('')}</select>`:''}</div>`}
+// Vendor & sub quotes, laid out by scope: a row per scope, its vendors under it. A quote covering several scopes is edited
+// once (under its first scope) and listed by name under the others.
+function quoteGroupsHtml(b,work,admin){
+  const Q=b.quotes;if(!Q.length&&!b.scope_items.length)return '<div class="dim small">No quote requests yet.</div>';
+  const names=b.scope_items.map(x=>x.name);const lc=n=>String(n).toLowerCase();const inBid=n=>names.some(x=>lc(x)===lc(n));
+  const home=q=>{const s=qScopes(q);for(const n of names)if(s.some(x=>lc(x)===lc(n)))return n;return null};
+  const vsort=[...S.vendors].sort((a,b2)=>String(a.company).localeCompare(String(b2.company)));
+  const block=(title,sub,rows,scope)=>`<div class="qg"><div class="qg-h"><div><b>${esc(title)}</b>${sub}</div>${work&&scope!=null?`<select class="field sm qg-add" data-act="add-quote-scope" data-scope="${esc(scope)}"><option value="">+ Add vendor or sub…</option>${(()=>{const fit=vsort.filter(v=>vendorFits(v,scope)&&!Q.some(q=>q.vendor_id===v.id&&qHas(q,scope)));const rest=vsort.filter(v=>!fit.includes(v)&&!Q.some(q=>q.vendor_id===v.id&&qHas(q,scope)));return (fit.length?`<optgroup label="Quote ${esc(scope)}">${fit.map(v=>`<option value="${v.id}">${esc(v.company)}${Q.some(q=>q.vendor_id===v.id&&qOpen(q))?' (add to their quote)':''}</option>`).join('')}</optgroup>`:'')+`<optgroup label="Everyone else">${rest.map(v=>`<option value="${v.id}">${esc(v.company)} (${esc(v.trade||'')})${Q.some(q=>q.vendor_id===v.id&&qOpen(q))?' · add to their quote':''}</option>`).join('')}</optgroup>`})()}</select>`:''}</div>${rows||'<div class="qg-none">No vendors yet</div>'}</div>`;
+  const out=b.scope_items.map(it=>{const qs=Q.map((q,i)=>({q,i})).filter(o=>qHas(o.q,it.name));const rec=qs.filter(o=>o.q.status==='Received').length;
+    const sub=`<span class="qg-meta">${esc(performOf(it))}${qs.length?` · ${qs.length} vendor${qs.length===1?'':'s'}${rec?` · ${rec} in`:''}`:''}</span>`;
+    const rows=qs.map(({q,i})=>home(q)===it.name?quoteRow(q,i,work,admin):`<div class="q-mirror"><b>${esc(vendorOf(q.vendor_id)?.company||'Removed vendor')}</b><span class="pill ${QUOTE_CLS[q.status||'Not requested']||''}">${esc(q.status||'Not requested')}</span><span class="dim small">one quote with ${esc(home(q))} · edit it there</span></div>`).join('');
+    return block(it.name,sub,rows,it.name)}).join('');
+  const loose=Q.map((q,i)=>({q,i})).filter(o=>!home(o.q));
+  const extra=loose.length?block(b.scope_items.length?'Other quotes':'Quotes',`<span class="qg-meta">Not tied to a scope on this bid</span>`,loose.map(({q,i})=>quoteRow(q,i,work,admin)).join(''),null):'';
+  // same vendor on several open quotes → offer to combine
+  const dup=work?[...new Set(Q.filter(q=>qOpen(q)&&!q.file_path&&q.amount==null).map(q=>q.vendor_id))].filter(vid=>{const xs=Q.filter(q=>q.vendor_id===vid&&qOpen(q)&&!q.file_path&&q.amount==null);return xs.length>1&&(admin||xs.slice(1).every(q=>!M.origQuoteIds?.includes(q.id)))}):[];
+  const dupHtml=dup.map(vid=>{const n=Q.filter(q=>q.vendor_id===vid&&qOpen(q)).length;return `<div class="q-nr"><span><b>${esc(vendorOf(vid)?.company||'Vendor')}</b> has ${n} separate quote requests on this bid.</span><button class="btn sm" data-act="q-merge" data-v="${vid}">Combine into one quote</button></div>`}).join('');
+  return dupHtml+out+extra}
 function defaultScopeForTrade(t){const g=TRADE_GROUP[t];const inG=M.draft.scope_items.filter(x=>x.group===g);const m=inG.find(x=>performOf(x)!=='Self perform')||inG[0];return m?m.name:(['Trucking','Materials','Testing'].includes(g)?g:'Other')}
 function addQuote(vid,scope){const v=vendorOf(vid);if(!v)return false;
   if(!scope){const fit=M.draft.scope_items.find(x=>vendorFits(v,x.name));scope=fit?fit.name:defaultScopeForTrade(v.trade)}
-  if(M.draft.quotes.some(q=>q.vendor_id===vid&&q.scope===scope))return false;
+  if(M.draft.quotes.some(q=>q.vendor_id===vid&&qHas(q,scope)))return false;
+  const same=M.draft.quotes.find(q=>q.vendor_id===vid&&qOpen(q)&&!q.file_path&&q.amount==null);
+  if(same){qSetScopes(same,[...qScopes(same),scope]);return true}
   M.draft.quotes.push({id:newId(),bid_id:M.draft.id,vendor_id:vid,scope,status:'Not requested',requested_date:'',due_date:'',received_date:'',amount:null,note:'',file_path:null,file_name:null});return true}
 
 /* ----- directory modals ----- */
@@ -1315,7 +1340,7 @@ function companyModal(){return mhead('Company','Shown at the top of the app for 
 
 /* ---------- saving ---------- */
 const nullIfEmpty=v=>v===''||v===undefined?null:v;
-function quoteRowData(q){const r={};Q_COLS.forEach(k=>r[k]=q[k]);['requested_date','due_date','received_date','file_path','file_name'].forEach(k=>r[k]=nullIfEmpty(r[k]));r.updated_by=S.session.user.id;return r}
+function quoteRowData(q){const r={};Q_COLS.forEach(k=>r[k]=q[k]);{const cur=S.quotes.find(x=>x.id===q.id);const m={...(q.meta||{}),...(cur?.meta||{})};const sc=qScopes(q);if(sc.length>1)m.scopes=sc;else delete m.scopes;r.meta=m}['requested_date','due_date','received_date','file_path','file_name'].forEach(k=>r[k]=nullIfEmpty(r[k]));r.updated_by=S.session.user.id;return r}
 async function saveBid(){
   const d=M.draft;
   if(d.quotes.some(q=>q._uploading)||M.uploading)throw new Error('Wait for the upload to finish.');
@@ -3956,6 +3981,8 @@ document.addEventListener('click',e=>{
     case 'rm-support':M.draft.support_estimator_ids=M.draft.support_estimator_ids.filter(x=>x!==t.dataset.id);renderModal();break;
     case 'rm-client':{const id=t.dataset.id;M.draft.client_ids=M.draft.client_ids.filter(x=>x!==id);delete M.draft.client_contacts[id];delete M.draft.client_proposals[id];if(M.draft.awarded_client_id===id)M.draft.awarded_client_id='';renderModal();break}
     case 'award':awardClient(t.dataset.id);break;
+    case 'q-unscope':{const q=M.draft.quotes[+t.dataset.i];if(q){qSetScopes(q,qScopes(q).filter(x=>x!==t.dataset.s));renderModal()}break}
+    case 'q-merge':{const vid=t.dataset.v;const xs=M.draft.quotes.filter(q=>q.vendor_id===vid&&qOpen(q)&&!q.file_path&&q.amount==null);if(xs.length>1){const keep=xs.find(q=>q.status==='Requested')||xs[0];qSetScopes(keep,xs.flatMap(qScopes));if(xs.some(q=>q.status==='Requested')){keep.status='Requested';keep.requested_date=xs.map(q=>q.requested_date).filter(Boolean).sort()[0]||keep.requested_date||todayStr()}const due=xs.map(q=>q.due_date).filter(Boolean).sort()[0];if(due)keep.due_date=due;keep.note=[...new Set(xs.map(q=>q.note).filter(Boolean))].join(' · ');M.draft.quotes=M.draft.quotes.filter(q=>q===keep||!xs.includes(q));toast(`Combined into one quote covering ${qScopes(keep).length} scopes. Save the bid to keep it.`);renderModal()}break}
     case 'q-reqall':if(M&&M.draft&&M.draft.quotes){let n=0;M.draft.quotes.forEach(q=>{if((q.status||'Not requested')==='Not requested'){q.status='Requested';q.requested_date=q.requested_date||todayStr();n++}});toast(`${n} marked requested. Save the bid to keep it.`);renderModal()}break;
     case 'pick-open':pickerStart();break;
     case 'add-ad':{const l=M.draft.addenda;const n=l.reduce((m,a)=>Math.max(m,+a.number||0),0)+1;l.push({id:newId(),number:n,date:todayStr(),description:'',priced:false,acknowledged:false});renderModal();setTimeout(()=>{const x=document.querySelectorAll('[data-ad$=".description"]');x[x.length-1]?.focus()},0);break}
@@ -4112,6 +4139,8 @@ document.addEventListener('change',e=>{
     case 'add-support':if(t.value==='__all'){const d=M.draft;S.estimators.filter(e=>e.active!==false&&e.id!==d.lead_estimator_id&&!d.support_estimator_ids.includes(e.id)).sort((a,c)=>a.name.localeCompare(c.name)).forEach(e=>d.support_estimator_ids.push(e.id));renderModal()}else if(t.value){M.draft.support_estimator_ids.push(t.value);renderModal()}break;
     case 'add-client':if(t.value){M.draft.client_ids.push(t.value);const first=byId(S.clients,t.value)?.contacts?.[0]?.name;if(first)M.draft.client_contacts[t.value]=first;renderModal()}break;
     case 'add-quote':if(t.value){addQuote(t.value);renderModal()}break;
+    case 'add-quote-scope':if(t.value){const had=M.draft.quotes.some(q=>q.vendor_id===t.value&&qOpen(q));addQuote(t.value,t.dataset.scope);if(had&&M.draft.quotes.some(q=>q.vendor_id===t.value&&qHas(q,t.dataset.scope)&&qScopes(q).length>1))toast(`Added ${t.dataset.scope} to ${vendorOf(t.value)?.company||'their'} quote, so they send one price for all of it.`);renderModal()}break;
+    case 'q-addscope':if(t.value){const q=M.draft.quotes[+t.dataset.i];if(q){qSetScopes(q,[...qScopes(q),t.value]);renderModal()}}break;
     case 'apply-template':if(t.value){const tp=(lib().templates||[]).find(x=>x.id===t.value);const n=tp?tp.scopes.filter(x=>addScope(x)).length:0;toast(n?`Added ${n} scope${n===1?'':'s'} from ${tp.name}`:'Those scopes are already on this bid');renderModal()}break;
     case 'add-scope':if(t.value){addScope(t.value);renderModal()}break;
     case 'award-sel':if(t.value)awardClient(t.value);else{M.draft.awarded_client_id='';renderModal()}break;
