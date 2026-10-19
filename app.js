@@ -2674,28 +2674,32 @@ function drawRet(v,r){
 }
 const CALCS=[
  {id:'pipe',group:'Pipe & utilities',name:'Pipe bedding & stone backfill',icon:'◯',
-  desc:'Stone around a pipe in a trench: bedding under the pipe, the pipe zone, and cover over the crown — less the space the pipe takes up. The trench section redraws as you type.',
+  desc:'Stone around a pipe in a trench: bedding under the pipe, then stone up the pipe as high as the cover you set, less the space the pipe takes up. The trench section redraws as you type.',
   fields:[{k:'ptype',label:'Pipe',type:'select',options:()=>pipeTypeOpts(),def:'RCP (wall B)'},
     {k:'size',label:'Nominal size',unit:'in',type:'select',options:v=>pipeSizes(v.ptype).map(n=>[String(n),n+'"']),def:'24',show:v=>!pipeLib(v.ptype)},
     {k:'od',label:'Outside diameter',unit:'in',step:'0.1',auto:v=>odFor(v.ptype,v.size),help:'From the pipe you picked. Type your own to override.'},
     {k:'len',label:'Pipe length',unit:'LF',def:100},
     {k:'width',label:'Trench width',unit:'in',auto:v=>Math.ceil((+v.od||0)+24),help:'At the bottom. Blank = OD + 12" each side.'},
-    {k:'bed',label:'Bedding under pipe',unit:'in',def:6},{k:'cover',label:'Stone over crown',unit:'in',def:12},
+    {k:'bed',label:'Bedding under pipe',unit:'in',def:6},{k:'zone',label:'Cover',unit:'in from pipe bottom',auto:v=>Math.round(((+v.od||0)+12)*10)/10,help:'Up from the bottom of the pipe. 0 = bedding only. Blank = 12″ over the top.'},
     {k:'depth',label:'Depth to invert',unit:'ft',step:'0.1',def:6,help:'From finished grade. Adds excavation and backfill. 0 = skip.'},
     {k:'slope',label:'Trench side slope',unit:'H : 1V',step:'0.25',def:0,help:'0 = vertical walls (trench box). 1 = 1:1.'},
     matField(),densField(),{k:'waste',label:'Waste / overrun',unit:'%',def:10}],
-  calc:v=>{const lib=pipeLib(v.ptype);const nom=lib?+lib.size:(+v.size||0);const wall=wallFor(v.ptype,v.od,nom);const s=Math.max(0,v.slope||0);
-    const W=v.width/12,H=(v.bed+v.od+v.cover)/12,pipeA=Math.PI*Math.pow(v.od/24,2);const zoneA=W*H+s*H*H;
-    const perLF=(zoneA-pipeA)/27;const cy=perLF*v.len;const cyW=cy*(1+v.waste/100);const tons=cyW*v.dens;
-    const Dt=v.depth>0?v.depth+(wall+v.bed)/12:0;const exA=Dt?W*Dt+s*Dt*Dt:0;const bfA=Dt>H?exA-zoneA:0;const coverG=v.depth>0?v.depth-(v.od-wall)/12:null;
-    const warn=[];if(Dt&&H>Dt+1e-6)warn.push('The stone zone is taller than the trench — it would stick up above grade. Check the depth or the cover.');
+  calc:v=>{const neg=['od','len','width','bed','zone','depth','slope','waste','dens'].filter(k=>+v[k]<0);neg.forEach(k=>v[k]=0);
+    const lib=pipeLib(v.ptype);const nom=lib?+lib.size:(+v.size||0);const wall=wallFor(v.ptype,v.od,nom);const s=Math.max(0,v.slope||0);
+    // stone goes from the bottom of the bedding up to "cover" inches above the bottom of the pipe
+    const Z=v.zone;const H=(v.bed+Z)/12,W=v.width/12,R=v.od/24;const hIn=Math.min(Z,v.od)/12;
+    const pipeA=hIn<=0?0:hIn>=2*R?Math.PI*R*R:R*R*Math.acos((R-hIn)/R)-(R-hIn)*Math.sqrt(Math.max(0,2*R*hIn-hIn*hIn));
+    const zoneA=W*H+s*H*H;v.cover=Z-v.od;
+    const perLF=Math.max(0,zoneA-pipeA)/27;const cy=perLF*v.len;const cyW=cy*(1+v.waste/100);const tons=cyW*v.dens;
+    const Dt=v.depth>0?v.depth+(wall+v.bed)/12:0;const exA=Dt?W*Dt+s*Dt*Dt:0;const bfA=Dt>H?Math.max(0,exA-zoneA-(Math.PI*R*R-pipeA)):0;const coverG=v.depth>0?v.depth-(v.od-wall)/12:null;
+    const warn=[];if(neg.length)warn.push('Negative numbers aren’t used. Those boxes were figured as 0.');if(Dt&&H>Dt+1e-6)warn.push('The stone zone is taller than the trench — it would stick up above grade. Check the depth or the cover.');
     if(v.od<=nom)warn.push('The outside diameter is not bigger than the nominal size — check the OD.');
     if(W*12<v.od)warn.push('The trench is narrower than the pipe.');
     return {main:[fmtN(tons,1),'tons'],warn,
-      out:[['Stone volume',fmtN(cy,2)+' CY'],['With '+v.waste+'% waste',fmtN(cyW,2)+' CY'],['Tons',fmtN(tons,2)],['Per LF of pipe',fmtN(perLF*27,2)+' CF · '+fmtN(perLF*(1+v.waste/100)*v.dens,3)+' tons'],['Stone zone depth',ftin(H)],
+      out:[['Stone volume',fmtN(cy,2)+' CY'],['With '+v.waste+'% waste',fmtN(cyW,2)+' CY'],['Tons',fmtN(tons,2)],['Per LF of pipe',fmtN(perLF*27,2)+' CF · '+fmtN(perLF*(1+v.waste/100)*v.dens,3)+' tons'],['Stone zone depth',ftin(H)],['Stone over top of pipe',Z>=v.od?ftin((Z-v.od)/12):'— (stops '+ftin((v.od-Z)/12)+' below the top)'],
         ...(Dt?[['Trench depth',ftin(Dt)],['Trench excavation',fmtN(exA/27*v.len,1)+' bank CY'],['Backfill above stone',fmtN(bfA/27*v.len,1)+' CY'],['Cover to grade over pipe',ftin(coverG)]]:[])],
-      math:[`Stone zone = ${fmtN(W,3)} ft wide × ${fmtN(H,3)} ft deep (${v.bed}" bedding + ${fmtN(v.od,2)}" OD + ${v.cover}" cover)${s?` + ${s} × ${fmtN(H,3)}² for the side slopes`:''} = ${fmtN(zoneA,3)} SF`,
-        `Pipe area = π × (${fmtN(v.od,2)}" ÷ 24)² = ${fmtN(pipeA,3)} SF`,`Stone per LF = (${fmtN(zoneA,3)} − ${fmtN(pipeA,3)}) ÷ 27 = ${fmtN(perLF,4)} CY`,
+      math:[`Stone zone = ${fmtN(W,3)} ft wide × ${fmtN(H,3)} ft deep (${v.bed}" bedding + ${fmtN(Z,2)}" cover from the bottom of the pipe)${s?` + ${s} × ${fmtN(H,3)}² for the side slopes`:''} = ${fmtN(zoneA,3)} SF`,
+        Z>=v.od?`Pipe area = π × (${fmtN(v.od,2)}" ÷ 24)² = ${fmtN(pipeA,3)} SF (the whole pipe is in the stone)`:Z>0?`Pipe area in the stone = the bottom ${fmtN(Z,2)}" of a ${fmtN(v.od,2)}" pipe = ${fmtN(pipeA,3)} SF`:'No pipe in the stone (bedding only)',`Stone per LF = (${fmtN(zoneA,3)} − ${fmtN(pipeA,3)}) ÷ 27 = ${fmtN(perLF,4)} CY`,
         `× ${fmtN(v.len)} LF = ${fmtN(cy,2)} CY × ${1+v.waste/100} waste = ${fmtN(cyW,2)} CY`,`× ${v.dens} tons/CY = ${fmtN(tons,2)} tons`,
         ...(Dt?[`Trench depth = ${v.depth} ft to invert + ${fmtN(wall,2)}" pipe wall + ${v.bed}" bedding = ${fmtN(Dt,3)} ft`,`Excavation = ${fmtN(W,3)} × ${fmtN(Dt,3)}${s?` + ${s} × ${fmtN(Dt,3)}²`:''} = ${fmtN(exA,3)} SF × ${fmtN(v.len)} LF ÷ 27 = ${fmtN(exA/27*v.len,1)} CY`]:[])],
       g:{W,H,s,wall,Dt}}},
@@ -3033,8 +3037,8 @@ function drawPipe(v,r){
   b+=`<polyline points="${P([[-half,Dg],[-W/2,0],[W/2,0],[half,Dg]])}" class="dw-cut"/>`;
   if(g.Dt>0)b+=`<line x1="0" x2="${sw*k}" y1="${top}" y2="${top}" class="dw-grade"/>`+svgT(6,top-5,'Finished grade','dw-muted');
   // dimensions on the right
-  const x1=sw*k+14,x2=sw*k+96;const lv=[[0,v.bed/12,ftin(v.bed/12)+' bedding'],[v.bed/12,(v.bed+v.od)/12,fmtN(v.od,1)+'″ OD'],[(v.bed+v.od)/12,H,ftin(v.cover/12)+' cover']];
-  const lines=[0,v.bed/12,(v.bed+v.od)/12,H];lines.forEach(y=>b+=`<line x1="${X(W/2+s*y)+2}" x2="${x1+4}" y1="${Y(y)}" y2="${Y(y)}" class="dw-ext"/>`);
+  const x1=sw*k+14,x2=sw*k+96;const Zs=v.zone;const lv=[[0,v.bed/12,ftin(v.bed/12)+' bedding']];if(Zs>0)lv.push([v.bed/12,H,ftin(Zs/12)+' cover from pipe bottom']);if(Zs<v.od)lv.push([H,(v.bed+v.od)/12,'rest of '+fmtN(v.od,1)+'″ OD']);else if(Zs>v.od)lv.splice(1,0);
+  const lines=[...new Set([0,v.bed/12,H,(v.bed+v.od)/12])];lines.forEach(y=>b+=`<line x1="${X(W/2+s*y)+2}" x2="${x1+4}" y1="${Y(y)}" y2="${Y(y)}" class="dw-ext"/>`);
   lv.forEach(([a,c])=>b+=dimV(x1,Y(a),Y(c)));
   spread(lv.map(([a,c,t])=>({y:(Y(a)+Y(c))/2+4,t})).reverse()).forEach(l=>b+=svgT(x1+8,l.y,l.t,'dw-dimt'));
   if(g.Dt>0){b+=`<line x1="${X(Ri*0.55)}" x2="${x2+4}" y1="${Y(inv)}" y2="${Y(inv)}" class="dw-ext"/><line x1="${sw*k}" x2="${x2+4}" y1="${top}" y2="${top}" class="dw-ext"/>`+dimV(x2,Y(inv),top)+svgT(x2+8,(Y(inv)+top)/2+4,fmtN(v.depth,2)+'′ to inv.','dw-dimt')}
