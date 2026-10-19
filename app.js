@@ -6663,7 +6663,7 @@ const TUTS=[
  {id:'fun',area:null,group:'Everyday',title:'The break room',blurb:'Your profile, trophies and a few games.',go:'fun',steps:[
    'Open <b>Break room</b>, or click your avatar in the top-right corner.','<b>My profile</b>: pick a hard hat color, an avatar, a tagline and a few facts. The crew sees it on <b>The crew</b> tab.',
    '<b>Trophy room</b>: your shelf fills up from real work (bids won, scopes signed off, jobs run, feedback that got fixed) and from the games. Look at anyone’s shelf, or the company case.',
-   '<b>Games</b>: a daily trivia question, Guess the quantity, and Pipe Dream, each with office high scores.'],
+   '<b>Games</b>: a daily trivia question, Guess the quantity, Build It Up and Pipe Dream, each with office high scores.'],
   tips:['Each trophy has bronze, silver and gold. Click one to see what the next tier takes.','Rumor has it there’s a fourth game.']},
  {id:'team',area:'team',group:'Admin',title:'People, roles and access',blurb:'Adding people and deciding what they can open.',go:'team',steps:[
    'Add the person in Supabase (<b>Authentication → Users → Add user</b>). They appear on <b>Team → People & access</b> as “No access yet”.',
@@ -6973,6 +6973,7 @@ const TROPHIES=[
  {id:'dirt',shape:'cup',icon:'🚜',names:['Operator','Master Operator','Dirt Legend'],tiers:[80,200,400],what:'best Dirt Mover score',secret:true,v:(s,f)=>f('dirt')},
  {id:'push',shape:'cup',icon:'🚧',names:['Pusher','Dozer Hand','Finish Blade'],tiers:[25,125,350],what:'most trucks handled in Push Crew',secret:true,v:(s,f)=>f('push')},
  {id:'clean',shape:'star',icon:'☎️',names:['Call Before You Dig'],tiers:[1],what:'Dirt Mover game with no utility strikes',secret:true,v:(s,f,d)=>d('dirt').clean?1:0},
+ {id:'stack',shape:'cup',icon:'🏗️',names:['Foreman','Superintendent','Developer'],tiers:[20000,100000,400000],what:'best Build It Up score',v:(s,f)=>f('stack')},
  {id:'pipe',shape:'medal',icon:'🌧️',names:['Pipe Layer','Storm Chaser','Rainmaker'],tiers:[2,4,7],what:'Pipe Dream levels cleared in one run',v:(s,f,d)=>num(d('pipe').level)||0},
  {id:'guess',shape:'shield',icon:'👁️',names:['Good Eye','Eagle Eye','Human AGTEK'],tiers:[300,400,470],what:'best Guess the quantity score (out of 500)',v:(s,f)=>f('guess')},
  {id:'trivia',shape:'plaque',icon:'🎓',names:['Quick Study','Know-It-All','Professor'],tiers:[5,25,100],what:'trivia questions right',v:(s,f)=>f('trivia')},
@@ -7239,11 +7240,12 @@ document.addEventListener('keyup',e=>{const g=S.fun.dirt;if(!g)return;if(e.key==
 ['pointerdown','pointerup','pointerleave','pointercancel'].forEach(ev=>document.addEventListener(ev,e=>{const b=e.target.closest&&e.target.closest('[data-dirt]');const g=S.fun.dirt;if(!b||!g)return;const k=b.dataset.dirt;if(k==='act'){if(ev==='pointerdown')dirtAct(g)}else g.keys[k]=ev==='pointerdown'}));
 
 /* ---------- the page ---------- */
-function funGames(){const F=S.fun;if(F.game==='pipe')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funPipe();if(F.game==='guess')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funGuess();if(F.game==='trivia')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funTrivia();
+function funGames(){const F=S.fun;if(F.game==='pipe')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funPipe();if(F.game==='guess')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funGuess();if(F.game==='trivia')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funTrivia();if(F.game==='stack')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funBuild();
   const me=myId();const found=!!funStat(me,'dirt')||(()=>{try{return localStorage.getItem('bp-dig-found')==='1'}catch(e){return false}})();const tv=funStat(me,'trivia')?.data||{};
   const card=(k,icon,name,blurb,best,cta)=>`<div class="panel pad gcard"><div class="gcard-i">${icon}</div><h2>${name}</h2><p class="small">${blurb}</p><div class="small dim">${best}</div><button class="btn primary" data-act="${k==='dirt'?'fun-dig':'fun-game'}" data-v="${k}">${cta}</button></div>`;
   return `<div class="gcards">${card('trivia','🎓','Daily trivia','One site-work question a day. Keep the streak alive.',tv.last===todayStr()?`Done for today · 🔥 ${num(tv.streak)||0}`:'Today’s question is waiting',tv.last===todayStr()?'See today’s answer':'Answer today’s question')}
     ${card('guess','👁️','Guess the quantity','Five sketches, 30 seconds each, no calculator. How good is your eye?',`Your best: ${num(funStat(me,'guess')?.value)||0} / 500`,'Play')}
+    ${card('stack','🏗️','Build It Up','Three stakes make a cone, three cones a barricade… all the way up to a tower. Keep the gophers boxed in.',`Your best: ${Number(num(funStat(me,'stack')?.value)||0).toLocaleString()}`,(()=>{try{return localStorage.getItem('bp-bu')?'Keep building':'Play'}catch(e){return 'Play'}})())}
     ${card('pipe','🌧️','Pipe Dream','Turn the pieces to connect the manhole to the outfall before the storm.',`Your best: ${Number(num(funStat(me,'pipe')?.value)||0).toLocaleString()}`,'Play')}
     ${found?card('dirt','🚜','Dirt Mover','The secret one. Load trucks, don’t hit the line.',`Your best: ${num(funStat(me,'dirt')?.value)||0}`,'Play'):`<div class="panel pad gcard locked"><div class="gcard-i">🔒</div><h2>???</h2><p class="small">There’s a fourth game hidden somewhere in this app. Site-work folks know the first thing you do on any job.</p><div class="small dim">No hints at the trophy room either.</div></div>`}
     ${funStat(me,'push')||(()=>{try{return localStorage.getItem('bp-push-found')==='1'}catch(e){return false}})()?`<div class="panel pad gcard"><div class="gcard-i">🚧</div><h2>Push Crew</h2><p class="small">The other secret one. Trucks dump, you push. Fill the lot before the shift ends.</p><div class="small dim">Your best: ${num(funStat(me,'push')?.value)||0} trucks</div><button class="btn primary" data-act="fun-push">Play</button></div>`
@@ -10377,3 +10379,95 @@ document.addEventListener('change',e=>{const t=e.target;
   if(t.dataset.archbefore!=null){M.before=t.value;renderModal();return}
   if(t.dataset.archnodate!=null){M.noDate=t.checked;renderModal();return}});
 try{S.inclArch=localStorage.getItem('bp-inclarch')==='1'}catch(e){}
+
+/* ---------- Build It Up: a merge-three puzzle for the Break room ----------
+   Place what the yard hands you on a 6×6 lot. Three or more of the same thing touching (side by side) merge into the
+   next thing up where you put the last one: stakes → cones → barricades → shed → trailer → house → office → tower.
+   Gophers wander; box one in so it can't move and it digs in, leaving a dirt mound (three mounds make a stockpile).
+   The excavator fits in wherever it makes the biggest merge; dynamite clears a spot. The game ends when the lot fills. */
+const BU_N=6;
+const BU={stake:{n:'Survey stake',p:5,up:'cone'},cone:{n:'Traffic cone',p:20,up:'barr'},barr:{n:'Barricade',p:100,up:'shed'},shed:{n:'Tool shed',p:500,up:'trailer'},
+  trailer:{n:'Job trailer',p:1500,up:'house'},house:{n:'House',p:5000,up:'office'},office:{n:'Office building',p:20000,up:'tower'},tower:{n:'Tower',p:100000,up:null},
+  mound:{n:'Dirt mound',p:0,up:'pile'},pile:{n:'Stockpile',p:1000,up:'quarry'},quarry:{n:'Quarry',p:10000,up:null},
+  rock:{n:'Rock',p:0,up:'boulder'},boulder:{n:'Boulder',p:100,up:'gold'},gold:{n:'Gold nugget',p:0,up:null,tap:5000},
+  gopher:{n:'Gopher',p:0},exc:{n:'Excavator',p:0},tnt:{n:'Dynamite',p:0}};
+const BU_PATH=['stake','cone','barr','shed','trailer','house','office','tower'];
+const BU_DEAL=[['stake',58],['cone',14],['barr',2.2],['gopher',14],['rock',3],['exc',4.3],['tnt',4.5]];
+// the pictures: small original drawings, one per piece
+const BU_SVG={
+  stake:'<path d="M30 10v44" stroke="#9a6b3c" stroke-width="5" stroke-linecap="round"/><path d="M32 12l18 6-18 6z" fill="#ff4fa3"/>',
+  cone:'<path d="M32 8 L46 50 H18 Z" fill="#ff8a1f"/><path d="M26 26h12M23 36h18" stroke="#fff" stroke-width="5"/><rect x="12" y="49" width="40" height="7" rx="2" fill="#e8701a"/>',
+  barr:'<rect x="8" y="16" width="48" height="14" rx="2" fill="#fff" stroke="#e3561b" stroke-width="2"/><path d="M14 16l-6 14M26 16l-8 14M38 16l-8 14M50 16l-8 14M56 22l-4 8" stroke="#e3561b" stroke-width="5"/><path d="M16 30v24M48 30v24" stroke="#666" stroke-width="5"/><circle cx="13" cy="12" r="4" fill="#ffc400"/><circle cx="51" cy="12" r="4" fill="#ffc400"/>',
+  shed:'<path d="M10 28 L32 12 L54 28" fill="#b5523b"/><rect x="14" y="28" width="36" height="26" fill="#d9c9a3"/><rect x="26" y="36" width="12" height="18" fill="#7a5a3a"/>',
+  trailer:'<rect x="6" y="18" width="52" height="28" rx="3" fill="#eef1f4" stroke="#8795a1" stroke-width="2"/><rect x="12" y="24" width="10" height="8" fill="#6fa8dc"/><rect x="42" y="24" width="10" height="8" fill="#6fa8dc"/><rect x="28" y="24" width="9" height="22" fill="#8795a1"/><path d="M10 46v8M54 46v8" stroke="#555" stroke-width="4"/><path d="M4 50h56" stroke="#555" stroke-width="3"/>',
+  house:'<path d="M6 30 L32 8 L58 30" fill="#4a7b56"/><rect x="12" y="29" width="40" height="27" fill="#f3e6c8"/><rect x="18" y="35" width="9" height="9" fill="#6fa8dc"/><rect x="37" y="35" width="9" height="9" fill="#6fa8dc"/><rect x="28" y="42" width="8" height="14" fill="#7a5a3a"/>',
+  office:'<rect x="14" y="8" width="36" height="48" fill="#5d6d7e"/>'+[0,1,2,3,4].map(r=>[0,1,2].map(c=>`<rect x="${19+c*10}" y="${13+r*8}" width="6" height="5" fill="#cfe5ff"/>`).join('')).join('')+'<rect x="28" y="48" width="8" height="8" fill="#2c3e50"/>',
+  tower:'<rect x="22" y="14" width="22" height="42" fill="#2f6fd6"/>'+[0,1,2,3,4,5,6].map(r=>`<rect x="25" y="${18+r*5.5}" width="16" height="3" fill="#bfe0ff"/>`).join('')+'<path d="M10 56V6h3v50M11 8h42M50 8v10" stroke="#ffc400" stroke-width="3"/><rect x="47" y="18" width="7" height="6" fill="#ffc400"/>',
+  mound:'<path d="M6 52 Q32 18 58 52Z" fill="#8a5a33"/><circle cx="24" cy="44" r="2.5" fill="#6b4425"/><circle cx="38" cy="40" r="2" fill="#6b4425"/>',
+  pile:'<path d="M2 54 Q20 22 34 32 Q46 14 62 54Z" fill="#a0693b"/><path d="M40 54l8-16 8 16" fill="#7a4e2a"/>',
+  quarry:'<path d="M4 20h56v36H4z" fill="#c9b79c"/><path d="M8 26h48v8H8zM14 34h36v8H14zM20 42h24v10H20z" fill="#a8977c"/><path d="M8 26h48M14 34h36M20 42h24" stroke="#8a7a62" stroke-width="2"/>',
+  rock:'<path d="M12 48 L18 26 L34 18 L50 28 L54 48Z" fill="#9aa1a8"/><path d="M18 26 L30 32 L34 18" fill="#b8bec4"/>',
+  boulder:'<path d="M6 52 L10 24 L28 10 L50 16 L60 40 L54 54Z" fill="#7d858c"/><path d="M10 24 L26 30 L28 10M26 30 L50 16" stroke="#a7aeb4" stroke-width="3" fill="none"/>',
+  gold:'<path d="M14 44 L22 20 L42 16 L52 38 L40 52 L20 52Z" fill="#f4c430"/><path d="M22 20 L30 34 L42 16M30 34 L40 52" stroke="#fff3b0" stroke-width="3" fill="none"/>',
+  gopher:'<ellipse cx="32" cy="40" rx="18" ry="16" fill="#9b6b43"/><circle cx="20" cy="22" r="6" fill="#9b6b43"/><circle cx="44" cy="22" r="6" fill="#9b6b43"/><circle cx="32" cy="32" r="14" fill="#b07c50"/><circle cx="26" cy="29" r="2.6" fill="#222"/><circle cx="38" cy="29" r="2.6" fill="#222"/><rect x="29" y="38" width="3" height="5" fill="#fff"/><rect x="32.5" y="38" width="3" height="5" fill="#fff"/><ellipse cx="32" cy="35" rx="3" ry="2" fill="#4a2e1a"/>',
+  exc:'<rect x="8" y="40" width="34" height="10" rx="5" fill="#333"/><rect x="12" y="26" width="24" height="14" fill="#ffc400"/><rect x="24" y="18" width="12" height="10" fill="#ffc400"/><rect x="26" y="20" width="8" height="6" fill="#bfe0ff"/><path d="M36 30 L50 14 L58 30" stroke="#e0a800" stroke-width="5" fill="none"/><path d="M54 30h8l-4 8z" fill="#555"/>',
+  tnt:'<rect x="18" y="20" width="10" height="34" rx="2" fill="#d63031"/><rect x="28" y="20" width="10" height="34" rx="2" fill="#e84343"/><rect x="38" y="20" width="10" height="34" rx="2" fill="#d63031"/><rect x="16" y="32" width="34" height="5" fill="#3a2b1b"/><path d="M33 20 Q34 10 42 8" stroke="#444" stroke-width="2" fill="none"/><circle cx="43" cy="7" r="3" fill="#ffb000"/>'};
+const buIcon=(k,sz)=>k&&BU_SVG[k]?`<svg viewBox="0 0 64 64" width="${sz||44}" height="${sz||44}" aria-hidden="true">${BU_SVG[k]}</svg>`:'';
+const buAt=(G,i)=>G.b[i];const buNb=i=>{const r=Math.floor(i/BU_N),c=i%BU_N;const o=[];if(r)o.push(i-BU_N);if(r<BU_N-1)o.push(i+BU_N);if(c)o.push(i-1);if(c<BU_N-1)o.push(i+1);return o};
+function buGroup(b,i,k){const seen=new Set([i]);const st=[i];while(st.length){const x=st.pop();for(const y of buNb(x))if(!seen.has(y)&&b[y]===k){seen.add(y);st.push(y)}}return seen}
+function buDeal(){let r=Math.random()*100;for(const [k,w] of BU_DEAL){if((r-=w)<0)return k}return 'stake'}
+function buNew(){const G={b:Array(BU_N*BU_N).fill(null),cur:'stake',store:null,score:0,turn:0,top:'stake',over:false,log:[]};
+  // a few things already on the lot, never three in a row
+  const start=['stake','stake','stake','cone','cone','rock','rock','stake','barr','gopher'];start.forEach(k=>{for(let t=0;t<50;t++){const i=Math.floor(Math.random()*G.b.length);if(G.b[i])continue;G.b[i]=k;if(BU[k].up&&buGroup(G.b,i,k).size>=3){G.b[i]=null;continue}break}});
+  G.cur=buDeal();return G}
+// what a piece turns into on this spot: the excavator becomes whatever makes the biggest merge, or a rock
+function buWild(b,i){let best=null;const seen=new Set();for(const y of buNb(i)){const k=b[y];if(!k||seen.has(k)||!BU[k].up)continue;seen.add(k);const t=b.slice();t[i]=k;if(buGroup(t,i,k).size>=3){const lv=buChainTop(t,i,k);if(!best||lv.p>best.p)best={k,p:lv.p}}}return best?best.k:'rock'}
+function buChainTop(b,i,k){const t=b.slice();t[i]=k;let p=0;for(;;){const g=buGroup(t,i,k);if(!BU[k].up||g.size<3)break;g.forEach(x=>t[x]=null);k=BU[k].up;t[i]=k;p=BU[k].p+(BU_PATH.indexOf(k)+1)*1e6}return {k,p}}
+function buMerge(G,i){let k=G.b[i];let made=[];for(;;){const g=buGroup(G.b,i,k);if(!BU[k].up||g.size<3)break;g.forEach(x=>{if(x!==i)G.b[x]=null});const nk=BU[k].up;G.b[i]=nk;const pts=BU[nk].p*(g.size>=4?2:1);G.score+=pts;made.push({k:nk,n:g.size,pts});k=nk;if(BU_PATH.indexOf(nk)>BU_PATH.indexOf(G.top))G.top=nk}return made}
+// gophers move one at a time to an open spot next to them; a group with nowhere to go digs in
+function buGophers(G,skip){const gs=[];G.b.forEach((k,i)=>{if(k==='gopher')gs.push(i)});const moved=new Set();
+  gs.forEach(i=>{if(i===skip||moved.has(i))return;const free=buNb(i).filter(y=>!G.b[y]);if(!free.length)return;const to=free[Math.floor(Math.random()*free.length)];G.b[to]='gopher';G.b[i]=null;moved.add(to)});
+  const all=[];G.b.forEach((k,i)=>{if(k==='gopher')all.push(i)});const done=new Set();const trapped=[];
+  all.forEach(i=>{if(done.has(i))return;const g=buGroup(G.b,i,'gopher');g.forEach(x=>done.add(x));const out=[...g].some(x=>buNb(x).some(y=>!G.b[y]));if(!out)trapped.push(...g)});
+  if(!trapped.length)return 0;trapped.forEach(x=>G.b[x]='mound');trapped.forEach(x=>{if(G.b[x]==='mound')buMerge(G,x)});return trapped.length}
+function buPlace(i){const G=S.fun.bu;if(!G||G.over)return;const k=G.cur;const here=G.b[i];
+  if(here==='gold'){G.score+=BU.gold.tap;G.b[i]=null;G.msg=`Gold! +${BU.gold.tap.toLocaleString()}`;buSaveLocal();render();return}
+  if(k==='tnt'){if(!here){G.msg='Dynamite needs something to blow up. Pick a spot with a piece on it.';render();return}
+    if(here==='gopher'){G.b[i]='mound';buMerge(G,i);G.msg='Gopher run off. It left a mound.'}else{G.b[i]=null;G.msg=`Blew up the ${BU[here].n.toLowerCase()}.`}}
+  else{if(here){G.msg='That spot’s taken.';render();return}const kk=k==='exc'?buWild(G.b,i):k;G.b[i]=kk;const made=kk==='gopher'?[]:buMerge(G,i);
+    G.msg=made.length?made.map(m=>`${m.n>=4?'Big merge! ':''}${BU[m.k].n} +${m.pts.toLocaleString()}`).join(' · '):k==='exc'?(kk==='rock'?'Nothing to dig into: the excavator left a rock.':`The excavator built a ${BU[kk].n.toLowerCase()}.`):''}
+  const dug=buGophers(G,k==='gopher'?i:-1);if(dug)G.msg=(G.msg?G.msg+' · ':'')+`${dug} gopher${dug===1?'':'s'} boxed in and dug down.`;
+  G.turn++;G.cur=buDeal();G.prev=null;
+  if(G.b.every(Boolean)){G.over=true;G.msg='The lot’s full. Nice build.';funSave('stack',G.score,{top:G.top,turns:G.turn,plays:(num(funStat(myId(),'stack')?.data?.plays)||0)+1}).then(()=>render())}
+  buSaveLocal();render()}
+function buSaveLocal(){try{const G=S.fun.bu;if(!G||G.over)localStorage.removeItem('bp-bu');else localStorage.setItem('bp-bu',JSON.stringify({b:G.b,cur:G.cur,store:G.store,score:G.score,turn:G.turn,top:G.top}))}catch(e){}}
+function buLoadLocal(){try{const x=JSON.parse(localStorage.getItem('bp-bu')||'null');if(x&&Array.isArray(x.b)&&x.b.length===BU_N*BU_N)return {...x,over:false,log:[]}}catch(e){}return null}
+// which spots a placement here would sweep up (shown on hover)
+function buPreview(G,i){if(!G||G.over||G.b[i])return [];let k=G.cur;if(k==='tnt'||k==='gopher')return [];if(k==='exc')k=buWild(G.b,i);if(!BU[k]||!BU[k].up)return [];const t=G.b.slice();t[i]=k;const out=new Set();let kk=k;for(;;){const g=buGroup(t,i,kk);if(!BU[kk].up||g.size<3)break;g.forEach(x=>{if(x!==i)out.add(x);t[x]=null});kk=BU[kk].up;t[i]=kk}return [...out]}
+function funBuild(){const F=S.fun;const G=F.bu;const st=funStat(myId(),'stack');
+  const path=`<div class="bu-path">${BU_PATH.map((k,n)=>{const seen=G&&BU_PATH.indexOf(G.top)>=n||st&&BU_PATH.indexOf(st.data&&st.data.top)>=n||n<2;return `<span class="bu-pk${seen?'':' hid'}" title="${seen?esc(BU[k].n)+' · '+BU[k].p.toLocaleString()+' pts':'Keep building to find out'}">${seen?buIcon(k,30):'<b>?</b>'}</span>${n<BU_PATH.length-1?'<i>›</i>':''}`}).join('')}</div>`;
+  const side=`<div class="panel pad"><b>Build It Up high scores</b>${funBoard('stack',{fmt:(v,x)=>`${Number(v).toLocaleString()}${x.data&&x.data.top?' · '+esc(BU[x.data.top]?BU[x.data.top].n:''):''}`})}
+    <div class="bu-help small"><p><b>Three of a kind merge.</b> Put three or more of the same piece side by side (not diagonal) and they become the next thing up, where you put the last one. Four or more score double.</p>${path}
+    <p>${buIcon('gopher',22)} <b>Gophers</b> wander each turn. Box them in so they can't move and they dig down into a ${buIcon('mound',20)} mound; three mounds make a stockpile.</p>
+    <p>${buIcon('exc',22)} The <b>excavator</b> turns into whatever makes the biggest merge. ${buIcon('tnt',22)} <b>Dynamite</b> clears a spot. ${buIcon('rock',22)} Rocks merge too, and three boulders make ${buIcon('gold',20)} gold: tap it to cash in.</p>
+    <p>The <b>laydown yard</b> holds one piece for later. The game ends when the lot is full.</p></div></div>`;
+  if(!G){const saved=buLoadLocal();return `<div class="grid2"><div class="panel pad"><div class="sec-h" style="margin-top:0"><h2>Build It Up</h2><span>Merge three, build higher</span></div>
+    <p>A 6×6 lot and whatever the yard sends you. Line up three stakes and they become a cone. Three cones make a barricade, and on up through sheds, trailers and houses to a tower. Keep the gophers boxed in.</p>${path}
+    ${st?`<p class="small">Your best: <b>${Number(st.value).toLocaleString()}</b>${st.data&&st.data.top?`, built up to a ${esc(BU[st.data.top].n.toLowerCase())}`:''}.</p>`:''}
+    <div class="adders">${saved?`<button class="btn primary" data-act="bu-resume">Keep building (${Number(saved.score).toLocaleString()} pts)</button><button class="btn" data-act="bu-start">New lot</button>`:'<button class="btn primary" data-act="bu-start">Start building</button>'}</div></div>${side}</div>`}
+  const best=Math.max(num(st&&st.value)||0,G.score);
+  return `<div class="grid2"><div class="panel pad bu"><div class="bu-top"><div><div class="small dim">Score</div><b class="bu-sc">${G.score.toLocaleString()}</b><div class="small dim">Best ${best.toLocaleString()} · turn ${G.turn}</div></div>
+      <div class="bu-slot"><div class="small dim">Next</div><div class="bu-cur" title="${esc(BU[G.cur].n)}">${buIcon(G.cur,52)}</div><div class="small">${esc(BU[G.cur].n)}</div></div>
+      <button class="bu-slot bu-store" data-act="bu-store" title="Laydown yard: park this piece for later (or swap it with what’s parked)"${G.over?' disabled':''}><div class="small dim">Laydown yard</div><div class="bu-cur">${G.store?buIcon(G.store,46):'<span class="dim small">empty</span>'}</div><div class="small">${G.store?esc(BU[G.store].n):'Park it'}</div></button></div>
+    <div class="bu-msg small">${G.msg?esc(G.msg):G.cur==='tnt'?'Pick a piece to blow up.':G.cur==='exc'?'Drop the excavator next to a pair and it fills in the third.':'Click an empty spot to place it.'}</div>
+    <div class="bu-grid${G.cur==='tnt'?' tnt':''}" style="--n:${BU_N}">${G.b.map((k,i)=>`<button class="bu-c${k?' on k-'+k:''}" data-act="bu-put" data-i="${i}" data-bui="${i}" aria-label="${k?esc(BU[k].n):'Empty'}"${G.over?' disabled':''}>${k?buIcon(k,46):''}</button>`).join('')}</div>
+    ${G.over?`<div class="bu-over"><b>Game over: ${G.score.toLocaleString()} points</b><div class="small">You built up to a ${esc(BU[G.top].n.toLowerCase())}.</div><div class="adders"><button class="btn primary" data-act="bu-start">Build again</button></div></div>`:`<div class="adders"><button class="btn sm ghost" data-act="bu-quit">Save and leave</button><button class="btn sm ghost" data-act="bu-start" title="Start over on an empty lot">Start over</button></div>`}</div>${side}</div>`}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||S.view!=='fun')return;const a=t.dataset.act;const F=S.fun;
+  if(a==='bu-start'){if(F.bu&&!F.bu.over&&F.bu.turn>3&&!t.classList.contains('arm')){t.classList.add('arm');t.textContent='Click again to start over';setTimeout(()=>t.classList.remove('arm'),3000);return}F.bu=buNew();buSaveLocal();render();return}
+  if(a==='bu-resume'){F.bu=buLoadLocal()||buNew();render();return}
+  if(a==='bu-quit'){buSaveLocal();F.bu=null;render();return}
+  if(a==='bu-put'){buPlace(+t.dataset.i);return}
+  if(a==='bu-store'){const G=F.bu;if(!G||G.over)return;if(G.store){const x=G.store;G.store=G.cur;G.cur=x}else{G.store=G.cur;G.cur=buDeal()}G.msg='';buSaveLocal();render();return}});
+document.addEventListener('mouseover',e=>{const c=e.target.closest&&e.target.closest('[data-bui]');if(!c||!S.fun||!S.fun.bu)return;const G=S.fun.bu;document.querySelectorAll('.bu-c.pv,.bu-c.tg').forEach(x=>x.classList.remove('pv','tg'));const i=+c.dataset.bui;
+  const pv=buPreview(G,i);if(!G.b[i]||G.cur==='tnt')c.classList.add('tg');pv.forEach(x=>{const el=document.querySelector(`[data-bui="${x}"]`);if(el)el.classList.add('pv')})});
+document.addEventListener('mouseout',e=>{if(e.target.closest&&e.target.closest('.bu-grid')&&!(e.relatedTarget&&e.relatedTarget.closest&&e.relatedTarget.closest('.bu-grid')))document.querySelectorAll('.bu-c.pv,.bu-c.tg').forEach(x=>x.classList.remove('pv','tg'))});

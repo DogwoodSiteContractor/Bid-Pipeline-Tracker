@@ -192,6 +192,16 @@ A tab for morale: profiles, trophies and a few site-work games. Needs `supabase/
   - **Push Crew:** also hidden. Type **push** anywhere in the app (not in a text box). Trucks back up to the haul road and dump; drive the dozer into a pile to push it. Pushed down the lot it slides until it lands, so the lot fills from the bottom up. A truck that can't dump is a strike (three and you're out, one is handed back for each lot you fill), and each lot has a shift clock. Lots grow 5×5, 10×10, 15×15 and the trucks come faster. Score is trucks handled; once found it shows as a card in the Break room, with its own trophy.
 - **Loading screen:** a small bulldozer pushing dirt replaces the spinner.
 
+
+**Build It Up** (Games) is a merge-three puzzle on a 6×6 lot. Three or more matching pieces side by side merge into the next one up, in the spot where you placed the last one: survey stake → cone → barricade → tool shed → job trailer → house → office → tower. Four or more score double, and hovering a spot outlines what it would merge.
+
+- **Gophers** move each turn. A gopher boxed in with nowhere to go digs in and leaves a dirt mound; three mounds make a stockpile, and three stockpiles make a quarry.
+- **Rocks** merge into boulders, and three boulders make gold, which you click to cash in.
+- **The excavator** becomes whatever makes the biggest merge, and **dynamite** clears a spot.
+- **The laydown yard** holds one piece for later.
+
+A game in progress is saved on that computer. High scores go on the office board, and there's a trophy for 20,000, 100,000 and 400,000 points.
+
 ## Help and feedback (everyone)
 The **Help** tab is there for every login. Needs `supabase/update-19-help-developer.sql` for feedback.
 - **Tutorials:** step-by-step guides for each part of the app. People only see guides for the areas they can open. They can search, tick guides off as they learn them, and jump straight to the page a guide is about.
