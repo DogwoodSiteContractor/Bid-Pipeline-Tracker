@@ -1058,7 +1058,8 @@ function bidModal(){
   <fieldset><legend>Vendor & sub quotes</legend>
     ${b.quotes.length?`<div class="qhead"><span>Vendor</span><span>Scope</span><span>Status</span><span>Need by</span><span>Amount</span><span>Quote file</span><span></span></div>`:''}
     <div class="rows">${b.quotes.map((q,i)=>quoteRow(q,i,work,admin)).join('')||'<div class="dim small">No quote requests yet.</div>'}</div>
-    ${work?`<div class="adders"><button class="btn primary sm" data-act="pick-open"${b.scope_items.length&&S.vendors.length?'':' disabled title="Add scopes and vendors first"'}>Select vendors by scope…</button><select class="field" data-act="add-quote"><option value="">+ Request a quote from…</option>${vendorsSorted.map(v=>`<option value="${v.id}">${esc(v.company)} (${esc(v.trade)})</option>`).join('')}</select>
+    ${work&&b.quotes.some(q=>(q.status||'Not requested')==='Not requested')?`<div class="q-nr"><span>${b.quotes.filter(q=>(q.status||'Not requested')==='Not requested').length} not requested yet. Mark them Requested as the RFQs go out. Once every one is out, the bid moves past RFQ sent to Takeoff.</span><button class="btn sm" data-act="q-reqall">Mark all requested</button></div>`:''}
+    ${work?`<div class="adders"><button class="btn primary sm" data-act="pick-open"${b.scope_items.length&&S.vendors.length?'':' disabled title="Add scopes and vendors first"'}>Select vendors by scope…</button><select class="field" data-act="add-quote"><option value="">+ Add a vendor or sub…</option>${vendorsSorted.map(v=>`<option value="${v.id}">${esc(v.company)} (${esc(v.trade)})</option>`).join('')}</select>
     ${tradesWithVendors.length?`<select class="field" data-act="add-trade"><option value="">+ Add every vendor in a trade…</option>${tradesWithVendors.map(t=>`<option>${esc(t)}</option>`).join('')}</select>`:''}</div>
     <p class="hint">Upload the quote when it comes in (PDF, Excel, image — any file). Status switches to Received automatically. Save to keep changes.</p>`:''}
   </fieldset>
@@ -1260,7 +1261,7 @@ function defaultScopeForTrade(t){const g=TRADE_GROUP[t];const inG=M.draft.scope_
 function addQuote(vid,scope){const v=vendorOf(vid);if(!v)return false;
   if(!scope){const fit=M.draft.scope_items.find(x=>vendorFits(v,x.name));scope=fit?fit.name:defaultScopeForTrade(v.trade)}
   if(M.draft.quotes.some(q=>q.vendor_id===vid&&q.scope===scope))return false;
-  M.draft.quotes.push({id:newId(),bid_id:M.draft.id,vendor_id:vid,scope,status:'Requested',requested_date:todayStr(),due_date:'',received_date:'',amount:null,note:'',file_path:null,file_name:null});return true}
+  M.draft.quotes.push({id:newId(),bid_id:M.draft.id,vendor_id:vid,scope,status:'Not requested',requested_date:'',due_date:'',received_date:'',amount:null,note:'',file_path:null,file_name:null});return true}
 
 /* ----- directory modals ----- */
 function ef(path,ph,type){return `<input class="field" ${type?`type="${type}"`:''} data-ef="${path}" value="${esc(M.draft[path]??'')}" placeholder="${esc(ph||'')}"${DIS()}>`}
@@ -1327,11 +1328,12 @@ async function saveBid(){
   // status follows the takeoff: first scope started → Estimating; every scope signed off → Takeoff Complete
   const its=d.scope_items||[];
   // The stage only ever moves forward by itself; anyone working the bid can set it by hand.
-  //   quote requests out → RFQ Sent · a scope started → Takeoff · every scope signed off and every quote answered → Quotes Received
+  //   some quote requests out → RFQ Sent · every request out, or a scope started → Takeoff · every scope signed off and every quote answered → Quotes Received
   const qs=(d.quotes||[]).filter(q=>q.status&&q.status!=='Not requested');const qIn=qs.length&&qs.every(q=>['Received','Declined','No response'].includes(q.status))&&qs.some(q=>q.status==='Received');
   const toDone=its.length&&its.every(x=>x.status==='Complete'||x.status==='N/A');const toStarted=its.some(x=>x.status&&x.status!=='Not Started');
   const up=to=>{if(stageNo(d.status)>=0&&stageNo(d.status)<stageNo(to))d.status=to};
-  if(qs.length)up('RFQ Sent');if(toStarted)up('Takeoff');
+  const allOut=(d.quotes||[]).length&&(d.quotes||[]).every(q=>q.status&&q.status!=='Not requested');
+  if(qs.length)up('RFQ Sent');if(allOut||toStarted)up('Takeoff');
   if(toDone&&qIn)up('Quotes Received');else if(toDone&&!qs.length)up('Estimating');
   // proposal went out → Submitted; Submitted → proposal marked Sent
   if(PRE_SUBMIT.includes(d.status)&&(d.proposal_status==='Sent'||sent.length))d.status='Submitted';
@@ -3954,6 +3956,7 @@ document.addEventListener('click',e=>{
     case 'rm-support':M.draft.support_estimator_ids=M.draft.support_estimator_ids.filter(x=>x!==t.dataset.id);renderModal();break;
     case 'rm-client':{const id=t.dataset.id;M.draft.client_ids=M.draft.client_ids.filter(x=>x!==id);delete M.draft.client_contacts[id];delete M.draft.client_proposals[id];if(M.draft.awarded_client_id===id)M.draft.awarded_client_id='';renderModal();break}
     case 'award':awardClient(t.dataset.id);break;
+    case 'q-reqall':if(M&&M.draft&&M.draft.quotes){let n=0;M.draft.quotes.forEach(q=>{if((q.status||'Not requested')==='Not requested'){q.status='Requested';q.requested_date=q.requested_date||todayStr();n++}});toast(`${n} marked requested. Save the bid to keep it.`);renderModal()}break;
     case 'pick-open':pickerStart();break;
     case 'add-ad':{const l=M.draft.addenda;const n=l.reduce((m,a)=>Math.max(m,+a.number||0),0)+1;l.push({id:newId(),number:n,date:todayStr(),description:'',priced:false,acknowledged:false});renderModal();setTimeout(()=>{const x=document.querySelectorAll('[data-ad$=".description"]');x[x.length-1]?.focus()},0);break}
     case 'rm-ad':M.draft.addenda.splice(+t.dataset.i,1);renderModal();break;

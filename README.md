@@ -606,7 +606,7 @@ The pipeline follows the order the work happens:
 Then **Awarded**, **Not Awarded** or **No Bid**; **On Hold** at any point.
 
 - **Moving a bid:** click a stage on the bar at the top of the bid, or use the Bid status dropdown.
-- **Moves by itself (forward only):** adding a quote request → RFQ Sent; starting a scope → Takeoff; every scope signed off and every quote answered → Quotes Received (or straight to Estimating when the bid has no quote requests); proposal marked sent → Submitted. Estimating and Proposal Review are set by hand.
+- **Moves by itself (forward only):** vendors and subs added to a bid start as **Not requested** and don't move anything. Marking at least one Requested → RFQ Sent; once every one is Requested (there's a **Mark all requested** button), or a scope is started → Takeoff; every scope signed off and every quote answered → Quotes Received (or straight to Estimating when the bid has no quote requests); proposal marked sent → Submitted. Estimating and Proposal Review are set by hand.
 - **Old bids:** Not Started became Project Created, and Takeoff Complete became Estimating. Importing a spreadsheet still accepts the old names.
 
 

@@ -2299,3 +2299,5 @@ div.tw-pgh{cursor:default}
 .scd-arm{background:var(--surface-2,rgba(0,0,0,.04));border:1px dashed var(--line);border-radius:8px;padding:6px 8px;font-size:13px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
 .scd-arm select{width:auto}
 .scd-gnew{border-style:dashed}
+.q-nr{display:flex;align-items:center;gap:10px;justify-content:space-between;margin-top:8px;padding:8px 10px;border:1px dashed var(--line);border-radius:8px;font-size:13px;color:var(--ink-2)}
+.q-nr .btn{flex:none}
