@@ -201,6 +201,8 @@ Parts with no data are left out and the rest count for more. A vendor with very 
 
 Rows with no price (headings, notes, "delivery included…") are left out unless you ask for them. Scanned-picture PDFs can't be read; use the Excel version or a PDF you can select text in. Vendors get the same **Import from Excel or PDF** button on their own update page, and still check and save.
 
+**Using vendor prices in an estimate.** In an activity's costs, **🏷️ Vendor prices** searches every vendor's price list ("57 stone", "15 RCP", "paving"). Matching items are grouped, the lowest price comes first with how much higher the others are, and each vendor's score and the age of the price are shown. You can narrow it to materials or services, one vendor, or a region. **Add** puts the price on the activity: materials come in as material lines (with sales tax) and services as subcontract lines. The line is tagged "Price list · vendor", with "· 50d old" when that price is out of date. Typing a different price replaces it, the same as a quote.
+
 **Vendor update link.** **✉ Send price link** makes a private page with only that vendor's price list, and **Email it** opens an email to them with the link. They open it without logging in, change prices, add or remove items, and click **Save prices**. Their changes are marked "vendor" with their name. Links last 60 days, and **New link** or **Turn it off** stops the old one working. You can always edit the list yourself.
 
 **Vendor rankings** (Contacts tab) is a dashboard built from cards you choose:

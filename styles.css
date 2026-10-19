@@ -2266,3 +2266,13 @@ div.tw-pgh{cursor:default}
 .vxi-drop:hover,.vxi-drop.on{border-color:var(--accent);background:var(--accent-soft)}
 .vp-impbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
 .vp-imp{margin-bottom:14px}
+/* estimate: vendor price picker */
+.vpk-bar{display:grid;grid-template-columns:minmax(0,2fr) repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px;position:sticky;top:-18px;background:var(--bg,var(--surface));padding:6px 0;z-index:2}
+.vpk-g{border:1px solid var(--line);border-radius:10px;margin-bottom:10px;overflow:hidden;background:var(--surface)}
+.vpk-gh{padding:8px 12px;background:var(--surface-2);border-bottom:1px solid var(--line);display:flex;flex-wrap:wrap;gap:6px;align-items:baseline}
+.vpk-t{width:100%;border-collapse:collapse}
+.vpk-t td{padding:7px 12px;border-bottom:1px solid var(--line);vertical-align:middle}
+.vpk-t tr:last-child td{border-bottom:0}
+.vpk-t td:nth-child(2){width:150px}.vpk-t td:nth-child(3){width:120px}.vpk-t td:last-child{width:60px;text-align:right}
+.vpk-t tr.vp-low td{background:color-mix(in srgb,var(--accent) 7%,transparent)}
+@media (max-width:700px){.vpk-bar{grid-template-columns:1fr 1fr}}
