@@ -1126,8 +1126,11 @@ function bpRfq(b,work,admin){
   const tradesWithVendors=TRADES.filter(t=>S.vendors.some(v=>v.trade===t));
   const nr=b.quotes.filter(q=>(q.status||'Not requested')==='Not requested').length;
   const due=rfqDue(b);const mixed=!due&&new Set(b.quotes.filter(q=>qOpen(q)).map(q=>q.due_date).filter(Boolean)).size>1;
-  return `<div class="rfq-bar"><label class="rfq-due"><span>Quotes due</span><input type="date" class="field" data-rfqdue value="${esc(due)}"${work?'':' disabled'}></label>
-    <span class="small dim">${mixed?'The quotes have different due dates. Pick one to set them all.':due?`${rfqDate(due)}${b.due_date?` · ${Math.round((parseD(b.due_date)-parseD(due))/864e5)} days before the bid`:''}`:'One date for the whole RFQ. Every vendor gets the same one.'}</span>
+  const sugg=b.due_date&&!due&&work?[7,10,14].map(n=>{const d=addDays(b.due_date,-n);return d>todayStr()?`<button class="chip" data-act="rfq-due-pick" data-v="${d}">${fmtShort(d)} <b>${n} days before bid</b></button>`:''}).join(''):'';
+  return `<div class="rfq-bar"><div class="rfq-due"><label for="rfq-due-bar">Quotes due</label>
+      <input type="date" class="field" id="rfq-due-bar" data-rfqdue value="${esc(due)}"${work?'':' disabled'}>
+      <span class="dim">by</span><input class="field rfq-time" id="rfq-time-bar" data-bprfq="time" value="${esc(rfqOf(b).time||'')}" placeholder="5PM"${work?'':' disabled'}></div>
+    <span class="small dim rfq-due-note">${rfqDueNote(b,due,mixed)}</span>${sugg?`<span class="rfq-sugg">${sugg}</span>`:''}
     ${work?`<button class="btn primary" data-act="rfq-start"${b.quotes.length?'':' disabled title="Add vendors first"'}>✉ RFQ email…</button>`:''}</div>
   <fieldset><legend>Scopes, vendors & RFQs</legend>
     <p class="hint" style="margin:0 0 10px">Pick the scopes, then the vendors and subs to price each one. Picking the same vendor for several scopes keeps it to one quote. Mark them <b>Requested</b> as the RFQs go out.</p>
@@ -11145,6 +11148,7 @@ const rfqD=d=>{if(!d)return 'TBD';const x=new Date(d+'T12:00:00');return `${x.ge
 const rfqLS=id=>{try{return JSON.parse(localStorage.getItem('rfq:'+id)||'null')}catch(e){return null}};
 function rfqOf(b){if(!b.rfq||typeof b.rfq!=='object')b.rfq={...(rfqLS(b.id)||{})};return b.rfq}
 // the bid's "quotes due" date: set once for the whole RFQ (falls back to what the open quotes share)
+function rfqDueNote(b,due,mixed){return mixed?'The quotes have different due dates. Pick one to set them all.':due?`${rfqDate(due)}${b.due_date?` · ${Math.round((parseD(b.due_date)-parseD(due))/864e5)} days before the bid`:''}`:'One date for the whole RFQ. Every vendor gets the same one.'}
 function rfqDue(b){const r=rfqOf(b);if(r.due)return r.due;const ds=[...new Set((b.quotes||[]).filter(q=>qOpen(q)).map(q=>q.due_date).filter(Boolean))];return ds.length===1?ds[0]:''}
 const vEmail=v=>(/[^\s<>(),;]+@[^\s<>(),;]+/.exec(String(v&&v.email||''))||[''])[0];
 // scopes on this RFQ; ones you self perform go out as "(material)"
@@ -11183,7 +11187,7 @@ function rfqView(){const b=M.draft;const R=M.rfq;const T=rfqTpl();const r=rfqOf(
   return mhead('RFQ email',`${b.name} · ${qs.length} quote request${qs.length===1?'':'s'} · ${bcc.length} email${bcc.length===1?'':'s'}`).replace('data-act="close"','data-act="rfq-cancel"')+`<div class="mbody rfq-wrap">
    <div class="rfq-cols"><div>
    <fieldset><legend>This RFQ</legend><div class="fg">
-     <label class="f">Quotes due<input type="date" class="field" data-rfqdue value="${esc(due)}"></label>
+     <label class="f">Quotes due<input type="date" class="field" id="rfq-due-modal" data-rfqdue value="${esc(due)}"></label>
      ${f('time','Due time','5PM')}
      ${f('note','Note (shows in bold, and in the subject)','e.g. Pricing and Quotes needed are for only Phase 1 & 2','s2')}
      ${f('plans','Plans link','Paste the SharePoint / Dropbox / plan room link','s2')}
@@ -11242,7 +11246,12 @@ document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')re
   if(t.dataset.rfqsel&&M.rfq){t.checked?M.rfq.sel.add(t.dataset.rfqsel):M.rfq.sel.delete(t.dataset.rfqsel);M.rfq.copied='';M.rfq.subj=null;renderModal();return}
   if(t.dataset.rfqplain!=null&&M.rfq){M.rfq.plain=t.checked;return}
   // one "quotes due" date for the whole RFQ: every open quote takes it
-  if(t.dataset.rfqdue!=null){const v=t.value;rfqOf(M.draft).due=v;M.draft.quotes.forEach(q=>{if(qOpen(q))q.due_date=v});renderModal();return}
+  if(t.dataset.rfqdue!=null){rfqSetDue(t.value);return}
   // putting in the date a quote came back marks it received
   if(t.dataset.qf&&t.dataset.qf.endsWith('.received_date')){const q=M.draft.quotes[+t.dataset.qf.split('.')[0]];if(q&&t.value&&q.status!=='Received'){q.status='Received';renderModal()}}});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.bprfq&&M&&M.kind==='bid'){rfqOf(M.draft)[t.dataset.bprfq]=t.value;if(!M.draft._new)bpSaveUI('Editing…')}});
+function rfqSetDue(v){if(v&&!/^\d{4}-\d{2}-\d{2}$/.test(v))return;if(v&&+v.slice(0,4)<2000)return;   // still typing the year
+  const b=M.draft;rfqOf(b).due=v;b.quotes.forEach(q=>{if(qOpen(q))q.due_date=v});
+  const n=document.querySelector('.rfq-due-note');if(n)n.textContent=rfqDueNote(b,v,false);if(!b._new)bpSaveUI('Editing…')}
+document.addEventListener('focusout',e=>{const t=e.target;if(t.dataset&&t.dataset.rfqdue!=null&&M&&M.kind==='bid')setTimeout(()=>{if(M&&M.kind==='bid'&&!(document.activeElement&&document.activeElement.dataset&&document.activeElement.dataset.rfqdue!=null))renderModal()},0)});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act=rfq-due-pick]');if(!t||!M||M.kind!=='bid')return;rfqSetDue(t.dataset.v);renderModal()});
