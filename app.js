@@ -946,7 +946,7 @@ let M=null;
 function closeModal(){const ae=document.activeElement;if(ae&&$('#modal')?.contains(ae))ae.blur();if(M&&M.kind==='bid'&&!M.picker&&!M.sup){bpHash('');if(bpCanAuto()&&bpSig(M.draft)!==M.bpSig){const m=M;saveBid({auto:true},m).then(()=>toast(`Saved ${m.draft.name}`)).catch(e=>toast('Not saved: '+errMsg(e)))}}const back=M&&M.kind==='lib'&&M.back;if(back){M=back;renderModal();return}M=null;$('#modal').innerHTML='';document.body.style.overflow=''}
 function showModal(){document.body.style.overflow='hidden';renderModal(true)}
 // keep the cursor in the same field when a modal re-renders
-const FOCUS_ATTRS=['data-itp','data-jip','data-itf','data-entf','data-logf','data-jobf','data-logdate','data-ef','data-bf','data-qf','data-cp','data-ad','data-rv','data-sf','data-lf','data-ctf','data-ff','data-tn','data-pickq','data-bulktype'];
+const FOCUS_ATTRS=['data-rfqf','data-rfqsubj','data-rfqt','data-bprfq','data-itp','data-jip','data-itf','data-entf','data-logf','data-jobf','data-logdate','data-ef','data-bf','data-qf','data-cp','data-ad','data-rv','data-sf','data-lf','data-ctf','data-ff','data-tn','data-pickq','data-bulktype'];
 function focusKey(el){if(!el||!$('#modal')?.contains(el))return null;if(el.id)return '#'+CSS.escape(el.id);for(const a of FOCUS_ATTRS)if(el.hasAttribute(a))return `[${a}="${CSS.escape(el.getAttribute(a))}"]`;return null}
 function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=true;try{renderModalNow(first)}finally{renderModal._busy=false}}
 function renderModalNow(first){
@@ -11206,10 +11206,14 @@ function rfqView(){const b=M.draft;const R=M.rfq;const T=rfqTpl();const r=rfqOf(
      <div class="rfq-preview">${html}</div>
      <div class="adders"><button class="btn sm" data-act="rfq-copy" data-v="html">Copy message</button>${isAdmin()?'<button class="btn sm ghost" data-act="rfq-edit">✎ Edit template</button>':''}<label class="small" style="display:flex;gap:6px;align-items:center;margin-left:auto"><input type="checkbox" data-rfqplain${R.plain?' checked':''}> Put plain text in the email instead</label></div>
      ${R.copied?`<p class="small good">✓ ${esc(R.copied)} copied</p>`:''}
-   </fieldset></div></div></div>
+   </fieldset>
+   ${R.sent?`<div class="rfq-next"><b>${R.sent==='eml'?'Your Outlook draft downloaded.':'Your email is open in a new window.'}</b><ol>${R.sent==='eml'?'<li>Open the downloaded file (bottom of your browser, or your Downloads folder). It opens as a new Outlook email with Cc, Bcc, subject and the formatted message filled in.</li><li>Check it and hit <b>Send</b>.</li>':`<li>Cc, Bcc and the subject are filled in.</li><li>${R.sentPlain?'The message is in the body as plain text.':'Click in the message body and press <b>Ctrl+V</b> (⌘V on a Mac) to paste the formatted message. It’s already copied.'}</li><li>Hit <b>Send</b>.</li>`}</ol>
+     <div class="adders"><button class="btn sm" data-act="rfq-copy" data-v="html">Copy the message again</button><button class="btn sm" data-act="rfq-cancel">Done, back to the bid</button></div>
+     ${R.sent!=='eml'?'<p class="hint">Nothing showed up? Try <b>⬇ Outlook draft file</b>. It carries everything, formatting included.</p>':''}</div>`:''}
+   </div></div></div>
   <div class="mfoot"><div><button class="btn" data-act="rfq-cancel">Back to the bid</button></div><div class="r">
     <button class="btn" data-act="rfq-mark"${qs.some(q=>(q.status||'Not requested')==='Not requested')?'':' disabled'}>Mark ${qs.filter(q=>(q.status||'Not requested')==='Not requested').length} requested</button>
-    <button class="btn primary" data-act="rfq-open"${bcc.length?'':' disabled'}>✉ Open in email</button></div></div>`}
+    ${(()=>{const how=rfqHow();const B=(k,l,cls)=>`<button class="btn ${cls}" data-act="rfq-open" data-v="${k}"${bcc.length?'':' disabled'}>${l}</button>`;const opts=[['owa','✉ Open in Outlook (web)'],['eml','⬇ Outlook draft file'],['mailto','Open in mail app']];return opts.filter(o=>o[0]!==how).map(o=>B(o[0],o[1],'')).join('')+B(how,opts.find(o=>o[0]===how)[1],'primary')})()}</div></div>`}
 function rfqEditView(){const R=M.rfq;const T=R.tpl;
   return mhead('RFQ email template','Shared by the whole team. **bold**, __underline__, and {fields} filled in from the bid.').replace('data-act="close"','data-act="rfq-edit-cancel"')+`<div class="mbody">
    <fieldset><legend>Template</legend>
@@ -11229,10 +11233,14 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
   if(a==='rfq-copy'){const o=M.rfq.out||{};const v=t.dataset.v;let ok;if(v==='bcc')ok=await rfqClip('',o.bcc.join('; '));else ok=await rfqClip(o.html,o.text);M.rfq.copied=ok?(v==='bcc'?'Bcc list':'Formatted message'):'';if(!ok)toast('Couldn’t copy. Select the message and copy it by hand.');renderModal();return}
   if(a==='rfq-mark'){const n=rfqMark();toast(`${n} marked requested.`);renderModal();return}
   if(a==='rfq-open'){const o=M.rfq.out||{};if(!(o.bcc||[]).length){toast('None of the picked vendors have an email on file.');return}
-    const plain=M.rfq.plain;let ok=true;if(!plain)ok=await rfqClip(o.html,o.text);
-    const url=`mailto:?cc=${encodeURIComponent(o.cc||'')}&bcc=${encodeURIComponent(o.bcc.join(','))}&subject=${encodeURIComponent(o.subj)}${plain||!ok?`&body=${encodeURIComponent(o.text.replace(/\r?\n/g,'\r\n'))}`:''}`;
-    const n=rfqMark(true);M.rfq=null;renderModal();location.href=url;
-    toast(plain||!ok?`Email opened${n?`, ${n} marked requested`:''}. Check it and hit send.`:`Email opened and the message is copied. Click in the body, paste (Ctrl+V), and send.${n?` ${n} marked requested.`:''}`);return}
+    const how=t.dataset.v||rfqHow();try{localStorage.setItem('rfqHow',how)}catch(_){}
+    const plain=M.rfq.plain;let ok=true;
+    if(how==='eml'){rfqEml(o)}
+    else{if(!plain)ok=await rfqClip(o.html,o.text);const body=plain||!ok?o.text:'';
+      if(how==='owa'){const q=new URLSearchParams();q.set('cc',o.cc||'');q.set('bcc',o.bcc.join(';'));q.set('subject',o.subj);if(body)q.set('body',body);window.open('https://outlook.office.com/mail/deeplink/compose?'+q.toString().replace(/\+/g,'%20'),'_blank')}
+      else location.href=`mailto:?cc=${encodeURIComponent(o.cc||'')}&bcc=${encodeURIComponent(o.bcc.join(','))}&subject=${encodeURIComponent(o.subj)}${body?`&body=${encodeURIComponent(body.replace(/\r?\n/g,'\r\n'))}`:''}`}
+    const n=rfqMark(true);M.rfq.sent=how;M.rfq.sentPlain=plain||!ok;renderModal();const nx=$('#modal .rfq-next');if(nx)nx.scrollIntoView({block:'nearest'});
+    if(n)toast(`${n} marked requested.`);return}
   if(a==='rfq-edit'){M.rfq.edit=true;M.rfq.tpl=rfqTpl();renderModal();return}
   if(a==='rfq-edit-cancel'){M.rfq.edit=false;renderModal();return}
   if(a==='rfq-edit-reset'){M.rfq.tpl={...RFQ_DEF};renderModal();return}
@@ -11241,7 +11249,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
 document.addEventListener('input',e=>{const t=e.target;if(!M||!M.rfq)return;
   if(t.dataset.rfqt!=null&&M.rfq.tpl){M.rfq.tpl[t.dataset.rfqt]=t.value;return}
   if(t.dataset.rfqsubj!=null){M.rfq.subj=t.value;if(M.rfq.out)M.rfq.out.subj=t.value;return}
-  if(t.dataset.rfqf){const r=rfqOf(M.draft);r[t.dataset.rfqf]=t.value;M.rfq.copied='';if(t.dataset.rfqf==='note')M.rfq.subj=null;clearTimeout(rfqStart._t);rfqStart._t=setTimeout(()=>renderModal(),350)}});
+  if(t.dataset.rfqf){const r=rfqOf(M.draft);r[t.dataset.rfqf]=t.value;M.rfq.copied='';if(t.dataset.rfqf==='note')M.rfq.subj=null;clearTimeout(rfqStart._t);rfqStart._t=setTimeout(rfqRefresh,250)}});
 document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')return;
   if(t.dataset.rfqsel&&M.rfq){t.checked?M.rfq.sel.add(t.dataset.rfqsel):M.rfq.sel.delete(t.dataset.rfqsel);M.rfq.copied='';M.rfq.subj=null;renderModal();return}
   if(t.dataset.rfqplain!=null&&M.rfq){M.rfq.plain=t.checked;return}
@@ -11255,3 +11263,13 @@ function rfqSetDue(v){if(v&&!/^\d{4}-\d{2}-\d{2}$/.test(v))return;if(v&&+v.slice
   const n=document.querySelector('.rfq-due-note');if(n)n.textContent=rfqDueNote(b,v,false);if(!b._new)bpSaveUI('Editing…')}
 document.addEventListener('focusout',e=>{const t=e.target;if(t.dataset&&t.dataset.rfqdue!=null&&M&&M.kind==='bid')setTimeout(()=>{if(M&&M.kind==='bid'&&!(document.activeElement&&document.activeElement.dataset&&document.activeElement.dataset.rfqdue!=null))renderModal()},0)});
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act=rfq-due-pick]');if(!t||!M||M.kind!=='bid')return;rfqSetDue(t.dataset.v);renderModal()});
+const rfqHow=()=>{try{return localStorage.getItem('rfqHow')||'owa'}catch(e){return 'owa'}};
+// redraw just the preview and subject while you type in the RFQ boxes
+function rfqRefresh(){if(!M||!M.rfq||M.rfq.edit)return;const b=M.draft;const R=M.rfq;const T=rfqTpl();const qs=b.quotes.filter(q=>R.sel.has(q.id));
+  const subj=R.subj??rfqLines(T.subject,rfqMap(b,qs)).replace(/\*\*|__/g,'');const html=rfqHtml(b,qs,T.body);const text=rfqText(b,qs,T.body);R.out={...(R.out||{}),subj,html,text};
+  const pv=$('#modal .rfq-preview');if(pv)pv.innerHTML=html;const si=$('#modal [data-rfqsubj]');if(si&&document.activeElement!==si)si.value=subj}
+// an Outlook draft: opens as a new, unsent email with everything filled in
+function rfqEml(o){const b64=s=>btoa(unescape(encodeURIComponent(s)));const wrap=s=>s.replace(/.{1,76}/g,'$&\r\n');
+  const name=(M.draft.name||'RFQ').replace(/[\\/:*?"<>|]+/g,' ').trim();
+  const eml=['X-Unsent: 1','To: ',`Cc: ${o.cc||''}`,`Bcc: ${o.bcc.join(', ')}`,`Subject: =?UTF-8?B?${b64(o.subj)}?=`,'MIME-Version: 1.0','Content-Type: text/html; charset="UTF-8"','Content-Transfer-Encoding: base64','',wrap(b64(`<html><head><meta charset="utf-8"></head><body>${o.html}</body></html>`))].join('\r\n');
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([eml],{type:'message/rfc822'}));a.download=`RFQ - ${name}.eml`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000)}
