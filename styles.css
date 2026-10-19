@@ -2099,3 +2099,11 @@ div.tw-pgh{cursor:default}
 .pl-cle{display:inline-flex;align-items:center;gap:4px;flex:none}
 .pl-cle .field.xs{width:auto}
 .pl-ce.step{border-left-style:dotted;font-style:italic}
+/* bulk archive */
+.arch-modes{display:flex;flex-direction:column;gap:6px}
+.arch-m{display:flex;gap:10px;align-items:flex-start;padding:9px 12px;border:1px solid var(--line);border-radius:10px;cursor:pointer}
+.arch-m.on{border-color:var(--accent-2);background:var(--accent-soft)}
+.arch-m>span{display:flex;flex-direction:column;gap:4px;flex:1}
+.arch-days{display:flex;flex-direction:column;gap:4px;margin-top:4px}
+.arch-batches{display:flex;flex-direction:column;gap:6px;margin:0 0 10px}
+.arch-b{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);font-size:13.5px}

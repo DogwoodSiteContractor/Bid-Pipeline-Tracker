@@ -162,6 +162,16 @@ As you type, the line under the box shows what it understood. **Steps:** after y
 
 **Calendar** shows your tasks, team tasks and bid dates (bid due, site walk, RFIs) by month; each can be switched on or off. Click a day to see everything on it and add a task for that day. Drag a task to another day to move it.
 
+## Archiving old or filler bids (admins)
+
+**Pipeline → 🗄 Archive…** archives many bids at once. You can choose:
+- everything in the pipeline,
+- bids added on certain days, which is how to pick out an Excel import (the day with the most bids is ticked for you),
+- bids due before a date, with or without the ones that have no due date,
+- or every decided bid (awarded, not awarded, no bid).
+
+The window lists what will go before you confirm. Archived bids keep their estimates, quotes, files and log. They leave the pipeline, the dashboards, win rates, estimator stats and the Estimates list (choose **Archived bids** there to see them), and they're under **🗄 Archived** in the Pipeline. There, each archiving run is listed with its own **Restore** button, so a whole batch comes back in one click; single bids restore from **Select**. To count archived bids in the numbers again, tick **Include archived** on the Board dashboard.
+
 ## Who's online (everyone)
 
 The top bar shows who else has the app open, with a green dot for active and amber for away (tab hidden, or no mouse or keys for 5 minutes). If someone has the same page open as you, the bar says so ("👀 Pat is here too"); it's worth a word before you both edit one estimate or takeoff. Click it to see each person's page and bid, for example "Takeoff · High Falls 16". This uses Supabase Realtime and needs no setup. Run `supabase/update-35-presence.sql` once and the list also shows **Recently**: who was on earlier and when.

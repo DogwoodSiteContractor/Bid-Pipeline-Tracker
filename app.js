@@ -55,6 +55,8 @@ const PROJECT_TYPE_ALIASES={singlefamily:'Single Family',sfr:'Single Family',sin
   singlefamilytownhomes:'Single Family & Townhomes',singlefamilyandtownhomes:'Single Family & Townhomes',sftownhomes:'Single Family & Townhomes',residential:'Residential',industrial:'Industrial',warehouse:'Industrial',commercial:'Commercial',retail:'Commercial',office:'Commercial',public:'Public / municipal',municipal:'Public / municipal',publicmunicipal:'Public / municipal',institutional:'Institutional',school:'Institutional'};
 const normProjectType=v=>{if(!v)return v;if(PROJECT_TYPES.includes(v))return v;return PROJECT_TYPE_ALIASES[String(v).toLowerCase().replace(/[^a-z0-9]/g,'')]||v};
 const live=b=>!b.archived_at;
+// dashboards and win rates count archived bids only when someone asks for them (Board dashboard → Include archived)
+const statOk=b=>!b.archived_at||!!S.inclArch;
 const unitsText=b=>num(b.units)?`${Number(b.units).toLocaleString('en-US')} unit${+b.units===1?'':'s'}`:'';
 const BID_TYPES=['Hard bid','Negotiated','Budget / pricing','Design-assist'];
 const LOST_REASONS=['','Price','Schedule','Relationship / incumbent','Project cancelled','Scope','Unknown'];
@@ -387,11 +389,11 @@ function vDashboard(){
   if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}</div></div>`+bidReqPanel()+fuPanel()+precon();
   if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}</div></div>`+board();
   return `<div class="head"><div><h1>${S.dash==='precon'?'Bid pipeline dashboard':'Board dashboard'}</h1><p>${d}${S.lastLoaded?` · <span class="dim">Last updated ${S.lastLoaded.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>`:''}</p></div>
-  <div class="tools">${S.dash==='board'?yearSelect()+'<button class="btn" data-act="board-custom">Customize view</button>':'<button class="btn" data-act="refresh">↻ Refresh</button>'}
+  <div class="tools">${S.dash==='board'?yearSelect()+(S.bids.some(b=>b.archived_at)?`<label class="check small" title="Archived bids are left out of the numbers unless this is on"><input type="checkbox" data-inclarch${S.inclArch?' checked':''}> Include archived</label>`:'')+'<button class="btn" data-act="board-custom">Customize view</button>':'<button class="btn" data-act="refresh">↻ Refresh</button>'}
   <div class="seg" role="tablist"><button class="${S.dash==='precon'?'on':''}" data-act="dash" data-v="precon">Precon<small>Daily work</small></button><button class="${S.dash==='board'?'on':''}" data-act="dash" data-v="board">Board<small>Results & trends</small></button></div></div></div>`
   +bidReqPanel()+fuPanel()+(S.dash==='precon'?precon():board());
 }
-function yearSelect(){const ys=new Set([new Date().getFullYear()]);S.bids.forEach(b=>ys.add(yearOf(b)));return `<select class="field" data-act="year" style="width:auto">${[...ys].sort((a,b)=>b-a).map(y=>`<option${y===S.year?' selected':''}>${y}</option>`).join('')}</select>`}
+function yearSelect(){const ys=new Set([new Date().getFullYear()]);S.bids.filter(statOk).forEach(b=>ys.add(yearOf(b)));return `<select class="field" data-act="year" style="width:auto">${[...ys].sort((a,b)=>b-a).map(y=>`<option${y===S.year?' selected':''}>${y}</option>`).join('')}</select>`}
 function kpi(l,v,s,cls,filter){const tag=filter?'button':'div';return `<${tag} class="kpi ${cls||''}"${filter?` data-act="kpi-filter" data-v="${filter}"`:''}><div class="l">${l}</div><div class="v">${v}</div><div class="s">${esc(s)}</div></${tag}>`}
 function dueCell(b){
   if(!b.due_date)return '<span class="dim">No date</span>';
@@ -434,7 +436,7 @@ function precon(){
   const fu=sub.filter(needsFollowUp);
   const val=act.reduce((s,b)=>s+bidValue(b),0);
   const Y=new Date().getFullYear();
-  const yr=S.bids.filter(b=>yearOf(b)===Y);
+  const yr=S.bids.filter(b=>yearOf(b)===Y&&statOk(b));
   const proposed=yr.filter(isSent);
   const won=yr.filter(b=>b.status==='Awarded');
   const split=list=>{const w=list.filter(b=>bidValue(b)&&b.use_for!=='without').length,o=list.filter(b=>bidValue(b)&&b.use_for==='without').length;return `${w} w/ site, ${o} w/o site`};
@@ -576,7 +578,7 @@ function panel(t,sub,body){return `<div class="sec" style="margin:0"><div class=
 function hbars(items){return `<div class="hbars">${items.map(x=>`<div class="hb"><span class="lab">${esc(x.l)}</span><div class="track"><div class="fill ${x.c||''}" style="width:${Math.max(0,x.w*100)}%"></div></div><span class="v">${esc(x.v)}</span></div>`).join('')}</div>`}
 function board(){
   const Y=S.year,cfg=boardCfg();
-  const yb=S.bids.filter(b=>yearOf(b)===Y);
+  const yb=S.bids.filter(b=>yearOf(b)===Y&&statOk(b));
   const sub=yb.filter(isSent);
   const won=yb.filter(b=>b.status==='Awarded'),lost=yb.filter(b=>b.status==='Not Awarded');
   const subVal=sub.reduce((s,b)=>s+bidValue(b),0),wonVal=won.reduce((s,b)=>s+wonValue(b),0);
@@ -712,7 +714,7 @@ function vPipeline(){
     calendar:'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="12" rx="1.5"/><path d="M1.5 6.5h13M5 1v3M11 1v3"/></svg>'};
   const body=!list.length&&pv.mode!=='calendar'?`<div class="panel"><div class="empty"><b>No bids match</b>${pool.length?(q||nf||S.filter!=='active'?`Try a different search or filter. <button class="linkbtn" data-act="pv-reset">Clear search and filters</button>`:'Nothing active right now.'):est?'Bids assigned to you will appear here.':'Create your first bid to fill the pipeline.'}</div></div>`
     :pv.mode==='list'?listView(list):pv.mode==='calendar'?calendarView(list):`<div class="cards${S.selMode?' selecting':''}">${list.map(card).join('')}</div>`;
-  return `<div class="head"><div><h1>${est?'My bids':'Pipeline'}</h1><p>${pool.filter(live).length} bid${pool.filter(live).length===1?'':'s'}${est?' assigned to you':' on file'}</p></div><div class="tools">${mineSeg()}${est||scopeView()?'':'<button class="btn" data-act="export-xlsx">Export Excel</button><button class="btn ghost" data-act="export">CSV</button>'}${isAdmin()?`<button class="btn${S.selMode?' primary':''}" data-act="sel-mode">${S.selMode?'Selecting…':'Select'}</button>`:''}${isAdmin()?'<button class="btn" data-act="import">Import from Excel</button><button class="btn primary" data-act="new-bid">+ New bid</button>':''}</div></div>
+  return `<div class="head"><div><h1>${est?'My bids':'Pipeline'}</h1><p>${pool.filter(live).length} bid${pool.filter(live).length===1?'':'s'}${est?' assigned to you':' on file'}</p></div><div class="tools">${mineSeg()}${est||scopeView()?'':'<button class="btn" data-act="export-xlsx">Export Excel</button><button class="btn ghost" data-act="export">CSV</button>'}${isAdmin()?`<button class="btn" data-act="arch-open" title="Archive old or filler bids in one go: all of them, an Excel import, everything due before a date…">🗄 Archive…</button><button class="btn${S.selMode?' primary':''}" data-act="sel-mode">${S.selMode?'Selecting…':'Select'}</button>`:''}${isAdmin()?'<button class="btn" data-act="import">Import from Excel</button><button class="btn primary" data-act="new-bid">+ New bid</button>':''}</div></div>
   <div class="bar">${FILTERS.map(([k,l,fn])=>`<button class="chip ${S.filter===k?'on':''}" data-act="filter" data-v="${k}">${l}<b>${base.filter(b=>live(b)&&fn(b)).length}</b></button>`).join('')}${base.some(b=>b.archived_at)||inArch?`<button class="chip ${inArch?'on':''}" data-act="filter" data-v="archived">🗄 Archived<b>${base.filter(b=>b.archived_at).length}</b></button>`:''}</div>
   <div class="pv-bar">
     <div class="pv-search"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><input id="q-pipe" class="field" placeholder="Search projects, GCs, estimators, scopes, vendors, notes…" value="${esc(S.q.pipe||'')}" data-q="pipe" aria-label="Search bids">${S.q.pipe?'<button class="rm" data-act="pv-clearq" aria-label="Clear search">×</button>':'<kbd>/</kbd>'}</div>
@@ -723,6 +725,7 @@ function vPipeline(){
   ${pv.open?filterPanel(est):''}
   ${nf?`<div class="pv-pills">${activePills()}<button class="linkbtn" data-act="pv-clearf">Clear all filters</button></div>`:''}
   ${pv.mode!=='calendar'?`<div class="pv-summary">Showing <b>${list.length}</b> of ${inArch?pool.filter(b=>b.archived_at).length:pool.filter(live).length} bid${list.length===1?'':'s'}${total?` · <b>${moneyK(total)}</b> total value`:''}${q?` · matching “${esc(S.q.pipe.trim())}”`:''}</div>`:''}
+  ${inArch&&isAdmin()?archBatches(pool):''}
   ${S.selMode&&pv.mode!=='calendar'?'<div class="notice">Click bids to select them, then archive or delete. Archived bids leave your pipeline and dashboard but keep all their history — find them under <b>Archived</b> to restore. Use the filters and search to narrow down first.</div>':''}
   ${body}${pv.mode!=='calendar'?selBar:''}`;
 }
@@ -876,7 +879,7 @@ function vEstimators(){
   const q=(S.q.est||'').toLowerCase();const list=S.estimators.filter(e=>!q||(e.name+' '+e.title+' '+e.email).toLowerCase().includes(q)).sort((a,b)=>a.name.localeCompare(b.name));
   return dbHead('Estimators',S.estimators.length+' people','new-est','+ Add estimator')+`<div class="bar"><input id="q-est" class="field search" data-q="est" placeholder="Search estimators" value="${esc(S.q.est||'')}"></div>
   <div class="panel scroll"><table><thead><tr><th>Name</th><th>Title</th><th>Contact</th><th>Login</th><th class="r">Active bids</th><th class="r">Bids this year</th><th class="r">Won this year</th><th>Status</th></tr></thead><tbody>
-  ${list.map(e=>{const mine=S.bids.filter(b=>b.lead_estimator_id===e.id||(b.support_estimator_ids||[]).includes(e.id));const y=mine.filter(b=>yearOf(b)===new Date().getFullYear());
+  ${list.map(e=>{const mine=S.bids.filter(b=>statOk(b)&&(b.lead_estimator_id===e.id||(b.support_estimator_ids||[]).includes(e.id)));const y=mine.filter(b=>yearOf(b)===new Date().getFullYear());
    return `<tr class="click" data-act="open-est" data-id="${e.id}"><td><span class="who">${avatar(e.id)}<b style="font-weight:600">${esc(e.name)}</b></span></td><td>${esc(e.title)}</td><td class="small">${esc(e.email)}${e.phone?'<br>'+esc(e.phone):''}</td><td>${e.user_id?pill('Linked','good'):pill('No login')}</td><td class="r num">${mine.filter(b=>ACTIVE.includes(b.status)).length}</td><td class="r num">${y.length}</td><td class="r num">${y.filter(b=>b.status==='Awarded').length}</td><td>${e.active===false?pill('Inactive'):pill('Active','good')}</td></tr>`}).join('')
   ||`<tr><td colspan="8"><div class="empty"><b>No estimators yet</b>Add the people who price your work.</div></td></tr>`}</tbody></table></div>`;
 }
@@ -939,7 +942,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  const html={arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -5400,10 +5403,10 @@ function vEstimates(){const tab=S.estsTab||'list';const canNew=can('bids','edit'
       ||`<tr><td colspan="7"><div class="empty"><b>No templates yet</b>${admin?'Open a finished estimate and click <b>Save as master template</b>, or start a blank one here. Save a single scope with <b>Save as section template</b> on any section.':'An admin sets these up.'}</div></td></tr>`}</tbody></table></div>`}
   const q=(S.q.ests||'').trim().toLowerCase();const f=S.estsF||'active';
   let list=S.estIndex.map(x=>({x,b:byId(S.bids,x.bid_id)})).filter(o=>o.b);
-  if(f==='active')list=list.filter(o=>!DECIDED.includes(o.b.status)&&!o.b.archived_at);else if(f==='won')list=list.filter(o=>o.b.status==='Awarded');
+  if(f==='active')list=list.filter(o=>!DECIDED.includes(o.b.status)&&!o.b.archived_at);else if(f==='won')list=list.filter(o=>o.b.status==='Awarded'&&!o.b.archived_at);else if(f==='arch')list=list.filter(o=>o.b.archived_at);else list=list.filter(o=>!o.b.archived_at);
   if(q)list=list.filter(o=>[o.b.name,o.b.location,clientsLine(o.b,5),estName(o.b.lead_estimator_id)].join(' ').toLowerCase().includes(q));
   list.sort((a,c)=>String(a.b.due_date||'9').localeCompare(String(c.b.due_date||'9'))||String(c.x.updated_at).localeCompare(String(a.x.updated_at)));
-  return head+tabs+`<div class="bar"><input id="q-ests" class="field search" data-q="ests" placeholder="Search projects, GCs, estimators" value="${esc(S.q.ests||'')}"><select class="field" data-estsf><option value="active"${f==='active'?' selected':''}>Active bids</option><option value="won"${f==='won'?' selected':''}>Awarded</option><option value="all"${f==='all'?' selected':''}>All</option></select></div>
+  return head+tabs+`<div class="bar"><input id="q-ests" class="field search" data-q="ests" placeholder="Search projects, GCs, estimators" value="${esc(S.q.ests||'')}"><select class="field" data-estsf><option value="active"${f==='active'?' selected':''}>Active bids</option><option value="won"${f==='won'?' selected':''}>Awarded</option><option value="all"${f==='all'?' selected':''}>All</option>${S.bids.some(b=>b.archived_at)?`<option value="arch"${f==='arch'?' selected':''}>Archived bids</option>`:''}</select></div>
   <div class="panel scroll"><table><thead><tr><th>Project</th><th>GC / client</th><th>Due</th><th>Status</th><th>Lead</th><th class="r">Cost</th><th class="r">Bid total</th><th class="r">Margin</th><th>Updated</th><th></th></tr></thead><tbody>
   ${list.map(({x,b})=>`<tr class="click" data-act="ests-open" data-id="${b.id}"><td class="proj">${esc(b.name)}${estVersOf(b.id).length?` <span class="pill" title="Saved copies of earlier versions">${estVersOf(b.id).length} saved cop${estVersOf(b.id).length===1?'y':'ies'}</span>`:''}${b.location?`<div class="dim small">${esc(b.location)}</div>`:''}</td><td class="small">${clientsLine(b,2)}</td><td class="small">${dueCell(b)}</td><td>${pill(b.status,BID_CLS[b.status])}</td><td>${b.lead_estimator_id?avatar(b.lead_estimator_id):'<span class="dim">—</span>'}</td>
     <td class="r num">${money(x.total_cost)}</td><td class="r num"><b>${money(x.total_price)}</b></td><td class="r num">${num(x.total_price)?fmtN((x.total_price-x.total_cost)/x.total_price*100,1)+'%':'—'}</td><td class="small dim">${x.updated_at?fmtShort(String(x.updated_at).slice(0,10)):''}${x.updated_by_name?`<br>${esc(x.updated_by_name)}`:''}</td><td class="ests-acts">${canWork(b)&&can('estimates','edit')?`<button class="btn sm" data-act="ests-revise" data-id="${b.id}" title="Keep a copy of this estimate and start a revision">Revise</button>`:''}${isAdmin()?`<button class="btn sm ghost danger-t" data-act="ests-del" data-id="${b.id}" title="Delete this estimate">Delete</button>`:''}</td></tr>`).join('')
@@ -10334,3 +10337,43 @@ document.addEventListener('dragover',e=>{const z=e.target.closest&&e.target.clos
 document.addEventListener('drop',async e=>{const z=e.target.closest&&e.target.closest('[data-pldrop]');if(!z)return;const id=e.dataTransfer.getData('text/pl');if(!id)return;e.preventDefault();z.classList.remove('pl-over');const t=S.tasks.find(x=>x.id===id);if(!t||!plCanEdit(t))return;const [k,v]=z.dataset.pldrop.split(':');
   if(k==='day'&&t.due_date!==v)await plSave({...t,due_date:v},true);
   else if(k==='st'&&t.status!==v){if(v==='done'){await plToggle(id)}else await plSave({...t,status:v,done_at:null},true)}});
+
+/* ---------- archive in bulk: start the pipeline fresh without losing anything ----------
+   Archived bids keep everything (estimates, quotes, files, log); they just leave the pipeline, dashboards and
+   win rates. Each run stamps its bids with the same time, so a whole batch can be restored in one click. */
+const ARCH_MODES=[['all','Everything in the pipeline'],['added','Bids added on certain days (an Excel import, say)'],['due','Bids due before a date'],['decided','Decided bids (awarded, not awarded, no bid)']];
+function archPool(){return S.bids.filter(b=>!b.archived_at)}
+const archDay=b=>String(b.created_at||'').slice(0,10);
+function archPick(){const A=M;const pool=archPool();
+  if(A.mode==='all')return pool;
+  if(A.mode==='added')return pool.filter(b=>A.days.has(archDay(b)));
+  if(A.mode==='due')return A.before?pool.filter(b=>b.due_date?b.due_date<A.before:A.noDate):[];
+  if(A.mode==='decided')return pool.filter(b=>DECIDED.includes(b.status));return []}
+function archModal(){const A=M;const pool=archPool();const pick=archPick();
+  const days=[...pool.reduce((m,b)=>m.set(archDay(b),(m.get(archDay(b))||0)+1),new Map())].filter(([d])=>d).sort((a,b)=>b[1]-a[1]||b[0].localeCompare(a[0])).slice(0,12);
+  const cnt=k=>k==='all'?pool.length:k==='decided'?pool.filter(b=>DECIDED.includes(b.status)).length:null;
+  return mhead('Archive bids','Start the pipeline fresh without losing anything')+`<div class="mbody">
+    <p class="small" style="margin-top:0">Archived bids leave the pipeline, the dashboards and the win rates, but keep their estimates, quotes, files and log. They're under <b>🗄 Archived</b> in the Pipeline, where you can search them, open them and restore them, one at a time or the whole batch.</p>
+    <div class="arch-modes">${ARCH_MODES.map(([k,l])=>`<label class="arch-m${A.mode===k?' on':''}"><input type="radio" name="arch-mode" value="${k}" data-archmode${A.mode===k?' checked':''}><span><b>${l}</b>${cnt(k)!=null?` <span class="dim">${cnt(k)}</span>`:''}
+      ${k==='added'&&A.mode==='added'?`<span class="arch-days">${days.map(([d,n])=>`<label class="check small"><input type="checkbox" data-archday="${d}"${A.days.has(d)?' checked':''}> ${fmtDate(d)} <span class="dim">· ${n} bid${n===1?'':'s'}</span></label>`).join('')||'<span class="dim small">No dates on file.</span>'}<span class="dim small">The day with the most bids is usually the import.</span></span>`:''}
+      ${k==='due'&&A.mode==='due'?`<span class="arch-days"><label class="small">Due before <input class="field sm" type="date" data-archbefore value="${esc(A.before||'')}" style="width:auto"></label><label class="check small"><input type="checkbox" data-archnodate${A.noDate?' checked':''}> Also bids with no due date</label></span>`:''}</span></label>`).join('')}</div>
+    <fieldset style="margin-top:14px"><legend>${pick.length} bid${pick.length===1?'':'s'} will be archived</legend><div class="list">${pick.slice(0,20).map(b=>`<div class="li"><div><b style="font-weight:600">${esc(b.name)}</b><div class="dim small">${[b.due_date?'Due '+fmtDate(b.due_date):'',clientsLine(b,2),b.created_at?'added '+fmtShort(archDay(b)):''].filter(x=>x&&x!=='—').join(' · ')}</div></div>${pill(b.status,BID_CLS[b.status])}</div>`).join('')||'<div class="li dim small">Nothing matches yet.</div>'}${pick.length>20?`<div class="li dim small">…and ${pick.length-20} more</div>`:''}</div></fieldset>
+    ${pick.length&&pick.length===pool.length?'<p class="small dim">That’s every bid in the pipeline: it will be empty, ready for new work.</p>':''}</div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="arch-run"${pick.length&&!A.running?'':' disabled'}>${A.running?'Archiving…':`Archive ${pick.length} bid${pick.length===1?'':'s'}`}</button></div></div>`}
+// the Archived view: each batch with a restore button
+function archBatches(pool){const arch=pool.filter(b=>b.archived_at);if(!arch.length)return '';const g=new Map();arch.forEach(b=>{const k=String(b.archived_at).slice(0,16);g.set(k,(g.get(k)||[]).concat(b))});
+  const rows=[...g].sort((a,b)=>b[0].localeCompare(a[0])).slice(0,8);
+  return `<div class="arch-batches">${rows.map(([k,bs])=>{const d=new Date(bs[0].archived_at);return `<div class="arch-b"><span>🗄 Archived <b>${d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</b> ${d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})} · ${bs.length} bid${bs.length===1?'':'s'}</span><button class="btn sm" data-act="arch-restore" data-v="${esc(k)}">Restore ${bs.length===1?'it':'these '+bs.length}</button></div>`}).join('')}</div>`}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
+  if(a==='arch-open'){if(!isAdmin())return;M={kind:'arch',mode:'all',days:new Set(),before:'',noDate:false};const pool=archPool();const top=[...pool.reduce((m,b)=>m.set(archDay(b),(m.get(archDay(b))||0)+1),new Map())].sort((x,y)=>y[1]-x[1])[0];if(top&&top[1]>=10)M.days.add(top[0]);showModal();return}
+  if(a==='arch-run'&&M&&M.kind==='arch'){const ids=archPick().map(b=>b.id);if(!ids.length||M.running)return;M.running=true;renderModal();const n=await setArchived(ids,true);closeModal();S.sel=new Set();S.selMode=false;if(S.filter==='archived')S.filter='active';render();if(n)toast(`${n} bid${n===1?'':'s'} archived. They’re under 🗄 Archived, where the whole batch can be restored.`);return}
+  if(a==='arch-restore'){if(!isAdmin())return;const k=t.dataset.v;const ids=S.bids.filter(b=>b.archived_at&&String(b.archived_at).slice(0,16)===k).map(b=>b.id);if(!ids.length)return;
+    if(!t.classList.contains('arm')){t.classList.add('arm');t.textContent='Click again to restore '+ids.length;setTimeout(()=>{t.classList.remove('arm')},4000);return}await setArchived(ids,false);render();return}});
+document.addEventListener('change',e=>{const t=e.target;
+  if(t.dataset.inclarch!=null){S.inclArch=t.checked;try{localStorage.setItem('bp-inclarch',t.checked?'1':'')}catch(err){}render();return}
+  if(!M||M.kind!=='arch')return;
+  if(t.dataset.archmode!=null){M.mode=t.value;renderModal();return}
+  if(t.dataset.archday){t.checked?M.days.add(t.dataset.archday):M.days.delete(t.dataset.archday);renderModal();return}
+  if(t.dataset.archbefore!=null){M.before=t.value;renderModal();return}
+  if(t.dataset.archnodate!=null){M.noDate=t.checked;renderModal();return}});
+try{S.inclArch=localStorage.getItem('bp-inclarch')==='1'}catch(e){}
