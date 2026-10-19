@@ -52,6 +52,7 @@ supabase/update-21-break-room.sql          one-time update for the Break room: p
 supabase/update-35-presence.sql            optional: "last seen" in the who's-online list (who's on right now works without it)
 supabase/update-36-planner.sql             one-time update for the Planner (my tasks, team board, calendar)
 supabase/update-37-vendor-rankings.sql    one-time update for vendor rankings, price lists and vendor update links
+supabase/update-38-vendor-cleanup.sql     small follow-up: lets Reset clear a vendor's price history
 ```
 
 > **Already set up before these updates?** Run each `supabase/update-*.sql` file you haven't run yet, once, in number order, in the SQL Editor. New installs only need `schema.sql`.
@@ -202,6 +203,12 @@ Parts with no data are left out and the rest count for more. A vendor with very 
 - needs attention.
 
 Each card can be narrowed by trade, scope and region. **+ Add a card** adds one, and ⚙ on a card changes it. Your layout is kept on your computer. Below the cards is every vendor ranked, with each part of the score.
+
+**Reset or delete vendors.** **🧹 Reset or delete…** on Vendors & subs (or 🧹 on a vendor's page) works on one vendor or many; search, tick them, or **Pick all**:
+- **Reset** keeps the vendors and their contact details, and clears their ratings, price lists, price history and update links, so their ranking starts fresh.
+- **Delete** removes the vendors completely. You type DELETE to confirm, and it can't be undone.
+
+Either way you can also delete their quotes on bids. Otherwise those quotes stay on the bids: after a reset they still count toward the vendor's response rate, and after a delete they're left with no vendor.
 
 **Reminders.** A vendor's ranking is flagged when nobody has rated them in 30 days; only vendors you've used lately or marked preferred are flagged. Pricing is flagged once any of its prices are over 30 days old. Admins can change both numbers under **⚙ Reminders**. The precon dashboard shows a "Vendor upkeep" line when anything is due.
 

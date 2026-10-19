@@ -2211,3 +2211,9 @@ div.tw-pgh{cursor:default}
 .ct.vp{max-width:1120px}
 .head .tools select.field{width:auto}
 .vx-wh>span{display:inline-flex;flex:none}
+.vc-bar{display:flex;gap:8px;margin-bottom:8px}
+.vc-bar .field{flex:1}
+.vc-list{max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:4px 8px}
+.vc-li{display:flex;align-items:flex-start;gap:8px;padding:6px 0;border-bottom:1px solid var(--line)}
+.vc-li:last-child{border-bottom:0}
+.vc-c{display:block}
