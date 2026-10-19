@@ -194,6 +194,13 @@ Parts with no data are left out and the rest count for more. A vendor with very 
 
 **Service regions and home base** go in the vendor's details, and vendors can be filtered by region.
 
+**Import a price list.** On a vendor's **Price list** tab, **⬆ Import file** reads an Excel (.xlsx, .xls), CSV or PDF price list or quote sheet. It finds the columns by their headings (Item, Description, Size, U/M, Unit price…). With no headings, it goes by what's in them: dollar amounts are the price, TON/CY/LF/EA are the unit, and words are the item. Units are tidied to TON, CY, LF and so on. Before anything is added you see:
+- which column it took for what, each one changeable,
+- every row it found, each with a tick box,
+- whether to add new items and update prices of matching ones, or replace the whole list.
+
+Rows with no price (headings, notes, "delivery included…") are left out unless you ask for them. Scanned-picture PDFs can't be read; use the Excel version or a PDF you can select text in. Vendors get the same **Import from Excel or PDF** button on their own update page, and still check and save.
+
 **Vendor update link.** **✉ Send price link** makes a private page with only that vendor's price list, and **Email it** opens an email to them with the link. They open it without logging in, change prices, add or remove items, and click **Save prices**. Their changes are marked "vendor" with their name. Links last 60 days, and **New link** or **Turn it off** stops the old one working. You can always edit the list yourself.
 
 **Vendor rankings** (Contacts tab) is a dashboard built from cards you choose:
