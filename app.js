@@ -2682,27 +2682,28 @@ const CALCS=[
     {k:'width',label:'Trench width',unit:'in',auto:v=>Math.ceil((+v.od||0)+24),help:'At the bottom. Blank = OD + 12" each side.'},
     {k:'bed',label:'Bedding under pipe',unit:'in',def:6},{k:'zone',label:'Cover',unit:'in from pipe bottom',auto:v=>Math.round(((+v.od||0)+12)*10)/10,help:'Up from the bottom of the pipe. 0 = bedding only. Blank = 12″ over the top.'},
     {k:'depth',label:'Depth to invert',unit:'ft',step:'0.1',def:6,help:'From finished grade. Adds excavation and backfill. 0 = skip.'},
+    {k:'vert',label:'Vertical wall before slope',unit:'ft',step:'0.5',def:0,help:'Straight walls from the trench bottom up this high, then the side slope starts. 0 = slope from the bottom.'},
     {k:'slope',label:'Trench side slope',unit:'H : 1V',step:'0.25',def:0,help:'0 = vertical walls (trench box). 1 = 1:1.'},
     matField(),densField(),{k:'waste',label:'Waste / overrun',unit:'%',def:10}],
-  calc:v=>{const neg=['od','len','width','bed','zone','depth','slope','waste','dens'].filter(k=>+v[k]<0);neg.forEach(k=>v[k]=0);
+  calc:v=>{const neg=['od','len','width','bed','zone','depth','vert','slope','waste','dens'].filter(k=>+v[k]<0);neg.forEach(k=>v[k]=0);
     const lib=pipeLib(v.ptype);const nom=lib?+lib.size:(+v.size||0);const wall=wallFor(v.ptype,v.od,nom);const s=Math.max(0,v.slope||0);
     // stone goes from the bottom of the bedding up to "cover" inches above the bottom of the pipe
     const Z=v.zone;const H=(v.bed+Z)/12,W=v.width/12,R=v.od/24;const hIn=Math.min(Z,v.od)/12;
     const pipeA=hIn<=0?0:hIn>=2*R?Math.PI*R*R:R*R*Math.acos((R-hIn)/R)-(R-hIn)*Math.sqrt(Math.max(0,2*R*hIn-hIn*hIn));
-    const zoneA=W*H+s*H*H;v.cover=Z-v.od;
+    const V=s>0?v.vert:0;const secA=h=>W*h+s*Math.pow(Math.max(0,h-V),2);const zoneA=secA(H);
     const perLF=Math.max(0,zoneA-pipeA)/27;const cy=perLF*v.len;const cyW=cy*(1+v.waste/100);const tons=cyW*v.dens;
-    const Dt=v.depth>0?v.depth+(wall+v.bed)/12:0;const exA=Dt?W*Dt+s*Dt*Dt:0;const bfA=Dt>H?Math.max(0,exA-zoneA-(Math.PI*R*R-pipeA)):0;const coverG=v.depth>0?v.depth-(v.od-wall)/12:null;
+    const Dt=v.depth>0?v.depth+(wall+v.bed)/12:0;const exA=Dt?secA(Dt):0;const bfA=Dt>H?Math.max(0,exA-zoneA-(Math.PI*R*R-pipeA)):0;const coverG=v.depth>0?v.depth-(v.od-wall)/12:null;
     const warn=[];if(neg.length)warn.push('Negative numbers aren’t used. Those boxes were figured as 0.');if(Dt&&H>Dt+1e-6)warn.push('The stone zone is taller than the trench — it would stick up above grade. Check the depth or the cover.');
     if(v.od<=nom)warn.push('The outside diameter is not bigger than the nominal size — check the OD.');
     if(W*12<v.od)warn.push('The trench is narrower than the pipe.');
     return {main:[fmtN(tons,1),'tons'],warn,
       out:[['Stone volume',fmtN(cy,2)+' CY'],['With '+v.waste+'% waste',fmtN(cyW,2)+' CY'],['Tons',fmtN(tons,2)],['Per LF of pipe',fmtN(perLF*27,2)+' CF · '+fmtN(perLF*(1+v.waste/100)*v.dens,3)+' tons'],['Stone zone depth',ftin(H)],['Stone over top of pipe',Z>=v.od?ftin((Z-v.od)/12):'— (stops '+ftin((v.od-Z)/12)+' below the top)'],
-        ...(Dt?[['Trench depth',ftin(Dt)],['Trench excavation',fmtN(exA/27*v.len,1)+' bank CY'],['Backfill above stone',fmtN(bfA/27*v.len,1)+' CY'],['Cover to grade over pipe',ftin(coverG)]]:[])],
-      math:[`Stone zone = ${fmtN(W,3)} ft wide × ${fmtN(H,3)} ft deep (${v.bed}" bedding + ${fmtN(Z,2)}" cover from the bottom of the pipe)${s?` + ${s} × ${fmtN(H,3)}² for the side slopes`:''} = ${fmtN(zoneA,3)} SF`,
+        ...(Dt?[['Trench depth',ftin(Dt)],...(s>0?[['Top width',ftin(W+2*s*Math.max(0,Dt-V))]]:[]),['Trench excavation',fmtN(exA/27*v.len,1)+' bank CY'],['Backfill above stone',fmtN(bfA/27*v.len,1)+' CY'],['Cover to grade over pipe',ftin(coverG)]]:[])],
+      math:[`Stone zone = ${fmtN(W,3)} ft wide × ${fmtN(H,3)} ft deep (${v.bed}" bedding + ${fmtN(Z,2)}" cover from the bottom of the pipe)${s&&H>V?` + ${s} × ${fmtN(H-V,3)}² for the side slopes${V?` above the ${fmtN(V,2)} ft vertical wall`:''}`:''} = ${fmtN(zoneA,3)} SF`,
         Z>=v.od?`Pipe area = π × (${fmtN(v.od,2)}" ÷ 24)² = ${fmtN(pipeA,3)} SF (the whole pipe is in the stone)`:Z>0?`Pipe area in the stone = the bottom ${fmtN(Z,2)}" of a ${fmtN(v.od,2)}" pipe = ${fmtN(pipeA,3)} SF`:'No pipe in the stone (bedding only)',`Stone per LF = (${fmtN(zoneA,3)} − ${fmtN(pipeA,3)}) ÷ 27 = ${fmtN(perLF,4)} CY`,
         `× ${fmtN(v.len)} LF = ${fmtN(cy,2)} CY × ${1+v.waste/100} waste = ${fmtN(cyW,2)} CY`,`× ${v.dens} tons/CY = ${fmtN(tons,2)} tons`,
-        ...(Dt?[`Trench depth = ${v.depth} ft to invert + ${fmtN(wall,2)}" pipe wall + ${v.bed}" bedding = ${fmtN(Dt,3)} ft`,`Excavation = ${fmtN(W,3)} × ${fmtN(Dt,3)}${s?` + ${s} × ${fmtN(Dt,3)}²`:''} = ${fmtN(exA,3)} SF × ${fmtN(v.len)} LF ÷ 27 = ${fmtN(exA/27*v.len,1)} CY`]:[])],
-      g:{W,H,s,wall,Dt}}},
+        ...(Dt?[`Trench depth = ${v.depth} ft to invert + ${fmtN(wall,2)}" pipe wall + ${v.bed}" bedding = ${fmtN(Dt,3)} ft`,`Excavation = ${fmtN(W,3)} × ${fmtN(Dt,3)}${s&&Dt>V?` + ${s} × ${fmtN(Dt-V,3)}²${V?` (slope starts ${fmtN(V,2)} ft up)`:''}`:''} = ${fmtN(exA,3)} SF × ${fmtN(v.len)} LF ÷ 27 = ${fmtN(exA/27*v.len,1)} CY`]:[])],
+      g:{W,H,s,wall,Dt,V}}},
   draw:drawPipe},
  {id:'manhole',group:'Pipe & utilities',name:'Precast manhole & risers',icon:'⊚',
   desc:'Put in the rim and every invert. It sets the bottom of the base, checks that the pipe holes fit in the base, and picks the risers and adjusting rings to hit the rim.',
@@ -3024,26 +3025,28 @@ function dimV(x,y1,y2,label,side='r'){const a=Math.min(y1,y2),b=Math.max(y1,y2);
 function spread(items,gap=13){items.sort((a,b)=>a.y-b.y);for(let i=1;i<items.length;i++)if(items[i].y-items[i-1].y<gap)items[i].y=items[i-1].y+gap;return items}
 
 function drawPipe(v,r){
-  const g=r.g;const {W,H,s,wall}=g;const Dg=g.Dt>0?g.Dt:H+0.5;const Tp=Math.max(Dg,H);const half=W/2+s*Dg;
+  const g=r.g;const {W,H,s,wall}=g;const V=g.V||0;const hw=y=>W/2+s*Math.max(0,y-V);const Dg=g.Dt>0?g.Dt:H+0.5;const Tp=Math.max(Dg,H);const half=hw(Dg);
+  const side=(y0,y1)=>{const ys=[y0];if(V>y0&&V<y1)ys.push(V);ys.push(y1);return ys};const band=(y0,y1)=>{const up=side(y0,y1);return [...up.map(y=>[-hw(y),y]).reverse(),...up.map(y=>[hw(y),y])]};
   const sw=Math.max(W/2+s*Tp,half)*2+2.4;const sh=Tp+1.2;const k=Math.min(420/sw,320/sh,110);const LAB=170,PT=20;const Wp=sw*k+LAB,Hp=sh*k+PT+6;
   const X=x=>(sw/2+x)*k,Y=y=>PT+(Tp-y)*k,P=pts=>pts.map(p=>X(p[0]).toFixed(1)+','+Y(p[1]).toFixed(1)).join(' ');
   const cy=(v.bed+v.od/2)/12,R=v.od/24,Ri=Math.max(R-wall/12,0.02),inv=(v.bed+wall)/12,top=Y(Dg);let b='';
   b+=`<rect x="0" y="${top}" width="${sw*k}" height="${Y(-1.05)-top}" fill="url(#dwSoil)"/>`;
-  b+=`<polygon points="${P([[-W/2,0],[W/2,0],[half,Dg],[-half,Dg]])}" class="dw-back"/>`;
-  b+=`<polygon points="${P([[-W/2,0],[W/2,0],[W/2+s*Math.min(H,Dg),Math.min(H,Dg)],[-W/2-s*Math.min(H,Dg),Math.min(H,Dg)]])}" fill="url(#dwStone)" class="dw-stoneedge"/>`;
-  if(H>Dg)b+=`<polygon points="${P([[-W/2-s*Dg,Dg],[W/2+s*Dg,Dg],[W/2+s*H,H],[-W/2-s*H,H]])}" fill="url(#dwStone)" class="dw-over"/>`;
+  b+=`<polygon points="${P(band(0,Dg))}" class="dw-back"/>`;
+  b+=`<polygon points="${P(band(0,Math.min(H,Dg)))}" fill="url(#dwStone)" class="dw-stoneedge"/>`;
+  if(H>Dg)b+=`<polygon points="${P(band(Dg,H))}" fill="url(#dwStone)" class="dw-over"/>`;
   b+=`<circle cx="${X(0)}" cy="${Y(cy)}" r="${(R*k).toFixed(1)}" class="dw-pipe"/><circle cx="${X(0)}" cy="${Y(cy)}" r="${(Ri*k).toFixed(1)}" class="dw-pipein"/>`;
   b+=`<line x1="${X(-Ri*0.55)}" x2="${X(Ri*0.55)}" y1="${Y(inv)}" y2="${Y(inv)}" class="dw-inv"/>`;
-  b+=`<polyline points="${P([[-half,Dg],[-W/2,0],[W/2,0],[half,Dg]])}" class="dw-cut"/>`;
+  {const up=side(0,Dg);b+=`<polyline points="${P([...up.map(y=>[-hw(y),y]).reverse(),...up.map(y=>[hw(y),y])])}" class="dw-cut"/>`}
   if(g.Dt>0)b+=`<line x1="0" x2="${sw*k}" y1="${top}" y2="${top}" class="dw-grade"/>`+svgT(6,top-5,'Finished grade','dw-muted');
   // dimensions on the right
-  const x1=sw*k+14,x2=sw*k+96;const Zs=v.zone;const lv=[[0,v.bed/12,ftin(v.bed/12)+' bedding']];if(Zs>0)lv.push([v.bed/12,H,ftin(Zs/12)+' cover from pipe bottom']);if(Zs<v.od)lv.push([H,(v.bed+v.od)/12,'rest of '+fmtN(v.od,1)+'″ OD']);else if(Zs>v.od)lv.splice(1,0);
-  const lines=[...new Set([0,v.bed/12,H,(v.bed+v.od)/12])];lines.forEach(y=>b+=`<line x1="${X(W/2+s*y)+2}" x2="${x1+4}" y1="${Y(y)}" y2="${Y(y)}" class="dw-ext"/>`);
+  const x1=sw*k+14,x2=sw*k+96;const Zs=v.zone;const lv=[[0,v.bed/12,ftin(v.bed/12)+' bedding']];if(Zs>0)lv.push([v.bed/12,H,ftin(Zs/12)+' cover']);if(Zs<v.od)lv.push([H,(v.bed+v.od)/12,'rest of '+fmtN(v.od,1)+'″ OD']);else if(Zs>v.od)lv.splice(1,0);
+  const lines=[...new Set([0,v.bed/12,H,(v.bed+v.od)/12])];lines.forEach(y=>b+=`<line x1="${X(hw(y))+2}" x2="${x1+4}" y1="${Y(y)}" y2="${Y(y)}" class="dw-ext"/>`);
   lv.forEach(([a,c])=>b+=dimV(x1,Y(a),Y(c)));
   spread(lv.map(([a,c,t])=>({y:(Y(a)+Y(c))/2+4,t})).reverse()).forEach(l=>b+=svgT(x1+8,l.y,l.t,'dw-dimt'));
   if(g.Dt>0){b+=`<line x1="${X(Ri*0.55)}" x2="${x2+4}" y1="${Y(inv)}" y2="${Y(inv)}" class="dw-ext"/><line x1="${sw*k}" x2="${x2+4}" y1="${top}" y2="${top}" class="dw-ext"/>`+dimV(x2,Y(inv),top)+svgT(x2+8,(Y(inv)+top)/2+4,fmtN(v.depth,2)+'′ to inv.','dw-dimt')}
   const yb=Y(-0.3);b+=`<line x1="${X(-W/2)}" x2="${X(W/2)}" y1="${yb}" y2="${yb}" class="dw-dim"/><line x1="${X(-W/2)}" x2="${X(-W/2)}" y1="${yb-4}" y2="${yb+4}" class="dw-dim"/><line x1="${X(W/2)}" x2="${X(W/2)}" y1="${yb-4}" y2="${yb+4}" class="dw-dim"/>`+svgT(X(0),yb+15,ftin(W)+' bottom','dw-dimt dw-halo','middle');
   if(s>0)b+=svgT(X(half)-4,top+14,s+' : 1','dw-dimt dw-halo','end');
+  if(s>0&&V>0&&V<Dg)b+=`<line x1="${X(-W/2)-10}" x2="${X(-W/2)-10}" y1="${Y(0)}" y2="${Y(V)}" class="dw-dim"/>`+svgT(X(-W/2)-14,(Y(0)+Y(V))/2+4,ftin(V)+' vertical','dw-dimt dw-halo','end');
   const legend=`<div class="dw-legend"><span><i class="lg-stone"></i>${esc(v.mat)}</span>${g.Dt>0?'<span><i class="lg-back"></i>Backfill</span>':''}<span><i class="lg-soil"></i>Native</span><span><i class="lg-pipe"></i>${esc(pipeLabel(v.ptype,v.size))}</span></div>`;
   return `<div class="dw-h"><b>Trench section</b><span class="dim small">To scale · redraws as you type</span></div>`+svgWrap(Wp,Hp,b,'Trench cross-section with the pipe, bedding and stone')+legend;
 }
