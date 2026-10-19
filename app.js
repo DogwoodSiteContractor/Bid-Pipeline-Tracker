@@ -1286,7 +1286,8 @@ function scopeSection(b,work){
   const avail=SG().map(g=>[g,L.scopes.filter(x=>x.group===g&&!have.has(x.name.toLowerCase()))]).filter(([,xs])=>xs.length);
   return `<fieldset><legend>Scope takeoff</legend>
    ${items.length?`<p class="hint" style="margin:0 0 10px">${done} of ${items.length} scopes signed off</p>`:''}
-   <div class="rows">${items.map((it,i)=>scopeRow(it,i,work,team)).join('')||`<div class="dim small">No scopes selected yet.${work?' Start from a template or pick scopes from the list.':''}</div>`}</div>
+   ${tgHtml(b,work,team)}
+   <div class="rows">${items.map((it,i)=>it.tg?'':scopeRow(it,i,work,team)).join('')||(items.length?'':`<div class="dim small">No scopes selected yet.${work?' Start from a template or pick scopes from the list.':''}</div>`)}</div>
    ${work?`<div class="adders">
      <select class="field" data-act="apply-template"><option value="">Apply a template…</option>${(L.templates||[]).map(t=>`<option value="${esc(t.id)}">${esc(t.name)} (${t.scopes.length})</option>`).join('')}</select>
      <select class="field" data-act="add-scope"><option value="">+ Add a scope…</option>${avail.map(([g,xs])=>`<optgroup label="${esc(g)}">${xs.map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('')}</optgroup>`).join('')}</select>
@@ -11273,3 +11274,55 @@ function rfqEml(o){const b64=s=>btoa(unescape(encodeURIComponent(s)));const wrap
   const name=(M.draft.name||'RFQ').replace(/[\\/:*?"<>|]+/g,' ').trim();
   const eml=['X-Unsent: 1','To: ',`Cc: ${o.cc||''}`,`Bcc: ${o.bcc.join(', ')}`,`Subject: =?UTF-8?B?${b64(o.subj)}?=`,'MIME-Version: 1.0','Content-Type: text/html; charset="UTF-8"','Content-Transfer-Encoding: base64','',wrap(b64(`<html><head><meta charset="utf-8"></head><body>${o.html}</body></html>`))].join('\r\n');
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([eml],{type:'message/rfc822'}));a.download=`RFQ - ${name}.eml`;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},2000)}
+
+/* ----- takeoff groups: put several scopes together so one person, one status and one sign-off covers them all.
+   A scope's group is kept on the scope itself (scope_items[].tg). Scopes not in a group keep their own row. */
+const tgNames=b=>[...new Set(b.scope_items.map(x=>x.tg).filter(Boolean))];
+const tgMembers=(b,g)=>b.scope_items.map((it,i)=>({it,i})).filter(o=>o.it.tg===g);
+function tgHtml(b,work,team){const P=M.tgPick;const free=b.scope_items.map((it,i)=>({it,i})).filter(o=>!o.it.tg);
+  const cards=tgNames(b).map(g=>{const ms=tgMembers(b,g);const all=ms.length&&ms.every(o=>o.it.status==='Complete'||o.it.status==='N/A');const open=ms.filter(o=>o.it.status!=='Complete'&&o.it.status!=='N/A');
+    const st=all?'Complete':ms.some(o=>o.it.status==='In Progress'||o.it.status==='Complete')?'In Progress':'Not Started';
+    const asg=[...new Set(ms.map(o=>o.it.assignee_id||''))];const asgv=asg.length===1?asg[0]:'__mixed';
+    const signedBy=all?ms.map(o=>o.it).find(x=>x.signed_initials):null;const canUnsign=work&&(isAdmin()||ms.every(o=>!o.it.signed_by_user||o.it.signed_by_user===S.session.user.id));
+    let right;
+    if(all)right=`<div class="signed"><span class="stamp">${esc(signedBy?.signed_initials||'✓')}</span><div class="small"><b>Group signed off</b>${signedBy?.signed_by_name?' by '+esc(signedBy.signed_by_name):''}<div class="dim">${signedBy?.signed_at?new Date(signedBy.signed_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):''}</div></div>${canUnsign?`<button class="btn sm ghost" data-act="tg-unsign" data-g="${esc(g)}">Reopen</button>`:''}</div>`;
+    else if(M.signing==='g:'+g)right=`<div class="signing"><input class="field" id="sign-init" maxlength="4" value="${esc(myInitials())}" aria-label="Your initials" style="width:74px;text-transform:uppercase;font-weight:700"><button class="btn sm primary" data-act="tg-sign-confirm" data-g="${esc(g)}">Sign off ${open.length} scope${open.length===1?'':'s'}</button><button class="btn sm ghost" data-act="sign-cancel">Cancel</button></div>`;
+    else right=`<div class="signing"><select class="field" data-tgf="status" data-g="${esc(g)}"${work?'':' disabled'} style="width:140px">${['Not Started','In Progress'].map(x=>`<option${st===x?' selected':''}>${x}</option>`).join('')}</select>${work?`<button class="btn sm" data-act="tg-sign-start" data-g="${esc(g)}">Sign off group</button>`:''}</div>`;
+    const addable=free;
+    return `<div class="tg-card${all?' is-signed':''}"><div class="tg-h">
+      <div class="tg-title"><span class="tg-ico">▦</span><input class="field tg-name" data-tgname="${esc(g)}" value="${esc(g)}"${work?'':' disabled'} title="Rename the group"><span class="pill">${ms.length} scope${ms.length===1?'':'s'}</span></div>
+      <select class="field" data-tgf="assignee_id" data-g="${esc(g)}" title="Who is doing this group"${work&&!all?'':' disabled'}>${asgv==='__mixed'?'<option value="__mixed" selected>Mixed</option>':''}<option value="">Whole team</option>${team.map(id=>`<option value="${id}"${asgv===id?' selected':''}>${esc(estName(id))}</option>`).join('')}</select>
+      ${right}
+      ${work?`<button class="btn sm ghost" data-act="tg-ungroup" data-g="${esc(g)}" title="Break the group up. The scopes go back to their own rows and keep their status.">Ungroup</button>`:''}</div>
+      <div class="tg-members">${ms.map(({it,i})=>`<span class="tg-m${it.status==='Complete'?' done':''}">${it.status==='Complete'?'✓ ':''}${esc(it.name)}${performOf(it)!=='Self perform'?` <i>${performOf(it)==='Sub'?'Sub':'S+S'}</i>`:''}${work&&!(it.status==='Complete'&&!isAdmin())?`<button class="q-scx" data-act="tg-rm" data-i="${i}" title="Take ${esc(it.name)} out of the group">×</button>`:''}</span>`).join('')}
+        ${work&&addable.length&&!all?`<select class="q-scadd" data-act="tg-add" data-g="${esc(g)}"><option value="">+ scope</option>${addable.map(({it,i})=>`<option value="${i}">${esc(it.name)}</option>`).join('')}</select>`:''}</div></div>`}).join('');
+  const picker=P?`<div class="tg-pick"><b>New takeoff group</b><span class="small dim">Pick the scopes that go together, then name the group.</span>
+      <div class="tg-pick-list">${free.map(({it,i})=>`<button class="chip${P.sel.has(i)?' on':''}" data-act="tg-pick" data-i="${i}">${P.sel.has(i)?'✓ ':''}${esc(it.name)}</button>`).join('')||'<span class="dim small">Every scope is already in a group.</span>'}</div>
+      <div class="adders"><input class="field" id="tg-new-name" placeholder="Group name, e.g. Utilities" value="${esc(P.name||'')}" style="width:240px"><button class="btn primary sm" data-act="tg-create"${P.sel.size?'':' disabled'}>Group ${P.sel.size||''} scope${P.sel.size===1?'':'s'}</button><button class="btn sm ghost" data-act="tg-pick-cancel">Cancel</button></div></div>`:'';
+  const btn=work&&!P&&free.length>1?`<div class="adders" style="margin:0 0 10px"><button class="btn sm" data-act="tg-pick-open">▦ Group scopes…</button><span class="small dim">Put scopes together to assign, update and sign them off as one.</span></div>`:'';
+  return `${btn}${picker}${cards?`<div class="tg-list">${cards}</div>`:''}${cards&&free.length?'<div class="small dim tg-sep">Individual scopes</div>':''}`}
+function tgApply(g,fn){tgMembers(M.draft,g).forEach(o=>fn(o.it))}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT'||!M||M.kind!=='bid')return;const a=t.dataset.act;if(!a.startsWith('tg-'))return;const b=M.draft;const g=t.dataset.g;
+  if(a==='tg-pick-open'){M.tgPick={sel:new Set(),name:''};renderModal();return}
+  if(a==='tg-pick-cancel'){M.tgPick=null;renderModal();return}
+  if(a==='tg-pick'){const i=+t.dataset.i;const P=M.tgPick;P.name=$('#tg-new-name')?.value||P.name;P.sel.has(i)?P.sel.delete(i):P.sel.add(i);renderModal();return}
+  if(a==='tg-create'){const P=M.tgPick;let name=($('#tg-new-name')?.value||'').trim();if(!name)name='Group '+(tgNames(b).length+1);
+    if(tgNames(b).some(x=>x.toLowerCase()===name.toLowerCase())){toast('There’s already a group with that name.');return}
+    const ms=[...P.sel].map(i=>b.scope_items[i]).filter(Boolean);ms.forEach(it=>{it.tg=name});
+    // one person for the group: keep it if they all had the same one
+    const asg=[...new Set(ms.map(x=>x.assignee_id||''))];if(asg.length>1)ms.forEach(x=>x.assignee_id='');
+    M.tgPick=null;renderModal();toast(`Grouped ${ms.length} scopes as ${name}.`);return}
+  if(a==='tg-ungroup'){tgApply(g,it=>{delete it.tg});renderModal();toast(`${g} ungrouped. Each scope is back on its own row.`);return}
+  if(a==='tg-rm'){const it=b.scope_items[+t.dataset.i];if(it){delete it.tg;renderModal()}return}
+  if(a==='tg-sign-start'){M.signing='g:'+g;renderModal();setTimeout(()=>{const n=$('#sign-init');if(n){n.focus();n.select()}},0);return}
+  if(a==='tg-sign-confirm'){const ini=($('#sign-init')?.value||'').trim().toUpperCase();if(!/^[A-Z]{1,4}$/.test(ini)){toast('Enter your initials (letters only).');return}
+    const ms=tgMembers(b,g).filter(o=>o.it.status!=='Complete'&&o.it.status!=='N/A');const prev=ms.map(o=>clone(o.it));const at=new Date().toISOString();
+    ms.forEach(o=>Object.assign(o.it,{status:'Complete',signed_initials:ini,signed_by_name:myName(),signed_by_user:S.session.user.id,signed_by_estimator_id:myEst()?.id||null,signed_at:at}));M.signing=null;
+    if(b._new){renderModal();toast('Signed off. Create the bid to keep it.');return}
+    try{await saveBid();renderModal();toast(`${g}: ${ms.length} scope${ms.length===1?'':'s'} signed off by ${ini}`)}catch(err){ms.forEach((o,k)=>Object.assign(o.it,prev[k]));renderModal();toast(errMsg(err))}return}
+  if(a==='tg-unsign'){const ms=tgMembers(b,g);const prev=ms.map(o=>clone(o.it));ms.forEach(o=>{if(o.it.status==='Complete')Object.assign(o.it,{status:'In Progress'},UNSIGNED)});
+    if(b._new){renderModal();return}try{await saveBid();renderModal();toast(`${g} reopened`)}catch(err){ms.forEach((o,k)=>Object.assign(o.it,prev[k]));renderModal();toast(errMsg(err))}return}});
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')return;const b=M.draft;
+  if(t.dataset.tgf&&t.dataset.g){const k=t.dataset.tgf;if(t.value==='__mixed')return;tgApply(t.dataset.g,it=>{if(k==='status'){if(it.status!=='Complete'&&it.status!=='N/A')it.status=t.value}else it[k]=t.value});renderModal();return}
+  if(t.dataset.act==='tg-add'&&t.value!==''){const it=b.scope_items[+t.value];if(it){it.tg=t.dataset.g;const ms=tgMembers(b,t.dataset.g).map(o=>o.it).filter(x=>x!==it);if(ms[0]){it.assignee_id=ms[0].assignee_id||'';if(it.status!=='Complete')it.status=ms.some(x=>x.status==='In Progress')?'In Progress':it.status}}renderModal();return}
+  if(t.dataset.tgname!=null){const old=t.dataset.tgname;const nw=t.value.trim();if(!nw||nw===old){t.value=old;return}if(tgNames(b).some(x=>x!==old&&x.toLowerCase()===nw.toLowerCase())){toast('There’s already a group with that name.');t.value=old;return}tgApply(old,it=>{it.tg=nw});renderModal()}});
