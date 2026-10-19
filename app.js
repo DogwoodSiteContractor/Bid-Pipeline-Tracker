@@ -937,7 +937,7 @@ async function makeEstimatorFor(uid){const p=byId(S.profiles,uid);if(!p)return;
 
 /* ---------- modals ---------- */
 let M=null;
-function closeModal(){const ae=document.activeElement;if(ae&&$('#modal')?.contains(ae))ae.blur();M=null;$('#modal').innerHTML='';document.body.style.overflow=''}
+function closeModal(){const ae=document.activeElement;if(ae&&$('#modal')?.contains(ae))ae.blur();const back=M&&M.kind==='lib'&&M.back;if(back){M=back;renderModal();return}M=null;$('#modal').innerHTML='';document.body.style.overflow=''}
 function showModal(){document.body.style.overflow='hidden';renderModal(true)}
 // keep the cursor in the same field when a modal re-renders
 const FOCUS_ATTRS=['data-itp','data-jip','data-itf','data-entf','data-logf','data-jobf','data-logdate','data-ef','data-bf','data-qf','data-cp','data-ad','data-rv','data-sf','data-lf','data-ctf','data-ff','data-tn','data-pickq','data-bulktype'];
@@ -1289,8 +1289,9 @@ function clientModal(){const c=M.draft,isNew=M.isNew;const admin=can('contacts',
 function vendorScopeField(v){
   const L=lib();const mine=vendorScopes(v);const names=[...new Set([...L.scopes.map(x=>x.name),...mine])];const d=DIS();
   return `<fieldset><legend id="vs-count">Scopes they quote (${mine.length})</legend>
-   <p class="hint" style="margin:0 0 10px">These vendors are suggested for those scopes when you click <b>Select vendors</b> on a bid.</p>
+   <p class="hint" style="margin:0 0 10px">These vendors are suggested for those scopes when you click <b>Select vendors</b> on a bid.${isAdmin()||can('codebook','edit')?' Rename or remove scopes under <b>Contacts → Trades & scopes</b>.':''}</p>
    ${SCOPE_GROUPS.map(g=>{const xs=names.filter(n=>groupOf(n)===g);return xs.length?`<div style="margin-bottom:12px"><div class="small" style="font-weight:600;margin-bottom:6px">${esc(g)}</div><div class="tplgrid">${xs.map(n=>`<label class="check"><input type="checkbox" data-vs="${esc(n)}" ${mine.some(x=>x.toLowerCase()===n.toLowerCase())?'checked':''}${d}> ${esc(n)}</label>`).join('')}</div></div>`:''}).join('')}
+   ${d?'':`<div class="scd-quick"${isAdmin()||can('codebook','edit')?' style="grid-template-columns:minmax(0,1fr) 180px auto"':''}"><input class="field sm" id="vs-new" data-vsnew placeholder="Not listed? Type a scope and press Enter"><select class="field sm" id="vs-newg">${SCOPE_GROUPS.map(g=>`<option>${esc(g)}</option>`).join('')}</select>${isAdmin()||can('codebook','edit')?'<button class="btn sm" data-act="edit-lib">✎ Edit scope list</button>':''}</div>`}
   </fieldset>`;
 }
 function vendorModal(){const v=M.draft,isNew=M.isNew;const s=vendorStats(v.id);
@@ -1373,7 +1374,10 @@ async function saveModal(){
     }else if(M.kind==='board'){await run(sb.from('settings').upsert({key:'board',value:{widgets:d}}));await loadTable('settings');toast('Board view saved')}
     else if(M.kind==='lib'){
       const seen=new Set();const scopes=M.draft.map(x=>({name:String(x.name||'').trim(),group:x.group,perform:PERFORM.includes(x.perform)?x.perform:'Self perform'})).filter(x=>x.name&&!seen.has(x.name.toLowerCase())&&seen.add(x.name.toLowerCase()));
-      await saveLib({scopes,templates:lib().templates||[]});toast('Scope list saved');
+      const ren=new Map(M.draft.filter(x=>x.orig&&String(x.name||'').trim()&&String(x.name).trim()!==x.orig).map(x=>[x.orig.toLowerCase(),String(x.name).trim()]));const fix=a=>[...new Set((a||[]).map(n=>ren.get(String(n).toLowerCase())||n))];
+      await saveLib({scopes,templates:(lib().templates||[]).map(t=>({...t,scopes:fix(t.scopes)}))});
+      if(ren.size&&can('contacts','edit')){for(const v of S.vendors){const vs=vendorScopes(v);if(!vs.some(n=>ren.has(String(n).toLowerCase())))continue;await run(sb.from('vendors').update({scopes:fix(vs)}).eq('id',v.id))}await loadTable('vendors')}
+      if(M.back&&M.back.draft)M.back.draft.scopes=fix(vendorScopes(M.back.draft));toast('Scope list saved');
     }else if(M.kind==='tpl'){
       if(!d.name.trim())throw new Error('Name the template.');if(!d.scopes.length)throw new Error('Pick at least one scope.');
       const L=clone(lib());L.templates=L.templates||[];const i=L.templates.findIndex(t=>t.id===d.id);const t={id:d.id,name:d.name.trim(),scopes:d.scopes};
@@ -3974,7 +3978,7 @@ document.addEventListener('click',e=>{
     case 'sign-cancel':M.signing=null;renderModal();break;
     case 'sign-confirm':signScope(+t.dataset.i);break;
     case 'unsign':unsignScope(+t.dataset.i);break;
-    case 'edit-lib':M={kind:'lib',draft:clone(lib().scopes)};showModal();break;
+    case 'edit-lib':{const back=M&&M.kind==='vendor'?M:null;M={kind:'lib',draft:clone(lib().scopes).map(x=>({...x,orig:x.name})),back};if(back)renderModal();else showModal();break}
     case 'add-lib':M.draft.push({name:'',group:'Other',perform:'Self perform'});renderModal();setTimeout(()=>{const n=document.querySelectorAll('[data-lf$=".name"]');n[n.length-1]?.focus()},0);break;
     case 'rm-lib':M.draft.splice(+t.dataset.i,1);renderModal();break;
     case 'new-tpl':M={kind:'tpl',isNew:true,draft:{id:'tpl-'+newId().slice(0,8),name:'',scopes:[]}};showModal();break;
@@ -10913,10 +10917,20 @@ function vLists(){const T=S.trd;const admin=isAdmin();const cnt=t=>S.vendors.fil
       <div class="trd-row"><input class="field sm" id="trd-new" data-trdnew placeholder="+ Add a trade and press Enter"></div></div>
       <div class="adders"><button class="btn primary" data-act="trd-save"${T.busy?' disabled':''}>${T.busy?'Saving…':'Save trades'}</button><button class="btn" data-act="trd-cancel">Cancel</button></div>
       <p class="hint">Renaming a trade updates every vendor tagged with it. Removing one moves its vendors to the trade you pick.</p>`:'';
-  let sc='';try{sc=vScopes().replace(/<div class="head">[\s\S]*?<\/div><\/div>/,m=>m.replace('<h1>Scopes & templates</h1>','<h2 style="margin:0">Scopes & templates</h2>'))}catch(e){sc=''}
+  const sc=isAdmin()||can('codebook','edit')?scdHtml():'';
   return `<div class="head"><div><h1>Trades & scopes</h1><p>The lists your team picks from: trades for vendors and subs, scopes for bids.</p></div></div>
     <div class="panel pad" style="margin-bottom:16px"><div class="sec-h" style="margin-top:0"><h2>Trades</h2><span>${TRADES.length} trades · used on vendors and subs</span>${admin&&!T?'<button class="btn sm" data-act="trd-edit" style="margin-left:auto">Edit trades</button>':''}</div>${T?edit:view}${!admin?'<p class="small dim">Only admins can change the trade list.</p>':''}</div>
-    ${isAdmin()||can('codebook','edit')?sc:''}`}
+    ${sc}`}
+// the scope list, edited in place: rename, regroup, who performs it, add, remove
+function scdHtml(){const L=lib();const D=S.scd;const use=n=>S.vendors.filter(v=>vendorFits(v,n)).length;
+  const groups=SCOPE_GROUPS.filter(g=>L.scopes.some(x=>x.group===g));
+  const view=`${groups.map(g=>`<div style="margin-bottom:12px"><div class="small" style="font-weight:600;margin-bottom:6px">${esc(g)}</div><div class="tagrow">${L.scopes.filter(x=>x.group===g).map(x=>`<span class="pill">${esc(x.name)}${x.perform&&x.perform!=='Self perform'?` <span class="perf-tag">${x.perform==='Sub'?'Sub':'S+S'}</span>`:''}</span>`).join('')}</div></div>`).join('')}`;
+  const edit=D?`<div class="scd-rows">${SCOPE_GROUPS.map(g=>{const rows=D.rows.map((r,i)=>({r,i})).filter(o=>o.r.group===g);return `<div class="scd-g"><div class="scd-gh">${esc(g)}</div>${rows.map(({r,i})=>`<div class="scd-row${r.gone?' gone':''}"><input class="field sm" data-scd="${i}.name" value="${esc(r.name)}" placeholder="Scope name"${r.gone?' disabled':''}><select class="field sm" data-scd="${i}.group"${r.gone?' disabled':''}>${SCOPE_GROUPS.map(x=>`<option${r.group===x?' selected':''}>${esc(x)}</option>`).join('')}</select><select class="field sm" data-scd="${i}.perform" title="Default when added to a bid"${r.gone?' disabled':''}>${PERFORM.map(o=>`<option${(r.perform||'Self perform')===o?' selected':''}>${o}</option>`).join('')}</select><span class="small dim">${r.orig&&use(r.orig)?use(r.orig)+' vendor'+(use(r.orig)===1?'':'s'):''}</span>${r.gone?`<button class="btn xs" data-act="scd-undo" data-v="${i}">Undo</button>`:`<button class="x" data-act="scd-del" data-v="${i}" title="Remove">×</button>`}</div>`).join('')}
+      <div class="scd-row add"><input class="field sm" data-scdnew="${esc(g)}" placeholder="+ Add a scope to ${esc(g)} and press Enter"></div></div>`}).join('')}</div>
+    <div class="adders"><button class="btn primary" data-act="scd-save"${D.busy?' disabled':''}>${D.busy?'Saving…':'Save scope list'}</button><button class="btn" data-act="scd-cancel">Cancel</button></div>
+    <p class="hint">Renaming a scope updates the vendors who quote it and your templates. Bids already using the old name keep it.</p>`:'';
+  return `<div class="panel pad" style="margin-bottom:16px"><div class="sec-h" style="margin-top:0"><h2>Scopes</h2><span>${L.scopes.length} scopes · what your team picks from on each bid${S.settings.scope_library?'':' · starter list, edit it to make it yours'}</span>${D?'':'<button class="btn sm primary" data-act="scd-edit" style="margin-left:auto">✎ Edit scopes</button>'}</div>${D?edit:view}</div>
+    <div class="panel pad"><div class="sec-h" style="margin-top:0"><h2>Scope templates</h2><span>Apply a set of scopes to a bid in one click</span><button class="btn sm" data-act="new-tpl" style="margin-left:auto">+ New template</button></div><div class="list">${(L.templates||[]).map(t=>`<div class="li"><div><button class="linkish" data-act="edit-tpl" data-id="${esc(t.id)}">${esc(t.name)}</button><div class="dim small">${t.scopes.map(esc).join(', ')}</div></div><span class="pill">${t.scopes.length}</span></div>`).join('')||'<div class="empty">No templates yet.</div>'}</div></div>`}
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('trd-'))return;
   if(a==='trd-edit'){S.trd={rows:TRADES.map(x=>({orig:x,name:x}))};render();return}
   if(a==='trd-cancel'){S.trd=null;render();return}const T=S.trd;if(!T)return;const i=+t.dataset.v;
@@ -10931,3 +10945,21 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
 document.addEventListener('input',e=>{const t=e.target;if(t.dataset.trd!=null&&S.trd){S.trd.rows[+t.dataset.trd].name=t.value}});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset.trdto!=null&&S.trd){S.trd.rows[+t.dataset.trdto].to=t.value}});
 document.addEventListener('keydown',e=>{const t=e.target;if(t.dataset&&t.dataset.trdnew!=null&&e.key==='Enter'&&S.trd){e.preventDefault();const v=t.value.trim();if(!v)return;const oi=S.trd.rows.findIndex(r=>r.orig==='Other');S.trd.rows.splice(oi<0?S.trd.rows.length:oi,0,{orig:null,name:v});t.value='';render();setTimeout(()=>{const n=document.getElementById('trd-new');if(n)n.focus()},0)}});
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('scd-'))return;
+  if(a==='scd-edit'){S.scd={rows:lib().scopes.map(x=>({orig:x.name,name:x.name,group:SCOPE_GROUPS.includes(x.group)?x.group:'Other',perform:x.perform||'Self perform'}))};render();return}
+  if(a==='scd-cancel'){S.scd=null;render();return}const D=S.scd;if(!D)return;const i=+t.dataset.v;
+  if(a==='scd-del'){D.rows[i].gone=true;render();return}
+  if(a==='scd-undo'){D.rows[i].gone=false;render();return}
+  if(a==='scd-save'){const seen=new Set();const keep=D.rows.filter(r=>!r.gone&&r.name.trim()).filter(r=>{const k=r.name.trim().toLowerCase();if(seen.has(k))return false;seen.add(k);return true});
+    const scopes=keep.map(r=>({name:r.name.trim(),group:r.group,perform:PERFORM.includes(r.perform)?r.perform:'Self perform'}));const ren=new Map(D.rows.filter(r=>r.orig&&!r.gone&&r.name.trim()&&r.name.trim()!==r.orig).map(r=>[r.orig.toLowerCase(),r.name.trim()]));
+    D.busy=true;render();try{const L=lib();const templates=(L.templates||[]).map(tp=>({...tp,scopes:[...new Set(tp.scopes.map(n=>ren.get(String(n).toLowerCase())||n))]}));await saveLib({scopes,templates});
+      if(ren.size&&can('contacts','edit')){for(const v of S.vendors){const vs=vendorScopes(v);if(!vs.some(n=>ren.has(String(n).toLowerCase())))continue;const nx=[...new Set(vs.map(n=>ren.get(String(n).toLowerCase())||n))];const {error}=await sb.from('vendors').update({scopes:nx}).eq('id',v.id);if(error)throw error}await loadTable('vendors')}
+      S.scd=null;render();toast(`Scope list saved: ${scopes.length} scopes.`)}catch(err){D.busy=false;render();toast(errMsg(err))}}});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset.scd&&S.scd){const [i,k]=t.dataset.scd.split('.');S.scd.rows[+i][k]=t.value}});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset.scd&&S.scd){const [i,k]=t.dataset.scd.split('.');S.scd.rows[+i][k]=t.value;if(k==='group')render()}});
+document.addEventListener('keydown',async e=>{const t=e.target;if(!t.dataset||e.key!=='Enter')return;
+  if(t.dataset.scdnew!=null&&S.scd){e.preventDefault();const v=t.value.trim();if(!v)return;const g=t.dataset.scdnew;S.scd.rows.push({orig:null,name:v,group:g,perform:'Self perform'});render();setTimeout(()=>{const n=document.querySelector(`[data-scdnew="${CSS.escape(g)}"]`);if(n)n.focus()},0);return}
+  // vendor window: add a new scope to the company list and tick it for this vendor
+  if(t.dataset.vsnew!=null&&M&&M.kind==='vendor'){e.preventDefault();const v=t.value.trim();if(!v)return;const L=lib();const g=(document.getElementById('vs-newg')||{}).value||'Other';
+    if(!L.scopes.some(x=>x.name.toLowerCase()===v.toLowerCase())){if(!(isAdmin()||can('codebook','edit'))){toast('Only admins can add to the scope list.');return}try{await saveLib({scopes:[...L.scopes,{name:v,group:g,perform:'Self perform'}],templates:L.templates||[]})}catch(err){toast(errMsg(err));return}}
+    const cur=vendorScopes(M.draft);if(!cur.some(x=>x.toLowerCase()===v.toLowerCase()))M.draft.scopes=[...cur,v];renderModal();const ni=document.getElementById('vs-new');if(ni){ni.value='';ni.focus()}toast(`“${v}” added to the scope list and ticked for this vendor.`)}});
