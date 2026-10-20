@@ -24,13 +24,15 @@ function normBid(b){if(LEGACY_STATUS[b.status])b.status=LEGACY_STATUS[b.status];
 const isSent=b=>b.status==='Submitted'||b.proposal_status==='Sent'||(b.client_ids||[]).some(id=>['Sent','Lost','Awarded'].includes(((b.client_proposals||{})[id]||{}).status))||['Awarded','Not Awarded'].includes(b.status);
 const isPending=b=>ACTIVE.includes(b.status)&&isSent(b);
 const isWorking=b=>ACTIVE.includes(b.status)&&b.status!=='On Hold'&&!isSent(b);
-const QUOTE_ST=['Not requested','Requested','Received','Declined','No response'];
-const QUOTE_CLS={'Not requested':'','Requested':'warn','Received':'good','Declined':'bad','No response':'na'};
+const QUOTE_ST=['Not requested','Budget, no RFQ','Requested','Received','Declined','No response'];
+const BUD='Budget, no RFQ';   // using this vendor, our own rough number, no quote asked for (yet)
+const qAsked=q=>!!q&&!!q.status&&q.status!=='Not requested'&&q.status!==BUD;
+const QUOTE_CLS={'Not requested':'','Budget, no RFQ':'info','Requested':'warn','Received':'good','Declined':'bad','No response':'na'};
 const QUOTE_EXTRA=['Materials','Trucking','Testing','Other'];
 const qScopes=q=>Array.isArray(q?.meta?.scopes)&&q.meta.scopes.length?q.meta.scopes:(q?.scope?[q.scope]:[]);
 const qHas=(q,n)=>qScopes(q).some(x=>String(x).toLowerCase()===String(n).toLowerCase());
 const qSetScopes=(q,arr)=>{arr=[...new Set(arr.filter(Boolean))];q.meta={...(q.meta||{}),scopes:arr.length>1?arr:[]};if(arr.length<=1)delete q.meta.scopes;q.scope=arr.join(', ')};
-const qOpen=q=>['Not requested','Requested'].includes(q.status||'Not requested');
+const qOpen=q=>['Not requested','Requested',BUD].includes(q.status||'Not requested');
 const PERFORM=['Self perform','Sub','Both'];
 const PERF_SHORT={'Self perform':'Self','Sub':'Sub','Both':'Self + sub'};
 const DEFAULT_SUB=['Asphalt paving','Concrete paving','Curb & gutter','Sidewalks','Striping & signage','Fencing','Testing allowance','Retaining walls','Grassing & stabilization'];
@@ -196,7 +198,7 @@ const STAGE_NAMES=['Project created','RFQ sent','Takeoff','Quotes received','Est
 const LAST=STAGES.length-1;
 // Follows the bid's stage. The stage in progress fills part-way from the real work: scopes signed off, quotes back.
 function stageInfo(b,qs){
-  qs=(qs||quotesFor(b.id)).filter(q=>q.status&&q.status!=='Not requested');
+  qs=(qs||quotesFor(b.id)).filter(qAsked);
   const sc=scopeItems(b).map(x=>x.status||'Not Started');
   const decided=DECIDED.includes(b.status);const submitted=isSent(b);
   const scDone=sc.filter(x=>x==='Complete'||x==='N/A').length,qIn=qs.filter(q=>q.status!=='Requested').length;
@@ -902,7 +904,7 @@ function vClients(){
   ||`<tr><td colspan="7"><div class="empty"><b>${eng?'No engineers or designers yet':'No clients yet'}</b>${isAdmin()?(eng?'Add the engineering and design firms on your projects. Set the type to Engineer or Designer / architect.':'Add the GCs, developers and owners you bid to.'):''}</div></td></tr>`}</tbody></table></div>`;
 }
 function vendorStats(id){const qs=S.quotes.filter(q=>q.vendor_id===id).map(q=>({q,b:byId(S.bids,q.bid_id)})).filter(x=>x.b);
-  const asked=qs.filter(x=>x.q.status!=='Not requested');const rec=qs.filter(x=>x.q.status==='Received');
+  const asked=qs.filter(x=>qAsked(x.q));const rec=qs.filter(x=>x.q.status==='Received');
   return{qs,asked:asked.length,rec:rec.length,open:qs.filter(x=>x.q.status==='Requested').length,rate:asked.length?Math.round(rec.length/asked.length*100):null}}
 function vVendors(){vxNeed();
   const q=(S.q.ven||'').toLowerCase();const tf=S.q.trade||'';const sf=S.q.vscope||'';const yf=S.q.vtype||'';const rf=S.q.vreg||'';
@@ -1036,15 +1038,15 @@ function bpMissing(b,key){const m=[];const Q=b.quotes||[];
   if(key==='project'){if(!String(b.name||'').trim())m.push('Project name');if(!b.due_date)m.push('Bid due date');if(!b.lead_estimator_id)m.push('Lead estimator');if(!b.client_ids.length)m.push('Who you’re bidding to')}
   if(key==='rfq'){if(!b.scope_items.length)m.push('Pick the scopes');const none=bpSubScopes(b).filter(it=>!Q.some(q=>qHas(q,it.name)));if(none.length)m.push(`${none.length} sub scope${none.length===1?'':'s'} with no vendor (${none.slice(0,3).map(x=>x.name).join(', ')}${none.length>3?'…':''})`);const nr=Q.filter(q=>(q.status||'Not requested')==='Not requested').length;if(nr)m.push(`${nr} quote${nr===1?'':'s'} not requested yet`)}
   if(key==='takeoff'){const open=b.scope_items.filter(x=>x.status!=='Complete'&&x.status!=='N/A');if(!b.scope_items.length)m.push('No scopes on the bid');else if(open.length)m.push(`${open.length} of ${b.scope_items.length} scopes not signed off`)}
-  if(key==='quotes'){const w=Q.filter(q=>q.status==='Requested').length;if(w)m.push(`${w} quote${w===1?'':'s'} still out`);const nr=Q.filter(q=>(q.status||'Not requested')==='Not requested').length;if(nr)m.push(`${nr} not requested`);const no=bpSubScopes(b).filter(it=>!Q.some(q=>qHas(q,it.name)&&q.status==='Received'));if(no.length)m.push(`${no.length} sub scope${no.length===1?'':'s'} with no price back`)}
+  if(key==='quotes'){const w=Q.filter(q=>q.status==='Requested').length;if(w)m.push(`${w} quote${w===1?'':'s'} still out`);const nr=Q.filter(q=>(q.status||'Not requested')==='Not requested').length;if(nr)m.push(`${nr} not requested`);const no=bpSubScopes(b).filter(it=>!Q.some(q=>qHas(q,it.name)&&(q.status==='Received'||(q.status===BUD&&num(q.amount)!=null))));if(no.length)m.push(`${no.length} sub scope${no.length===1?'':'s'} with no price back`)}
   if(key==='estimate'){if(num(b.amount_with)==null&&num(b.amount_without)==null&&!b.client_ids.some(id=>clientAmount(b,id)))m.push('Enter the base number')}
   if(key==='proposal'){if(!b.client_ids.length)m.push('Add who you’re bidding to');const noAmt=b.client_ids.filter(id=>!clientAmount(b,id));if(noAmt.length)m.push(`No number for ${noAmt.map(clientName).join(', ')}`)}
   return m}
 function bpProgress(b,key){const Q=b.quotes||[];
   if(key==='project'){const n=bpMissing(b,key).length;return n?`${n} to fill`:'✓'}
-  if(key==='rfq'){if(!b.scope_items.length)return 'No scopes';const out=Q.filter(q=>q.status&&q.status!=='Not requested').length;return Q.length?`${out}/${Q.length} requested`:`${b.scope_items.length} scopes`}
+  if(key==='rfq'){if(!b.scope_items.length)return 'No scopes';const bq=Q.filter(q=>q.status===BUD).length;const out=Q.filter(qAsked).length;return Q.length?(bq===Q.length?`${bq} budget`:`${out}/${Q.length-bq} requested`):`${b.scope_items.length} scopes`}
   if(key==='takeoff'){const s=b.scope_items.filter(x=>x.status==='Complete'||x.status==='N/A').length;return b.scope_items.length?`${s}/${b.scope_items.length} signed`:'—'}
-  if(key==='quotes'){const asked=Q.filter(q=>q.status&&q.status!=='Not requested');const back=asked.filter(q=>q.status!=='Requested').length;return asked.length?`${back}/${asked.length} back`:'—'}
+  if(key==='quotes'){const asked=Q.filter(qAsked);const back=asked.filter(q=>q.status!=='Requested').length;return asked.length?`${back}/${asked.length} back`:'—'}
   if(key==='estimate'){const v=bidValue(b);return v?moneyK(v):'—'}
   if(key==='proposal'){const n=b.client_ids.length;const s=b.client_ids.filter(id=>['Sent','Lost','Awarded'].includes(propOf(b,id).status)).length;return n?`${s}/${n} sent`:'—'}
   if(key==='outcome'){return DECIDED.includes(b.status)?b.status:isSent(b)?'Waiting':'—'}
@@ -1125,9 +1127,14 @@ function bpRfq(b,work,admin){
   const vendorsSorted=S.vendors.slice().sort((a,c)=>a.trade.localeCompare(c.trade)||a.company.localeCompare(c.company));
   const tradesWithVendors=TRADES.filter(t=>S.vendors.some(v=>v.trade===t));
   const nr=b.quotes.filter(q=>(q.status||'Not requested')==='Not requested').length;
-  const due=rfqDue(b);const mixed=!due&&new Set(b.quotes.filter(q=>qOpen(q)).map(q=>q.due_date).filter(Boolean)).size>1;
+  const due=rfqDue(b);const mixed=!due&&new Set(b.quotes.filter(q=>qOpen(q)).map(q=>q.due_date).filter(Boolean)).size>1;const bud=isBudget(b);
+  const budBar=`<label class="bud-sw${bud?' on':''}"><input type="checkbox" data-budsw${bud?' checked':''}${work?'':' disabled'}><span><b>Budget pricing, no RFQs</b><small>${bud?'Vendors you add are marked <b>Budget, no RFQ</b>. Put your own rough number on each. Turn this off when it’s time to send real RFQs.':'Turn on for preliminary / budget numbers: you know who you’re using but aren’t asking for quotes yet.'}${rfqOf(b).budget==null&&b.bid_type==='Budget / pricing'?' On because the bid type is Budget / pricing.':''}</small></span></label>`;
+  if(bud)return `${budBar}<fieldset><legend>Scopes & vendors</legend>
+    <p class="hint" style="margin:0 0 10px">Pick the scopes and who you’ll use for each, with a budget number. No quote requests go out. Use <b>Request a quote now</b> on any vendor when you want a real price.</p>
+    <div class="qgs">${quoteGroupsHtml(b,work,admin,'rfq')}</div>${work?bpScopeAdders(b):''}
+    ${work?`<div class="adders"><select class="field" data-act="add-quote"><option value="">+ Add a vendor or sub…</option>${vendorsSorted.map(v=>`<option value="${v.id}">${esc(v.company)} (${esc(v.trade)})</option>`).join('')}</select></div>`:''}</fieldset>`;
   const sugg=b.due_date&&!due&&work?[7,10,14].map(n=>{const d=addDays(b.due_date,-n);return d>todayStr()?`<button class="chip" data-act="rfq-due-pick" data-v="${d}">${fmtShort(d)} <b>${n} days before bid</b></button>`:''}).join(''):'';
-  return `<div class="rfq-bar"><div class="rfq-due"><label for="rfq-due-bar">Quotes due</label>
+  return `${budBar}<div class="rfq-bar"><div class="rfq-due"><label for="rfq-due-bar">Quotes due</label>
       <input type="date" class="field" id="rfq-due-bar" data-rfqdue value="${esc(due)}"${work?'':' disabled'}>
       <span class="dim">by</span><input class="field rfq-time" id="rfq-time-bar" data-bprfq="time" value="${esc(rfqOf(b).time||'')}" placeholder="5PM"${work?'':' disabled'}></div>
     <span class="small dim rfq-due-note">${rfqDueNote(b,due,mixed)}</span>${sugg?`<span class="rfq-sugg">${sugg}</span>`:''}
@@ -1142,7 +1149,7 @@ function bpRfq(b,work,admin){
   </fieldset>`}
 function bpTakeoff(b,work){return `${scopeSection(b,work)}${logSection(b,work)}${addendaSection(b,work)}`}
 function bpQuotes(b,work,admin){
-  const asked=b.quotes.filter(q=>q.status&&q.status!=='Not requested');
+  const asked=b.quotes.filter(qAsked);
   return `<fieldset><legend>Quotes back</legend>
     <p class="hint" style="margin:0 0 10px">${asked.length?`${asked.filter(q=>q.status==='Received').length} received · ${asked.filter(q=>q.status==='Requested').length} still out · ${asked.filter(q=>['Declined','No response'].includes(q.status)).length} declined or no answer.`:'No quotes requested yet. Add vendors on the <b>Scopes & RFQs</b> tab.'} Upload a quote and it’s marked Received. The low number in each scope is marked.</p>
     <div class="qgs">${quoteGroupsHtml(b,work,admin,'quotes')}</div></fieldset>`}
@@ -1342,10 +1349,10 @@ function quoteRow(q,i,work,admin){
   const file=q._uploading?'<span class="dim small">Uploading…</span>'
     :q.file_path?`<span class="file"><button class="linkbtn" style="font-size:13px;font-weight:600;text-align:left;word-break:break-all" data-act="dl" data-path="${esc(q.file_path)}" data-name="${esc(q.file_name||'quote')}">${esc(q.file_name||'Download quote')}</button>${work?` <button class="rm" data-act="clear-file" data-i="${i}" title="Detach file">×</button>`:''}</span>`
     :work?`<span class="file"><label>Upload quote<input type="file" data-upload="${i}"></label></span>`:'<span class="dim small">No file</span>';
-  return `<div class="quote q2"><div class="vn">${esc(v?.company||'Removed vendor')}<small>${esc(v?.trade||'')}${v?.phone?' · '+esc(v.phone):''}${q.requested_date?' · asked '+fmtShort(q.requested_date):''}${q.received_date?' · in '+fmtShort(q.received_date):''}</small>${qCovHtml(q,i,work)}</div>
+  return `<div class="quote q2"><div class="vn">${esc(v?.company||'Removed vendor')}<small>${esc(v?.trade||'')}${v?.phone?' · '+esc(v.phone):''}${q.requested_date?' · asked '+fmtShort(q.requested_date):''}${q.received_date?' · in '+fmtShort(q.received_date):''}</small>${q.status===BUD?`<span class="q-budtag">Budget · no RFQ</span>${work?`<button class="linkbtn small" data-act="q-toreq" data-i="${i}">Request a quote now</button>`:''}`:''}${qCovHtml(q,i,work)}</div>
    <select class="field" data-qf="${i}.status"${d}>${QUOTE_ST.map(s=>`<option${q.status===s?' selected':''}>${s}</option>`).join('')}</select>
-   <label class="q-rcv" title="Date the quote came back"><span>Received</span><input type="date" class="field" data-qf="${i}.received_date" value="${esc(q.received_date||'')}"${d}></label>
-   <input type="number" step="0.01" class="field" data-qf="${i}.amount" data-t="n" value="${esc(q.amount??'')}" placeholder="$"${d}>
+   ${q.status===BUD?'<span class="q-rcv"><span>Budget number</span><span class="dim small">no quote asked for</span></span>':`<label class="q-rcv" title="Date the quote came back"><span>Received</span><input type="date" class="field" data-qf="${i}.received_date" value="${esc(q.received_date||'')}"${d}></label>`}
+   <input type="number" step="0.01" class="field${q.status===BUD?' q-bud':''}" data-qf="${i}.amount" data-t="n" value="${esc(q.amount??'')}" placeholder="${q.status===BUD?'Budget $':'$'}" title="${q.status===BUD?'Your rough number for this vendor, not a quote from them':'Their quoted amount'}"${d}>
    <div>${file}<input class="field" style="margin-top:4px" data-qf="${i}.note" value="${esc(q.note||'')}" placeholder="Note"${d}></div>
    ${admin||(work&&!M.origQuoteIds?.includes(q.id))?`<button class="rm" data-act="rm-quote" data-i="${i}" aria-label="Remove">×</button>`:'<span></span>'}</div>`;
 }
@@ -1382,7 +1389,7 @@ function addQuote(vid,scope){const v=vendorOf(vid);if(!v)return false;
   if(M.draft.quotes.some(q=>q.vendor_id===vid&&qHas(q,scope)))return false;
   const same=M.draft.quotes.find(q=>q.vendor_id===vid&&qOpen(q)&&!q.file_path&&q.amount==null);
   if(same){qSetScopes(same,[...qScopes(same),scope]);return true}
-  M.draft.quotes.push({id:newId(),bid_id:M.draft.id,vendor_id:vid,scope,status:'Not requested',requested_date:'',due_date:rfqDue(M.draft)||'',received_date:'',amount:null,note:'',file_path:null,file_name:null});return true}
+  M.draft.quotes.push({id:newId(),bid_id:M.draft.id,vendor_id:vid,scope,status:isBudget(M.draft)?BUD:'Not requested',requested_date:'',due_date:rfqDue(M.draft)||'',received_date:'',amount:null,note:'',file_path:null,file_name:null});return true}
 
 /* ----- directory modals ----- */
 function ef(path,ph,type){return `<input class="field" ${type?`type="${type}"`:''} data-ef="${path}" value="${esc(M.draft[path]??'')}" placeholder="${esc(ph||'')}"${DIS()}>`}
@@ -1450,7 +1457,7 @@ async function saveBid(opt={},m=M){
   const its=d.scope_items||[];
   // The stage only ever moves forward by itself; anyone working the bid can set it by hand.
   //   some quote requests out → RFQ Sent · every request out, or a scope started → Takeoff · every scope signed off and every quote answered → Quotes Received
-  const qs=(d.quotes||[]).filter(q=>q.status&&q.status!=='Not requested');const qIn=qs.length&&qs.every(q=>['Received','Declined','No response'].includes(q.status))&&qs.some(q=>q.status==='Received');
+  const qs=(d.quotes||[]).filter(qAsked);const qIn=qs.length&&qs.every(q=>['Received','Declined','No response'].includes(q.status))&&qs.some(q=>q.status==='Received');
   const toDone=its.length&&its.every(x=>x.status==='Complete'||x.status==='N/A');const toStarted=its.some(x=>x.status&&x.status!=='Not Started');
   // (the bid page's Advance button now moves the stage; it lights up when a step is done)
   void qIn,toDone,toStarted;
@@ -4088,6 +4095,7 @@ document.addEventListener('click',e=>{
     case 'award':awardClient(t.dataset.id);break;
     case 'q-unscope':{const q=M.draft.quotes[+t.dataset.i];if(q){qSetScopes(q,qScopes(q).filter(x=>x!==t.dataset.s));renderModal()}break}
     case 'q-merge':{const vid=t.dataset.v;const xs=M.draft.quotes.filter(q=>q.vendor_id===vid&&qOpen(q)&&!q.file_path&&q.amount==null);if(xs.length>1){const keep=xs.find(q=>q.status==='Requested')||xs[0];qSetScopes(keep,xs.flatMap(qScopes));if(xs.some(q=>q.status==='Requested')){keep.status='Requested';keep.requested_date=xs.map(q=>q.requested_date).filter(Boolean).sort()[0]||keep.requested_date||todayStr()}const due=xs.map(q=>q.due_date).filter(Boolean).sort()[0];if(due)keep.due_date=due;keep.note=[...new Set(xs.map(q=>q.note).filter(Boolean))].join(' · ');M.draft.quotes=M.draft.quotes.filter(q=>q===keep||!xs.includes(q));toast(`Combined into one quote covering ${qScopes(keep).length} scopes.`);renderModal()}break}
+    case 'q-toreq':{const q=M.draft.quotes[+t.dataset.i];if(q){q.status='Not requested';if(!q.due_date&&rfqDue(M.draft))q.due_date=rfqDue(M.draft);renderModal();toast('Set to Not requested. It goes out with the next RFQ email.')}break}
     case 'q-reqall':if(M&&M.draft&&M.draft.quotes){let n=0;M.draft.quotes.forEach(q=>{if((q.status||'Not requested')==='Not requested'){q.status='Requested';q.requested_date=q.requested_date||todayStr();n++}});toast(`${n} marked requested.`);renderModal()}break;
     case 'pick-open':pickerStart();break;
     case 'add-ad':{const l=M.draft.addenda;const n=l.reduce((m,a)=>Math.max(m,+a.number||0),0)+1;l.push({id:newId(),number:n,date:todayStr(),description:'',priced:false,acknowledged:false});renderModal();setTimeout(()=>{const x=document.querySelectorAll('[data-ad$=".description"]');x[x.length-1]?.focus()},0);break}
@@ -5070,7 +5078,7 @@ function qRule(P,cols){const r=P&&P.rule;if(!r||!r.mode||r.mode==='manual')retur
 function qRuleSet(d,pkg,rule){const P=qPkg(d,pkg);if(!rule||rule.mode==='manual'){const C=qCalc(d,pkg,estResIndex(d));P.pick={...C.pick};P.rule={mode:'manual'}}else P.rule=rule}
 function qEdit(id,fn){const base=S.quotes.find(x=>x.id===id);if(!base)return;const q=qGet(base);
   const c={lines:clone(q.lines||[]),meta:{...(q.meta||{})},amount:q.amount??null,status:q.status,received_date:q.received_date||null};fn(c);
-  if(['Requested','Not requested','No response'].includes(c.status)&&((c.lines||[]).some(l=>num(l.price)!=null)||(c.meta.lump&&num(c.amount)!=null))){c.status='Received';c.received_date=c.received_date||todayStr()}
+  if(c.status!==BUD&&['Requested','Not requested','No response'].includes(c.status)&&((c.lines||[]).some(l=>num(l.price)!=null)||(c.meta.lump&&num(c.amount)!=null))){c.status='Received';c.received_date=c.received_date||todayStr()}
   QP[id]=c;if(!c.meta.lump&&S.est&&S.est.data){const C=qCalc(S.est.data,base.scope,estResIndex(S.est.data));const col=C.cols.find(x=>x.q.id===id);if(col)c.amount=r2(col.total)}
   clearTimeout(qEdit['_'+id]);qEdit['_'+id]=setTimeout(()=>qFlush(id),800)}
 async function qFlush(id){const c=QP[id];if(!c)return;
@@ -10657,7 +10665,7 @@ function vxScoreAll(){const key=S.quotes.length+'|'+S.vx.ratings.length+'|'+S.ve
     const rs=S.vx.ratings.filter(r=>r.vendor_id===v.id).sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at)));const yr=Date.now()-365*864e5;const latest=new Map();rs.forEach(r=>{if(new Date(r.created_at)>=yr&&!latest.has(r.user_id))latest.set(r.user_id,r)});
     const avgs=[];latest.forEach(r=>{const xs=VX_STARS.map(([k])=>+r[k]).filter(x=>x>=1);if(xs.length)avgs.push(xs.reduce((a,b)=>a+b,0)/xs.length)});n.ratings=avgs.length;
     if(avgs.length){const a=avgs.reduce((x,y)=>x+y,0)/avgs.length;P.rating={s:(a-1)/4*100,label:`${a.toFixed(1)} ★ from ${avgs.length} ${avgs.length===1?'person':'people'}`,avg:a}}
-    const qs=S.quotes.filter(q=>q.vendor_id===v.id&&q.status!=='Not requested');const closed=qs.filter(q=>q.status!=='Requested'||(q.due_date&&q.due_date<today)||(q.requested_date&&daysUntil(q.requested_date)<-14));const rec=closed.filter(q=>q.status==='Received');n.asked=qs.length;
+    const qs=S.quotes.filter(q=>q.vendor_id===v.id&&qAsked(q));const closed=qs.filter(q=>q.status!=='Requested'||(q.due_date&&q.due_date<today)||(q.requested_date&&daysUntil(q.requested_date)<-14));const rec=closed.filter(q=>q.status==='Received');n.asked=qs.length;
     if(closed.length){P.resp={s:rec.length/closed.length*100,label:`${rec.length} of ${closed.length} RFQs answered`}}
     const ds=rec.filter(q=>q.requested_date&&q.received_date).map(q=>Math.max(0,(parseD(q.received_date)-parseD(q.requested_date))/864e5)).sort((a,b)=>a-b);
     if(ds.length){const med=ds[Math.floor(ds.length/2)];P.speed={s:Math.max(0,Math.min(100,100-(med-2)*(100/12))),label:`${med<1?'same day':Math.round(med)+' day'+(Math.round(med)===1?'':'s')} typical turnaround`,days:med}}
@@ -11425,3 +11433,14 @@ document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.
   // picking a lead takes it off the board
   if(t.dataset&&t.dataset.bf==='lead_estimator_id'&&M&&M.kind==='bid'&&t.value&&M.draft.grab&&M.draft.grab.open){M.draft.grab={...M.draft.grab,open:false,taken_by:estName(t.value)||'',taken_at:new Date().toISOString(),log:[...(M.draft.grab.log||[]),{t:'assigned',who:myName(),to:estName(t.value),at:new Date().toISOString()}]};renderModal()}});
 document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.grab&&M&&M.kind==='bid'){M.draft.grab={...(M.draft.grab||{}),[t.dataset.grab]:t.value}}});
+
+/* budget pricing: a bid where you know who you're using but aren't asking for quotes yet.
+   On by default when the bid type is "Budget / pricing"; the switch on Scopes & RFQs overrides it (bid.rfq.budget). */
+function isBudget(b){const r=b&&typeof b.rfq==='object'&&b.rfq?b.rfq:(b?rfqOf(b):{});return r.budget!=null?!!r.budget:(b&&b.bid_type==='Budget / pricing')}
+function budApply(b,on){let n=0;b.quotes.forEach(q=>{const st=q.status||'Not requested';if(on&&st==='Not requested'){q.status=BUD;n++}else if(!on&&st===BUD){q.status='Not requested';if(!q.due_date&&rfqDue(b))q.due_date=rfqDue(b);n++}});return n}
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')return;const b=M.draft;
+  if(t.dataset.budsw!=null){const on=t.checked;rfqOf(b).budget=on;const n=budApply(b,on);renderModal();
+    toast(on?`Budget pricing on.${n?` ${n} vendor${n===1?'':'s'} set to Budget, no RFQ.`:''}`:`Budget pricing off.${n?` ${n} vendor${n===1?'':'s'} set to Not requested, ready for the RFQ email.`:''}`);return}
+  // picking the Budget / pricing bid type turns the switch on (and off when you change away from it)
+  if(t.dataset.bf==='bid_type'){const was=isBudget({...b,bid_type:t.dataset.prevType||''});const r=rfqOf(b);delete r.budget;const now=isBudget(b);if(now!==was||now){const n=budApply(b,now);if(n)toast(now?`Budget pricing: ${n} vendor${n===1?'':'s'} set to Budget, no RFQ.`:`${n} vendor${n===1?'':'s'} set back to Not requested.`)}renderModal()}});
+document.addEventListener('focusin',e=>{const t=e.target;if(t.dataset&&t.dataset.bf==='bid_type')t.dataset.prevType=t.value});
