@@ -1054,6 +1054,7 @@ function bidModal(){
   if(M.picker)return pickerView();
   if(M.sup)return supView();
   if(M.rfq)return rfqView();
+  if(M.trk)return trackModal().replace('data-act="close"','data-act="trk-back"');
   const b=M.draft;const admin=isAdmin();const work=canWork(b);const isNew=b._new;
   if(!M.tab)M.tab=isNew?'project':bpTabOf(b);
   const cur=bpStageIdx(b);
@@ -1070,7 +1071,7 @@ function bidModal(){
       <label class="bp-status" title="Set the stage by hand, or put the bid on hold">${sel('status',BID_ST)}</label>
       ${isNew&&work?'<button class="btn primary" data-act="save">Create bid</button>':''}</div></div>
   <div class="bp-tabs" role="tablist">${tabs}${b.status==='On Hold'?'<span class="bp-hold">'+pill('On hold','warn')+'</span>':''}</div>
-  <div class="mbody bp-body"><div class="bp-grid"><div class="bp-main">${archNote}${supBanner(b)}${bidReqBanner(b)}${body}</div><aside class="bp-aside">${bpAside(b,work,admin,isNew)}</aside></div></div>
+  <div class="mbody bp-body"><div class="bp-grid"><div class="bp-main">${archNote}${supBanner(b)}${bidReqBanner(b)}${trkStrip(b)}${body}</div><aside class="bp-aside">${bpAside(b,work,admin,isNew)}</aside></div></div>
   <div class="mfoot bp-foot"><div style="display:flex;gap:8px;flex-wrap:wrap">${work&&!isNew?'<button class="btn" data-act="sup-start" title="Same project, new name or details — keeps everything and records the change">↻ Supersede</button>':''}${admin&&!isNew?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button><button class="btn" data-act="${b.archived_at?'bid-restore':'bid-archive'}">${b.archived_at?'Restore':'Archive'}</button>${b.status==='Awarded'?`<button class="btn" data-act="create-job">${S.jobs.some(j=>j.bid_id===b.id)?'Open job':'Create job'}</button>`:''}`:''}</div>
   <div class="r">${bpAdvanceHtml(b,work,isNew)}</div></div>`;
 }
@@ -1089,8 +1090,7 @@ function bpAdvanceHtml(b,work,isNew){
 function bpProject(b,work,admin){
   const ests=S.estimators.filter(e=>e.active!==false||e.id===b.lead_estimator_id||b.support_estimator_ids.includes(e.id));
   const clientsSorted=S.clients.slice().sort((a,c)=>a.company.localeCompare(c.company));
-  return `${trackRow(b)}
-  <fieldset><legend>Project</legend><div class="fg">
+  return `<fieldset><legend>Project</legend><div class="fg">
     <label class="f s2">Project name ${work?'<span class="req">required</span>':''}<input class="field" ${bf('name')} placeholder="e.g. Riverside Commerce Park"></label>
     <label class="f s2">Location<input class="field" ${bf('location')} placeholder="City, county or address"></label>
     <label class="f">Project type${sel('project_type',PROJECT_TYPES)}</label>
@@ -7877,33 +7877,36 @@ function trackEmail(c,b,url){const who=String((b&&(b.client_contacts||{})[c.id])
   return {subject:`${co?co+' — ':''}bid tracker${b?' for '+b.name:''}`,
     body:`${who?'Hi '+who.split(' ')[0]:'Hello'},\n\n${b?`Thank you for the invitation to bid ${b.name}. `:''}The link below is for tracking purposes. It shows where our bid stands on every project you’ve sent us: the stage it’s in, the bid due date, when to expect our proposal, the addenda we’ve acknowledged and who to call with questions.\n\n${url}\n\nNo login is needed, and the same link keeps working for future projects. It’s private to ${c.company||'your company'}, so please keep it within your team.\n\nThank you,\n${myName()}${me&&me.phone?'\n'+me.phone:''}${co?'\n'+co:''}`}}
 async function trackOpen(clientIds,bidId){const ids=(clientIds||[]).filter(id=>byId(S.clients,id));if(!ids.length)return;M={kind:'track',ids,bidId:bidId||null,cur:ids[0],links:{},fromNew:!!bidId&&M===null};showModal();trackLoad(ids[0])}
-async function trackLoad(id,fresh){const x=M;if(!x||x.kind!=='track')return;try{const tk=await run(sb.rpc('client_track_link',{p_client:id,p_new:!!fresh}));x.links[id]=tk;x.err=null}catch(e){x.err=/client_track_link|does not exist|schema cache|PGRST202/i.test(errMsg(e))?TRACK_SQL:errMsg(e)}if(M===x)renderModal()}
-function trackModal(){const x=M;const c=byId(S.clients,x.cur)||{};const b=x.bidId?byId(S.bids,x.bidId):null;const tk=x.links[x.cur];const url=tk?trackUrl(tk):'';const em=tk?trackEmail(c,b,url):null;
+async function trackLoad(id,fresh){const x=trkCtx();if(!x)return;trkSendsLoad();try{const tk=await run(sb.rpc('client_track_link',{p_client:id,p_new:!!fresh}));x.links[id]=tk;x.err=null}catch(e){x.err=/client_track_link|does not exist|schema cache|PGRST202/i.test(errMsg(e))?TRACK_SQL:errMsg(e)}if(trkCtx()===x)renderModal()}
+function trackModal(){const x=trkCtx();const inBid=M.kind==='bid';const c=byId(S.clients,x.cur)||{};const b=x.bidId?byId(S.bids,x.bidId):null;const tk=x.links[x.cur];const url=tk?trackUrl(tk):'';const em=tk?trackEmail(c,b,url):null;
   const n=S.bids.filter(q=>(q.client_ids||[]).includes(c.id)&&!q.archived_at&&!DECIDED.includes(q.status)).length;
   return mhead('Client tracker link',b?`${b.name} — send the GC their tracking link`:c.company||'')+`<div class="mbody">
     ${x.ids.length>1?`<div class="seg" style="margin-bottom:12px">${x.ids.map(id=>`<button class="${id===x.cur?'on':''}" data-act="trk-pick" data-id="${id}">${esc(byId(S.clients,id)?.company||'')}</button>`).join('')}</div>`:''}
     ${x.err?`<div class="notice">${esc(x.err)}</div>`:!tk?'<p class="dim">Getting the link…</p>':`
     <p class="small" style="margin:0 0 10px"><b>${esc(c.company||'This client')}</b> has one private link. It shows all ${n} of their bids in progress and any new ones you add later, so you only need to send it once.</p>
+    ${trkSentHtml(x,c)}
     <fieldset><legend>Link</legend><div class="pt-row"><input class="field" id="trk-url" readonly value="${esc(url)}" onfocus="this.select()"><button class="btn primary" data-act="trk-copy" data-v="url">Copy link</button><a class="btn" href="${esc(url)}" target="_blank" rel="noopener">Preview</a></div></fieldset>
     <fieldset><legend>Email to send them</legend><label class="f">Subject<input class="field" id="trk-subj" data-trk="subject" value="${esc(x.subject??em.subject)}"></label><label class="f">Message<textarea class="field" id="trk-body" data-trk="body" rows="11">${esc(x.body??em.body)}</textarea></label>
       <div class="adders"><button class="btn primary" data-act="trk-copy" data-v="email">Copy email</button><button class="btn" data-act="trk-mail">Open in my email</button></div>
       <p class="hint">Paste it into Outlook or Gmail and send it yourself. The client sees stages, dates, acknowledged addenda and the lead estimator’s contact — never prices, other GCs or your notes.</p></fieldset>
     ${isAdmin()?`<button class="btn sm ghost${x.arm2?' danger':''}" data-act="trk-new">${x.arm2?'Click again — the old link stops working':'Replace this link (turns the old one off)'}</button>`:''}`}</div>
-  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">${x.bidId?'Done':'Close'}</button></div></div>`}
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="${inBid?'trk-back':'close'}">${inBid?'Back to the bid':x.bidId?'Done':'Close'}</button></div></div>`}
 function trackRow(b){if(!b||b._new||!can('bids','edit'))return '';const ids=(b.client_ids||[]).filter(id=>byId(S.clients,id));if(!ids.length)return '';
   return `<div class="trk-row small"><span class="dim">Client tracker:</span> ${ids.map(id=>`<button class="linkbtn" data-act="trk-open" data-id="${id}" data-bid="${b.id}">${esc(byId(S.clients,id).company)}</button>`).join(' · ')}</div>`}
 FOCUS_ATTRS.push('data-trk');
-document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('trk-'))return;const x=M&&M.kind==='track'?M:null;
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('trk-'))return;const x=trkCtx();
   const copy=(txt,msg)=>(navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast(msg)).catch(()=>toast('Couldn’t copy — select the text and copy it by hand.'));
   const cur=()=>{const c=byId(S.clients,x.cur)||{};const b=x.bidId?byId(S.bids,x.bidId):null;const em=trackEmail(c,b,trackUrl(x.links[x.cur]));return {subject:x.subject??em.subject,body:x.body??em.body,c,b}};
   switch(a){
-    case 'trk-open':{const bid=t.dataset.bid||null;const id=t.dataset.id;closeModal();M={kind:'track',ids:[id],bidId:bid,cur:id,links:{}};showModal();trackLoad(id);break}
+    case 'trk-open':{const bid=t.dataset.bid||null;const id=t.dataset.id;if(M&&M.kind==='bid'){M.trk={ids:(M.draft.client_ids||[]).filter(c=>byId(S.clients,c)),bidId:M.draft.id,cur:id,links:{}};if(!M.trk.ids.includes(id))M.trk.ids=[id];renderModal();trackLoad(id);break}closeModal();M={kind:'track',ids:[id],bidId:bid,cur:id,links:{}};showModal();trackLoad(id);break}
+    case 'trk-back':if(M&&M.kind==='bid'){M.trk=null;renderModal()}break;
+    case 'trk-sent':if(x)trkMarkSent(x);break;
     case 'trk-pick':if(x){x.cur=t.dataset.id;x.subject=x.body=undefined;x.arm2=false;renderModal();if(!x.links[x.cur])trackLoad(x.cur)}break;
-    case 'trk-copy':if(x&&x.links[x.cur]){if(t.dataset.v==='url')copy(trackUrl(x.links[x.cur]),'Link copied');else{const m=cur();copy(`Subject: ${m.subject}\n\n${m.body}`,'Email copied')}}break;
-    case 'trk-mail':if(x&&x.links[x.cur]){const m=cur();const to=(/[^\s<>(),;]+@[^\s<>(),;]+/.exec(String((m.b&&(m.b.client_contacts||{})[m.c.id])||'')+' '+String(m.c.email||''))||[''])[0];location.href=`mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`}break;
+    case 'trk-copy':if(x&&x.links[x.cur]){if(t.dataset.v==='url')copy(trackUrl(x.links[x.cur]),'Link copied');else{const m=cur();copy(`Subject: ${m.subject}\n\n${m.body}`,'Email copied')}x.ask=true;renderModal()}break;
+    case 'trk-mail':if(x&&x.links[x.cur]){const m=cur();const to=(/[^\s<>(),;]+@[^\s<>(),;]+/.exec(String((m.b&&(m.b.client_contacts||{})[m.c.id])||'')+' '+String(m.c.email||''))||[''])[0];location.href=`mailto:${encodeURIComponent(to)}?subject=${encodeURIComponent(m.subject)}&body=${encodeURIComponent(m.body)}`;x.ask=true;renderModal()}break;
     case 'trk-new':if(x&&isAdmin()){if(!x.arm2){x.arm2=true;renderModal();break}x.arm2=false;x.subject=x.body=undefined;delete x.links[x.cur];renderModal();trackLoad(x.cur,true).then(()=>toast('New link made. The old one no longer works.'))}break;
   }});
-document.addEventListener('input',e=>{const t=e.target;if(M&&M.kind==='track'&&t.dataset.trk)M[t.dataset.trk]=t.value});
+document.addEventListener('input',e=>{const t=e.target;const x=trkCtx();if(x&&t.dataset.trk)x[t.dataset.trk]=t.value});
 
 
 /* ---- pipeline stage bar on the bid: where it is, and click to move it ---- */
@@ -11333,3 +11336,26 @@ document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')re
   if(t.dataset.tgf&&t.dataset.g){const k=t.dataset.tgf;if(t.value==='__mixed')return;tgApply(t.dataset.g,it=>{if(k==='status'){if(it.status!=='Complete'&&it.status!=='N/A')it.status=t.value}else it[k]=t.value});renderModal();return}
   if(t.dataset.act==='tg-add'&&t.value!==''){const it=b.scope_items[+t.value];if(it){it.tg=t.dataset.g;const ms=tgMembers(b,t.dataset.g).map(o=>o.it).filter(x=>x!==it);if(ms[0]){it.assignee_id=ms[0].assignee_id||'';if(it.status!=='Complete')it.status=ms.some(x=>x.status==='In Progress')?'In Progress':it.status}}renderModal();return}
   if(t.dataset.tgname!=null){const old=t.dataset.tgname;const nw=t.value.trim();if(!nw||nw===old){t.value=old;return}if(tgNames(b).some(x=>x!==old&&x.toLowerCase()===nw.toLowerCase())){toast('There’s already a group with that name.');t.value=old;return}tgApply(old,it=>{it.tg=nw});renderModal()}});
+
+/* ----- when each GC was last sent their tracker link (track_sends, update-40) -----
+   One link covers all of a client's bids, so a send from any bid (or the Clients page) counts for all of them. */
+const TRK_DAYS=30;
+function trkCtx(){return M&&M.kind==='track'?M:(M&&M.kind==='bid'&&M.trk)?M.trk:null}
+async function trkSendsLoad(force){if(S.trkSends&&!force)return;if(trkSendsLoad.busy)return;trkSendsLoad.busy=true;
+  try{const {data,error}=await sb.from('track_sends').select('*').order('sent_at',{ascending:false}).limit(3000);if(error)throw error;S.trkSends=data||[];S.trkMissing=false}
+  catch(e){S.trkSends=S.trkSends||[];S.trkMissing=/track_sends|does not exist|schema cache|PGRST205|42P01/i.test(errMsg(e))}
+  finally{trkSendsLoad.busy=false}if(M)renderModal();else render()}
+const trkLast=cid=>(S.trkSends||[]).filter(r=>r.client_id===cid&&r.sent_at).sort((x,y)=>String(y.sent_at).localeCompare(String(x.sent_at)))[0]||null;
+const trkAgo=at=>{const d=Math.floor((Date.now()-new Date(at).getTime())/864e5);return d<=0?'today':d===1?'yesterday':d+' days ago'};
+function trkState(cid){const r=trkLast(cid);if(!r)return {k:'none'};const days=Math.floor((Date.now()-new Date(r.sent_at).getTime())/864e5);const next=new Date(new Date(r.sent_at).getTime()+TRK_DAYS*864e5);return {k:days<TRK_DAYS?'ok':'due',r,days,next}}
+function trkStrip(b){if(!b||b._new||!can('bids','edit'))return '';const ids=(b.client_ids||[]).filter(id=>byId(S.clients,id));if(!ids.length)return '';
+  if(!S.trkSends&&!S.trkMissing){trkSendsLoad();return ''}
+  const rows=ids.map(id=>{const c=byId(S.clients,id);const st=trkState(id);
+    const msg=st.k==='none'?'<b>Tracker link not sent yet</b>':st.k==='ok'?`Tracker link sent ${fmtShort(String(st.r.sent_at).slice(0,10))} (${trkAgo(st.r.sent_at)})${st.r.sent_by_name?' by '+esc(st.r.sent_by_name):''} · no need to resend until ${st.next.toLocaleDateString('en-US',{month:'short',day:'numeric'})}`:`Last sent ${fmtShort(String(st.r.sent_at).slice(0,10))}, ${st.days} days ago · time to send it again`;
+    return `<div class="trk-line ${st.k}"><span class="trk-dot"></span><span class="trk-co">${esc(c.company)}</span><span class="trk-msg">${msg}</span><button class="btn xs${st.k==='ok'?' ghost':''}" data-act="trk-open" data-id="${id}" data-bid="${b.id}">${st.k==='none'?'Send tracker link':st.k==='ok'?'Open link':'Send again'}</button></div>`}).join('');
+  return `<div class="trk-strip">${rows}${S.trkMissing&&isAdmin()?'<div class="small dim" style="margin-top:4px">To remember when links were sent, run <b>update-40-track-sends.sql</b> in Supabase.</div>':''}</div>`}
+function trkSentHtml(x,c){const st=trkState(c.id);
+  const line=S.trkMissing?'<span class="dim">Sends aren’t recorded until update-40 is run in Supabase.</span>':st.k==='none'?'Not sent to them yet.':`Last sent ${fmtShort(String(st.r.sent_at).slice(0,10))} (${trkAgo(st.r.sent_at)})${st.r.sent_by_name?' by '+esc(st.r.sent_by_name):''}.${st.k==='ok'?` Good until ${st.next.toLocaleDateString('en-US',{month:'short',day:'numeric'})}.`:' Time to send it again.'}`;
+  return `<div class="trk-sent ${st.k}${x.ask?' ask':''}"><span>${line}</span>${S.trkMissing?'':`<button class="btn sm${x.ask?' primary':''}" data-act="trk-sent">${x.ask?'Sent it? ✓ Mark as sent today':'✓ Mark as sent today'}</button>`}</div>`}
+async function trkMarkSent(x){const cid=x.cur;try{const {error}=await sb.from('track_sends').insert({client_id:cid,bid_id:x.bidId||null,sent_at:new Date().toISOString(),sent_by:S.session.user.id,sent_by_name:myName()});if(error)throw error;x.ask=false;await trkSendsLoad(true);toast(`Marked as sent to ${byId(S.clients,cid)?.company||'the client'}.`)}
+  catch(e){if(/track_sends|does not exist|schema cache|PGRST205|42P01/i.test(errMsg(e))){S.trkMissing=true;renderModal();toast('Run update-40 in Supabase to record sends.')}else toast(errMsg(e))}}
