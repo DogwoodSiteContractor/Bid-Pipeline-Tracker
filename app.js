@@ -211,6 +211,7 @@ function stageInfo(b,qs){
   if(current<0)current=sc.length&&scDone===sc.length?(qs.length&&qIn===qs.length?3:2):sc.some(x=>x!=='Not Started')?2:qs.length?1:0;   // on hold: best guess from the work
   const part=[.15,.5,sc.length?Math.max(.12,scDone/sc.length):.3,qs.length?Math.max(.12,qIn/qs.length):.5,b.status==='Proposal Review'?.85:.4,.5,1][current];
   const st=STAGES.map((_,i)=>i<current?1:i===current?(decided?1:part):0);
+  const qOut=qs.filter(q=>q.status==='Requested').length;if(!decided&&current>3&&qOut&&qs.length)st[3]=Math.max(.08,qIn/qs.length);
   const detail=['Invitation is in',
     qs.length?`${qs.length} quote request${qs.length===1?'':'s'} out`:'Quote requests going out',
     sc.length?`${scDone} of ${sc.length} scopes signed off`:'No scopes selected yet',
@@ -218,16 +219,16 @@ function stageInfo(b,qs){
     b.status==='Proposal Review'?'Ready for review: estimate and proposal are done':'Working on the estimate and proposal',
     (b.client_ids||[]).length>1?`Sent to ${(b.client_ids||[]).filter(id=>['Sent','Lost','Awarded'].includes(propOf(b,id).status)).length} of ${b.client_ids.length} GCs · waiting on decision`:'Waiting on GC decision',
     b.status==='Awarded'?'Awarded':b.status==='Not Awarded'?'Not awarded':b.status==='No Bid'?'Passed on this bid':''][current];
-  return {st,current,detail,decided};
+  return {st,current,detail:detail+(!decided&&current>3&&qOut?` · ${qOut} quote${qOut===1?'':'s'} still out`:''),decided,qOut:current>3&&!decided?qOut:0};
 }
 function progress(b,opts={}){
   const {st,current,detail,decided}=stageInfo(b,opts.quotes);
   const end=b.status==='Awarded'?'won':b.status==='Not Awarded'?'lost':b.status==='No Bid'?'nobid':'';
-  const bars=STAGES.map((s,i)=>{const cls=i===LAST&&decided?end:st[i]>=1?'done':i===current?'cur':'';
+  const bars=STAGES.map((s,i)=>{const cls=i===LAST&&decided?end:st[i]>=1?'done':i===current?'cur':i<current?'open':'';
     return `<i class="${cls}"><b style="width:${Math.round((i===current&&!decided?Math.max(st[i],.12):st[i])*100)}%"></b></i>`}).join('');
-  const labs=STAGES.map((s,i)=>`<span class="${i===current?(decided?end||'cur':'cur'):st[i]>=1?'done':''}">${i===LAST&&decided?esc(b.status):s}</span>`).join('');
+  const labs=STAGES.map((s,i)=>`<span class="${i===current?(decided?end||'cur':'cur'):st[i]>=1?'done':i<current?'open':''}">${i===LAST&&decided?esc(b.status):s}</span>`).join('');
   const hold=b.status==='On Hold'?' · on hold':'';
-  return `<div class="prog${opts.lg?' lg':''}" title="${esc(STAGE_NAMES.map((n,i)=>n+': '+(st[i]>=1?'done':st[i]>0?'in progress':'not started')).join('\n'))}">
+  return `<div class="prog${opts.lg?' lg':''}" title="${esc(STAGE_NAMES.map((n,i)=>n+': '+(st[i]>=1?'done':i<current?'still open':st[i]>0?'in progress':'not started')).join('\n'))}">
     <div class="prog-bar">${bars}</div><div class="prog-lab">${labs}</div>
     ${opts.lg?`<div class="prog-now">Step ${current+1} of ${STAGES.length} · <b>${STAGE_NAMES[current]}</b> — ${esc(detail)}${hold}</div>`:''}</div>`;
 }
@@ -538,7 +539,7 @@ function overviewTable(all){
     ${groups.map(([,g])=>`<td>${groupStatus(b,g)}</td>`).join('')}
     <td>${pill(b.proposal_status||'Not Started',PROP_CLS[b.proposal_status])}${revisions(b).length>1||lastTouch(b)?`<div class="dim small" style="margin-top:3px">${[revisions(b).length>1?'Rev '+esc(revisions(b)[revisions(b).length-1].rev):'',lastTouch(b)?'GC contact '+fmtShort(lastTouch(b)):''].filter(Boolean).join(' · ')}</div>`:''}${openAddenda(b).length?`<div class="small" style="margin-top:3px;color:var(--warn);font-weight:600;white-space:nowrap">${openAddenda(b).length} addend${openAddenda(b).length===1?'um':'a'} open</div>`:''}</td>
     <td class="r num">${ovNumber(b)}</td>
-    <td>${stPill(b.status,b)}</td></tr>`).join('');
+    <td>${stPill(b.status,b)}${(()=>{const n=stageInfo(b).qOut;return n?`<div class="small" style="color:var(--warn);font-weight:600;margin-top:3px;white-space:nowrap">⏳ ${n} quote${n===1?'':'s'} out</div>`:''})()}</td></tr>`).join('');
   return `${all.length?ovBar(all,list.length):''}<div class="panel scroll"><table class="ov"><thead><tr>${th('name','Project')}${th('client','GC / client')}${th('due','Due date')}${groups.map(([l])=>th('g:'+l,l)).join('')}${th('proposal','Proposal')}${th('value','Our number','r')}${th('status','Status')}</tr></thead>
    <tbody>${rows||`<tr><td colspan="${6+groups.length}"><div class="empty">${all.length?'<b>No bids match these filters</b><button class="btn sm" data-act="ov-clear">Clear filters</button>':`<b>No active bids</b>${isAdmin()?'Click <b>+ New bid</b> to add one.':''}`}</div></td></tr>`}</tbody></table></div>`;
 }
@@ -884,7 +885,7 @@ function card(b){
   const picked=S.selMode&&S.sel?.has(b.id);
   return `<div class="card${picked?' picked':''}" role="button" tabindex="0" data-act="open-bid" data-id="${b.id}"${S.selMode?` aria-pressed="${picked?'true':'false'}"`:''}>${S.selMode?`<span class="pickbox" aria-hidden="true">${picked?'✓':''}</span>`:''}
    <div class="card-top"><div><h3>${esc(b.name)}${b.archived_at?' <span class="pill na" style="font-size:11px;vertical-align:3px">Archived</span>':''}</h3>${supTag(b,true)}<div class="meta">${clientsLine(b)}</div>${b.project_type||unitsText(b)?`<div class="meta" style="margin-top:1px">${[normProjectType(b.project_type),unitsText(b)].filter(Boolean).map(esc).join(' · ')}</div>`:''}</div>${stPill(b.status,b)}</div>
-   ${progress(b)}
+   ${progress(b)}${(()=>{const n=stageInfo(b,qs).qOut;return n?`<div class="q-out">⏳ ${n} quote${n===1?'':'s'} still out</div>`:''})()}
    <div class="row">${dueCell(b)}<div style="text-align:right">${v?`<div class="val">${money(v)}</div><div class="dim small">${b.use_for==='without'?'Without':'With'} site improvements</div>`:`<div class="dim small">Proposal ${esc((b.proposal_status||'Not Started').toLowerCase())}</div>`}</div></div>
    <div class="scopes">${scopePills(b)}</div>
    <div class="foot"><span class="who" style="gap:3px">${team.map(id=>avatar(id,24)).join('')||'<span class="dim small">No estimator</span>'}</span>
