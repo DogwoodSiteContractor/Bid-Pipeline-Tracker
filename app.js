@@ -13,6 +13,8 @@ const PROP_CLS={'Not Started':'','In Progress':'warn','Complete':'good','Sent':'
 const BID_ST=['Project Created','RFQ Sent','Takeoff','Quotes Received','Estimating','Proposal Review','Submitted','On Hold','Awarded','Not Awarded','No Bid'];
 const BID_ABOUT={'Project Created':'Invitation is in; nothing started yet','RFQ Sent':'Quote requests are out to vendors and subs','Takeoff':'Quantities are being taken off','Quotes Received':'Vendor and sub quotes are back','Estimating':'Building and pricing the estimate','Proposal Review':'Estimate is being checked and the proposal written','Submitted':'Proposal has gone to the GC','On Hold':'Paused','Awarded':'We got it','Not Awarded':'Went to someone else','No Bid':'We passed on it'};
 const BID_CLS={'Project Created':'','RFQ Sent':'st2','Takeoff':'st3','Quotes Received':'st4','Estimating':'warn','Proposal Review':'hot','Submitted':'info','On Hold':'','Awarded':'good','Not Awarded':'bad','No Bid':'na'};
+const ST_LABEL={'Estimating':'Estimate & proposal','Proposal Review':'Ready for review'};const stLabel=s=>ST_LABEL[s]||s;
+const stPill=s=>pill(stLabel(s),BID_CLS[s]);
 const ACTIVE=['Project Created','RFQ Sent','Takeoff','Quotes Received','Estimating','Proposal Review','Submitted','On Hold'];
 const PRE_SUBMIT=['Project Created','RFQ Sent','Takeoff','Quotes Received','Estimating','Proposal Review'];
 const stageNo=s=>PRE_SUBMIT.indexOf(s);   // -1 once it's sent, on hold or decided
@@ -193,8 +195,9 @@ function toast(msg){const t=$('#toast');t.innerHTML=`<div class="toast">${esc(ms
 
 
 /* ---------- pipeline progress (derived automatically from the bid) ---------- */
-const STAGES=['Created','RFQ sent','Takeoff','Quotes in','Estimating','Review','Sent','Decision'];
-const STAGE_NAMES=['Project created','RFQ sent','Takeoff','Quotes received','Estimating','Proposal review','Proposal sent','Decision'];
+const STAGES=['Created','RFQ sent','Takeoff','Quotes in','Estimate & proposal','Sent','Decision'];
+const STAGE_NAMES=['Project created','RFQ sent','Takeoff','Quotes received','Estimate & proposal','Proposal sent','Decision'];
+const stageIdx=s=>{const i=stageNo(s);return i===5?4:i};
 const LAST=STAGES.length-1;
 // Follows the bid's stage. The stage in progress fills part-way from the real work: scopes signed off, quotes back.
 function stageInfo(b,qs){
@@ -202,16 +205,15 @@ function stageInfo(b,qs){
   const sc=scopeItems(b).map(x=>x.status||'Not Started');
   const decided=DECIDED.includes(b.status);const submitted=isSent(b);
   const scDone=sc.filter(x=>x==='Complete'||x==='N/A').length,qIn=qs.filter(q=>q.status!=='Requested').length;
-  let current=decided?LAST:submitted?6:stageNo(b.status);
+  let current=decided?LAST:submitted?5:stageIdx(b.status);
   if(current<0)current=sc.length&&scDone===sc.length?(qs.length&&qIn===qs.length?3:2):sc.some(x=>x!=='Not Started')?2:qs.length?1:0;   // on hold: best guess from the work
-  const part=[.15,.5,sc.length?Math.max(.12,scDone/sc.length):.3,qs.length?Math.max(.12,qIn/qs.length):.5,.5,.5,.5,1][current];
+  const part=[.15,.5,sc.length?Math.max(.12,scDone/sc.length):.3,qs.length?Math.max(.12,qIn/qs.length):.5,b.status==='Proposal Review'?.85:.4,.5,1][current];
   const st=STAGES.map((_,i)=>i<current?1:i===current?(decided?1:part):0);
   const detail=['Invitation is in',
     qs.length?`${qs.length} quote request${qs.length===1?'':'s'} out`:'Quote requests going out',
     sc.length?`${scDone} of ${sc.length} scopes signed off`:'No scopes selected yet',
     qs.length?`${qIn} of ${qs.length} quotes in`:'No quotes requested',
-    'Building the estimate',
-    'Checking the numbers and writing the proposal',
+    b.status==='Proposal Review'?'Ready for review: estimate and proposal are done':'Working on the estimate and proposal',
     (b.client_ids||[]).length>1?`Sent to ${(b.client_ids||[]).filter(id=>['Sent','Lost','Awarded'].includes(propOf(b,id).status)).length} of ${b.client_ids.length} GCs · waiting on decision`:'Waiting on GC decision',
     b.status==='Awarded'?'Awarded':b.status==='Not Awarded'?'Not awarded':b.status==='No Bid'?'Passed on this bid':''][current];
   return {st,current,detail,decided};
@@ -395,13 +397,13 @@ document.addEventListener('submit',async e=>{
 /* ---------- dashboard ---------- */
 function vDashboard(){
   const d=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}</div></div>`+bidReqPanel()+fuPanel()+mine();
+  if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}</div></div>`+bidReqPanel()+reviewPanel()+fuPanel()+mine();
   if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}</div></div>`+bidReqPanel()+fuPanel()+precon();
   if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}</div></div>`+board();
   return `<div class="head"><div><h1>${S.dash==='precon'?'Bid pipeline dashboard':'Board dashboard'}</h1><p>${d}${S.lastLoaded?` · <span class="dim">Last updated ${S.lastLoaded.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>`:''}</p></div>
   <div class="tools">${S.dash==='board'?yearSelect()+(S.bids.some(b=>b.archived_at)?`<label class="check small" title="Archived bids are left out of the numbers unless this is on"><input type="checkbox" data-inclarch${S.inclArch?' checked':''}> Include archived</label>`:'')+'<button class="btn" data-act="board-custom">Customize view</button>':'<button class="btn" data-act="refresh">↻ Refresh</button>'}
   <div class="seg" role="tablist"><button class="${S.dash==='precon'?'on':''}" data-act="dash" data-v="precon">Precon<small>Daily work</small></button><button class="${S.dash==='board'?'on':''}" data-act="dash" data-v="board">Board<small>Results & trends</small></button></div></div></div>`
-  +(S.dash==='precon'?vxUpkeepHtml():'')+bidReqPanel()+fuPanel()+(S.dash==='precon'?precon():board());
+  +(S.dash==='precon'?vxUpkeepHtml():'')+bidReqPanel()+reviewPanel()+fuPanel()+(S.dash==='precon'?precon():board());
 }
 function yearSelect(){const ys=new Set([new Date().getFullYear()]);S.bids.filter(statOk).forEach(b=>ys.add(yearOf(b)));return `<select class="field" data-act="year" style="width:auto">${[...ys].sort((a,b)=>b-a).map(y=>`<option${y===S.year?' selected':''}>${y}</option>`).join('')}</select>`}
 function kpi(l,v,s,cls,filter){const tag=filter?'button':'div';return `<${tag} class="kpi ${cls||''}"${filter?` data-act="kpi-filter" data-v="${filter}"`:''}><div class="l">${l}</div><div class="v">${v}</div><div class="s">${esc(s)}</div></${tag}>`}
@@ -430,7 +432,7 @@ function bidTable(list,opts={}){
     <td class="num">${qs.length?`${rec}/${qs.length}`:'<span class="dim">—</span>'}</td>
     <td class="num">${filesFor(b.id).length||'<span class="dim">—</span>'}</td>
     <td class="r num" style="font-weight:600">${bidValue(b)?money(bidValue(b)):'<span class="dim">—</span>'}</td>
-    <td>${pill(b.status,BID_CLS[b.status])}<div class="dim small" style="margin-top:3px;white-space:nowrap">Step ${stageInfo(b).current+1}: ${STAGES[stageInfo(b).current]}</div></td></tr>`}).join('');
+    <td>${stPill(b.status)}<div class="dim small" style="margin-top:3px;white-space:nowrap">Step ${stageInfo(b).current+1}: ${STAGES[stageInfo(b).current]}</div></td></tr>`}).join('');
   return `<div class="panel scroll"><table><thead><tr><th>Project</th><th>Bidding to</th><th>${opts.mine?'My role':'Estimator'}</th><th>Due</th><th>Scope takeoff</th><th>Proposal</th><th>Quotes in</th><th>Files</th><th class="r">Bid value</th><th>Status</th></tr></thead>
    <tbody>${rows||`<tr><td colspan="10"><div class="empty"><b>No active bids</b>${opts.mine?'Bids your precon manager assigns to you will show up here.':'Add a new bid to get started.'}</div></td></tr>`}</tbody></table></div>`;
 }
@@ -534,7 +536,7 @@ function overviewTable(all){
     ${groups.map(([,g])=>`<td>${groupStatus(b,g)}</td>`).join('')}
     <td>${pill(b.proposal_status||'Not Started',PROP_CLS[b.proposal_status])}${revisions(b).length>1||lastTouch(b)?`<div class="dim small" style="margin-top:3px">${[revisions(b).length>1?'Rev '+esc(revisions(b)[revisions(b).length-1].rev):'',lastTouch(b)?'GC contact '+fmtShort(lastTouch(b)):''].filter(Boolean).join(' · ')}</div>`:''}${openAddenda(b).length?`<div class="small" style="margin-top:3px;color:var(--warn);font-weight:600;white-space:nowrap">${openAddenda(b).length} addend${openAddenda(b).length===1?'um':'a'} open</div>`:''}</td>
     <td class="r num">${ovNumber(b)}</td>
-    <td>${pill(b.status,BID_CLS[b.status])}</td></tr>`).join('');
+    <td>${stPill(b.status)}</td></tr>`).join('');
   return `${all.length?ovBar(all,list.length):''}<div class="panel scroll"><table class="ov"><thead><tr>${th('name','Project')}${th('client','GC / client')}${th('due','Due date')}${groups.map(([l])=>th('g:'+l,l)).join('')}${th('proposal','Proposal')}${th('value','Our number','r')}${th('status','Status')}</tr></thead>
    <tbody>${rows||`<tr><td colspan="${6+groups.length}"><div class="empty">${all.length?'<b>No bids match these filters</b><button class="btn sm" data-act="ov-clear">Clear filters</button>':`<b>No active bids</b>${isAdmin()?'Click <b>+ New bid</b> to add one.':''}`}</div></td></tr>`}</tbody></table></div>`;
 }
@@ -542,7 +544,7 @@ function closedTable(list){
   return `<div class="panel scroll"><table><thead><tr><th>Project</th><th>GC / client</th><th>Due date</th><th class="r">W/ site impr.</th><th class="r">W/O site impr.</th><th class="r">Contract</th><th>Status</th></tr></thead><tbody>
   ${list.slice(0,20).map(b=>`<tr class="click" data-act="open-bid" data-id="${b.id}"><td class="proj">${esc(b.name)}</td><td>${clientsLine(b,3)}</td><td>${fmtDate(b.due_date)}</td>
     <td class="r num">${amtCell(b,'amount_with')}</td><td class="r num">${amtCell(b,'amount_without')}</td>
-    <td class="r num" style="font-weight:700">${b.status==='Awarded'?money(wonValue(b)):'<span class="dim">—</span>'}</td><td>${pill(b.status,BID_CLS[b.status])}${b.status==='Not Awarded'&&b.lost_reason?`<div class="dim small">${esc(b.lost_reason)}</div>`:''}</td></tr>`).join('')}
+    <td class="r num" style="font-weight:700">${b.status==='Awarded'?money(wonValue(b)):'<span class="dim">—</span>'}</td><td>${stPill(b.status)}${b.status==='Not Awarded'&&b.lost_reason?`<div class="dim small">${esc(b.lost_reason)}</div>`:''}</td></tr>`).join('')}
   </tbody></table></div>`;
 }
 function setupGuide(){
@@ -651,7 +653,7 @@ function board(){
 
 /* ----- pipeline ----- */
 const ARCHIVED_FILTER=['archived','Archived',b=>!!b.archived_at];
-const FILTERS=[['active','All active',b=>ACTIVE.includes(b.status)],['notstarted','Project created',b=>b.status==='Project Created'],['rfq','RFQ sent',b=>b.status==='RFQ Sent'],['takeoff','Takeoff',b=>b.status==='Takeoff'],['quotes','Quotes received',b=>b.status==='Quotes Received'],['estimating','Estimating',b=>b.status==='Estimating'],['review','Proposal review',b=>b.status==='Proposal Review'],['submitted','Submitted',b=>b.status==='Submitted'],['hold','On hold',b=>b.status==='On Hold'],['awarded','Awarded',b=>b.status==='Awarded'],['lost','Not awarded',b=>b.status==='Not Awarded'],['nobid','No bid',b=>b.status==='No Bid'],['all','Everything',()=>true]];
+const FILTERS=[['active','All active',b=>ACTIVE.includes(b.status)],['notstarted','Project created',b=>b.status==='Project Created'],['rfq','RFQ sent',b=>b.status==='RFQ Sent'],['takeoff','Takeoff',b=>b.status==='Takeoff'],['quotes','Quotes received',b=>b.status==='Quotes Received'],['estimating','Estimate & proposal',b=>b.status==='Estimating'||b.status==='Proposal Review'],['review','Ready for review',b=>b.status==='Proposal Review'],['submitted','Submitted',b=>b.status==='Submitted'],['hold','On hold',b=>b.status==='On Hold'],['awarded','Awarded',b=>b.status==='Awarded'],['lost','Not awarded',b=>b.status==='Not Awarded'],['nobid','No bid',b=>b.status==='No Bid'],['all','Everything',()=>true]];
 /* =====================================================================
    Pipeline views: Cards / List / Calendar, filters, sort and search
    (view choices are remembered per browser)
@@ -783,7 +785,7 @@ function listView(list){
       <td class="small">${(b.client_ids||[]).slice(0,2).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}${clientWon(b,id)?' ✓':''}</div>`).join('')}${(b.client_ids||[]).length>2?`<div class="dim">+${b.client_ids.length-2} more</div>`:''}${(b.client_ids||[]).length?'':'<span class="dim">—</span>'}</td>
       <td class="small">${b.lead_estimator_id?`<span class="who">${avatar(b.lead_estimator_id,22)}${esc(estName(b.lead_estimator_id))}</span>`:'<span class="dim">—</span>'}</td>
       <td>${dueCell(b)}</td>
-      <td>${pill(b.status,BID_CLS[b.status])}</td>
+      <td>${stPill(b.status)}</td>
       <td>${miniProg(b)}</td>
       <td class="num small">${it.length?`${done}/${it.length}`:'<span class="dim">—</span>'}</td>
       <td class="num small">${qs.length?`${rec}/${qs.length}`:'<span class="dim">—</span>'}</td>
@@ -816,8 +818,8 @@ function calendarView(list){
   const grid=cells.map(c=>{const es=by[c.ds]||[];const more=es.length-3;
     return `<div class="cday${c.out?' out':''}${c.ds===today?' today':''}${open===c.ds?' open':''}"><button class="cnum" data-act="cal-day" data-d="${c.ds}" aria-label="${fmtDate(c.ds)}, ${es.length} event${es.length===1?'':'s'}">${c.d.getDate()}</button>
       ${es.slice(0,3).map(evHtml).join('')}${more>0?`<button class="cmore" data-act="cal-day" data-d="${c.ds}">+${more} more</button>`:''}</div>`}).join('');
-  const dayList=open&&by[open]?`<div class="panel pad cal-daylist"><div class="sec-h" style="margin:0 0 8px"><h2>${fmtDate(open)}</h2><button class="x" data-act="cal-day" data-d="" aria-label="Close">×</button></div><div class="list">${by[open].map(e=>`<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${e.b.id}">${esc(e.label)}</button><div class="dim small"><span class="cdot ${e.type}"></span>${CAL_TYPES.find(x=>x[0]===e.type)[1]}${e.time?' · '+esc(e.time):''}</div></div>${pill(e.b.status,BID_CLS[e.b.status])}</div>`).join('')}</div></div>`:'';
-  const agenda=inMonth.length?`<div class="list">${inMonth.map(e=>`<div class="li"><div style="display:flex;gap:12px;align-items:center"><div class="agd${e.date===today?' today':''}"><b>${parseD(e.date).getDate()}</b><span>${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][parseD(e.date).getDay()]}</span></div><div><button class="linkish" data-act="open-bid" data-id="${e.b.id}">${esc(e.label)}</button><div class="dim small"><span class="cdot ${e.type}"></span>${CAL_TYPES.find(x=>x[0]===e.type)[1]}${e.time?' · '+esc(e.time):''}</div></div></div>${pill(e.b.status,BID_CLS[e.b.status])}</div>`).join('')}</div>`:'<div class="empty">Nothing scheduled this month.</div>';
+  const dayList=open&&by[open]?`<div class="panel pad cal-daylist"><div class="sec-h" style="margin:0 0 8px"><h2>${fmtDate(open)}</h2><button class="x" data-act="cal-day" data-d="" aria-label="Close">×</button></div><div class="list">${by[open].map(e=>`<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${e.b.id}">${esc(e.label)}</button><div class="dim small"><span class="cdot ${e.type}"></span>${CAL_TYPES.find(x=>x[0]===e.type)[1]}${e.time?' · '+esc(e.time):''}</div></div>${stPill(e.b.status)}</div>`).join('')}</div></div>`:'';
+  const agenda=inMonth.length?`<div class="list">${inMonth.map(e=>`<div class="li"><div style="display:flex;gap:12px;align-items:center"><div class="agd${e.date===today?' today':''}"><b>${parseD(e.date).getDate()}</b><span>${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][parseD(e.date).getDay()]}</span></div><div><button class="linkish" data-act="open-bid" data-id="${e.b.id}">${esc(e.label)}</button><div class="dim small"><span class="cdot ${e.type}"></span>${CAL_TYPES.find(x=>x[0]===e.type)[1]}${e.time?' · '+esc(e.time):''}</div></div></div>${stPill(e.b.status)}</div>`).join('')}</div>`:'<div class="empty">Nothing scheduled this month.</div>';
   const undated=list.filter(b=>!b.due_date).length;
   return `<div class="cal-head">
     <div class="cal-nav"><button class="btn sm" data-act="cal-prev" aria-label="Previous month">‹</button><h2>${first.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</h2><button class="btn sm" data-act="cal-next" aria-label="Next month">›</button><button class="btn sm ghost" data-act="cal-today">Today</button></div>
@@ -845,7 +847,7 @@ function palItems(){
   if(q&&!isPM()){
     const bids=(onlyMine()?S.bids.filter(assigned):S.bids).filter(b=>matchesQuery(bidHaystack(b),q))
       .sort((a,b)=>((b.name||'').toLowerCase().includes(q)-(a.name||'').toLowerCase().includes(q))||(live(b)-live(a))||(a.due_date||'9').localeCompare(b.due_date||'9'));
-    bids.slice(0,8).forEach(b=>add('Bids',b.name,[b.status,b.due_date?fmtDate(b.due_date):'',clientsLine(b,1).replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")].filter(Boolean).join(' · '),()=>openBid(b.id),pill(b.status,BID_CLS[b.status])));
+    bids.slice(0,8).forEach(b=>add('Bids',b.name,[b.status,b.due_date?fmtDate(b.due_date):'',clientsLine(b,1).replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")].filter(Boolean).join(' · '),()=>openBid(b.id),stPill(b.status)));
     S.clients.filter(c=>matchesQuery([c.company,c.type,...(c.contacts||[]).map(x=>x.name+' '+x.email)].join(' ').toLowerCase(),q)).slice(0,5)
       .forEach(c=>add('Clients & GCs',c.company,[c.type,...(c.contacts||[]).map(x=>x.name).filter(Boolean).slice(0,2)].filter(Boolean).join(' · '),()=>{const d=clone(c);M={kind:'client',draft:d};showModal()}));
     S.vendors.filter(v=>matchesQuery([v.company,v.trade,v.vendor_type,v.contact_name,...vendorScopes(v)].join(' ').toLowerCase(),q)).slice(0,5)
@@ -879,7 +881,7 @@ function card(b){
   const team=[b.lead_estimator_id,...(b.support_estimator_ids||[])].filter(id=>byId(S.estimators,id));
   const picked=S.selMode&&S.sel?.has(b.id);
   return `<div class="card${picked?' picked':''}" role="button" tabindex="0" data-act="open-bid" data-id="${b.id}"${S.selMode?` aria-pressed="${picked?'true':'false'}"`:''}>${S.selMode?`<span class="pickbox" aria-hidden="true">${picked?'✓':''}</span>`:''}
-   <div class="card-top"><div><h3>${esc(b.name)}${b.archived_at?' <span class="pill na" style="font-size:11px;vertical-align:3px">Archived</span>':''}</h3>${supTag(b,true)}<div class="meta">${clientsLine(b)}</div>${b.project_type||unitsText(b)?`<div class="meta" style="margin-top:1px">${[normProjectType(b.project_type),unitsText(b)].filter(Boolean).map(esc).join(' · ')}</div>`:''}</div>${pill(b.status,BID_CLS[b.status])}</div>
+   <div class="card-top"><div><h3>${esc(b.name)}${b.archived_at?' <span class="pill na" style="font-size:11px;vertical-align:3px">Archived</span>':''}</h3>${supTag(b,true)}<div class="meta">${clientsLine(b)}</div>${b.project_type||unitsText(b)?`<div class="meta" style="margin-top:1px">${[normProjectType(b.project_type),unitsText(b)].filter(Boolean).map(esc).join(' · ')}</div>`:''}</div>${stPill(b.status)}</div>
    ${progress(b)}
    <div class="row">${dueCell(b)}<div style="text-align:right">${v?`<div class="val">${money(v)}</div><div class="dim small">${b.use_for==='without'?'Without':'With'} site improvements</div>`:`<div class="dim small">Proposal ${esc((b.proposal_status||'Not Started').toLowerCase())}</div>`}</div></div>
    <div class="scopes">${scopePills(b)}</div>
@@ -1030,11 +1032,11 @@ function pickerFinish(){
    Tabs follow the pipeline. You can open any tab at any time; looking at a tab never moves the bid. Only Advance
    (or the status menu) moves it. Advance says what's still open on that step and lights up when the step is done.
    Changes save on their own a second after you stop typing. */
-const BP_TABS=[['project','Project','Project Created'],['rfq','Scopes & RFQs','RFQ Sent'],['takeoff','Takeoff','Takeoff'],['quotes','Quotes','Quotes Received'],['estimate','Estimate','Estimating'],['proposal','Proposal','Proposal Review'],['outcome','Follow-up & outcome','Submitted']];
+const BP_TABS=[['project','Project','Project Created'],['rfq','Scopes & RFQs','RFQ Sent'],['takeoff','Takeoff','Takeoff'],['quotes','Quotes','Quotes Received'],['estprop','Estimate & proposal','Estimating'],['outcome','Follow-up & outcome','Submitted']];
 const BP_ORDER=BP_TABS.map(x=>x[2]);
 // where the bid stands: 0..6 on the way, 7 once decided; on hold → best guess from the work
-function bpStageIdx(b){if(DECIDED.includes(b.status))return 7;const i=BP_ORDER.indexOf(b.status);if(i>=0)return i;try{return Math.min(6,stageInfo(b,b.quotes).current)}catch(e){return 0}}
-const bpTabOf=b=>BP_TABS[Math.min(6,bpStageIdx(b))][0];
+function bpStageIdx(b){const n=BP_TABS.length;if(DECIDED.includes(b.status))return n;if(b.status==='Proposal Review')return 4;const i=BP_ORDER.indexOf(b.status);if(i>=0)return i;try{return Math.min(n-1,stageInfo(b,b.quotes).current)}catch(e){return 0}}
+const bpTabOf=b=>BP_TABS[Math.min(BP_TABS.length-1,bpStageIdx(b))][0];
 function bpSubScopes(b){return b.scope_items.filter(it=>performOf(it)!=='Self perform')}
 // what's still open on each step, in plain words
 function bpMissing(b,key){const m=[];const Q=b.quotes||[];
@@ -1042,7 +1044,7 @@ function bpMissing(b,key){const m=[];const Q=b.quotes||[];
   if(key==='rfq'){if(!b.scope_items.length)m.push('Pick the scopes');const none=bpSubScopes(b).filter(it=>!Q.some(q=>qHas(q,it.name)));if(none.length)m.push(`${none.length} sub scope${none.length===1?'':'s'} with no vendor (${none.slice(0,3).map(x=>x.name).join(', ')}${none.length>3?'…':''})`);const nr=Q.filter(q=>(q.status||'Not requested')==='Not requested').length;if(nr)m.push(`${nr} quote${nr===1?'':'s'} not requested yet`)}
   if(key==='takeoff'){const open=b.scope_items.filter(x=>x.status!=='Complete'&&x.status!=='N/A');if(!b.scope_items.length)m.push('No scopes on the bid');else if(open.length)m.push(`${open.length} of ${b.scope_items.length} scopes not signed off`)}
   if(key==='quotes'){const w=Q.filter(q=>q.status==='Requested').length;if(w)m.push(`${w} quote${w===1?'':'s'} still out`);const nr=Q.filter(q=>(q.status||'Not requested')==='Not requested').length;if(nr)m.push(`${nr} not requested`);const no=bpSubScopes(b).filter(it=>!Q.some(q=>qHas(q,it.name)&&(q.status==='Received'||(q.status===BUD&&num(q.amount)!=null))));if(no.length)m.push(`${no.length} sub scope${no.length===1?'':'s'} with no price back`)}
-  if(key==='estimate'){if(num(b.amount_with)==null&&num(b.amount_without)==null&&!b.client_ids.some(id=>clientAmount(b,id)))m.push('Enter the base number')}
+  if(key==='estprop'){if(num(b.amount_with)==null&&num(b.amount_without)==null&&!b.client_ids.some(id=>clientAmount(b,id)))m.push('Enter the base number');if(b.status==='Proposal Review'){if(!b.client_ids.length)m.push('Add who you’re bidding to');const noAmt=b.client_ids.filter(id=>!clientAmount(b,id));if(noAmt.length&&b.client_ids.length)m.push(`No number for ${noAmt.map(clientName).join(', ')}`)}}
   if(key==='proposal'){if(!b.client_ids.length)m.push('Add who you’re bidding to');const noAmt=b.client_ids.filter(id=>!clientAmount(b,id));if(noAmt.length)m.push(`No number for ${noAmt.map(clientName).join(', ')}`)}
   return m}
 function bpProgress(b,key){const Q=b.quotes||[];
@@ -1050,7 +1052,7 @@ function bpProgress(b,key){const Q=b.quotes||[];
   if(key==='rfq'){if(!b.scope_items.length)return 'No scopes';const bq=Q.filter(q=>q.status===BUD).length;const out=Q.filter(qAsked).length;return Q.length?(bq===Q.length?`${bq} budget`:`${out}/${Q.length-bq} requested`):`${b.scope_items.length} scopes`}
   if(key==='takeoff'){const s=b.scope_items.filter(x=>x.status==='Complete'||x.status==='N/A').length;return b.scope_items.length?`${s}/${b.scope_items.length} signed`:'—'}
   if(key==='quotes'){const asked=Q.filter(qAsked);const back=asked.filter(q=>q.status!=='Requested').length;return asked.length?`${back}/${asked.length} back`:'—'}
-  if(key==='estimate'){const v=bidValue(b);return v?moneyK(v):'—'}
+  if(key==='estprop'){const e=epState(b);return ({ns:'Not started',ip:'In progress',rr:'Ready for review',sent:'Sent'})[e]+(bidValue(b)?' · '+moneyK(bidValue(b)):'')}
   if(key==='proposal'){const n=b.client_ids.length;const s=b.client_ids.filter(id=>['Sent','Lost','Awarded'].includes(propOf(b,id).status)).length;return n?`${s}/${n} sent`:'—'}
   if(key==='outcome'){return DECIDED.includes(b.status)?b.status:isSent(b)?'Waiting':'—'}
   return ''}
@@ -1066,14 +1068,14 @@ function bidModal(){
   const due=b.due_date?`Due ${fmtShort(b.due_date)}${b.due_time?' '+fuTime(b.due_time):''}${(()=>{const n=daysUntil(b.due_date);return n==null?'':n<0?` · ${-n} day${n===-1?'':'s'} ago`:n===0?' · today':` · ${n} day${n===1?'':'s'}`})()}`:'No due date';
   const sub=[b.client_ids.map(clientName).join(', ')||'No GC yet',due,b.lead_estimator_id?'Lead: '+esc(estName(b.lead_estimator_id)||''):'No lead estimator'].filter(Boolean);
   const saveTxt=isNew?'Not created yet':!work?'Read-only':(M.bpErr?'<span class="bad">Not saved</span>':'Saved');
-  const tabs=BP_TABS.map(([k,l],i)=>{const st=i<cur?'past':i===cur?'now':'';const skip=k==='estimate'&&!estOn();
+  const tabs=BP_TABS.map(([k,l],i)=>{const st=i<cur?'past':i===cur?'now':'';const skip=false;
     return `<button class="bp-tab ${st}${M.tab===k?' on':''}" data-act="bp-tab" data-v="${k}"><i>${i<cur?'✓':i+1}</i><span><b>${esc(l)}${skip?'':''}</b><small>${esc(isNew&&k!=='project'?'':bpProgress(b,k))}</small></span></button>`}).join('');
-  const body={project:bpProject,rfq:bpRfq,takeoff:bpTakeoff,quotes:bpQuotes,estimate:bpEstimate,proposal:bpProposal,outcome:bpOutcome}[M.tab](b,work,admin);
+  const body={project:bpProject,rfq:bpRfq,takeoff:bpTakeoff,quotes:bpQuotes,estprop:bpEstProp,outcome:bpOutcome}[M.tab](b,work,admin);
   const archNote=b.archived_at?`<div class="notice" style="margin-bottom:14px">🗄 Archived ${fmtDate(String(b.archived_at).slice(0,10))}. It’s hidden from the pipeline and dashboard but all its history is kept.${admin?' Click <b>Restore</b> to bring it back.':''}</div>`:'';
   return `<div class="bp-head"><button class="btn ghost bp-back" data-act="close">← ${S.view==='pipeline'?'Pipeline':'Back'}</button>
     <div class="bp-title"><h2>${esc(isNew?(b.name||'New bid'):b.name||'Untitled bid')}</h2><p>${sub.join(' · ')}</p></div>
     <div class="bp-right"><span class="bp-save" id="bp-save">${saveTxt}</span>
-      <label class="bp-status" title="Set the stage by hand, or put the bid on hold">${sel('status',BID_ST)}</label>
+      <label class="bp-status" title="Set the stage by hand, or put the bid on hold"><select class="field" data-bf="status"${DIS()}>${BID_ST.map(o=>`<option value="${esc(o)}"${o===b.status?' selected':''}>${esc(stLabel(o)==='Submitted'?'Proposal sent':stLabel(o))}</option>`).join('')}</select></label>
       ${isNew&&work?'<button class="btn primary" data-act="save">Create bid</button>':''}</div></div>
   <div class="bp-tabs" role="tablist">${tabs}${b.status==='On Hold'?'<span class="bp-hold">'+pill('On hold','warn')+'</span>':''}</div>
   <div class="mbody bp-body"><div class="bp-grid"><div class="bp-main">${archNote}${supBanner(b)}${bidReqBanner(b)}${trkStrip(b)}${body}</div><aside class="bp-aside">${bpAside(b,work,admin,isNew)}</aside></div></div>
@@ -1085,9 +1087,9 @@ function bpAdvanceHtml(b,work,isNew){
   const i=BP_TABS.findIndex(x=>x[0]===M.tab);const prev=BP_TABS[i-1],next=BP_TABS[i+1];
   const nav=`${prev?`<button class="btn" data-act="bp-tab" data-v="${prev[0]}">← ${esc(prev[1])}</button>`:''}${next?`<button class="btn" data-act="bp-tab" data-v="${next[0]}">${esc(next[1])} →</button>`:''}`;
   if(isNew||!work)return nav;
-  const cur=bpStageIdx(b);if(cur>=6||b.status==='On Hold')return nav;
-  const key=BP_TABS[cur][0];const miss=bpMissing(b,key);const to=cur===5?'Proposal sent':BP_TABS[cur+1][1];
-  const label=cur===5?'Mark proposal sent →':`Advance to ${esc(to)} →`;
+  const cur=bpStageIdx(b);if(cur>=BP_TABS.length-1||b.status==='On Hold')return nav;
+  const key=BP_TABS[cur][0];const miss=bpMissing(b,key);const ep=key==='estprop';
+  const label=ep?(b.status==='Proposal Review'?'Mark proposal sent →':'Ready for review →'):`Advance to ${esc(BP_TABS[cur+1][1])} →`;
   const left=miss.length?`<span class="bp-miss" title="${esc(miss.join('\n'))}">${M.advArm?'<b>Advance anyway?</b> ':'Still open: '}${esc(miss.slice(0,2).join(' · '))}${miss.length>2?` +${miss.length-2}`:''}</span>`:`<span class="bp-ready">✓ ${esc(BP_TABS[cur][1])} is done</span>`;
   return `${nav}<span class="bp-adv">${left}<button class="btn ${miss.length?(M.advArm?'warn':''):'primary glow'}" data-act="bp-advance">${M.advArm&&miss.length?'Yes, advance':label}</button></span>`}
 
@@ -1114,7 +1116,7 @@ function bpProject(b,work,admin){
   <fieldset><legend>Bidding to</legend>
     <div class="bp-gcs">${b.client_ids.map(id=>{const c=byId(S.clients,id);const cs=c?.contacts||[];return `<div class="bp-gc"><div><b>${esc(clientName(id))}</b><div class="dim small">${esc(c?.type||'')}</div></div><select class="field sm" data-cc="${id}"${work?'':' disabled'}><option value="">Contact…</option>${cs.map(x=>`<option${b.client_contacts?.[id]===x.name?' selected':''}>${esc(x.name)}</option>`).join('')}</select>${work?`<button class="rm" data-act="rm-client" data-id="${id}" aria-label="Remove">×</button>`:''}</div>`}).join('')||'<div class="dim small">No GCs yet.</div>'}</div>
     ${work?`<div class="adders"><select class="field" data-act="add-client"><option value="">+ Add a GC, owner or contractor…</option>${clientsSorted.filter(c=>!b.client_ids.includes(c.id)).map(c=>`<option value="${c.id}">${esc(c.company)}${c.type?' ('+esc(c.type)+')':''}</option>`).join('')}</select></div>`:''}
-    <p class="hint">Numbers and proposal status for each GC are on the <b>Proposal</b> tab.</p></fieldset>
+    <p class="hint">Each GC’s number and proposal are on the <b>Estimate & proposal</b> tab.</p></fieldset>
   <fieldset><legend>Estimating team</legend><div class="fg">
     <label class="f s2">Lead estimator<select class="field" data-bf="lead_estimator_id"${admin?'':' disabled'}><option value="">Unassigned</option>${ests.map(e=>`<option value="${e.id}"${b.lead_estimator_id===e.id?' selected':''}>${esc(e.name)}${e.title?' — '+esc(e.title):''}</option>`).join('')}</select></label>
     <div class="f s2" style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:500;color:var(--ink-2)">Supporting estimators
@@ -1156,7 +1158,30 @@ function bpQuotes(b,work,admin){
   return `<fieldset><legend>Quotes back</legend>
     <p class="hint" style="margin:0 0 10px">${asked.length?`${asked.filter(q=>q.status==='Received').length} received · ${asked.filter(q=>q.status==='Requested').length} still out · ${asked.filter(q=>['Declined','No response'].includes(q.status)).length} declined or no answer.`:'No quotes requested yet. Add vendors on the <b>Scopes & RFQs</b> tab.'} Upload a quote and it’s marked Received. The low number in each scope is marked.</p>
     <div class="qgs">${quoteGroupsHtml(b,work,admin,'quotes')}</div></fieldset>`}
-function bpEstimate(b,work){return `${estOn()?estBidBlock(b,work):''}
+// where the estimate & proposal stands: not started → in progress → ready for review → sent
+function epState(b){return isSent(b)||DECIDED.includes(b.status)?'sent':b.status==='Proposal Review'?'rr':b.status==='Estimating'?'ip':'ns'}
+function epBar(b,work){const e=epState(b);const steps=[['ns','Not started'],['ip','In progress'],['rr','Ready for review'],['sent','Sent']];const ix=steps.findIndex(x=>x[0]===e);
+  return `<div class="ep-bar"><div class="ep-steps">${steps.map(([k,l],i)=>`<button class="ep-step${i<ix?' past':''}${k===e?' on':''}" data-act="ep-set" data-v="${k}"${work?'':' disabled'}><i>${i<ix?'✓':i+1}</i>${l}</button>`).join('')}</div>
+    <div class="small dim">${e==='ns'?'Click <b>In progress</b> when you start the estimate.':e==='ip'?'When the number and proposal are done, mark it <b>Ready for review</b>. Managers see it on their dashboard.':e==='rr'?'Waiting on review. Once it’s checked, click <b>Sent</b> when the proposal goes out.':'Sent. Follow-up and the outcome are on the next tab.'}</div>
+    ${M.epArm?`<div class="notice" style="margin-top:8px">This proposal is marked sent${b.client_ids.some(id=>propOf(b,id).status==='Sent')?' to '+b.client_ids.filter(id=>propOf(b,id).status==='Sent').map(clientName).join(', '):''}. Moving it back clears those sent marks. <button class="btn sm warn" data-act="ep-set" data-v="${M.epArm}" data-ok="1">Yes, move it back</button> <button class="btn sm ghost" data-act="ep-unarm">Keep it sent</button></div>`:''}
+    ${M.epSend?epSendHtml(b):''}</div>`}
+function epSendHtml(b){const X=M.epSend;return `<div class="ep-send"><b>Who did the proposal go to?</b>
+  ${b.client_ids.length?`<div class="ep-gcs">${b.client_ids.map(id=>`<label class="check"><input type="checkbox" data-epgc="${id}"${X.sel.has(id)?' checked':''}> ${esc(clientName(id))} <span class="dim small">${clientAmount(b,id)?money(clientAmount(b,id)):'no number'}</span>${propOf(b,id).status==='Sent'?' '+pill('already sent','info'):''}</label>`).join('')}</div>`:'<p class="small dim" style="margin:6px 0">No GCs on this bid yet. It will just be marked sent.</p>'}
+  <div class="adders"><label class="f" style="flex-direction:row;align-items:center;gap:8px">Sent on <input type="date" class="field" data-epdate value="${esc(X.date)}" style="width:auto"></label><button class="btn primary" data-act="ep-send-go"${b.client_ids.length&&!X.sel.size?' disabled':''}>✓ Mark proposal sent</button><button class="btn ghost" data-act="ep-send-x">Cancel</button></div>
+  <p class="hint" style="margin:0">This marks the bid Proposal sent and starts the GC follow-up clock.</p></div>`}
+function epOpenSend(){const b=M.draft;M.epSend={sel:new Set(b.client_ids.filter(id=>propOf(b,id).status!=='Lost')),date:todayStr()};renderModal()}
+function epGo(k,ok){const b=M.draft;const e=epState(b);if(k===e&&k!=='sent')return;
+  if(k==='sent'){epOpenSend();return}
+  if(e==='sent'&&!ok){M.epArm=k;renderModal();return}M.epArm=null;
+  if(e==='sent'){b.client_ids.forEach(id=>{const p=propOf(b,id);if(p.status==='Sent'){b.client_proposals={...(b.client_proposals||{}),[id]:{...p,status:'Not sent'}}}})}
+  if(k==='ns'){b.status=['Estimating','Proposal Review','Submitted'].includes(b.status)?'Quotes Received':b.status;b.proposal_status='Not Started'}
+  if(k==='ip'){b.status='Estimating';b.proposal_status='In Progress'}
+  if(k==='rr'){b.status='Proposal Review';b.proposal_status='Complete'}
+  renderModal();toast(k==='rr'?'Ready for review. Managers see it on their dashboard.':k==='ip'?'Estimate & proposal in progress.':'Set to not started.')}
+function epSendGo(){const b=M.draft;const X=M.epSend;const d=X.date||todayStr();const cp={...(b.client_proposals||{})};
+  [...X.sel].forEach(id=>{cp[id]={...propOf(b,id),status:'Sent',sent_date:propOf(b,id).sent_date||d}});b.client_proposals=cp;
+  b.proposal_status='Sent';b.status='Submitted';if(!b.submitted_date)b.submitted_date=d;M.epSend=null;M.tab='outcome';renderModal();toast(`Proposal sent${X.sel.size?` to ${[...X.sel].map(clientName).join(', ')}`:''}. GC follow-up starts from ${fmtShort(d)}.`)}
+function bpEstProp(b,work){return `${epBar(b,work)}${estOn()?estBidBlock(b,work):''}
   <fieldset><legend>Base numbers</legend><div class="fg">
     <label class="f">Base — with site improvements<input type="number" step="0.01" min="0" class="field" ${bf('amount_with','n')} placeholder="$0.00"></label>
     <label class="f">Base — without site improvements<input type="number" step="0.01" min="0" class="field" ${bf('amount_without','n')} placeholder="$0.00"></label>
@@ -1165,8 +1190,7 @@ function bpEstimate(b,work){return `${estOn()?estBidBlock(b,work):''}
       <label><input type="radio" name="usefor" data-bf="use_for" value="with"${b.use_for!=='without'?' checked':''}${DIS()}> With site improvements</label>
       <label><input type="radio" name="usefor" data-bf="use_for" value="without"${b.use_for==='without'?' checked':''}${DIS()}> Without</label></div></div>
     <label class="f s2">Win probability: <b id="probv">${b.probability??50}%</b><input type="range" min="0" max="100" step="5" data-bf="probability" data-t="n" value="${b.probability??50}"${DIS()}></label>
-  </div><p class="hint">These apply to every GC unless you enter a different number for them on the Proposal tab.</p></fieldset>`}
-function bpProposal(b,work){return `<fieldset><legend>Proposal</legend><div class="fg"><label class="f">Proposal status${sel('proposal_status',PROPOSAL_ST)}</label></div></fieldset>${clientsSection(b,work)}${revisionSection(b,work)}`}
+  </div><p class="hint">These apply to every GC unless you enter a different number for them below.</p></fieldset>${clientsSection(b,work)}${revisionSection(b,work)}`}
 function bpOutcome(b,work){
   const outcome=isSent(b)||DECIDED.includes(b.status);
   return `${fuRow(b)}
@@ -1191,11 +1215,12 @@ function bpAside(b,work,admin,isNew){const files=isNew?[]:filesFor(b.id);
 /* switching tabs, advancing, recording the outcome */
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='bid')return;const a=t.dataset.act;
   if(a==='bp-tab'){M.tab=t.dataset.v;M.advArm=false;renderModal();const bd=$('#modal .mbody');if(bd)bd.scrollTop=0;return}
-  if(a==='bp-advance'){const b=M.draft;const cur=bpStageIdx(b);if(cur>=6)return;const miss=bpMissing(b,BP_TABS[cur][0]);
+  if(a==='bp-advance'){const b=M.draft;const cur=bpStageIdx(b);if(cur>=BP_TABS.length-1)return;const key=BP_TABS[cur][0];const miss=bpMissing(b,key);
     if(miss.length&&!M.advArm){M.advArm=true;renderModal();return}M.advArm=false;
-    if(cur===5){b.proposal_status='Sent';b.status='Submitted';if(!b.submitted_date)b.submitted_date=todayStr();M.tab='outcome'}
-    else{b.status=BP_ORDER[cur+1];M.tab=BP_TABS[cur+1][0]}
-    renderModal();const bd=$('#modal .mbody');if(bd)bd.scrollTop=0;toast(`Moved to ${BP_TABS[Math.min(6,cur+1)][1]}.`);return}
+    if(key==='estprop'){M.tab='estprop';if(b.status==='Proposal Review')epOpenSend();else epGo('rr');return}
+    if(BP_TABS[cur+1][0]==='estprop'){epGo('ip');M.tab='estprop';renderModal();return}
+    b.status=BP_ORDER[cur+1];M.tab=BP_TABS[cur+1][0];
+    renderModal();const bd=$('#modal .mbody');if(bd)bd.scrollTop=0;toast(`Moved to ${BP_TABS[cur+1][1]}.`);return}
   if(a==='bp-out'){M.draft.status=t.dataset.v;if(t.dataset.v==='Awarded'&&!M.draft.awarded_date)M.draft.awarded_date=todayStr();renderModal();return}});
 
 /* auto-save: a second after the last change, if anything on the bid differs from what was last saved */
@@ -1398,7 +1423,7 @@ function addQuote(vid,scope){const v=vendorOf(vid);if(!v)return false;
 function ef(path,ph,type){return `<input class="field" ${type?`type="${type}"`:''} data-ef="${path}" value="${esc(M.draft[path]??'')}" placeholder="${esc(ph||'')}"${DIS()}>`}
 function efSel(path,list){return `<select class="field" data-ef="${path}"${DIS()}>${list.map(o=>`<option${M.draft[path]===o?' selected':''}>${esc(o)}</option>`).join('')}</select>`}
 function entFoot(label,isNew){const ok=M&&(M.kind==='client'||M.kind==='vendor')?can('contacts','edit'):isAdmin();return `<div class="mfoot"><div>${ok&&!isNew?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete'}</button>`:''}</div><div class="r"><button class="btn" data-act="close">${ok?'Cancel':'Close'}</button>${ok?`<button class="btn primary" data-act="save">${isNew?label:'Save changes'}</button>`:''}</div></div>`}
-function bidMiniList(bs,extra){return bs.length?`<div class="list">${bs.sort((a,b)=>(b.due_date||'').localeCompare(a.due_date||'')).map(b=>`<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button><div class="dim small">${fmtDate(b.due_date)}${extra?' · '+extra(b):''}</div></div><div style="text-align:right">${pill(b.status,BID_CLS[b.status])}<div class="num small">${bidValue(b)?money(bidValue(b)):''}</div></div></div>`).join('')}</div>`:'<div class="empty">No bids yet.</div>'}
+function bidMiniList(bs,extra){return bs.length?`<div class="list">${bs.sort((a,b)=>(b.due_date||'').localeCompare(a.due_date||'')).map(b=>`<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button><div class="dim small">${fmtDate(b.due_date)}${extra?' · '+extra(b):''}</div></div><div style="text-align:right">${stPill(b.status)}<div class="num small">${bidValue(b)?money(bidValue(b)):''}</div></div></div>`).join('')}</div>`:'<div class="empty">No bids yet.</div>'}
 function estModal(){const e=M.draft,isNew=M.isNew;
   const bs=S.bids.filter(b=>b.lead_estimator_id===e.id||(b.support_estimator_ids||[]).includes(e.id));
   return mhead(isNew?'New estimator':e.name||'Estimator',e.user_id?'Has a login':'No login linked yet')+`<div class="mbody"><fieldset><legend>Details</legend><div class="fg">
@@ -1843,7 +1868,7 @@ function importModal(){
     <div class="panel scroll"><table><thead><tr><th>Row</th><th>Project</th><th>GCs / clients</th><th>Due</th><th>Status</th><th class="r">Value</th><th>Result</th><th>Notes</th></tr></thead><tbody>
     ${it.map(x=>{const f=x.f;const names=[...(f.client_ids||[])].map(id=>byId(S.clients,id)?.company||P.newClients.find(c=>c.id===id)?.company||'').filter(Boolean);
       const v=f.use_for==='without'?(f.amount_without??f.amount_with):(f.amount_with??f.amount_without);
-      return `<tr><td class="num dim">${x.rowNo}</td><td class="proj">${esc(f.name||'—')}</td><td class="small">${names.map(esc).join(', ')||'<span class="dim">—</span>'}${x.gcs?.length?` <span class="dim">(+${x.gcs.length} proposals)</span>`:''}</td><td class="small" style="white-space:nowrap">${f.due_date?fmtDate(f.due_date):'<span class="dim">—</span>'}</td><td>${f.status?pill(f.status,BID_CLS[f.status]):'<span class="dim small">Estimating</span>'}</td><td class="r num">${v!=null?money(v):'<span class="dim">—</span>'}</td>
+      return `<tr><td class="num dim">${x.rowNo}</td><td class="proj">${esc(f.name||'—')}</td><td class="small">${names.map(esc).join(', ')||'<span class="dim">—</span>'}${x.gcs?.length?` <span class="dim">(+${x.gcs.length} proposals)</span>`:''}</td><td class="small" style="white-space:nowrap">${f.due_date?fmtDate(f.due_date):'<span class="dim">—</span>'}</td><td>${f.status?stPill(f.status):'<span class="dim small">Estimating</span>'}</td><td class="r num">${v!=null?money(v):'<span class="dim">—</span>'}</td>
       <td style="white-space:nowrap">${pill(label[x.action][0],label[x.action][1])}${x.action==='possible'?`<label class="check small" style="margin-top:6px"><input type="checkbox" data-incl="${x.rowNo}"${P.include[x.rowNo]?' checked':''}> Add anyway</label>`:''}</td><td class="small" style="min-width:220px">${[...x.errors.map(e=>`<b style="color:var(--bad)">${esc(e)}</b>`),...x.issues.map(esc)].join('<br>')||'<span class="dim">—</span>'}</td></tr>`}).join('')}
     </tbody></table></div></div>`+foot('<button class="btn" data-act="imp-restart">Choose a different file</button>',`<button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="imp-run"${willImport&&!M.running?'':' disabled'}>${M.running?'Adding…':`Add ${willImport} bid${willImport===1?'':'s'}`}</button>`);
 }
@@ -1946,7 +1971,7 @@ function bulkDelModal(){
   const quotes=bs.reduce((x,b)=>x+quotesFor(b.id).length,0);const ok=M.typed.trim().toUpperCase()==='DELETE';
   return mhead(`Delete ${n} bid${n===1?'':'s'}?`,'This can’t be undone')+`<div class="mbody">
     <div class="err" style="margin-bottom:14px">These bids will be permanently deleted${quotes||files?`, along with ${quotes?`${quotes} vendor quote${quotes===1?'':'s'}`:''}${quotes&&files?' and ':''}${files?`${files} uploaded file${files===1?'':'s'}`:''}`:''}. Clients, GCs, vendors and estimators are not affected.</div>
-    <fieldset><legend>Bids to delete</legend><div class="list">${bs.slice(0,25).map(b=>`<div class="li"><div><b style="font-weight:600">${esc(b.name)}</b><div class="dim small">${[fmtDate(b.due_date),clientsLine(b,2)].filter(x=>x&&x!=='—').join(' · ')}</div></div>${pill(b.status,BID_CLS[b.status])}</div>`).join('')}${n>25?`<div class="li dim small">…and ${n-25} more</div>`:''}</div></fieldset>
+    <fieldset><legend>Bids to delete</legend><div class="list">${bs.slice(0,25).map(b=>`<div class="li"><div><b style="font-weight:600">${esc(b.name)}</b><div class="dim small">${[fmtDate(b.due_date),clientsLine(b,2)].filter(x=>x&&x!=='—').join(' · ')}</div></div>${stPill(b.status)}</div>`).join('')}${n>25?`<div class="li dim small">…and ${n-25} more</div>`:''}</div></fieldset>
     <fieldset><legend>Confirm</legend><label class="f">Type <b>DELETE</b> to confirm<input class="field" id="bulk-confirm" data-bulktype value="${esc(M.typed)}" autocomplete="off" style="max-width:220px;text-transform:uppercase"></label></fieldset></div>
     <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn danger arm" data-act="bulkdel-run"${ok&&!M.running?'':' disabled'}>${M.running?'Deleting…':`Delete ${n} bid${n===1?'':'s'}`}</button></div></div>`;
 }
@@ -5566,7 +5591,7 @@ function vEstimates(){const tab=S.estsTab||'list';const canNew=can('bids','edit'
   list.sort((a,c)=>String(a.b.due_date||'9').localeCompare(String(c.b.due_date||'9'))||String(c.x.updated_at).localeCompare(String(a.x.updated_at)));
   return head+tabs+`<div class="bar"><input id="q-ests" class="field search" data-q="ests" placeholder="Search projects, GCs, estimators" value="${esc(S.q.ests||'')}"><select class="field" data-estsf><option value="active"${f==='active'?' selected':''}>Active bids</option><option value="won"${f==='won'?' selected':''}>Awarded</option><option value="all"${f==='all'?' selected':''}>All</option>${S.bids.some(b=>b.archived_at)?`<option value="arch"${f==='arch'?' selected':''}>Archived bids</option>`:''}</select></div>
   <div class="panel scroll"><table><thead><tr><th>Project</th><th>GC / client</th><th>Due</th><th>Status</th><th>Lead</th><th class="r">Cost</th><th class="r">Bid total</th><th class="r">Margin</th><th>Updated</th><th></th></tr></thead><tbody>
-  ${list.map(({x,b})=>`<tr class="click" data-act="ests-open" data-id="${b.id}"><td class="proj">${esc(b.name)}${estVersOf(b.id).length?` <span class="pill" title="Saved copies of earlier versions">${estVersOf(b.id).length} saved cop${estVersOf(b.id).length===1?'y':'ies'}</span>`:''}${b.location?`<div class="dim small">${esc(b.location)}</div>`:''}</td><td class="small">${clientsLine(b,2)}</td><td class="small">${dueCell(b)}</td><td>${pill(b.status,BID_CLS[b.status])}</td><td>${b.lead_estimator_id?avatar(b.lead_estimator_id):'<span class="dim">—</span>'}</td>
+  ${list.map(({x,b})=>`<tr class="click" data-act="ests-open" data-id="${b.id}"><td class="proj">${esc(b.name)}${estVersOf(b.id).length?` <span class="pill" title="Saved copies of earlier versions">${estVersOf(b.id).length} saved cop${estVersOf(b.id).length===1?'y':'ies'}</span>`:''}${b.location?`<div class="dim small">${esc(b.location)}</div>`:''}</td><td class="small">${clientsLine(b,2)}</td><td class="small">${dueCell(b)}</td><td>${stPill(b.status)}</td><td>${b.lead_estimator_id?avatar(b.lead_estimator_id):'<span class="dim">—</span>'}</td>
     <td class="r num">${money(x.total_cost)}</td><td class="r num"><b>${money(x.total_price)}</b></td><td class="r num">${num(x.total_price)?fmtN((x.total_price-x.total_cost)/x.total_price*100,1)+'%':'—'}</td><td class="small dim">${x.updated_at?fmtShort(String(x.updated_at).slice(0,10)):''}${x.updated_by_name?`<br>${esc(x.updated_by_name)}`:''}</td><td class="ests-acts">${canWork(b)&&can('estimates','edit')?`<button class="btn sm" data-act="ests-revise" data-id="${b.id}" title="Keep a copy of this estimate and start a revision">Revise</button>`:''}${isAdmin()?`<button class="btn sm ghost danger-t" data-act="ests-del" data-id="${b.id}" title="Delete this estimate">Delete</button>`:''}</td></tr>`).join('')
     ||`<tr><td colspan="10"><div class="empty"><b>No estimates ${q||f!=='all'?'match':'yet'}</b>${canNew?'Click <b>+ New estimate</b> to start one.':''}</div></td></tr>`}</tbody></table></div>`}
 function tplSettingsText(e){const m=e.markup||{};const s=e.settings||{};const bits=[];if(s.sched)bits.push(s.sched.name);
@@ -7908,7 +7933,7 @@ document.addEventListener('input',e=>{const t=e.target;const x=trkCtx();if(x&&t.
 /* ---- pipeline stage bar on the bid: where it is, and click to move it ---- */
 function stageBar(b,work){const steps=[...PRE_SUBMIT,'Submitted'];const cur=steps.indexOf(b.status);const dec=DECIDED.includes(b.status);const n=dec?steps.length:cur;
   return `<div class="stg${b.status==='On Hold'?' hold':''}" role="group" aria-label="Pipeline stage">${steps.map((s,i)=>`<button type="button" class="${i<n?'past':i===n?'now':''}" data-act="bid-stage" data-v="${s}" title="${esc(BID_ABOUT[s]||'')}"${work?'':' disabled'}><i>${i<n?'✓':i+1}</i><span>${s==='Submitted'?'Proposal sent':s}</span></button>`).join('')}
-    <span class="stg-end">${dec?pill(b.status,BID_CLS[b.status]):b.status==='On Hold'?pill('On Hold','warn'):''}</span></div>`}
+    <span class="stg-end">${dec?stPill(b.status):b.status==='On Hold'?pill('On Hold','warn'):''}</span></div>`}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act=bid-stage]');if(!t||!M||M.kind!=='bid'||t.disabled)return;M.draft.status=t.dataset.v;renderModal()});
 
 /* =====================================================================
@@ -10505,7 +10530,7 @@ function archModal(){const A=M;const pool=archPool();const pick=archPick();
     <div class="arch-modes">${ARCH_MODES.map(([k,l])=>`<label class="arch-m${A.mode===k?' on':''}"><input type="radio" name="arch-mode" value="${k}" data-archmode${A.mode===k?' checked':''}><span><b>${l}</b>${cnt(k)!=null?` <span class="dim">${cnt(k)}</span>`:''}
       ${k==='added'&&A.mode==='added'?`<span class="arch-days">${days.map(([d,n])=>`<label class="check small"><input type="checkbox" data-archday="${d}"${A.days.has(d)?' checked':''}> ${fmtDate(d)} <span class="dim">· ${n} bid${n===1?'':'s'}</span></label>`).join('')||'<span class="dim small">No dates on file.</span>'}<span class="dim small">The day with the most bids is usually the import.</span></span>`:''}
       ${k==='due'&&A.mode==='due'?`<span class="arch-days"><label class="small">Due before <input class="field sm" type="date" data-archbefore value="${esc(A.before||'')}" style="width:auto"></label><label class="check small"><input type="checkbox" data-archnodate${A.noDate?' checked':''}> Also bids with no due date</label></span>`:''}</span></label>`).join('')}</div>
-    <fieldset style="margin-top:14px"><legend>${pick.length} bid${pick.length===1?'':'s'} will be archived</legend><div class="list">${pick.slice(0,20).map(b=>`<div class="li"><div><b style="font-weight:600">${esc(b.name)}</b><div class="dim small">${[b.due_date?'Due '+fmtDate(b.due_date):'',clientsLine(b,2),b.created_at?'added '+fmtShort(archDay(b)):''].filter(x=>x&&x!=='—').join(' · ')}</div></div>${pill(b.status,BID_CLS[b.status])}</div>`).join('')||'<div class="li dim small">Nothing matches yet.</div>'}${pick.length>20?`<div class="li dim small">…and ${pick.length-20} more</div>`:''}</div></fieldset>
+    <fieldset style="margin-top:14px"><legend>${pick.length} bid${pick.length===1?'':'s'} will be archived</legend><div class="list">${pick.slice(0,20).map(b=>`<div class="li"><div><b style="font-weight:600">${esc(b.name)}</b><div class="dim small">${[b.due_date?'Due '+fmtDate(b.due_date):'',clientsLine(b,2),b.created_at?'added '+fmtShort(archDay(b)):''].filter(x=>x&&x!=='—').join(' · ')}</div></div>${stPill(b.status)}</div>`).join('')||'<div class="li dim small">Nothing matches yet.</div>'}${pick.length>20?`<div class="li dim small">…and ${pick.length-20} more</div>`:''}</div></fieldset>
     ${pick.length&&pick.length===pool.length?'<p class="small dim">That’s every bid in the pipeline: it will be empty, ready for new work.</p>':''}</div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="arch-run"${pick.length&&!A.running?'':' disabled'}>${A.running?'Archiving…':`Archive ${pick.length} bid${pick.length===1?'':'s'}`}</button></div></div>`}
 // the Archived view: each batch with a restore button
@@ -11522,3 +11547,15 @@ document.addEventListener('input',e=>{const t=e.target;if(t.dataset.posf&&S.posd
 document.addEventListener('keydown',e=>{const t=e.target;if(t.id==='pos-new'&&e.key==='Enter'&&S.posd){e.preventDefault();const v=t.value.trim();if(!v)return;S.posd.rows.push({id:newId(),name:v,bids:false,jobs:false,office:false,role:'estimator',orig:null});render();setTimeout(()=>$('#pos-new')?.focus(),0)}});
 // picking a position while adding someone sets the access it usually gets
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.uapos!=null&&M&&M.kind==='useradd'){M.title=t.value;const pos=posByName(t.value);if(pos&&pos.role)M.role=pos.role;renderModal()}});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='bid'||t.tagName==='SELECT')return;const a=t.dataset.act;
+  if(a==='ep-set'){if(!canWork(M.draft))return;epGo(t.dataset.v,!!t.dataset.ok);return}
+  if(a==='ep-unarm'){M.epArm=null;renderModal();return}
+  if(a==='ep-send-x'){M.epSend=null;renderModal();return}
+  if(a==='ep-send-go'){epSendGo();return}});
+document.addEventListener('change',e=>{const t=e.target;if(!M||!M.epSend)return;if(t.dataset.epgc){t.checked?M.epSend.sel.add(t.dataset.epgc):M.epSend.sel.delete(t.dataset.epgc);renderModal()}else if(t.dataset.epdate!=null)M.epSend.date=t.value});
+// bids marked Ready for review, for managers (and the lead, on their own dashboard)
+function reviewPanel(){if(!can('bids'))return '';const mgr=isAdmin()||canAssign();const me=myEst();
+  const L=S.bids.filter(b=>!b.archived_at&&b.status==='Proposal Review'&&(mgr||(me&&(b.lead_estimator_id===me.id||(b.support_estimator_ids||[]).includes(me.id))))).sort((a,c)=>String(a.due_date||'9').localeCompare(String(c.due_date||'9')));
+  if(!L.length)return '';
+  return `<div class="panel pad rv-panel"><div class="rv-h"><b>📋 ${L.length} bid${L.length===1?'':'s'} ready for review</b><span class="small dim">${mgr?'Estimate and proposal are done. Check the number, then mark it sent.':'Waiting on a manager to check it.'}</span></div>
+    <div class="list">${L.map(b=>{const n=daysUntil(b.due_date);return `<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button><div class="dim small">${esc((b.client_ids||[]).map(clientName).join(', ')||'No GC')} · lead ${esc(estName(b.lead_estimator_id)||'—')}${bidValue(b)?' · '+money(bidValue(b)):''}</div></div><span class="small ${n!=null&&n<=1?'bad-t':''}">${b.due_date?`due ${fmtShort(b.due_date)}${n!=null?` (${n<0?'past due':n===0?'today':n+' day'+(n===1?'':'s')})`:''}`:'no due date'}</span></div>`}).join('')}</div></div>`}

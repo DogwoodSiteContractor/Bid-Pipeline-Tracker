@@ -2496,3 +2496,16 @@ div.tw-pgh{cursor:default}
 .ua-pwrow .btn{flex:none;white-space:nowrap}
 .ua-pwnote{align-self:end;padding-bottom:11px}
 @media (max-width:1400px){table.ov td,table.ov th{padding:8px 6px}table.ov th:not(.sorted) .ov-arr{display:none}table.ov td.ov-p{min-width:150px}table.ov td:nth-child(2){width:130px;min-width:110px}}
+/* estimate & proposal status */
+.ep-bar{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin-bottom:14px;display:flex;flex-direction:column;gap:8px}
+.ep-steps{display:flex;gap:6px;flex-wrap:wrap}
+.ep-step{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:7px 14px 7px 8px;font-weight:700;font-size:14px;color:var(--ink-2);cursor:pointer}
+.ep-step i{font-style:normal;width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:12px;background:var(--surface);border:1px solid var(--line)}
+.ep-step.past i{background:var(--good);border-color:var(--good);color:#fff}
+.ep-step.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.ep-step.on i{background:#fff;color:var(--accent);border-color:#fff}
+.ep-step:disabled{cursor:default}
+.ep-send{border:2px solid var(--accent);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:6px}
+.ep-gcs{display:flex;flex-direction:column;gap:4px}
+.rv-panel{border-left:4px solid var(--accent);margin-bottom:14px}
+.rv-h{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:6px}
