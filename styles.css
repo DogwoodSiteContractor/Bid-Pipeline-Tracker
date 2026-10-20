@@ -2474,3 +2474,15 @@ div.tw-pgh{cursor:default}
 .bud-sw.on{border:2px solid var(--info,#2a6fb0);background:color-mix(in srgb,var(--info,#2a6fb0) 7%,var(--surface))}
 .q-budtag{font-size:11px;font-weight:700;color:#fff;background:var(--info,#2a6fb0);border-radius:999px;padding:1px 8px}
 .field.q-bud{border-style:dashed}
+/* positions */
+.pos-sel{min-width:170px}
+.pos-tags{display:flex;gap:4px;flex-wrap:wrap;margin-top:4px;align-items:center}
+.pos-tag{font-size:10.5px;font-weight:700;border-radius:999px;padding:1px 7px;border:1px solid var(--line);color:var(--ink-2);background:var(--surface-2)}
+.pos-tag.b{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 45%,var(--line))}
+.pos-tag.j{color:var(--info,#2a6fb0);border-color:color-mix(in srgb,var(--info,#2a6fb0) 45%,var(--line))}
+.pos-tag.o{color:var(--ink-2)}
+.team-t tr.nl td{background:color-mix(in srgb,var(--surface-2) 60%,transparent)}
+.pos-ed td{vertical-align:middle}
+.pos-ed .field.sm{width:100%;min-width:140px}
+.pos-ck input{width:18px;height:18px}
+.pos-ed tr.gone td{opacity:.6}

@@ -300,7 +300,7 @@ function renderNow(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
-  const views={grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const views={positions:vPositions,grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
@@ -313,7 +313,7 @@ function renderNow(){
 }
 // top-bar tabs; related pages share a tab and get small sub-tabs inside it
 function navItems(){return navGroups().map(g=>[g[0],g[1]])}
-const SUBNAV_LABEL={lists:'Trades & scopes',clients:'Clients & GCs',vendors:'Vendors & subs',vboard:'Vendor rankings',team:'People & access',estimators:'Estimators',teampm:'Project managers',teamoffice:'Accounting & executives',access:'Access chart'};
+const SUBNAV_LABEL={lists:'Trades & scopes',clients:'Clients & GCs',vendors:'Vendors & subs',vboard:'Vendor rankings',team:'People & access',positions:'Positions',access:'Access chart'};
 function subNav(){const g=navGroups().find(x=>x[2].includes(S.view));if(!g)return '';const subs=g[2].filter(v=>SUBNAV_LABEL[v]);if(subs.length<2)return '';
   return `<div class="subnav">${subs.map(v=>`<button class="${S.view===v?'on':''}" data-act="nav" data-v="${v}">${SUBNAV_LABEL[v]}</button>`).join('')}</div>`}
 function renderTop(){setTimeout(()=>{presPaint();presTrack(false)},0);
@@ -556,7 +556,7 @@ function setupGuide(){
 /* ----- estimator personal view ----- */
 function mine(){
   const me=myEst();
-  if(!me)return `<div class="notice">Your login isn’t linked to an estimator record yet, so no bids can be assigned to you. Ask your precon manager to link your account on the Team page.</div>`;
+  if(!me)return `<div class="notice">Your account isn’t set up to work bids yet, so no bids can be assigned to you. Ask your precon manager to link your account on the Team page.</div>`;
   const my=S.bids.filter(b=>live(b)&&assigned(b));
   const act=my.filter(b=>ACTIVE.includes(b.status)).sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999'));
   const est=act.filter(isWorking);
@@ -6592,7 +6592,7 @@ const myReq=bidId=>(S.bidReqs||[]).find(r=>r.bid_id===bidId&&r.user_id===S.sessi
 const leadOf=b=>{const me=myEst();return !!me&&!!b&&b.lead_estimator_id===me.id&&can('bids','edit')};
 const canDecide=b=>canAssign()||leadOf(b);
 const openReqs=()=>(S.bidReqs||[]).filter(r=>r.status==='Pending'&&byId(S.bids,r.bid_id)&&canDecide(byId(S.bids,r.bid_id))&&r.user_id!==S.session?.user?.id).sort((a,b)=>String(a.created_at).localeCompare(String(b.created_at)));
-async function bidReqSend(bidId){const me=myEst();if(!me){toast('Your login isn’t linked to an estimator record yet. Ask an admin to link it on the Team page.');return}if(myReq(bidId))return;
+async function bidReqSend(bidId){const me=myEst();if(!me){toast('Your account isn’t set up to work bids yet. Ask an admin to give you a position that works bids (Team → People & access).');return}if(myReq(bidId))return;
   const note=prompt('Add a note for whoever assigns bids (optional)','');if(note===null)return;
   try{await run(sb.from('bid_requests').insert({id:newId(),bid_id:bidId,user_id:S.session.user.id,status:'Pending',created_at:new Date().toISOString(),estimator_id:me.id,name:myName(),note:String(note).trim().slice(0,300)}));await loadBidReqs();if(M&&M.kind==='bid')renderModal();render();toast('Request sent')}
   catch(e){toast(/bid_requests|does not exist|schema cache/i.test(errMsg(e))?'Requests need a one-time database update (update-24-estimator-view-requests.sql).':errMsg(e))}}
@@ -6631,7 +6631,7 @@ function navGroups(){const g=[];
   if(can('acct'))g.push(['acct','Accounting',['acct']]);
   if(can('contacts')||isAdmin())g.push(['clients','Contacts',[...(can('contacts')?['clients','vendors','vboard','vendor']:[]),...(isAdmin()||can('codebook','edit')?['lists']:[])]]);
   if(can('calc'))g.push(['calc','Calculators',['calc',...(twFree?['tw']:[])]]);
-  if(isAdmin())g.push(['team','Team',['team','estimators','teampm','teamoffice','access']]);
+  if(isAdmin())g.push(['team','Team',['team','positions','access','estimators','teampm','teamoffice']]);
   {const n=typeof plCount==='function'?plCount():0;g.push(['plan','Planner'+(n?` (${n})`:''),['plan']])}
   if(!tabOff('fun'))g.push(['fun','Break room',['fun']]);
   if(!tabOff('help'))g.push(['help','Help',['help']]);
@@ -6640,22 +6640,6 @@ function navGroups(){const g=[];
 
 /* ----- Team: People & access ----- */
 function teamHead(title,sub,tools){return `<div class="head"><div><h1>${title}</h1><p>${sub}</p></div><div class="tools">${tools||''}<button class="btn" data-act="reload-team">Refresh</button></div></div>`}
-function vTeam(){const me=S.session.user.id;const f=S.teamRole||'';const all=S.profiles.slice().sort((a,b)=>ROLE_ORDER.indexOf(a.role)-ROLE_ORDER.indexOf(b.role)||personName(a).localeCompare(personName(b)));
-  const list=all.filter(p=>!f||p.role===f);const waiting=all.filter(p=>p.role==='pending').length;
-  return teamHead('People & access',`${S.profiles.length} login${S.profiles.length===1?'':'s'} · everyone who uses the app, whatever their job`)+`
-  ${isAdmin()?'<div class="bar"><span style="flex:1"></span><button class="btn primary" data-act="ua-new">+ Add a person</button></div>':''}
-  ${waiting?`<div class="notice"><b>${waiting} ${waiting===1?'person is':'people are'} waiting for access.</b> Pick a role for them below. They can't see anything until you do.</div>`:''}
-  <div class="seg team-f">${[['','Everyone'],...ROLE_ORDER.map(r=>[r,ROLES.find(x=>x[0]===r)?.[1]||r])].filter(([k])=>!k||all.some(p=>p.role===k)).map(([k,l])=>`<button class="${f===k?'on':''}" data-act="team-f" data-v="${k}">${esc(l)}${k?` <small>${all.filter(p=>p.role===k).length}</small>`:''}</button>`).join('')}</div>
-  <div class="panel scroll"><table class="team-t"><thead><tr><th>Person</th><th>Role</th><th>Can open</th><th>Estimator record</th><th></th></tr></thead><tbody>
-  ${list.map(p=>{const linked=S.estimators.find(e=>e.user_id===p.id);const self=p.id===me;const cc=customCount(p);const needsEst=permOf(p,'bids_scope')!=='all'&&permOf(p,'bids')==='edit';
-    return `<tr><td><span class="who">${pAv(p)}<span><b>${esc(personName(p))}</b>${self?' '+pill('You','hot'):''}<div class="small dim">${[p.title,p.email,p.phone].filter(Boolean).map(esc).join(' · ')}</div></span></span></td>
-    <td><select class="field" data-prole="${p.id}" ${self?'disabled title="You can’t change your own role"':''}>${ROLES.map(([k,l])=>`<option value="${k}"${p.role===k?' selected':''}>${l}</option>`).join('')}</select></td>
-    <td class="team-acc">${accessChips(p)}${cc?`<div class="small warn-t">Custom: ${cc} change${cc===1?'':'s'} from the ${esc(ROLE_LABEL[p.role]||p.role)} default</div>`:''}</td>
-    <td>${needsEst||linked||p.role==='estimator'?`<div class="nowrap" style="display:flex;gap:6px;align-items:center"><select class="field" data-plink="${p.id}"><option value="">Not linked</option>${S.estimators.filter(e=>!e.user_id||e.user_id===p.id).map(e=>`<option value="${e.id}"${linked?.id===e.id?' selected':''}>${esc(e.name)}</option>`).join('')}</select>${linked?'':`<button class="btn sm" data-act="make-est" data-id="${p.id}">Create</button>`}</div>${needsEst&&!linked?'<div class="small warn-t">Needed to see their assigned bids</div>':''}`:'<span class="dim">—</span>'}</td>
-    <td class="r"><button class="btn sm" data-act="team-edit" data-id="${p.id}">Edit access…</button></td></tr>`}).join('')||'<tr><td colspan="5"><div class="empty">Nobody here.</div></td></tr>'}</tbody></table></div>
-  <details class="panel pad team-how"><summary><b>How to add someone</b> <span class="small dim">(any position: estimator, PM, bookkeeper, executive, board)</span></summary>
-    <ol class="small"><li>In Supabase go to <b>Authentication → Users → Add user</b>, then <b>Send invitation</b> (or create them with a password).</li><li>They show up here as <b>No access yet</b>.</li><li>Pick their role. That gives them the standard access for that job. Use <b>Edit access…</b> to fine-tune any area.</li><li>Estimators also need an <b>estimator record</b> so bids can be assigned to them. If their email matches one, it links automatically.</li></ol></details>`}
-
 /* ----- Team: Estimators (directory records used on bids) ----- */
 // (vEstimators stays — the records bids are assigned to)
 
@@ -6825,7 +6809,7 @@ const TUTS=[
    'Add the person in Supabase (<b>Authentication → Users → Add user</b>). They appear on <b>Team → People & access</b> as “No access yet”.',
    'Pick their <b>role</b>. That gives the standard access for the job: admin, executive, estimator, project manager, accounting or board.',
    'Click <b>Edit access…</b> to fine-tune any area to No access, View or Edit, and to choose all bids or only assigned bids.',
-   'Estimators need an <b>estimator record</b> linked to their login so bids can be assigned to them.','<b>Access chart</b> shows every role’s defaults and who has custom access.']}];
+   'Give each person a <b>position</b> (set them up on the <b>Positions</b> tab). Positions that work bids put that person on bids, Up for grabs and workload automatically. <b>Access</b> is separate: it’s what they can open, and picking a position sets the access it usually gets.','<b>Access chart</b> shows every role’s defaults and who has custom access.']}];
 const tutOk=t=>t.area==null?true:t.area==='team'?isAdmin():can(t.area,t.need==='edit'?'edit':undefined);
 const tutDone=()=>{try{return new Set(JSON.parse(localStorage.getItem('bp-tut-done')||'[]'))}catch(e){return new Set()}};
 function tutToggle(id){const s=tutDone();s.has(id)?s.delete(id):s.add(id);try{localStorage.setItem('bp-tut-done',JSON.stringify([...s]))}catch(e){}}
@@ -6959,7 +6943,7 @@ function devTestList(){const tbl=(t,file)=>({g:'Database tables',n:`Table “${t
    data('Estimates belong to a bid',()=>{const n=(S.estIndex||[]).filter(e=>!byId(S.bids,e.bid_id)).length;return n?T_WARN(`${n} estimate${n===1?'':'s'} whose bid is gone or archived`):T_OK(`${(S.estIndex||[]).length} estimates`)}),
    data('Crews use labor and equipment that still exist',()=>{const bad=cbList('crew').filter(c=>cbCrew(c).missing).length;return bad?T_WARN(`${bad} crew${bad===1?' has':'s have'} a removed member`,'Open the crew in the codebook and fix or remove the member.'):T_OK(`${cbList('crew').length} crews`)}),
    data('Codebook codes are unique',()=>{let dup=0;CB_BOOKS.forEach(([bk])=>{const seen={};cbList(bk).forEach(x=>{const k=String(x.code||'').trim().toLowerCase();if(!k)return;seen[k]=(seen[k]||0)+1;if(seen[k]===2)dup++})});return dup?T_WARN(`${dup} code${dup===1?' is':'s are'} used twice in the same codebook`):T_OK(`${S.codebook.length} items`)}),
-   data('Estimator logins are linked',()=>{const n=S.profiles.filter(p=>permOf(p,'bids')!=='none'&&permOf(p,'bids_scope')==='mine'&&!S.estimators.some(e=>e.user_id===p.id)).length;return n?T_WARN(`${n} login${n===1?'':'s'} can only see assigned bids but ${n===1?'has':'have'} no estimator record`,'They won’t see any bids. Link them on Team → People & access.'):T_OK('All linked')}),
+   data('Estimator logins are linked',()=>{const n=S.profiles.filter(p=>permOf(p,'bids')!=='none'&&permOf(p,'bids_scope')==='mine'&&!S.estimators.some(e=>e.user_id===p.id)).length;return n?T_WARN(`${n} login${n===1?'':'s'} can only see assigned bids but ${n===1?'has':'have'} no bid setup`,'They won’t see any bids. Link them on Team → People & access.'):T_OK('All linked')}),
    data('People waiting for access',()=>{const n=S.profiles.filter(p=>p.role==='pending').length;return n?T_WARN(`${n} login${n===1?' is':'s are'} waiting for a role`):T_OK('None waiting')}),
    data('Pay apps belong to a job',()=>{const n=(S.pay_apps||[]).filter(p=>!jobOf(p.job_id)).length;return n?T_WARN(`${n} pay app${n===1?'':'s'} for a job that’s gone`):T_OK(`${(S.pay_apps||[]).length} pay apps`)}),
    ...[['Database space',u=>[u.db_bytes,devPlan().db*MB]],['File storage space',u=>[(u.files||{}).bytes||0,devPlan().files*MB]]].map(([n,f])=>({g:'Capacity',n,run:async()=>{const {data,error}=await sb.rpc('dev_usage');if(error)return T_FAIL(error.message,'Run supabase/update-20-dev-usage.sql in Supabase.');const [used,lim]=f(data);const pct=used/lim*100;const d=`${fmtBytes(used)} of ${fmtBytes(lim)} (${fmtN(pct,1)}%) on ${devPlan().label}`;return pct>=90?T_FAIL(d,'Nearly full. Clear out old files or move up a plan before it stops accepting data.'):pct>=70?T_WARN(d,'Getting full. See Developer → Storage & capacity.'):T_OK(d)}})),
@@ -7803,9 +7787,9 @@ function userAddModal(){const x=M;const done=x.done;
     <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="ua-again">Add another</button><button class="btn primary" data-act="close">Done</button></div></div>`;
   return mhead('Add a person','Creates their login and sets what they can open')+`<div class="mbody"><div class="fg">
     <label class="f s2">Name<input class="field" id="ua-name" data-ua="name" value="${esc(x.name)}" placeholder="First and last name"></label><label class="f s2">Email<input class="field" id="ua-email" data-ua="email" type="email" value="${esc(x.email)}" placeholder="name@company.com" autocomplete="off"></label>
-    <label class="f s2">Role<select class="field" data-ua="role">${ROLE_ORDER.filter(r=>r!=='pending').map(r=>`<option value="${r}"${x.role===r?' selected':''}>${esc(ROLE_LABEL[r]||r)}</option>`).join('')}</select></label><label class="f s2">Title <span class="dim">(optional)</span><input class="field" id="ua-title" data-ua="title" value="${esc(x.title)}"></label>
+    <label class="f s2">Position<select class="field" data-ua="title" data-uapos>${!x.title?'<option value="" selected>Pick a position…</option>':''}${posList().map(p=>`<option${x.title===p.name?' selected':''}>${esc(p.name)}</option>`).join('')}</select></label><label class="f s2">Access<select class="field" data-ua="role">${ROLE_ORDER.filter(r=>r!=='pending').map(r=>`<option value="${r}"${x.role===r?' selected':''}>${esc(ROLE_LABEL[r]||r)}</option>`).join('')}</select></label>
     <label class="f s2">Temporary password<input class="field" id="ua-pw" data-ua="pw" value="${esc(x.pw)}" autocomplete="off"></label><div class="f s2" style="justify-content:flex-end"><button class="btn sm" data-act="ua-gen">Make a new one</button></div></div>
-    <p class="hint">${esc(ROLE_ABOUT[x.role]||'')}</p>${x.role==='estimator'?'<p class="hint">Estimators also need an estimator record linked to their login before bids can be assigned to them (Team → Estimators).</p>':''}</div>
+    <p class="hint">${(()=>{const pos=posByName(x.title);return pos?`${esc(pos.name)}: ${posTags(pos)||'no special lists'}. `:''})()}Access: ${esc(ROLE_ABOUT[x.role]||'')}</p></div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="ua-create"${x.busy?' disabled':''}>${x.busy?'Creating…':'Create account'}</button></div></div>`}
 async function userCreate(){const x=M;if(!isAdmin()||x.busy)return;const email=String(x.email||'').trim().toLowerCase(),name=String(x.name||'').trim(),pw=String(x.pw||'');
   if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)){toast('Enter their email address.');return}if(!name){toast('Enter their name.');return}if(pw.length<8){toast('The password needs at least 8 characters.');return}
@@ -7814,7 +7798,7 @@ async function userCreate(){const x=M;if(!isAdmin()||x.busy)return;const email=S
   try{const tmp=window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAnonKey,{auth:{persistSession:false,autoRefreshToken:false,detectSessionInUrl:false,storageKey:'bp-new-account'}});
     const {data,error}=await tmp.auth.signUp({email,password:pw,options:{data:{full_name:name}}});if(error)throw error;const u=data&&data.user;if(!u||!u.id||(Array.isArray(u.identities)&&!u.identities.length))throw new Error('There’s already a login with that email.');
     try{await tmp.auth.signOut()}catch(e){}
-    await run(sb.rpc('admin_finish_user',{p_id:u.id,p_name:name,p_role:x.role,p_title:String(x.title||'').trim()}));await Promise.all([loadProfiles(),loadAcctInfo()]);
+    await run(sb.rpc('admin_finish_user',{p_id:u.id,p_name:name,p_role:x.role,p_title:String(x.title||'').trim()}));await Promise.all([loadProfiles(),loadAcctInfo()]);try{await posSync(byId(S.profiles,u.id))}catch(e){}
     M={kind:'useradd',done:{email,name,role:x.role,pw}};renderModal();render()}
   catch(e){x.busy=false;renderModal();toast(acctErr(e))}}
 function acctBox(d){if(!isAdmin())return '';const self=d.id===S.session.user.id;const u=S.acctInfo&&S.acctInfo.get(d.id);const off=u&&u.banned;const x=M;
@@ -11387,7 +11371,7 @@ function vGrabs(){const me=myEst();const L=(S.grabs||[]).slice();const ld=myLoad
   const head=`<div class="head"><div><h1>Up for grabs</h1><p>Bids that need an estimator. Take the lead, or offer to help.</p></div></div>`;
   if(S.grabMissing)return head+`<div class="notice">Up for grabs needs a one-time database update: run <b>update-41-up-for-grabs.sql</b> in Supabase.</div>`;
   if(S.grabs===null){grabLoad();return head+'<div class="empty">Loading…</div>'}
-  const load=ld?`<div class="gr-me"><b>Your plate right now:</b> ${ld.n} bid${ld.n===1?'':'s'} in progress (${ld.lead} as lead)${ld.week?` · <b>${ld.week} due this week</b>`:''}</div>`:(can('bids','edit')?'<div class="notice">Your login isn’t linked to an estimator yet, so you can’t grab bids. Ask an admin to link it on the Team page.</div>':'');
+  const load=ld?`<div class="gr-me"><b>Your plate right now:</b> ${ld.n} bid${ld.n===1?'':'s'} in progress (${ld.lead} as lead)${ld.week?` · <b>${ld.week} due this week</b>`:''}</div>`:(can('bids','edit')?'<div class="notice">Your account isn’t set up to work bids yet, so you can’t grab bids. Ask an admin to give you a position that works bids (Team → People & access).</div>':'');
   const cards=L.map(g=>{const G=g.grab||{};const open=!g.lead;const n=daysUntil(g.due_date);const by=G.by_date;const byN=by?daysUntil(by):null;
     const amHelping=me&&(g.support||[]).includes(me.id);const amLead=me&&g.lead===me.id;const only=Array.isArray(G.only)&&G.only.length?G.only:null;const allowed=!only||(me&&only.includes(me.id));
     const helpers=(g.support||[]).map(estName).filter(Boolean);
@@ -11444,3 +11428,94 @@ document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')re
   // picking the Budget / pricing bid type turns the switch on (and off when you change away from it)
   if(t.dataset.bf==='bid_type'){const was=isBudget({...b,bid_type:t.dataset.prevType||''});const r=rfqOf(b);delete r.budget;const now=isBudget(b);if(now!==was||now){const n=budApply(b,now);if(n)toast(now?`Budget pricing: ${n} vendor${n===1?'':'s'} set to Budget, no RFQ.`:`${n} vendor${n===1?'':'s'} set back to Not requested.`)}renderModal()}});
 document.addEventListener('focusin',e=>{const t=e.target;if(t.dataset&&t.dataset.bf==='bid_type')t.dataset.prevType=t.value});
+
+/* ----- Positions: the jobs people hold at the company -----
+   Kept in settings 'positions' {list:[{id,name,bids,jobs,office,role}]}. A person's position is their profile title.
+   What a position does decides where they show up: "works bids" puts them on bids, Up for grabs and workload
+   (the app keeps the estimator entry bids need behind the scenes), "runs jobs" makes them a PM. Each position has a
+   default access level that's applied when someone is given it, and can still be changed per person. */
+const POS_DEF=[{id:'precon',name:'Precon Manager',bids:true,jobs:false,office:false,role:'admin'},{id:'sest',name:'Senior Estimator',bids:true,jobs:false,office:false,role:'estimator'},
+  {id:'est',name:'Estimator',bids:true,jobs:false,office:false,role:'estimator'},{id:'pm',name:'Project Manager',bids:false,jobs:true,office:false,role:'pm'},
+  {id:'acct',name:'Accounting',bids:false,jobs:false,office:true,role:'accounting'},{id:'exec',name:'Executive',bids:false,jobs:false,office:true,role:'executive'}];
+const posList=()=>{const L=S.settings.positions&&Array.isArray(S.settings.positions.list)?S.settings.positions.list:null;return L&&L.length?L:POS_DEF};
+const posByName=n=>{const k=String(n||'').trim().toLowerCase();return k?posList().find(x=>x.name.toLowerCase()===k)||null:null};
+const posOf=p=>posByName(p&&p.title);
+const estOfUser=uid=>S.estimators.find(e=>e.user_id===uid)||null;
+// does this account work bids? (position says so; people with no position fall back to how they were set up before)
+function worksBids(p){const pos=posByName(p&&p.title)&&p.posSet!==false?posOf(p):null;if(pos)return !!pos.bids;const e=estOfUser(p.id);return !!(e&&e.active!==false)||p.role==='estimator'}
+// keep the estimator entry bids need in step with the person's position
+async function posSync(p,quiet,addOnly){if(!p)return;const want=worksBids(p);let e=estOfUser(p.id);
+  if(want){if(!e){const em=String(p.email||'').toLowerCase();e=em?S.estimators.find(x=>!x.user_id&&String(x.email||'').toLowerCase()===em):null;
+      if(e)await run(sb.from('estimators').update({user_id:p.id,active:true,name:e.name||personName(p),title:p.title||e.title||''}).eq('id',e.id));
+      else await run(sb.from('estimators').insert({id:newId(),name:personName(p),title:p.title||'',email:p.email||'',phone:p.phone||'',user_id:p.id,active:true}))}
+    else if(e.active===false||(p.title&&e.title!==p.title))await run(sb.from('estimators').update({active:true,title:p.title||e.title||''}).eq('id',e.id))}
+  else if(!addOnly&&e&&e.active!==false)await run(sb.from('estimators').update({active:false}).eq('id',e.id));
+  if(!quiet)await loadTable('estimators')}
+async function setPosition(pid,name){const p=byId(S.profiles,pid);if(!p)return;const pos=posByName(name);const self=pid===S.session.user.id;
+  try{const row={title:name||''};if(pos&&pos.role&&!self&&p.role!==pos.role)row.role=pos.role;
+    await run(sb.from('profiles').update(row).eq('id',pid));await loadProfiles();await posSync(byId(S.profiles,pid));await loadPms();
+    toast(pos?`${personName(p)} is now ${pos.name}${row.role?` with ${ROLE_LABEL[row.role]} access`:''}.`:'Position cleared.');render()}
+  catch(e){toast(errMsg(e))}}
+// once per visit: anyone whose position works bids but isn't set up for it gets set up
+async function posSyncAll(){if(posSyncAll.done||!isAdmin())return;posSyncAll.done=true;let n=0;
+  for(const p of S.profiles){if(p.role==='pending')continue;const e=estOfUser(p.id);if(e||!worksBids(p))continue;try{await posSync(p,true,true);n++}catch(err){}}
+  if(n){await loadTable('estimators');render()}}
+const posTags=pos=>pos?[pos.bids?'<span class="pos-tag b">Works bids</span>':'',pos.jobs?'<span class="pos-tag j">Runs jobs</span>':'',pos.office?'<span class="pos-tag o">Office</span>':''].join(''):'';
+
+function vTeam(){const me=S.session.user.id;const f=S.teamRole||'';posSyncAll();
+  const people=S.profiles.slice().sort((a,b)=>(a.role==='pending')-(b.role==='pending')||personName(a).localeCompare(personName(b)));
+  const noLogin=S.estimators.filter(e=>!e.user_id&&e.active!==false).sort((a,b)=>a.name.localeCompare(b.name));
+  const is=(p,k)=>{const pos=posOf(p);return k==='bids'?worksBids(p):k==='jobs'?(pos?pos.jobs:p.role==='pm'):k==='office'?(pos?pos.office:['executive','accounting','board'].includes(p.role)):k==='pending'?p.role==='pending':k==='nopos'?!pos:true};
+  const waiting=people.filter(p=>p.role==='pending').length;const nopos=people.filter(p=>!posOf(p)&&p.role!=='pending').length;
+  const F=[['','Everyone',people.length+noLogin.length],['bids','Works bids',people.filter(p=>is(p,'bids')).length+noLogin.length],['jobs','Runs jobs',people.filter(p=>is(p,'jobs')).length],['office','Office',people.filter(p=>is(p,'office')).length],...(nopos?[['nopos','No position',nopos]]:[]),...(waiting?[['pending','Waiting for access',waiting]]:[]),...(noLogin.length?[['nologin','No login',noLogin.length]]:[])];
+  const list=f==='nologin'?[]:people.filter(p=>is(p,f));const nl=!f||f==='bids'||f==='nologin'?noLogin:[];
+  const posSel=(attr,id,cur)=>`<select class="field pos-sel" ${attr}="${id}"><option value="">${cur&&!posByName(cur)?esc(cur)+' (not a position)':'No position'}</option>${posList().map(x=>`<option${posByName(cur)===x?' selected':''}>${esc(x.name)}</option>`).join('')}</select>`;
+  const row=p=>{const self=p.id===me;const pos=posOf(p);const cc=customCount(p);const e=estOfUser(p.id);const bad=worksBids(p)&&!(e&&e.active!==false);
+    return `<tr><td><span class="who">${pAv(p)}<span><b>${esc(personName(p))}</b>${self?' '+pill('You','hot'):''}<div class="small dim">${[p.email,p.phone].filter(Boolean).map(esc).join(' · ')}</div></span></span></td>
+      <td>${posSel('data-ppos',p.id,p.title)}<div class="pos-tags">${posTags(pos)}${bad?`<button class="linkbtn small warn-t" data-act="pos-fix" data-id="${p.id}">Set up for bids</button>`:''}</div></td>
+      <td><select class="field" data-prole="${p.id}" ${self?'disabled title="You can’t change your own access level"':''}>${ROLES.map(([k,l])=>`<option value="${k}"${p.role===k?' selected':''}>${l}</option>`).join('')}</select>${pos&&pos.role&&pos.role!==p.role&&p.role!=='pending'?`<div class="small dim">${esc(pos.name)} usually gets ${esc(ROLE_LABEL[pos.role]||pos.role)}</div>`:''}${cc?`<div class="small warn-t">${cc} custom change${cc===1?'':'s'}</div>`:''}</td>
+      <td class="team-acc">${accessChips(p)}</td>
+      <td class="r"><button class="btn sm" data-act="team-edit" data-id="${p.id}">Edit access…</button></td></tr>`};
+  const row2=e=>`<tr class="nl"><td><span class="who">${avatar(e.id)}<span><b>${esc(e.name)}</b> ${pill('No login')}<div class="small dim">${[e.email,e.phone].filter(Boolean).map(esc).join(' · ')}</div></span></span></td>
+      <td>${posSel('data-epos',e.id,e.title)}<div class="pos-tags"><span class="pos-tag b">Works bids</span></div></td><td class="small dim">Can be put on bids but can’t sign in</td><td></td>
+      <td class="r"><button class="btn sm" data-act="open-est" data-id="${e.id}">Edit…</button></td></tr>`;
+  return teamHead('People & access',`${people.length} account${people.length===1?'':'s'}${noLogin.length?` · ${noLogin.length} without a login`:''} · everyone at the company, whatever their position`,isAdmin()?'<button class="btn" data-act="new-est" title="For someone who should be on bids but won’t sign in">+ Someone without a login</button><button class="btn primary" data-act="ua-new">+ Add a person</button>':'')+`
+  ${waiting?`<div class="notice"><b>${waiting} ${waiting===1?'person is':'people are'} waiting for access.</b> Give them a position below. That sets their access too.</div>`:''}
+  <div class="seg team-f">${F.map(([k,l,n])=>`<button class="${f===k?'on':''}" data-act="team-f" data-v="${k}">${esc(l)} <small>${n}</small></button>`).join('')}</div>
+  ${f==='jobs'?'<p class="small" style="margin:-4px 0 10px"><button class="linkbtn" data-act="nav" data-v="teampm">See each PM’s job numbers →</button></p>':''}
+  <div class="panel scroll"><table class="team-t"><thead><tr><th>Person</th><th>Position</th><th>Access</th><th>Can open</th><th></th></tr></thead><tbody>
+  ${list.map(row).join('')}${nl.map(row2).join('')}${!list.length&&!nl.length?'<tr><td colspan="5"><div class="empty">Nobody here.</div></td></tr>':''}</tbody></table></div>
+  <p class="hint">Position is their job; it decides where they show up (bids, jobs, office). Access is what they can open. Picking a position sets the access that position usually gets; change it here or with <b>Edit access…</b>. Set up positions on the <b>Positions</b> tab.</p>`}
+
+/* ----- the Positions tab ----- */
+function vPositions(){const D=S.posd;const L=posList();const cnt=n=>S.profiles.filter(p=>posByName(p.title)&&posByName(p.title).name===n).length+S.estimators.filter(e=>!e.user_id&&e.active!==false&&posByName(e.title)&&posByName(e.title).name===n).length;
+  const roleSel=(i,v)=>`<select class="field sm" data-posf="${i}.role">${ROLE_ORDER.filter(r=>r!=='pending').map(r=>`<option value="${r}"${v===r?' selected':''}>${esc(ROLE_LABEL[r])}</option>`).join('')}</select>`;
+  const ck=(i,k,v,l)=>`<label class="pos-ck"><input type="checkbox" data-posf="${i}.${k}"${v?' checked':''}> ${l}</label>`;
+  const view=`<div class="panel scroll"><table class="team-t"><thead><tr><th>Position</th><th>What they do</th><th>Default access</th><th class="r">People</th></tr></thead><tbody>${L.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td><div class="pos-tags">${posTags(x)||'<span class="dim small">—</span>'}</div></td><td>${esc(ROLE_LABEL[x.role]||'—')}</td><td class="r num">${cnt(x.name)}</td></tr>`).join('')}</tbody></table></div>`;
+  const edit=D?`<div class="panel scroll"><table class="team-t pos-ed"><thead><tr><th>Position</th><th>Works bids</th><th>Runs jobs</th><th>Office</th><th>Default access</th><th class="r">People</th><th></th></tr></thead><tbody>
+    ${D.rows.map((r,i)=>r.gone?`<tr class="gone"><td colspan="6"><s>${esc(r.name)}</s></td><td><button class="btn xs" data-act="pos-undo" data-v="${i}">Undo</button></td></tr>`:`<tr><td><input class="field sm" data-posf="${i}.name" value="${esc(r.name)}" placeholder="Position name"></td><td>${ck(i,'bids',r.bids,'')}</td><td>${ck(i,'jobs',r.jobs,'')}</td><td>${ck(i,'office',r.office,'')}</td><td>${roleSel(i,r.role)}</td><td class="r num">${r.orig?cnt(r.orig):0}</td><td><button class="x" data-act="pos-del" data-v="${i}" title="Remove">×</button></td></tr>`).join('')}
+    <tr><td colspan="7"><input class="field sm" id="pos-new" placeholder="+ New position, e.g. Estimating Assistant, and press Enter"></td></tr></tbody></table></div>
+    <div class="adders"><button class="btn primary" data-act="pos-save"${D.busy?' disabled':''}>${D.busy?'Saving…':'Save positions'}</button><button class="btn" data-act="pos-cancel">Cancel</button></div>
+    <p class="hint"><b>Works bids:</b> can lead or help on bids, shows in Up for grabs and workload. <b>Runs jobs:</b> shows as a project manager on jobs. <b>Office:</b> accounting, executives and other office staff. Renaming a position renames it for everyone who has it.</p>`:'';
+  return teamHead('Positions','The jobs people hold here, what each one does in the app, and the access it starts with',isAdmin()&&!D?'<button class="btn primary" data-act="pos-edit">✎ Edit positions</button>':'')+(D?edit:view)+(S.settings.positions?'':`<p class="hint">These are starter positions. Edit them to match your company.</p>`)}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;if(!a.startsWith('pos-'))return;
+  if(a==='pos-fix'){const p=byId(S.profiles,t.dataset.id);try{await posSync(p);toast(`${personName(p)} can be put on bids now.`);render()}catch(err){toast(errMsg(err))}return}
+  if(!isAdmin())return;
+  if(a==='pos-edit'){S.posd={rows:posList().map(x=>({...x,orig:x.name}))};render();return}
+  if(a==='pos-cancel'){S.posd=null;render();return}const D=S.posd;if(!D)return;const i=+t.dataset.v;
+  if(a==='pos-del'){const r=D.rows[i];const n=r.orig?S.profiles.filter(p=>posByName(p.title)&&posByName(p.title).name===r.orig).length:0;if(n){toast(`${n} ${n===1?'person has':'people have'} this position. Give them another one on People & access first.`);return}r.gone=true;render();return}
+  if(a==='pos-undo'){D.rows[i].gone=false;render();return}
+  if(a==='pos-save'){const keep=D.rows.filter(r=>!r.gone&&String(r.name||'').trim());const seen=new Set();for(const r of keep){const k=r.name.trim().toLowerCase();if(seen.has(k)){toast(`Two positions are named “${r.name.trim()}”.`);return}seen.add(k)}
+    const list=keep.map(r=>({id:r.id||newId(),name:r.name.trim(),bids:!!r.bids,jobs:!!r.jobs,office:!!r.office,role:r.role||'estimator'}));D.busy=true;render();
+    try{await run(sb.from('settings').upsert({key:'positions',value:{list}}));
+      for(const r of keep){if(r.orig&&r.orig!==r.name.trim()){const nm=r.name.trim();for(const p of S.profiles.filter(p=>String(p.title||'').toLowerCase()===r.orig.toLowerCase()))await run(sb.from('profiles').update({title:nm}).eq('id',p.id));for(const x of S.estimators.filter(x=>String(x.title||'').toLowerCase()===r.orig.toLowerCase()))await run(sb.from('estimators').update({title:nm}).eq('id',x.id))}}
+      await Promise.all([loadTable('settings'),loadProfiles()]);posSyncAll.done=false;S.posd=null;render();await posSyncAll();toast('Positions saved.')}
+    catch(err){D.busy=false;render();toast(errMsg(err))}}});
+document.addEventListener('change',e=>{const t=e.target;
+  if(t.dataset.ppos&&isAdmin()){setPosition(t.dataset.ppos,t.value);return}
+  if(t.dataset.epos&&isAdmin()){run(sb.from('estimators').update({title:t.value}).eq('id',t.dataset.epos)).then(()=>loadTable('estimators')).then(()=>{render();toast('Position updated.')}).catch(err=>toast(errMsg(err)));return}
+  if(t.dataset.posf&&S.posd){const [i,k]=t.dataset.posf.split('.');S.posd.rows[+i][k]=t.type==='checkbox'?t.checked:t.value}});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset.posf&&S.posd&&t.type!=='checkbox'){const [i,k]=t.dataset.posf.split('.');S.posd.rows[+i][k]=t.value}});
+document.addEventListener('keydown',e=>{const t=e.target;if(t.id==='pos-new'&&e.key==='Enter'&&S.posd){e.preventDefault();const v=t.value.trim();if(!v)return;S.posd.rows.push({id:newId(),name:v,bids:false,jobs:false,office:false,role:'estimator',orig:null});render();setTimeout(()=>$('#pos-new')?.focus(),0)}});
+// picking a position while adding someone sets the access it usually gets
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.uapos!=null&&M&&M.kind==='useradd'){M.title=t.value;const pos=posByName(t.value);if(pos&&pos.role)M.role=pos.role;renderModal()}});
