@@ -11,10 +11,12 @@ const PROPOSAL_ST=['Not Started','In Progress','Complete','Sent'];
 const PROP_CLS={'Not Started':'','In Progress':'warn','Complete':'good','Sent':'info'};
 // The pipeline, in the order the work happens: invitation in → RFQs out → takeoff → quotes back → build the estimate → check the proposal → send it → decision
 const BID_ST=['Project Created','RFQ Sent','Takeoff','Quotes Received','Estimating','Proposal Review','Submitted','On Hold','Awarded','Not Awarded','No Bid'];
-const BID_ABOUT={'Project Created':'Invitation is in; nothing started yet','RFQ Sent':'Quote requests are out to vendors and subs','Takeoff':'Quantities are being taken off','Quotes Received':'Vendor and sub quotes are back','Estimating':'Building and pricing the estimate','Proposal Review':'Estimate is being checked and the proposal written','Submitted':'Proposal has gone to the GC','On Hold':'Paused','Awarded':'We got it','Not Awarded':'Went to someone else','No Bid':'We passed on it'};
+const BID_ABOUT={'Project Created':'Invitation is in; nothing started yet','RFQ Sent':'Quote requests are out to vendors and subs','Takeoff':'Quantities are being taken off','Quotes Received':'Waiting on vendor and sub quotes, or they’re all in','Estimating':'Building and pricing the estimate','Proposal Review':'Estimate is being checked and the proposal written','Submitted':'Proposal has gone to the GC','On Hold':'Paused','Awarded':'We got it','Not Awarded':'Went to someone else','No Bid':'We passed on it'};
 const BID_CLS={'Project Created':'','RFQ Sent':'st2','Takeoff':'st3','Quotes Received':'st4','Estimating':'warn','Proposal Review':'hot','Submitted':'info','On Hold':'','Awarded':'good','Not Awarded':'bad','No Bid':'na'};
 const ST_LABEL={'Estimating':'Estimate & proposal','Proposal Review':'Ready for review'};const stLabel=s=>ST_LABEL[s]||s;
-const stPill=s=>pill(stLabel(s),BID_CLS[s]);
+const stPill=(s,b)=>pill(b?stLabelB(b):stLabel(s),BID_CLS[s]);
+function stLabelB(b){if(b.status!=='Quotes Received')return stLabel(b.status);const qs=(b.quotes||quotesFor(b.id)).filter(qAsked);const out=qs.filter(q=>q.status==='Requested').length;
+  return !qs.length?'Quotes':out?`Waiting on quotes ${qs.length-out}/${qs.length}`:'Quotes in'}
 const ACTIVE=['Project Created','RFQ Sent','Takeoff','Quotes Received','Estimating','Proposal Review','Submitted','On Hold'];
 const PRE_SUBMIT=['Project Created','RFQ Sent','Takeoff','Quotes Received','Estimating','Proposal Review'];
 const stageNo=s=>PRE_SUBMIT.indexOf(s);   // -1 once it's sent, on hold or decided
@@ -195,8 +197,8 @@ function toast(msg){const t=$('#toast');t.innerHTML=`<div class="toast">${esc(ms
 
 
 /* ---------- pipeline progress (derived automatically from the bid) ---------- */
-const STAGES=['Created','RFQ sent','Takeoff','Quotes in','Estimate & proposal','Sent','Decision'];
-const STAGE_NAMES=['Project created','RFQ sent','Takeoff','Quotes received','Estimate & proposal','Proposal sent','Decision'];
+const STAGES=['Created','RFQ sent','Takeoff','Quotes','Estimate & proposal','Sent','Decision'];
+const STAGE_NAMES=['Project created','RFQ sent','Takeoff','Quotes','Estimate & proposal','Proposal sent','Decision'];
 const stageIdx=s=>{const i=stageNo(s);return i===5?4:i};
 const LAST=STAGES.length-1;
 // Follows the bid's stage. The stage in progress fills part-way from the real work: scopes signed off, quotes back.
@@ -432,7 +434,7 @@ function bidTable(list,opts={}){
     <td class="num">${qs.length?`${rec}/${qs.length}`:'<span class="dim">—</span>'}</td>
     <td class="num">${filesFor(b.id).length||'<span class="dim">—</span>'}</td>
     <td class="r num" style="font-weight:600">${bidValue(b)?money(bidValue(b)):'<span class="dim">—</span>'}</td>
-    <td>${stPill(b.status)}<div class="dim small" style="margin-top:3px;white-space:nowrap">Step ${stageInfo(b).current+1}: ${STAGES[stageInfo(b).current]}</div></td></tr>`}).join('');
+    <td>${stPill(b.status,b)}<div class="dim small" style="margin-top:3px;white-space:nowrap">Step ${stageInfo(b).current+1}: ${STAGES[stageInfo(b).current]}</div></td></tr>`}).join('');
   return `<div class="panel scroll"><table><thead><tr><th>Project</th><th>Bidding to</th><th>${opts.mine?'My role':'Estimator'}</th><th>Due</th><th>Scope takeoff</th><th>Proposal</th><th>Quotes in</th><th>Files</th><th class="r">Bid value</th><th>Status</th></tr></thead>
    <tbody>${rows||`<tr><td colspan="10"><div class="empty"><b>No active bids</b>${opts.mine?'Bids your precon manager assigns to you will show up here.':'Add a new bid to get started.'}</div></td></tr>`}</tbody></table></div>`;
 }
@@ -536,7 +538,7 @@ function overviewTable(all){
     ${groups.map(([,g])=>`<td>${groupStatus(b,g)}</td>`).join('')}
     <td>${pill(b.proposal_status||'Not Started',PROP_CLS[b.proposal_status])}${revisions(b).length>1||lastTouch(b)?`<div class="dim small" style="margin-top:3px">${[revisions(b).length>1?'Rev '+esc(revisions(b)[revisions(b).length-1].rev):'',lastTouch(b)?'GC contact '+fmtShort(lastTouch(b)):''].filter(Boolean).join(' · ')}</div>`:''}${openAddenda(b).length?`<div class="small" style="margin-top:3px;color:var(--warn);font-weight:600;white-space:nowrap">${openAddenda(b).length} addend${openAddenda(b).length===1?'um':'a'} open</div>`:''}</td>
     <td class="r num">${ovNumber(b)}</td>
-    <td>${stPill(b.status)}</td></tr>`).join('');
+    <td>${stPill(b.status,b)}</td></tr>`).join('');
   return `${all.length?ovBar(all,list.length):''}<div class="panel scroll"><table class="ov"><thead><tr>${th('name','Project')}${th('client','GC / client')}${th('due','Due date')}${groups.map(([l])=>th('g:'+l,l)).join('')}${th('proposal','Proposal')}${th('value','Our number','r')}${th('status','Status')}</tr></thead>
    <tbody>${rows||`<tr><td colspan="${6+groups.length}"><div class="empty">${all.length?'<b>No bids match these filters</b><button class="btn sm" data-act="ov-clear">Clear filters</button>':`<b>No active bids</b>${isAdmin()?'Click <b>+ New bid</b> to add one.':''}`}</div></td></tr>`}</tbody></table></div>`;
 }
@@ -544,7 +546,7 @@ function closedTable(list){
   return `<div class="panel scroll"><table><thead><tr><th>Project</th><th>GC / client</th><th>Due date</th><th class="r">W/ site impr.</th><th class="r">W/O site impr.</th><th class="r">Contract</th><th>Status</th></tr></thead><tbody>
   ${list.slice(0,20).map(b=>`<tr class="click" data-act="open-bid" data-id="${b.id}"><td class="proj">${esc(b.name)}</td><td>${clientsLine(b,3)}</td><td>${fmtDate(b.due_date)}</td>
     <td class="r num">${amtCell(b,'amount_with')}</td><td class="r num">${amtCell(b,'amount_without')}</td>
-    <td class="r num" style="font-weight:700">${b.status==='Awarded'?money(wonValue(b)):'<span class="dim">—</span>'}</td><td>${stPill(b.status)}${b.status==='Not Awarded'&&b.lost_reason?`<div class="dim small">${esc(b.lost_reason)}</div>`:''}</td></tr>`).join('')}
+    <td class="r num" style="font-weight:700">${b.status==='Awarded'?money(wonValue(b)):'<span class="dim">—</span>'}</td><td>${stPill(b.status,b)}${b.status==='Not Awarded'&&b.lost_reason?`<div class="dim small">${esc(b.lost_reason)}</div>`:''}</td></tr>`).join('')}
   </tbody></table></div>`;
 }
 function setupGuide(){
@@ -653,7 +655,7 @@ function board(){
 
 /* ----- pipeline ----- */
 const ARCHIVED_FILTER=['archived','Archived',b=>!!b.archived_at];
-const FILTERS=[['active','All active',b=>ACTIVE.includes(b.status)],['notstarted','Project created',b=>b.status==='Project Created'],['rfq','RFQ sent',b=>b.status==='RFQ Sent'],['takeoff','Takeoff',b=>b.status==='Takeoff'],['quotes','Quotes received',b=>b.status==='Quotes Received'],['estimating','Estimate & proposal',b=>b.status==='Estimating'||b.status==='Proposal Review'],['review','Ready for review',b=>b.status==='Proposal Review'],['submitted','Submitted',b=>b.status==='Submitted'],['hold','On hold',b=>b.status==='On Hold'],['awarded','Awarded',b=>b.status==='Awarded'],['lost','Not awarded',b=>b.status==='Not Awarded'],['nobid','No bid',b=>b.status==='No Bid'],['all','Everything',()=>true]];
+const FILTERS=[['active','All active',b=>ACTIVE.includes(b.status)],['notstarted','Project created',b=>b.status==='Project Created'],['rfq','RFQ sent',b=>b.status==='RFQ Sent'],['takeoff','Takeoff',b=>b.status==='Takeoff'],['quotes','Quotes',b=>b.status==='Quotes Received'],['estimating','Estimate & proposal',b=>b.status==='Estimating'||b.status==='Proposal Review'],['review','Ready for review',b=>b.status==='Proposal Review'],['submitted','Submitted',b=>b.status==='Submitted'],['hold','On hold',b=>b.status==='On Hold'],['awarded','Awarded',b=>b.status==='Awarded'],['lost','Not awarded',b=>b.status==='Not Awarded'],['nobid','No bid',b=>b.status==='No Bid'],['all','Everything',()=>true]];
 /* =====================================================================
    Pipeline views: Cards / List / Calendar, filters, sort and search
    (view choices are remembered per browser)
@@ -785,7 +787,7 @@ function listView(list){
       <td class="small">${(b.client_ids||[]).slice(0,2).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}${clientWon(b,id)?' ✓':''}</div>`).join('')}${(b.client_ids||[]).length>2?`<div class="dim">+${b.client_ids.length-2} more</div>`:''}${(b.client_ids||[]).length?'':'<span class="dim">—</span>'}</td>
       <td class="small">${b.lead_estimator_id?`<span class="who">${avatar(b.lead_estimator_id,22)}${esc(estName(b.lead_estimator_id))}</span>`:'<span class="dim">—</span>'}</td>
       <td>${dueCell(b)}</td>
-      <td>${stPill(b.status)}</td>
+      <td>${stPill(b.status,b)}</td>
       <td>${miniProg(b)}</td>
       <td class="num small">${it.length?`${done}/${it.length}`:'<span class="dim">—</span>'}</td>
       <td class="num small">${qs.length?`${rec}/${qs.length}`:'<span class="dim">—</span>'}</td>
@@ -818,8 +820,8 @@ function calendarView(list){
   const grid=cells.map(c=>{const es=by[c.ds]||[];const more=es.length-3;
     return `<div class="cday${c.out?' out':''}${c.ds===today?' today':''}${open===c.ds?' open':''}"><button class="cnum" data-act="cal-day" data-d="${c.ds}" aria-label="${fmtDate(c.ds)}, ${es.length} event${es.length===1?'':'s'}">${c.d.getDate()}</button>
       ${es.slice(0,3).map(evHtml).join('')}${more>0?`<button class="cmore" data-act="cal-day" data-d="${c.ds}">+${more} more</button>`:''}</div>`}).join('');
-  const dayList=open&&by[open]?`<div class="panel pad cal-daylist"><div class="sec-h" style="margin:0 0 8px"><h2>${fmtDate(open)}</h2><button class="x" data-act="cal-day" data-d="" aria-label="Close">×</button></div><div class="list">${by[open].map(e=>`<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${e.b.id}">${esc(e.label)}</button><div class="dim small"><span class="cdot ${e.type}"></span>${CAL_TYPES.find(x=>x[0]===e.type)[1]}${e.time?' · '+esc(e.time):''}</div></div>${stPill(e.b.status)}</div>`).join('')}</div></div>`:'';
-  const agenda=inMonth.length?`<div class="list">${inMonth.map(e=>`<div class="li"><div style="display:flex;gap:12px;align-items:center"><div class="agd${e.date===today?' today':''}"><b>${parseD(e.date).getDate()}</b><span>${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][parseD(e.date).getDay()]}</span></div><div><button class="linkish" data-act="open-bid" data-id="${e.b.id}">${esc(e.label)}</button><div class="dim small"><span class="cdot ${e.type}"></span>${CAL_TYPES.find(x=>x[0]===e.type)[1]}${e.time?' · '+esc(e.time):''}</div></div></div>${stPill(e.b.status)}</div>`).join('')}</div>`:'<div class="empty">Nothing scheduled this month.</div>';
+  const dayList=open&&by[open]?`<div class="panel pad cal-daylist"><div class="sec-h" style="margin:0 0 8px"><h2>${fmtDate(open)}</h2><button class="x" data-act="cal-day" data-d="" aria-label="Close">×</button></div><div class="list">${by[open].map(e=>`<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${e.b.id}">${esc(e.label)}</button><div class="dim small"><span class="cdot ${e.type}"></span>${CAL_TYPES.find(x=>x[0]===e.type)[1]}${e.time?' · '+esc(e.time):''}</div></div>${stPill(e.b.status,e.b)}</div>`).join('')}</div></div>`:'';
+  const agenda=inMonth.length?`<div class="list">${inMonth.map(e=>`<div class="li"><div style="display:flex;gap:12px;align-items:center"><div class="agd${e.date===today?' today':''}"><b>${parseD(e.date).getDate()}</b><span>${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][parseD(e.date).getDay()]}</span></div><div><button class="linkish" data-act="open-bid" data-id="${e.b.id}">${esc(e.label)}</button><div class="dim small"><span class="cdot ${e.type}"></span>${CAL_TYPES.find(x=>x[0]===e.type)[1]}${e.time?' · '+esc(e.time):''}</div></div></div>${stPill(e.b.status,e.b)}</div>`).join('')}</div>`:'<div class="empty">Nothing scheduled this month.</div>';
   const undated=list.filter(b=>!b.due_date).length;
   return `<div class="cal-head">
     <div class="cal-nav"><button class="btn sm" data-act="cal-prev" aria-label="Previous month">‹</button><h2>${first.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</h2><button class="btn sm" data-act="cal-next" aria-label="Next month">›</button><button class="btn sm ghost" data-act="cal-today">Today</button></div>
@@ -847,7 +849,7 @@ function palItems(){
   if(q&&!isPM()){
     const bids=(onlyMine()?S.bids.filter(assigned):S.bids).filter(b=>matchesQuery(bidHaystack(b),q))
       .sort((a,b)=>((b.name||'').toLowerCase().includes(q)-(a.name||'').toLowerCase().includes(q))||(live(b)-live(a))||(a.due_date||'9').localeCompare(b.due_date||'9'));
-    bids.slice(0,8).forEach(b=>add('Bids',b.name,[b.status,b.due_date?fmtDate(b.due_date):'',clientsLine(b,1).replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")].filter(Boolean).join(' · '),()=>openBid(b.id),stPill(b.status)));
+    bids.slice(0,8).forEach(b=>add('Bids',b.name,[b.status,b.due_date?fmtDate(b.due_date):'',clientsLine(b,1).replace(/<[^>]+>/g,'').replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&#39;/g,"'")].filter(Boolean).join(' · '),()=>openBid(b.id),stPill(b.status,b)));
     S.clients.filter(c=>matchesQuery([c.company,c.type,...(c.contacts||[]).map(x=>x.name+' '+x.email)].join(' ').toLowerCase(),q)).slice(0,5)
       .forEach(c=>add('Clients & GCs',c.company,[c.type,...(c.contacts||[]).map(x=>x.name).filter(Boolean).slice(0,2)].filter(Boolean).join(' · '),()=>{const d=clone(c);M={kind:'client',draft:d};showModal()}));
     S.vendors.filter(v=>matchesQuery([v.company,v.trade,v.vendor_type,v.contact_name,...vendorScopes(v)].join(' ').toLowerCase(),q)).slice(0,5)
@@ -881,7 +883,7 @@ function card(b){
   const team=[b.lead_estimator_id,...(b.support_estimator_ids||[])].filter(id=>byId(S.estimators,id));
   const picked=S.selMode&&S.sel?.has(b.id);
   return `<div class="card${picked?' picked':''}" role="button" tabindex="0" data-act="open-bid" data-id="${b.id}"${S.selMode?` aria-pressed="${picked?'true':'false'}"`:''}>${S.selMode?`<span class="pickbox" aria-hidden="true">${picked?'✓':''}</span>`:''}
-   <div class="card-top"><div><h3>${esc(b.name)}${b.archived_at?' <span class="pill na" style="font-size:11px;vertical-align:3px">Archived</span>':''}</h3>${supTag(b,true)}<div class="meta">${clientsLine(b)}</div>${b.project_type||unitsText(b)?`<div class="meta" style="margin-top:1px">${[normProjectType(b.project_type),unitsText(b)].filter(Boolean).map(esc).join(' · ')}</div>`:''}</div>${stPill(b.status)}</div>
+   <div class="card-top"><div><h3>${esc(b.name)}${b.archived_at?' <span class="pill na" style="font-size:11px;vertical-align:3px">Archived</span>':''}</h3>${supTag(b,true)}<div class="meta">${clientsLine(b)}</div>${b.project_type||unitsText(b)?`<div class="meta" style="margin-top:1px">${[normProjectType(b.project_type),unitsText(b)].filter(Boolean).map(esc).join(' · ')}</div>`:''}</div>${stPill(b.status,b)}</div>
    ${progress(b)}
    <div class="row">${dueCell(b)}<div style="text-align:right">${v?`<div class="val">${money(v)}</div><div class="dim small">${b.use_for==='without'?'Without':'With'} site improvements</div>`:`<div class="dim small">Proposal ${esc((b.proposal_status||'Not Started').toLowerCase())}</div>`}</div></div>
    <div class="scopes">${scopePills(b)}</div>
@@ -1075,7 +1077,7 @@ function bidModal(){
   return `<div class="bp-head"><button class="btn ghost bp-back" data-act="close">← ${S.view==='pipeline'?'Pipeline':'Back'}</button>
     <div class="bp-title"><h2>${esc(isNew?(b.name||'New bid'):b.name||'Untitled bid')}</h2><p>${sub.join(' · ')}</p></div>
     <div class="bp-right"><span class="bp-save" id="bp-save">${saveTxt}</span>
-      <label class="bp-status" title="Set the stage by hand, or put the bid on hold"><select class="field" data-bf="status"${DIS()}>${BID_ST.map(o=>`<option value="${esc(o)}"${o===b.status?' selected':''}>${esc(stLabel(o)==='Submitted'?'Proposal sent':stLabel(o))}</option>`).join('')}</select></label>
+      <label class="bp-status" title="Set the stage by hand, or put the bid on hold"><select class="field" data-bf="status"${DIS()}>${BID_ST.map(o=>`<option value="${esc(o)}"${o===b.status?' selected':''}>${esc(stLabel(o)==='Submitted'?'Proposal sent':o==='Quotes Received'?'Quotes':stLabel(o))}</option>`).join('')}</select></label>
       ${isNew&&work?'<button class="btn primary" data-act="save">Create bid</button>':''}</div></div>
   <div class="bp-tabs" role="tablist">${tabs}${b.status==='On Hold'?'<span class="bp-hold">'+pill('On hold','warn')+'</span>':''}</div>
   <div class="mbody bp-body"><div class="bp-grid"><div class="bp-main">${archNote}${supBanner(b)}${bidReqBanner(b)}${trkStrip(b)}${body}</div><aside class="bp-aside">${bpAside(b,work,admin,isNew)}</aside></div></div>
@@ -1423,7 +1425,7 @@ function addQuote(vid,scope){const v=vendorOf(vid);if(!v)return false;
 function ef(path,ph,type){return `<input class="field" ${type?`type="${type}"`:''} data-ef="${path}" value="${esc(M.draft[path]??'')}" placeholder="${esc(ph||'')}"${DIS()}>`}
 function efSel(path,list){return `<select class="field" data-ef="${path}"${DIS()}>${list.map(o=>`<option${M.draft[path]===o?' selected':''}>${esc(o)}</option>`).join('')}</select>`}
 function entFoot(label,isNew){const ok=M&&(M.kind==='client'||M.kind==='vendor')?can('contacts','edit'):isAdmin();return `<div class="mfoot"><div>${ok&&!isNew?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete'}</button>`:''}</div><div class="r"><button class="btn" data-act="close">${ok?'Cancel':'Close'}</button>${ok?`<button class="btn primary" data-act="save">${isNew?label:'Save changes'}</button>`:''}</div></div>`}
-function bidMiniList(bs,extra){return bs.length?`<div class="list">${bs.sort((a,b)=>(b.due_date||'').localeCompare(a.due_date||'')).map(b=>`<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button><div class="dim small">${fmtDate(b.due_date)}${extra?' · '+extra(b):''}</div></div><div style="text-align:right">${stPill(b.status)}<div class="num small">${bidValue(b)?money(bidValue(b)):''}</div></div></div>`).join('')}</div>`:'<div class="empty">No bids yet.</div>'}
+function bidMiniList(bs,extra){return bs.length?`<div class="list">${bs.sort((a,b)=>(b.due_date||'').localeCompare(a.due_date||'')).map(b=>`<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button><div class="dim small">${fmtDate(b.due_date)}${extra?' · '+extra(b):''}</div></div><div style="text-align:right">${stPill(b.status,b)}<div class="num small">${bidValue(b)?money(bidValue(b)):''}</div></div></div>`).join('')}</div>`:'<div class="empty">No bids yet.</div>'}
 function estModal(){const e=M.draft,isNew=M.isNew;
   const bs=S.bids.filter(b=>b.lead_estimator_id===e.id||(b.support_estimator_ids||[]).includes(e.id));
   return mhead(isNew?'New estimator':e.name||'Estimator',e.user_id?'Has a login':'No login linked yet')+`<div class="mbody"><fieldset><legend>Details</legend><div class="fg">
@@ -1971,7 +1973,7 @@ function bulkDelModal(){
   const quotes=bs.reduce((x,b)=>x+quotesFor(b.id).length,0);const ok=M.typed.trim().toUpperCase()==='DELETE';
   return mhead(`Delete ${n} bid${n===1?'':'s'}?`,'This can’t be undone')+`<div class="mbody">
     <div class="err" style="margin-bottom:14px">These bids will be permanently deleted${quotes||files?`, along with ${quotes?`${quotes} vendor quote${quotes===1?'':'s'}`:''}${quotes&&files?' and ':''}${files?`${files} uploaded file${files===1?'':'s'}`:''}`:''}. Clients, GCs, vendors and estimators are not affected.</div>
-    <fieldset><legend>Bids to delete</legend><div class="list">${bs.slice(0,25).map(b=>`<div class="li"><div><b style="font-weight:600">${esc(b.name)}</b><div class="dim small">${[fmtDate(b.due_date),clientsLine(b,2)].filter(x=>x&&x!=='—').join(' · ')}</div></div>${stPill(b.status)}</div>`).join('')}${n>25?`<div class="li dim small">…and ${n-25} more</div>`:''}</div></fieldset>
+    <fieldset><legend>Bids to delete</legend><div class="list">${bs.slice(0,25).map(b=>`<div class="li"><div><b style="font-weight:600">${esc(b.name)}</b><div class="dim small">${[fmtDate(b.due_date),clientsLine(b,2)].filter(x=>x&&x!=='—').join(' · ')}</div></div>${stPill(b.status,b)}</div>`).join('')}${n>25?`<div class="li dim small">…and ${n-25} more</div>`:''}</div></fieldset>
     <fieldset><legend>Confirm</legend><label class="f">Type <b>DELETE</b> to confirm<input class="field" id="bulk-confirm" data-bulktype value="${esc(M.typed)}" autocomplete="off" style="max-width:220px;text-transform:uppercase"></label></fieldset></div>
     <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn danger arm" data-act="bulkdel-run"${ok&&!M.running?'':' disabled'}>${M.running?'Deleting…':`Delete ${n} bid${n===1?'':'s'}`}</button></div></div>`;
 }
@@ -5591,7 +5593,7 @@ function vEstimates(){const tab=S.estsTab||'list';const canNew=can('bids','edit'
   list.sort((a,c)=>String(a.b.due_date||'9').localeCompare(String(c.b.due_date||'9'))||String(c.x.updated_at).localeCompare(String(a.x.updated_at)));
   return head+tabs+`<div class="bar"><input id="q-ests" class="field search" data-q="ests" placeholder="Search projects, GCs, estimators" value="${esc(S.q.ests||'')}"><select class="field" data-estsf><option value="active"${f==='active'?' selected':''}>Active bids</option><option value="won"${f==='won'?' selected':''}>Awarded</option><option value="all"${f==='all'?' selected':''}>All</option>${S.bids.some(b=>b.archived_at)?`<option value="arch"${f==='arch'?' selected':''}>Archived bids</option>`:''}</select></div>
   <div class="panel scroll"><table><thead><tr><th>Project</th><th>GC / client</th><th>Due</th><th>Status</th><th>Lead</th><th class="r">Cost</th><th class="r">Bid total</th><th class="r">Margin</th><th>Updated</th><th></th></tr></thead><tbody>
-  ${list.map(({x,b})=>`<tr class="click" data-act="ests-open" data-id="${b.id}"><td class="proj">${esc(b.name)}${estVersOf(b.id).length?` <span class="pill" title="Saved copies of earlier versions">${estVersOf(b.id).length} saved cop${estVersOf(b.id).length===1?'y':'ies'}</span>`:''}${b.location?`<div class="dim small">${esc(b.location)}</div>`:''}</td><td class="small">${clientsLine(b,2)}</td><td class="small">${dueCell(b)}</td><td>${stPill(b.status)}</td><td>${b.lead_estimator_id?avatar(b.lead_estimator_id):'<span class="dim">—</span>'}</td>
+  ${list.map(({x,b})=>`<tr class="click" data-act="ests-open" data-id="${b.id}"><td class="proj">${esc(b.name)}${estVersOf(b.id).length?` <span class="pill" title="Saved copies of earlier versions">${estVersOf(b.id).length} saved cop${estVersOf(b.id).length===1?'y':'ies'}</span>`:''}${b.location?`<div class="dim small">${esc(b.location)}</div>`:''}</td><td class="small">${clientsLine(b,2)}</td><td class="small">${dueCell(b)}</td><td>${stPill(b.status,b)}</td><td>${b.lead_estimator_id?avatar(b.lead_estimator_id):'<span class="dim">—</span>'}</td>
     <td class="r num">${money(x.total_cost)}</td><td class="r num"><b>${money(x.total_price)}</b></td><td class="r num">${num(x.total_price)?fmtN((x.total_price-x.total_cost)/x.total_price*100,1)+'%':'—'}</td><td class="small dim">${x.updated_at?fmtShort(String(x.updated_at).slice(0,10)):''}${x.updated_by_name?`<br>${esc(x.updated_by_name)}`:''}</td><td class="ests-acts">${canWork(b)&&can('estimates','edit')?`<button class="btn sm" data-act="ests-revise" data-id="${b.id}" title="Keep a copy of this estimate and start a revision">Revise</button>`:''}${isAdmin()?`<button class="btn sm ghost danger-t" data-act="ests-del" data-id="${b.id}" title="Delete this estimate">Delete</button>`:''}</td></tr>`).join('')
     ||`<tr><td colspan="10"><div class="empty"><b>No estimates ${q||f!=='all'?'match':'yet'}</b>${canNew?'Click <b>+ New estimate</b> to start one.':''}</div></td></tr>`}</tbody></table></div>`}
 function tplSettingsText(e){const m=e.markup||{};const s=e.settings||{};const bits=[];if(s.sched)bits.push(s.sched.name);
@@ -7933,7 +7935,7 @@ document.addEventListener('input',e=>{const t=e.target;const x=trkCtx();if(x&&t.
 /* ---- pipeline stage bar on the bid: where it is, and click to move it ---- */
 function stageBar(b,work){const steps=[...PRE_SUBMIT,'Submitted'];const cur=steps.indexOf(b.status);const dec=DECIDED.includes(b.status);const n=dec?steps.length:cur;
   return `<div class="stg${b.status==='On Hold'?' hold':''}" role="group" aria-label="Pipeline stage">${steps.map((s,i)=>`<button type="button" class="${i<n?'past':i===n?'now':''}" data-act="bid-stage" data-v="${s}" title="${esc(BID_ABOUT[s]||'')}"${work?'':' disabled'}><i>${i<n?'✓':i+1}</i><span>${s==='Submitted'?'Proposal sent':s}</span></button>`).join('')}
-    <span class="stg-end">${dec?stPill(b.status):b.status==='On Hold'?pill('On Hold','warn'):''}</span></div>`}
+    <span class="stg-end">${dec?stPill(b.status,b):b.status==='On Hold'?pill('On Hold','warn'):''}</span></div>`}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act=bid-stage]');if(!t||!M||M.kind!=='bid'||t.disabled)return;M.draft.status=t.dataset.v;renderModal()});
 
 /* =====================================================================
@@ -10530,7 +10532,7 @@ function archModal(){const A=M;const pool=archPool();const pick=archPick();
     <div class="arch-modes">${ARCH_MODES.map(([k,l])=>`<label class="arch-m${A.mode===k?' on':''}"><input type="radio" name="arch-mode" value="${k}" data-archmode${A.mode===k?' checked':''}><span><b>${l}</b>${cnt(k)!=null?` <span class="dim">${cnt(k)}</span>`:''}
       ${k==='added'&&A.mode==='added'?`<span class="arch-days">${days.map(([d,n])=>`<label class="check small"><input type="checkbox" data-archday="${d}"${A.days.has(d)?' checked':''}> ${fmtDate(d)} <span class="dim">· ${n} bid${n===1?'':'s'}</span></label>`).join('')||'<span class="dim small">No dates on file.</span>'}<span class="dim small">The day with the most bids is usually the import.</span></span>`:''}
       ${k==='due'&&A.mode==='due'?`<span class="arch-days"><label class="small">Due before <input class="field sm" type="date" data-archbefore value="${esc(A.before||'')}" style="width:auto"></label><label class="check small"><input type="checkbox" data-archnodate${A.noDate?' checked':''}> Also bids with no due date</label></span>`:''}</span></label>`).join('')}</div>
-    <fieldset style="margin-top:14px"><legend>${pick.length} bid${pick.length===1?'':'s'} will be archived</legend><div class="list">${pick.slice(0,20).map(b=>`<div class="li"><div><b style="font-weight:600">${esc(b.name)}</b><div class="dim small">${[b.due_date?'Due '+fmtDate(b.due_date):'',clientsLine(b,2),b.created_at?'added '+fmtShort(archDay(b)):''].filter(x=>x&&x!=='—').join(' · ')}</div></div>${stPill(b.status)}</div>`).join('')||'<div class="li dim small">Nothing matches yet.</div>'}${pick.length>20?`<div class="li dim small">…and ${pick.length-20} more</div>`:''}</div></fieldset>
+    <fieldset style="margin-top:14px"><legend>${pick.length} bid${pick.length===1?'':'s'} will be archived</legend><div class="list">${pick.slice(0,20).map(b=>`<div class="li"><div><b style="font-weight:600">${esc(b.name)}</b><div class="dim small">${[b.due_date?'Due '+fmtDate(b.due_date):'',clientsLine(b,2),b.created_at?'added '+fmtShort(archDay(b)):''].filter(x=>x&&x!=='—').join(' · ')}</div></div>${stPill(b.status,b)}</div>`).join('')||'<div class="li dim small">Nothing matches yet.</div>'}${pick.length>20?`<div class="li dim small">…and ${pick.length-20} more</div>`:''}</div></fieldset>
     ${pick.length&&pick.length===pool.length?'<p class="small dim">That’s every bid in the pipeline: it will be empty, ready for new work.</p>':''}</div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="arch-run"${pick.length&&!A.running?'':' disabled'}>${A.running?'Archiving…':`Archive ${pick.length} bid${pick.length===1?'':'s'}`}</button></div></div>`}
 // the Archived view: each batch with a restore button
