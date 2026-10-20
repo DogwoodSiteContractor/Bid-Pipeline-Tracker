@@ -322,7 +322,7 @@ function renderTop(){setTimeout(()=>{presPaint();presTrack(false)},0);
   <nav class="nav">${navGroups().map(([k,l,mem])=>`<button class="${mem.includes(S.view)?'on':''}" data-act="nav" data-v="${k}">${l}</button>`).join('')}</nav>
   <div class="nav-more" hidden><button class="nav-morebtn" data-act="nav-more" aria-haspopup="true" aria-expanded="false">More ▾</button><div class="nav-menu" role="menu" hidden></div></div>
   <div class="pres" id="pres"></div><button class="topsearch" data-act="pal-open" aria-label="Search (Ctrl+K)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><span>Search</span><kbd>Ctrl K</kbd></button>
-  <div class="userbox"><button class="me-av" data-act="fun-me" title="My profile">${funAv(crewOf(myId()),30)}</button><span>${esc(myName())}<br><span class="rolepill">${ROLE_LABEL[role()]}</span></span>
+  <div class="userbox"><button class="me-av" data-act="fun-me" title="My profile">${funAv(crewOf(myId()),30)}</button><span>${esc(myName())}<br><span class="rolepill${isDev()?' dev':''}">${isDev()?'Developer':ROLE_LABEL[role()]}</span></span>
   ${can('bids','edit')&&bidsAll()?'<button class="btn primary" data-act="new-bid">+ New bid</button>':''}<button class="btn sm" data-act="signout">Sign out</button></div>`;
   navFit();
   // the logo takes up room once it loads, so fit the tabs again then
@@ -6683,7 +6683,7 @@ function accessModal(){const d=M.draft;const admin=d.role==='admin';const self=d
   return mhead(personName(d),d.email)+`<div class="mbody">
   <fieldset><legend>Person</legend><div class="fg"><label class="f">Display name<input class="field" id="acc-name" data-accf="full_name" value="${esc(d.full_name||'')}"></label><label class="f">Title / position<input class="field" id="acc-title" data-accf="title" value="${esc(d.title||'')}" placeholder="e.g. Senior estimator"></label>
     <label class="f">Phone<input class="field" id="acc-phone" data-accf="phone" value="${esc(d.phone||'')}"></label>
-    <label class="f">Role<select class="field" data-accrole${self?' disabled title="You can’t change your own role"':''}>${ROLES.map(([k,l])=>`<option value="${k}"${d.role===k?' selected':''}>${l}</option>`).join('')}</select></label></div>
+    ${d.is_dev?'<label class="f">Access<span class="pill dev" style="align-self:flex-start;margin-top:6px">Developer</span></label>':`    <label class="f">Access<select class="field" data-accrole${self?' disabled title="You can’t change your own role"':''}>${ROLES.map(([k,l])=>`<option value="${k}"${d.role===k?' selected':''}>${l}</option>`).join('')}</select></label>`}</div>
     <p class="small dim" style="margin:6px 0 0">${esc(ROLE_ABOUT[d.role]||'')}</p></fieldset>
   <fieldset><legend>Access</legend>${admin?'<div class="notice small">Admins can open and change everything. Pick another role to limit access.</div>':d.role==='pending'?'<div class="notice small">Pick a role first. People waiting for access can\'t open anything.</div>':''}
     <table class="acc-ed"><tbody>${AREAS.map(([a,l,desc])=>{const def=rolePerm(d.role,a);const eff=permOf(d,a);return `<tr class="${d.perms[a]?'custom':''}"><td><b>${esc(l)}</b><div class="small dim">${esc(desc)}</div></td>
@@ -11473,7 +11473,7 @@ function vTeam(){const me=S.session.user.id;const f=S.teamRole||'';posSyncAll();
   const row=p=>{const self=p.id===me;const pos=posOf(p);const cc=customCount(p);const e=estOfUser(p.id);const bad=worksBids(p)&&!(e&&e.active!==false);
     return `<tr><td><span class="who">${pAv(p)}<span><b>${esc(personName(p))}</b>${self?' '+pill('You','hot'):''}<div class="small dim">${[p.email,p.phone].filter(Boolean).map(esc).join(' · ')}</div></span></span></td>
       <td>${posSel('data-ppos',p.id,p.title)}<div class="pos-tags">${posTags(pos)}${bad?`<button class="linkbtn small warn-t" data-act="pos-fix" data-id="${p.id}">Set up for bids</button>`:''}</div></td>
-      <td><select class="field" data-prole="${p.id}" ${self?'disabled title="You can’t change your own access level"':''}>${ROLES.map(([k,l])=>`<option value="${k}"${p.role===k?' selected':''}>${l}</option>`).join('')}</select>${pos&&pos.role&&pos.role!==p.role&&p.role!=='pending'?`<div class="small dim">${esc(pos.name)} usually gets ${esc(ROLE_LABEL[pos.role]||pos.role)}</div>`:''}${cc?`<div class="small warn-t">${cc} custom change${cc===1?'':'s'}</div>`:''}</td>
+      <td>${p.is_dev?'<span class="pill dev">Developer</span><div class="small dim">Full access. Set in the database, not here.</div>':`<select class="field" data-prole="${p.id}" ${self?'disabled title="You can’t change your own access level"':''}>${ROLES.map(([k,l])=>`<option value="${k}"${p.role===k?' selected':''}>${l}</option>`).join('')}</select>${pos&&pos.role&&pos.role!==p.role&&p.role!=='pending'?`<div class="small dim">${esc(pos.name)} usually gets ${esc(ROLE_LABEL[pos.role]||pos.role)}</div>`:''}${cc?`<div class="small warn-t">${cc} custom change${cc===1?'':'s'}</div>`:''}`}</td>
       <td class="team-acc">${accessChips(p)}</td>
       <td class="r"><button class="btn sm" data-act="team-edit" data-id="${p.id}">Edit access…</button></td></tr>`};
   const row2=e=>`<tr class="nl"><td><span class="who">${avatar(e.id)}<span><b>${esc(e.name)}</b> ${pill('No login')}<div class="small dim">${[e.email,e.phone].filter(Boolean).map(esc).join(' · ')}</div></span></span></td>
