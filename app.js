@@ -298,7 +298,7 @@ function renderNow(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
-  const views={lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const views={grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
@@ -946,7 +946,7 @@ let M=null;
 function closeModal(){const ae=document.activeElement;if(ae&&$('#modal')?.contains(ae))ae.blur();if(M&&M.kind==='bid'&&!M.picker&&!M.sup){bpHash('');if(bpCanAuto()&&bpSig(M.draft)!==M.bpSig){const m=M;saveBid({auto:true},m).then(()=>toast(`Saved ${m.draft.name}`)).catch(e=>toast('Not saved: '+errMsg(e)))}}const back=M&&M.kind==='lib'&&M.back;if(back){M=back;renderModal();return}M=null;$('#modal').innerHTML='';document.body.style.overflow=''}
 function showModal(){document.body.style.overflow='hidden';renderModal(true)}
 // keep the cursor in the same field when a modal re-renders
-const FOCUS_ATTRS=['data-rfqf','data-rfqsubj','data-rfqt','data-bprfq','data-itp','data-jip','data-itf','data-entf','data-logf','data-jobf','data-logdate','data-ef','data-bf','data-qf','data-cp','data-ad','data-rv','data-sf','data-lf','data-ctf','data-ff','data-tn','data-pickq','data-bulktype'];
+const FOCUS_ATTRS=['data-grab','data-rfqf','data-rfqsubj','data-rfqt','data-bprfq','data-itp','data-jip','data-itf','data-entf','data-logf','data-jobf','data-logdate','data-ef','data-bf','data-qf','data-cp','data-ad','data-rv','data-sf','data-lf','data-ctf','data-ff','data-tn','data-pickq','data-bulktype'];
 function focusKey(el){if(!el||!$('#modal')?.contains(el))return null;if(el.id)return '#'+CSS.escape(el.id);for(const a of FOCUS_ATTRS)if(el.hasAttribute(a))return `[${a}="${CSS.escape(el.getAttribute(a))}"]`;return null}
 function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=true;try{renderModalNow(first)}finally{renderModal._busy=false}}
 function renderModalNow(first){
@@ -1115,7 +1115,7 @@ function bpProject(b,work,admin){
     <div class="f s2" style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:500;color:var(--ink-2)">Supporting estimators
       <div class="tagrow">${b.support_estimator_ids.map(id=>`<span class="tag">${avatar(id,20)} ${esc(estName(id)||'Removed')}${admin?`<button class="rm" data-act="rm-support" data-id="${id}" aria-label="Remove">×</button>`:'&nbsp;'}</span>`).join('')||(admin?'':'<span class="dim">None</span>')}
       ${admin?`<select class="field" data-act="add-support" style="width:auto"><option value="">+ Add</option>${(()=>{const left=ests.filter(e=>e.active!==false&&e.id!==b.lead_estimator_id&&!b.support_estimator_ids.includes(e.id));return (left.length>1?`<option value="__all">Entire team (all ${left.length} other estimators)</option>`:'')+left.map(e=>`<option value="${e.id}">${esc(e.name)}</option>`).join('')})()}</select>${b.support_estimator_ids.length>1?'<button class="linkbtn" data-act="clear-support" style="font-size:12.5px">Remove all</button>':''}`:''}</div></div>
-  </div>${admin&&!S.estimators.length?'<p class="hint">No estimators on file yet. Add them in the Estimators tab.</p>':''}</fieldset>`}
+  </div>${grabPostHtml(b)}${admin&&!S.estimators.length?'<p class="hint">No estimators on file yet. Add them in the Estimators tab.</p>':''}</fieldset>`}
 function bpScopeAdders(b){const L=lib();const have=new Set(b.scope_items.map(x=>x.name.toLowerCase()));const avail=SG().map(g=>[g,L.scopes.filter(x=>x.group===g&&!have.has(x.name.toLowerCase()))]).filter(([,xs])=>xs.length);
   return `<div class="adders">
      <select class="field" data-act="apply-template"><option value="">Apply a template…</option>${(L.templates||[]).map(t=>`<option value="${esc(t.id)}">${esc(t.name)} (${t.scopes.length})</option>`).join('')}</select>
@@ -1476,6 +1476,7 @@ async function saveBid(opt={},m=M){
   d._new=false;
   // kept out of the main save so bids still save before update-28 has been run
   if(d.proposal_eta!==undefined&&(wasNew?d.proposal_eta:true)){try{await sb.from('bids').update({proposal_eta:nullIfEmpty(d.proposal_eta)}).eq('id',row.id)}catch(e){}}
+  if(d.grab&&typeof d.grab==='object'&&!S.grabMissing){try{const {error}=await sb.from('bids').update({grab:d.grab}).eq('id',row.id);if(error){if(/grab/i.test(error.message||''))S.grabMissing=true;else throw error}else if(typeof grabLoad==='function')setTimeout(grabLoad,300)}catch(e){if(!/grab/i.test(errMsg(e)))throw e}}
   // RFQ details (quotes due, plans link, engineer…): own column so bids still save before update-39 is run
   if(d.rfq&&typeof d.rfq==='object'){try{localStorage.setItem('rfq:'+row.id,JSON.stringify(d.rfq))}catch(e){}
     if(!S.rfqMissing){try{const {error}=await sb.from('bids').update({rfq:d.rfq}).eq('id',row.id);if(error)S.rfqMissing=true}catch(e){S.rfqMissing=true}}}
@@ -6615,7 +6616,7 @@ const pAv=p=>`<span class="av" style="background:${avColor(p.id)}" title="${esc(
 /* ----- top bar: tabs come from what each person can open ----- */
 function navGroups(){const g=[];
   if(can('dash'))g.push(['dashboard',onlyMine()?'My dashboard':scopeView()?'Dashboard':role()==='board'?'Board dashboard':'Dashboard',['dashboard']]);
-  if(can('bids'))g.push(['pipeline',onlyMine()?'My bids':'Pipeline',['pipeline']]);
+  if(can('bids')){const n=typeof grabCount==='function'?grabCount():0;SUBNAV_LABEL.pipeline=onlyMine()?'My bids':'Pipeline';SUBNAV_LABEL.grabs='Up for grabs'+(n?` (${n})`:'');g.push(['pipeline',(onlyMine()?'My bids':'Pipeline')+(n?` <span class="nav-badge" title="${n} up for grabs">${n}</span>`:''),['pipeline','grabs']])}
   const twFree=!!(S.twBid&&!byId(S.bids,S.twBid));const est=[...(can('estimates')?['estimates','estimate',...(twFree?[]:['tw'])]:[]),...(can('codebook')?['cb']:[]),...(can('codebook','edit')?['settings','scopes']:[])];
   if(est.length)g.push([est[0],'Estimates',est.includes('cb')&&!est.includes('estimates')?[...est]:est]);
   if(can('jobs'))g.push(['jobs','Jobs',['jobs','job']]);
@@ -11359,3 +11360,68 @@ function trkSentHtml(x,c){const st=trkState(c.id);
   return `<div class="trk-sent ${st.k}${x.ask?' ask':''}"><span>${line}</span>${S.trkMissing?'':`<button class="btn sm${x.ask?' primary':''}" data-act="trk-sent">${x.ask?'Sent it? ✓ Mark as sent today':'✓ Mark as sent today'}</button>`}</div>`}
 async function trkMarkSent(x){const cid=x.cur;try{const {error}=await sb.from('track_sends').insert({client_id:cid,bid_id:x.bidId||null,sent_at:new Date().toISOString(),sent_by:S.session.user.id,sent_by_name:myName()});if(error)throw error;x.ask=false;await trkSendsLoad(true);toast(`Marked as sent to ${byId(S.clients,cid)?.company||'the client'}.`)}
   catch(e){if(/track_sends|does not exist|schema cache|PGRST205|42P01/i.test(errMsg(e))){S.trkMissing=true;renderModal();toast('Run update-40 in Supabase to record sends.')}else toast(errMsg(e))}}
+
+/* ----- Up for grabs: a manager posts a bid with no lead, anyone who works bids grabs it -----
+   bids.grab = {open, note, by_date, posted_by, posted_at, taken_by, taken_at, log:[…]} (update-41).
+   The list comes from grab_list() so estimators who only see their own bids still see what's up for grabs.
+   "I'll take it" / "I can help" go through grab_take(), which is allowed to change the team. */
+S.grabs=null;S.grabMissing=false;
+const canPost=()=>isAdmin()||canAssign();
+async function grabLoad(){if(!sb||!S.session)return;try{const {data,error}=await sb.rpc('grab_list');if(error)throw error;S.grabs=Array.isArray(data)?data:[];S.grabMissing=false}
+  catch(e){S.grabs=[];S.grabMissing=/grab_list|does not exist|schema cache|PGRST202/i.test(errMsg(e))}
+  if(!M||M.kind!=='bid')render();else{renderTop&&renderTop()}}
+setInterval(()=>{if(S.session&&!document.hidden)grabLoad()},120000);
+setInterval(()=>{if(S.session&&S.grabs===null&&!grabLoad.started){grabLoad.started=true;grabLoad()}},700);
+const grabCount=()=>(S.grabs||[]).filter(g=>!g.lead).length;
+function myLoad(){const me=myEst();if(!me)return null;const mine=S.bids.filter(b=>!b.archived_at&&PRE_SUBMIT.includes(b.status)&&(b.lead_estimator_id===me.id||(b.support_estimator_ids||[]).includes(me.id)));
+  const lead=mine.filter(b=>b.lead_estimator_id===me.id);const wk=mine.filter(b=>{const n=daysUntil(b.due_date);return n!=null&&n>=0&&n<=7});return {n:mine.length,lead:lead.length,week:wk.length}}
+function vGrabs(){const me=myEst();const L=(S.grabs||[]).slice();const ld=myLoad();
+  const head=`<div class="head"><div><h1>Up for grabs</h1><p>Bids that need an estimator. Take the lead, or offer to help.</p></div></div>`;
+  if(S.grabMissing)return head+`<div class="notice">Up for grabs needs a one-time database update: run <b>update-41-up-for-grabs.sql</b> in Supabase.</div>`;
+  if(S.grabs===null){grabLoad();return head+'<div class="empty">Loading…</div>'}
+  const load=ld?`<div class="gr-me"><b>Your plate right now:</b> ${ld.n} bid${ld.n===1?'':'s'} in progress (${ld.lead} as lead)${ld.week?` · <b>${ld.week} due this week</b>`:''}</div>`:(can('bids','edit')?'<div class="notice">Your login isn’t linked to an estimator yet, so you can’t grab bids. Ask an admin to link it on the Team page.</div>':'');
+  const cards=L.map(g=>{const G=g.grab||{};const open=!g.lead;const n=daysUntil(g.due_date);const by=G.by_date;const byN=by?daysUntil(by):null;
+    const amHelping=me&&(g.support||[]).includes(me.id);const amLead=me&&g.lead===me.id;const only=Array.isArray(G.only)&&G.only.length?G.only:null;const allowed=!only||(me&&only.includes(me.id));
+    const helpers=(g.support||[]).map(estName).filter(Boolean);
+    const urg=open&&byN!=null&&byN<=1?' urgent':open&&n!=null&&n<=7?' soon':'';
+    return `<div class="gr-card${urg}${open?'':' taken'}">
+      <div class="gr-top"><div><div class="gr-name">${esc(g.name||'Untitled')}</div><div class="dim small">${esc((g.clients||[]).join(', ')||'No GC yet')}${g.location?' · '+esc(g.location):''}</div></div>
+        <div class="gr-due"><b>${g.due_date?fmtShort(g.due_date):'No date'}</b><span>${n==null?'':n<0?'past due':n===0?'due today':`${n} day${n===1?'':'s'} left`}</span></div></div>
+      <div class="gr-meta">${[g.project_type,g.bid_type,g.size].filter(Boolean).map(x=>`<span class="pill">${esc(x)}</span>`).join('')}${g.walk_date?`<span class="pill">Site walk ${fmtShort(g.walk_date)}</span>`:''}</div>
+      ${(g.scopes||[]).length?`<div class="gr-scopes">${g.scopes.map(x=>`<span>${esc(x)}</span>`).join('')}</div>`:''}
+      ${G.note?`<div class="gr-note">“${esc(G.note)}”</div>`:''}
+      <div class="gr-foot small dim">Posted${G.posted_by?' by '+esc(G.posted_by):''}${G.posted_at?' '+fmtShort(String(G.posted_at).slice(0,10)):''}${by&&open?` · <b class="${byN!=null&&byN<=1?'bad':''}">needs an owner by ${fmtShort(by)}</b>`:''}${helpers.length?` · helping: ${helpers.map(esc).join(', ')}`:''}${only?` · for ${only.map(estName).filter(Boolean).map(esc).join(', ')}`:''}</div>
+      <div class="gr-act">${!open?`<span class="pill good">Taken by ${esc(G.taken_by||estName(g.lead)||'someone')}</span>`:''}
+        ${open&&me&&can('bids','edit')&&allowed?`<button class="btn primary" data-act="grab-take" data-id="${g.id}">✋ I’ll take it</button>`:''}
+        ${me&&can('bids','edit')&&allowed&&!amHelping&&!amLead?`<button class="btn" data-act="grab-help" data-id="${g.id}">I can help</button>`:''}
+        ${amHelping?'<span class="pill">You’re helping</span>':''}
+        ${byId(S.bids,g.id)?`<button class="btn ghost" data-act="open-bid" data-id="${g.id}">Open bid</button>`:''}
+        ${canPost()&&open?`<button class="btn ghost sm" data-act="grab-down" data-id="${g.id}" title="Take it off the board">Take down</button>`:''}</div></div>`}).join('');
+  return head+load+(cards?`<div class="gr-list">${cards}</div>`:`<div class="empty">Nothing up for grabs right now.${canPost()?' Post a bid from its Project tab, under Estimating team.':''}</div>`)}
+async function grabTake(id,role){const g=(S.grabs||[]).find(x=>x.id===id);const ld=myLoad();
+  try{const {error}=await sb.rpc('grab_take',{p_bid:id,p_role:role});if(error)throw error;
+    await Promise.all([loadTable('bids'),grabLoad()]);
+    if(role==='lead'&&g){try{await sb.from('tasks').insert({title:`Lead estimate: ${g.name}`,notes:`You grabbed this from Up for grabs.${g.grab?.note?' Note: '+g.grab.note:''}`,due_date:g.due_date||null,bid_id:id,owner_name:myName(),priority:1});if(typeof plLoad==='function')plLoad()}catch(e){}}
+    toast(role==='lead'?`It’s yours: you’re lead on ${g?.name||'the bid'}.${ld?` You now have ${ld.n+1} bids in progress.`:''}`:`You’re helping on ${g?.name||'the bid'}.`)}
+  catch(e){toast(errMsg(e));grabLoad()}}
+// the poster's side, on the bid's Project tab under Estimating team
+function grabPostHtml(b){if(!canPost()||b._new&&false)return '';const G=b.grab||{};
+  if(S.grabMissing)return `<div class="gr-post"><span class="dim small">Up for grabs needs update-41 in Supabase.</span></div>`;
+  if(G.open)return `<div class="gr-post on"><div><b>📣 Up for grabs</b> <span class="small dim">since ${G.posted_at?fmtShort(String(G.posted_at).slice(0,10)):'today'}${G.posted_by?' · posted by '+esc(G.posted_by):''}</span></div>
+     <div class="fg"><label class="f s2">Note for the team<input class="field" data-grab="note" value="${esc(G.note||'')}" placeholder="e.g. Big utility job, needs someone strong on storm"></label><label class="f">Needs an owner by<input type="date" class="field" data-grab="by_date" value="${esc(G.by_date||'')}"></label></div>
+     <div class="adders"><button class="btn sm" data-act="grab-unpost">Take it down</button><span class="small dim">Picking a lead estimator above takes it down too.</span></div></div>`;
+  const taken=G.taken_by?`<span class="small dim">Grabbed by ${esc(G.taken_by)} ${G.taken_at?fmtShort(String(G.taken_at).slice(0,10)):''}.</span>`:'';
+  return `<div class="gr-post">${b.lead_estimator_id?`${taken}<button class="btn sm ghost" data-act="grab-post" title="Clears the lead estimator and puts it on the board">Put back up for grabs</button>`:`<button class="btn sm" data-act="grab-post">📣 Post to Up for grabs</button><span class="small dim">No lead yet? Let the team grab it.</span>`}</div>`}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('grab-'))return;
+  if(a==='grab-take'){t.disabled=true;await grabTake(t.dataset.id,'lead');return}
+  if(a==='grab-help'){t.disabled=true;await grabTake(t.dataset.id,'help');return}
+  if(a==='grab-down'){const b=byId(S.bids,t.dataset.id);if(!b)return;try{const G={...(b.grab||{}),open:false,log:[...((b.grab||{}).log||[]),{t:'down',who:myName(),at:new Date().toISOString()}]};const {error}=await sb.from('bids').update({grab:G}).eq('id',b.id);if(error)throw error;await Promise.all([loadTable('bids'),grabLoad()]);toast('Taken off the board.')}catch(err){toast(errMsg(err))}return}
+  if(!M||M.kind!=='bid')return;const b=M.draft;
+  if(a==='grab-post'){if(b.lead_estimator_id&&!isAdmin()&&!canAssign())return;const log=[...((b.grab||{}).log||[]),{t:'posted',who:myName(),at:new Date().toISOString()}];
+    if(b.lead_estimator_id)b.lead_estimator_id='';b.grab={...(b.grab||{}),open:true,posted_by:myName(),posted_at:new Date().toISOString(),taken_by:null,taken_at:null,log};
+    if(b._new){renderModal();toast('It goes on the board when you create the bid.');return}renderModal();toast('Posted to Up for grabs.');return}
+  if(a==='grab-unpost'){b.grab={...(b.grab||{}),open:false,log:[...((b.grab||{}).log||[]),{t:'down',who:myName(),at:new Date().toISOString()}]};renderModal();return}});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.grab&&M&&M.kind==='bid'){M.draft.grab={...(M.draft.grab||{}),[t.dataset.grab]:t.value}}
+  // picking a lead takes it off the board
+  if(t.dataset&&t.dataset.bf==='lead_estimator_id'&&M&&M.kind==='bid'&&t.value&&M.draft.grab&&M.draft.grab.open){M.draft.grab={...M.draft.grab,open:false,taken_by:estName(t.value)||'',taken_at:new Date().toISOString(),log:[...(M.draft.grab.log||[]),{t:'assigned',who:myName(),to:estName(t.value),at:new Date().toISOString()}]};renderModal()}});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.grab&&M&&M.kind==='bid'){M.draft.grab={...(M.draft.grab||{}),[t.dataset.grab]:t.value}}});

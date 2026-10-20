@@ -2443,3 +2443,26 @@ div.tw-pgh{cursor:default}
 .trk-sent.ok{border-color:color-mix(in srgb,var(--good) 45%,var(--line))}
 .trk-sent.ask{border:2px solid var(--accent)}
 @media (max-width:700px){.trk-line{flex-wrap:wrap}.trk-line .trk-msg{flex-basis:100%;order:3}}
+/* Up for grabs */
+.nav-badge{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:4px;border-radius:999px;background:var(--warn);color:#fff;font-size:11px;font-weight:800;vertical-align:1px}
+.gr-me{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:9px 14px;margin-bottom:14px;font-size:14px}
+.gr-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(360px,1fr));gap:14px;align-items:start}
+.gr-card{background:var(--surface);border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:12px;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.gr-card.soon{border-left-color:var(--warn)}
+.gr-card.urgent{border-left-color:var(--bad)}
+.gr-card.taken{opacity:.7;border-left-color:var(--good)}
+.gr-top{display:flex;justify-content:space-between;gap:12px}
+.gr-name{font-size:17px;font-weight:800;line-height:1.2}
+.gr-due{text-align:right;flex:none;display:flex;flex-direction:column;font-size:13px}
+.gr-due b{font-size:15px}
+.gr-due span{color:var(--ink-3);font-size:12px}
+.gr-card.soon .gr-due span,.gr-card.urgent .gr-due span{color:var(--warn);font-weight:700}
+.gr-meta{display:flex;flex-wrap:wrap;gap:6px}
+.gr-scopes{display:flex;flex-wrap:wrap;gap:5px}
+.gr-scopes span{font-size:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:999px;padding:2px 9px;color:var(--ink-2)}
+.gr-note{font-style:italic;color:var(--ink-2);border-left:3px solid var(--line);padding-left:10px;font-size:14px}
+.gr-foot .bad{color:var(--bad)}
+.gr-act{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.gr-post{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)}
+.gr-post.on{flex-direction:column;align-items:stretch;border:2px solid var(--warn);border-radius:10px;padding:10px 12px;background:color-mix(in srgb,var(--warn) 6%,var(--surface))}
+@media (max-width:600px){.gr-list{grid-template-columns:1fr}}
