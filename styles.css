@@ -2486,3 +2486,7 @@ div.tw-pgh{cursor:default}
 .pos-ed .field.sm{width:100%;min-width:140px}
 .pos-ck input{width:18px;height:18px}
 .pos-ed tr.gone td{opacity:.6}
+.ua-pwrow{display:flex;gap:8px;align-items:stretch}
+.ua-pwrow .field{flex:1;min-width:0;font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.02em}
+.ua-pwrow .btn{flex:none;white-space:nowrap}
+.ua-pwnote{align-self:end;padding-bottom:11px}
