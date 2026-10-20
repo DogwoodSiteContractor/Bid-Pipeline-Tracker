@@ -415,7 +415,8 @@ function dueCell(b){
   else if(d<=3){cls='bad';txt='In '+d+' day'+(d===1?'':'s')}
   else if(d<=7){cls='warn';txt='In '+d+' days'}
   else txt='In '+d+' days';
-  return `<div class="due ${cls}">${fmtDate(b.due_date)}${b.due_time?' <span class="dim small">'+esc(fmtTime(b.due_time))+'</span>':''}<small>${txt}</small></div>`;
+  const thisYr=String(b.due_date).slice(0,4)===String(new Date().getFullYear());
+  return `<div class="due ${cls}">${thisYr?fmtShort(b.due_date):fmtDate(b.due_date)}${b.due_time?' <span class="dim small">'+esc(fmtTime(b.due_time))+'</span>':''}<small>${txt}</small></div>`;
 }
 function scopeBar(b){const it=scopeItems(b);if(!it.length)return '<span class="dim small">No scopes</span>';const d=it.filter(x=>x.status==='Complete').length;
   return `<span class="who" style="gap:8px"><span class="scopebar" title="${esc(it.map(x=>x.name+': '+(x.status==='Complete'?'signed off'+(x.signed_initials?' by '+x.signed_initials:''):x.status||'Not Started')).join('\n'))}">${it.slice(0,14).map(x=>`<i class="${scopeCls(x)}"></i>`).join('')}</span><span class="small num">${d}/${it.length}</span></span>`}
@@ -479,10 +480,15 @@ function groupStatus(b,groups){
   const tip=esc(it.map(x=>x.name+' ('+performOf(x)+'): '+(x.status==='Complete'?'signed off'+(x.signed_initials?' ('+x.signed_initials+')':''):x.status||'Not Started')).join('\n'));
   const count=it.length>1?` <span class="ov-n">${done}/${it.length}</span>`:'';
   const pf=[...new Set(it.map(performOf))];const perf=pf.length===1&&pf[0]==='Self perform'?'':`<div class="dim small" style="margin-top:3px">${pf.length===1?(pf[0]==='Sub'?'Sub':'Self + sub'):'Mixed'}</div>`;
-  if(done===it.length)return `<span class="pill good" title="${tip}">✓ Complete${it.length===1&&it[0].signed_initials?' · '+esc(it[0].signed_initials):count}</span>${perf}`;
-  if(done||started)return `<span class="pill warn" title="${tip}">In progress${count}</span>${perf}`;
-  return `<span class="pill" title="${tip}">Not started${count}</span>${perf}`;
+  const n=`${done}/${it.length}`;
+  if(done===it.length)return `<span class="pill good" title="Complete\n${tip}">✓ ${it.length===1&&it[0].signed_initials?esc(it[0].signed_initials):n}</span>${perf}`;
+  if(done||started)return `<span class="pill warn" title="In progress\n${tip}">◐ ${n}</span>${perf}`;
+  return `<span class="pill" title="Not started\n${tip}">○ ${n}</span>${perf}`;
 }
+// the number the dashboard counts, big; the other base (with / without site improvements) underneath
+function ovNumber(b){const v=bidValue(b);const w=amtVal(b,'amount_with'),wo=amtVal(b,'amount_without');const usesWo=b.use_for==='without';const other=usesWo?w:wo;
+  if(!v&&w==null&&wo==null)return '<span class="dim">—</span>';
+  return `<div style="font-weight:700;white-space:nowrap">${v?money(v):'—'} <span class="dim small" style="font-weight:500">${usesWo?'w/o':'w/'}</span></div>${other!=null&&other!==v?`<div class="dim small" style="white-space:nowrap">${money(other)} ${usesWo?'w/':'w/o'}</div>`:''}`}
 function amtCell(b,key){
   const base=num(b[key]);if(base!=null)return money(base);
   const a=(b.client_ids||[]).map(id=>num(propOf(b,id)[key])).filter(v=>v!=null);
@@ -522,18 +528,15 @@ function overviewTable(all){
   const groups=OV_GROUPS.filter(([l,g])=>['Earthwork','Underground','Erosion / demo'].includes(l)||all.some(b=>scopeItems(b).some(x=>ovIn(g,x.group||groupOf(x.name)))));
   const th=(k,label,cls='')=>`<th class="${cls}${O.sort===k?' sorted':''}" aria-sort="${O.sort===k?(O.dir>0?'ascending':'descending'):'none'}"><button class="ov-sort" data-act="ov-sort" data-k="${k}">${label}<span class="ov-arr" aria-hidden="true">${O.sort===k?(O.dir>0?'▲':'▼'):'↕'}</span></button></th>`;
   const rows=list.map(b=>`<tr class="click" data-act="open-bid" data-id="${b.id}">
-    <td><div class="proj">${esc(b.name)}</div><div class="dim small" style="white-space:nowrap">${[normProjectType(b.project_type),unitsText(b),b.lead_estimator_id?estName(b.lead_estimator_id):''].filter(Boolean).map(esc).join(' · ')}</div></td>
+    <td class="ov-p"><div class="proj">${esc(b.name)}</div><div class="dim small">${[normProjectType(b.project_type),unitsText(b),b.lead_estimator_id?estName(b.lead_estimator_id):''].filter(Boolean).map(esc).join(' · ')}</div></td>
     <td>${(b.client_ids||[]).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}</div>`).join('')||'<span class="dim">—</span>'}</td>
     <td>${dueCell(b)}</td>
     ${groups.map(([,g])=>`<td>${groupStatus(b,g)}</td>`).join('')}
-    <td>${pill(b.proposal_status||'Not Started',PROP_CLS[b.proposal_status])}${revisions(b).length>1?`<div class="dim small" style="margin-top:3px">Rev ${esc(revisions(b)[revisions(b).length-1].rev)}</div>`:''}${openAddenda(b).length?`<div class="small" style="margin-top:3px;color:var(--warn);font-weight:600;white-space:nowrap">${openAddenda(b).length} addend${openAddenda(b).length===1?'um':'a'} open</div>`:''}</td>
-    <td class="r num">${amtCell(b,'amount_with')}</td>
-    <td class="r num">${amtCell(b,'amount_without')}</td>
-    <td class="r num" style="font-weight:700">${bidValue(b)?money(bidValue(b))+` <span class="dim small">${b.use_for==='without'?'w/o':'w/'}</span>`:'<span class="dim">—</span>'}</td>
-    <td>${lastTouch(b)?fmtShort(lastTouch(b)):'<span class="dim">—</span>'}</td>
+    <td>${pill(b.proposal_status||'Not Started',PROP_CLS[b.proposal_status])}${revisions(b).length>1||lastTouch(b)?`<div class="dim small" style="margin-top:3px">${[revisions(b).length>1?'Rev '+esc(revisions(b)[revisions(b).length-1].rev):'',lastTouch(b)?'GC contact '+fmtShort(lastTouch(b)):''].filter(Boolean).join(' · ')}</div>`:''}${openAddenda(b).length?`<div class="small" style="margin-top:3px;color:var(--warn);font-weight:600;white-space:nowrap">${openAddenda(b).length} addend${openAddenda(b).length===1?'um':'a'} open</div>`:''}</td>
+    <td class="r num">${ovNumber(b)}</td>
     <td>${pill(b.status,BID_CLS[b.status])}</td></tr>`).join('');
-  return `${all.length?ovBar(all,list.length):''}<div class="panel scroll"><table class="ov"><thead><tr>${th('name','Project')}${th('client','GC / client')}${th('due','Due date')}${groups.map(([l])=>th('g:'+l,l)).join('')}${th('proposal','Proposal')}${th('with','W/ site impr.','r')}${th('without','W/O site impr.','r')}${th('value','Dashboard $','r')}${th('contact','Last GC contact')}${th('status','Status')}</tr></thead>
-   <tbody>${rows||`<tr><td colspan="${9+groups.length}"><div class="empty">${all.length?'<b>No bids match these filters</b><button class="btn sm" data-act="ov-clear">Clear filters</button>':`<b>No active bids</b>${isAdmin()?'Click <b>+ New bid</b> to add one.':''}`}</div></td></tr>`}</tbody></table></div>`;
+  return `${all.length?ovBar(all,list.length):''}<div class="panel scroll"><table class="ov"><thead><tr>${th('name','Project')}${th('client','GC / client')}${th('due','Due date')}${groups.map(([l])=>th('g:'+l,l)).join('')}${th('proposal','Proposal')}${th('value','Our number','r')}${th('status','Status')}</tr></thead>
+   <tbody>${rows||`<tr><td colspan="${6+groups.length}"><div class="empty">${all.length?'<b>No bids match these filters</b><button class="btn sm" data-act="ov-clear">Clear filters</button>':`<b>No active bids</b>${isAdmin()?'Click <b>+ New bid</b> to add one.':''}`}</div></td></tr>`}</tbody></table></div>`;
 }
 function closedTable(list){
   return `<div class="panel scroll"><table><thead><tr><th>Project</th><th>GC / client</th><th>Due date</th><th class="r">W/ site impr.</th><th class="r">W/O site impr.</th><th class="r">Contract</th><th>Status</th></tr></thead><tbody>

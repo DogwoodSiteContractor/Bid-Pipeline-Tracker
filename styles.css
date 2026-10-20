@@ -284,7 +284,12 @@ textarea.field{min-height:84px;resize:vertical}
 @media (max-width:600px){.gc-row{grid-template-columns:1fr 1fr}}
 
 /* ---- projects overview ---- */
-table.ov td,table.ov th{padding:10px 10px}
+table.ov{width:100%}
+table.ov td,table.ov th{padding:9px 8px}
+table.ov td:nth-child(2){width:150px;min-width:120px}
+table.ov td.ov-p{min-width:170px}
+table.ov td.ov-p .proj{white-space:normal}
+table.ov td:nth-child(2) div{white-space:normal!important}
 table.ov .pill{font-size:12px}
 table.ov td.num,table.ov .proj{white-space:nowrap}
 .ov-n{font-weight:600;opacity:.75;margin-left:2px}
@@ -2490,3 +2495,4 @@ div.tw-pgh{cursor:default}
 .ua-pwrow .field{flex:1;min-width:0;font-family:ui-monospace,Menlo,Consolas,monospace;letter-spacing:.02em}
 .ua-pwrow .btn{flex:none;white-space:nowrap}
 .ua-pwnote{align-self:end;padding-bottom:11px}
+@media (max-width:1400px){table.ov td,table.ov th{padding:8px 6px}table.ov th:not(.sorted) .ov-arr{display:none}table.ov td.ov-p{min-width:150px}table.ov td:nth-child(2){width:130px;min-width:110px}}
