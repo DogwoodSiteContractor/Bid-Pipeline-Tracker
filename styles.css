@@ -2642,3 +2642,9 @@ div.tw-pgh{cursor:default}
 .cat-x{border:0;background:none;color:var(--ink-3);cursor:pointer;font-size:14px;line-height:1;padding:0 3px}.cat-x:hover{color:var(--bad)}
 .cat-add{width:auto;max-width:260px;padding:2px 6px;font-size:12.5px;min-height:0}
 .cat-setup{margin-bottom:14px}.cat-setup .adders{margin-top:8px}
+.qg-t{display:flex;align-items:flex-start;gap:6px;min-width:0}
+.qg-tog{border:0;background:none;color:var(--ink-2);cursor:pointer;font-size:14px;width:20px;height:22px;padding:0;flex:none;border-radius:5px}.qg-tog:hover{background:var(--mute-soft,rgba(0,0,0,.06))}
+.qg.shut{padding-bottom:8px}.qg-sum{color:var(--ink-3);margin-top:2px}
+.qg-mv{display:inline-flex;gap:2px}.qg-arr{border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:13px;padding:0}
+.qg-arr:hover:not(:disabled){border-color:var(--accent);color:var(--ink)}.qg-arr:disabled{opacity:.3;cursor:default}
+.qg-bar{display:flex;justify-content:flex-end;margin:-4px 0 2px}
