@@ -496,8 +496,15 @@ function precon(){
 // Scope columns for the overview: each groups related scopes from the scope library
 const OV_GROUPS=[['Earthwork',['Earthwork']],['Underground',['Underground utilities']],['Erosion / demo',['Erosion control','Site prep & demo']],['Paving',['Paving & concrete']],['Other',['Other']]];
 const OV_KNOWN=new Set(OV_GROUPS.flatMap(x=>x[1]));const ovIn=(groups,g0)=>{const al=lib().galias||{};const g=al[g0]||g0;return groups.includes(g)||(groups.includes('Other')&&!OV_KNOWN.has(g))};
+// which overview column a scope belongs in: its group in the scope list today (or the one saved on the bid), renamed
+// groups followed, then matched by words in the group or the scope's own name, so custom scopes still land right
+const OV_WORDS=[['Earthwork',/earth|grad(e|ing)|cut|fill|excavat|undercut|topsoil|building pad|haul|rock/],['Underground utilities',/underground|utilit|sewer|sanitary|storm|water|drain|pipe|precast|structure|fire line|detention|manhole|inlet/],
+  ['Erosion control',/erosion|silt|sediment|grass|seed|stabiliz|bmp|swppp/],['Site prep & demo',/demo|clear|grub|site prep|strip/],['Paving & concrete',/pav|asphalt|concrete|curb|sidewalk|gab|aggregate base|striping/]];
+function ovGroupOf(x){const al=lib().galias||{};let g=libScope(x.name)?.group||x.group||'Other';g=al[g]||g;if(OV_KNOWN.has(g)&&g!=='Other')return g;
+  const lg=String(g).toLowerCase();const hit=OV_WORDS.find(([,re])=>re.test(lg));if(hit&&lg!=='other')return hit[0];
+  const ln=String(x.name||'').toLowerCase();const hn=OV_WORDS.find(([,re])=>re.test(ln));return hn?hn[0]:'Other'}
 function groupStatus(b,groups){
-  const it=scopeItems(b).filter(x=>ovIn(groups,x.group||groupOf(x.name)));
+  const it=scopeItems(b).filter(x=>ovIn(groups,ovGroupOf(x)));
   if(!it.length)return '<span class="dim">—</span>';
   const done=it.filter(x=>x.status==='Complete').length,started=it.some(x=>x.status==='In Progress');
   const tip=esc(it.map(x=>x.name+' ('+performOf(x)+'): '+(x.status==='Complete'?'signed off'+(x.signed_initials?' ('+x.signed_initials+')':''):x.status||'Not Started')).join('\n'));
@@ -523,7 +530,7 @@ const OV_KEY='bp-ov';const ovDefault=()=>({sort:'due',dir:1,q:'',status:'',est:'
 S.ov=(()=>{const d=ovDefault();try{Object.assign(d,JSON.parse(localStorage.getItem(OV_KEY)||'{}'))}catch(e){}return d})();
 const saveOv=()=>{try{localStorage.setItem(OV_KEY,JSON.stringify(S.ov))}catch(e){}};
 function amtVal(b,key){const base=num(b[key]);if(base!=null)return base;const a=(b.client_ids||[]).map(id=>num(propOf(b,id)[key])).filter(v=>v!=null);return a.length?Math.max(...a):null}
-function groupRank(b,groups){const it=scopeItems(b).filter(x=>ovIn(groups,x.group||groupOf(x.name)));if(!it.length)return null;const done=it.filter(x=>x.status==='Complete').length;return done/it.length+(it.some(x=>x.status==='In Progress')&&done<it.length?0.001:0)}
+function groupRank(b,groups){const it=scopeItems(b).filter(x=>ovIn(groups,ovGroupOf(x)));if(!it.length)return null;const done=it.filter(x=>x.status==='Complete').length;return done/it.length+(it.some(x=>x.status==='In Progress')&&done<it.length?0.001:0)}
 function ovSortVal(b,k){
   if(k==='name')return (b.name||'').toLowerCase();if(k==='client')return (b.client_ids||[]).map(clientName).sort()[0]?.toLowerCase()||null;
   if(k==='due')return b.due_date||null;if(k==='proposal')return PROPOSAL_ST.indexOf(b.proposal_status||'Not Started');
@@ -548,7 +555,7 @@ function ovBar(all,shown){const O=S.ov;const opt=(k,label,opts)=>`<select class=
     ${any?'<button class="btn sm ghost" data-act="ov-clear">Clear</button>':''}<span class="dim small ov-count">${shown===all.length?`${all.length} bid${all.length===1?'':'s'}`:`Showing ${shown} of ${all.length}`}</span></div>`}
 function overviewTable(all){
   const list=ovApply(all);const O=S.ov;
-  const groups=OV_GROUPS.filter(([l,g])=>['Earthwork','Underground','Erosion / demo'].includes(l)||all.some(b=>scopeItems(b).some(x=>ovIn(g,x.group||groupOf(x.name)))));
+  const groups=OV_GROUPS.filter(([l,g])=>['Earthwork','Underground','Erosion / demo'].includes(l)||all.some(b=>scopeItems(b).some(x=>ovIn(g,ovGroupOf(x)))));
   const th=(k,label,cls='')=>`<th class="${cls}${O.sort===k?' sorted':''}" aria-sort="${O.sort===k?(O.dir>0?'ascending':'descending'):'none'}"><button class="ov-sort" data-act="ov-sort" data-k="${k}">${label}<span class="ov-arr" aria-hidden="true">${O.sort===k?(O.dir>0?'▲':'▼'):'↕'}</span></button></th>`;
   const rows=list.map(b=>`<tr class="click" data-act="open-bid" data-id="${b.id}">
     <td class="ov-p"><div class="proj">${esc(b.name)}</div><div class="dim small">${[normProjectType(b.project_type),unitsText(b),b.lead_estimator_id?estName(b.lead_estimator_id):''].filter(Boolean).map(esc).join(' · ')}</div></td>
