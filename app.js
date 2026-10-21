@@ -317,7 +317,7 @@ function renderNow(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
-  const views={positions:vPositions,grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const views={workload:vWorkload,positions:vPositions,grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
@@ -6668,7 +6668,7 @@ const pAv=p=>`<span class="av" style="background:${avColor(p.id)}" title="${esc(
 /* ----- top bar: tabs come from what each person can open ----- */
 function navGroups(){const g=[];
   if(can('dash'))g.push(['dashboard',onlyMine()?'My dashboard':scopeView()?'Dashboard':role()==='board'?'Board dashboard':'Dashboard',['dashboard']]);
-  if(can('bids')){const n=typeof grabCount==='function'?grabCount():0;SUBNAV_LABEL.pipeline=onlyMine()?'My bids':'Pipeline';SUBNAV_LABEL.grabs='Up for grabs'+(n?` (${n})`:'');g.push(['pipeline',(onlyMine()?'My bids':'Pipeline')+(n?` <span class="nav-badge" title="${n} up for grabs">${n}</span>`:''),['pipeline','grabs']])}
+  if(can('bids')){const n=typeof grabCount==='function'?grabCount():0;SUBNAV_LABEL.pipeline=onlyMine()?'My bids':'Pipeline';SUBNAV_LABEL.grabs='Up for grabs'+(n?` (${n})`:'');SUBNAV_LABEL.workload='Workload';g.push(['pipeline',(onlyMine()?'My bids':'Pipeline')+(n?` <span class="nav-badge" title="${n} up for grabs">${n}</span>`:''),['pipeline','grabs','workload']])}
   const twFree=!!(S.twBid&&!byId(S.bids,S.twBid));const est=[...(can('estimates')?['estimates','estimate',...(twFree?[]:['tw'])]:[]),...(can('codebook')?['cb']:[]),...(can('codebook','edit')?['settings','scopes']:[])];
   if(est.length)g.push([est[0],'Estimates',est.includes('cb')&&!est.includes('estimates')?[...est]:est]);
   if(can('jobs'))g.push(['jobs','Jobs',['jobs','job']]);
@@ -11535,12 +11535,12 @@ function vTeam(){const me=S.session.user.id;const f=S.teamRole||'';posSyncAll();
 function vPositions(){const D=S.posd;const L=posList();const cnt=n=>S.profiles.filter(p=>posByName(p.title)&&posByName(p.title).name===n).length+S.estimators.filter(e=>!e.user_id&&e.active!==false&&posByName(e.title)&&posByName(e.title).name===n).length;
   const roleSel=(i,v)=>`<select class="field sm" data-posf="${i}.role">${ROLE_ORDER.filter(r=>r!=='pending').map(r=>`<option value="${r}"${v===r?' selected':''}>${esc(ROLE_LABEL[r])}</option>`).join('')}</select>`;
   const ck=(i,k,v,l)=>`<label class="pos-ck"><input type="checkbox" data-posf="${i}.${k}"${v?' checked':''}> ${l}</label>`;
-  const view=`<div class="panel scroll"><table class="team-t"><thead><tr><th>Position</th><th>What they do</th><th>Default access</th><th class="r">People</th></tr></thead><tbody>${L.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td><div class="pos-tags">${posTags(x)||'<span class="dim small">—</span>'}</div></td><td>${esc(ROLE_LABEL[x.role]||'—')}</td><td class="r num">${cnt(x.name)}</td></tr>`).join('')}</tbody></table></div>`;
-  const edit=D?`<div class="panel scroll"><table class="team-t pos-ed"><thead><tr><th>Position</th><th>Works bids</th><th>Runs jobs</th><th>Office</th><th>Default access</th><th class="r">People</th><th></th></tr></thead><tbody>
-    ${D.rows.map((r,i)=>r.gone?`<tr class="gone"><td colspan="6"><s>${esc(r.name)}</s></td><td><button class="btn xs" data-act="pos-undo" data-v="${i}">Undo</button></td></tr>`:`<tr><td><input class="field sm" data-posf="${i}.name" value="${esc(r.name)}" placeholder="Position name"></td><td>${ck(i,'bids',r.bids,'')}</td><td>${ck(i,'jobs',r.jobs,'')}</td><td>${ck(i,'office',r.office,'')}</td><td>${roleSel(i,r.role)}</td><td class="r num">${r.orig?cnt(r.orig):0}</td><td><button class="x" data-act="pos-del" data-v="${i}" title="Remove">×</button></td></tr>`).join('')}
-    <tr><td colspan="7"><input class="field sm" id="pos-new" placeholder="+ New position, e.g. Estimating Assistant, and press Enter"></td></tr></tbody></table></div>
+  const view=`<div class="panel scroll"><table class="team-t"><thead><tr><th>Position</th><th>What they do</th><th>Default access</th><th class="r" title="How much bid work one person in this position can carry at once (Pipeline → Workload)">Bid capacity</th><th class="r">People</th></tr></thead><tbody>${L.map(x=>`<tr><td><b>${esc(x.name)}</b></td><td><div class="pos-tags">${posTags(x)||'<span class="dim small">—</span>'}</div></td><td>${esc(ROLE_LABEL[x.role]||'—')}</td><td class="r num">${x.bids?(num(x.cap)||6):'<span class="dim">—</span>'}</td><td class="r num">${cnt(x.name)}</td></tr>`).join('')}</tbody></table></div>`;
+  const edit=D?`<div class="panel scroll"><table class="team-t pos-ed"><thead><tr><th>Position</th><th>Works bids</th><th>Runs jobs</th><th>Office</th><th>Default access</th><th class="r" title="Workload capacity. 6 is about two big bids in takeoff plus a few small ones.">Bid capacity</th><th class="r">People</th><th></th></tr></thead><tbody>
+    ${D.rows.map((r,i)=>r.gone?`<tr class="gone"><td colspan="7"><s>${esc(r.name)}</s></td><td><button class="btn xs" data-act="pos-undo" data-v="${i}">Undo</button></td></tr>`:`<tr><td><input class="field sm" data-posf="${i}.name" value="${esc(r.name)}" placeholder="Position name"></td><td>${ck(i,'bids',r.bids,'')}</td><td>${ck(i,'jobs',r.jobs,'')}</td><td>${ck(i,'office',r.office,'')}</td><td>${roleSel(i,r.role)}</td><td class="r"><input class="field sm" style="width:64px" data-posf="${i}.cap" data-nomoney inputmode="decimal" value="${esc(r.cap??'')}" placeholder="6"></td><td class="r num">${r.orig?cnt(r.orig):0}</td><td><button class="x" data-act="pos-del" data-v="${i}" title="Remove">×</button></td></tr>`).join('')}
+    <tr><td colspan="8"><input class="field sm" id="pos-new" placeholder="+ New position, e.g. Estimating Assistant, and press Enter"></td></tr></tbody></table></div>
     <div class="adders"><button class="btn primary" data-act="pos-save"${D.busy?' disabled':''}>${D.busy?'Saving…':'Save positions'}</button><button class="btn" data-act="pos-cancel">Cancel</button></div>
-    <p class="hint"><b>Works bids:</b> can lead or help on bids, shows in Up for grabs and workload. <b>Runs jobs:</b> shows as a project manager on jobs. <b>Office:</b> accounting, executives and other office staff. Renaming a position renames it for everyone who has it.</p>`:'';
+    <p class="hint"><b>Works bids:</b> can lead or help on bids, shows in Up for grabs and workload. <b>Runs jobs:</b> shows as a project manager on jobs. <b>Office:</b> accounting, executives and other office staff. <b>Bid capacity:</b> how much bid work one person can carry on the Workload map (blank = 6). Renaming a position renames it for everyone who has it.</p>`:'';
   return teamHead('Positions','The jobs people hold here, what each one does in the app, and the access it starts with',isAdmin()&&!D?'<button class="btn primary" data-act="pos-edit">✎ Edit positions</button>':'')+(D?edit:view)+(S.settings.positions?'':`<p class="hint">These are starter positions. Edit them to match your company.</p>`)}
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;if(!a.startsWith('pos-'))return;
   if(a==='pos-fix'){const p=byId(S.profiles,t.dataset.id);try{await posSync(p);toast(`${personName(p)} can be put on bids now.`);render()}catch(err){toast(errMsg(err))}return}
@@ -11550,7 +11550,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
   if(a==='pos-del'){const r=D.rows[i];const n=r.orig?S.profiles.filter(p=>posByName(p.title)&&posByName(p.title).name===r.orig).length:0;if(n){toast(`${n} ${n===1?'person has':'people have'} this position. Give them another one on People & access first.`);return}r.gone=true;render();return}
   if(a==='pos-undo'){D.rows[i].gone=false;render();return}
   if(a==='pos-save'){const keep=D.rows.filter(r=>!r.gone&&String(r.name||'').trim());const seen=new Set();for(const r of keep){const k=r.name.trim().toLowerCase();if(seen.has(k)){toast(`Two positions are named “${r.name.trim()}”.`);return}seen.add(k)}
-    const list=keep.map(r=>({id:r.id||newId(),name:r.name.trim(),bids:!!r.bids,jobs:!!r.jobs,office:!!r.office,role:r.role||'estimator'}));D.busy=true;render();
+    const list=keep.map(r=>({id:r.id||newId(),name:r.name.trim(),bids:!!r.bids,jobs:!!r.jobs,office:!!r.office,role:r.role||'estimator',...(num(r.cap)>0?{cap:num(r.cap)}:{})}));D.busy=true;render();
     try{await run(sb.from('settings').upsert({key:'positions',value:{list}}));
       for(const r of keep){if(r.orig&&r.orig!==r.name.trim()){const nm=r.name.trim();for(const p of S.profiles.filter(p=>String(p.title||'').toLowerCase()===r.orig.toLowerCase()))await run(sb.from('profiles').update({title:nm}).eq('id',p.id));for(const x of S.estimators.filter(x=>String(x.title||'').toLowerCase()===r.orig.toLowerCase()))await run(sb.from('estimators').update({title:nm}).eq('id',x.id))}}
       await Promise.all([loadTable('settings'),loadProfiles()]);posSyncAll.done=false;S.posd=null;render();await posSyncAll();toast('Positions saved.')}
@@ -11800,3 +11800,94 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   if(a==='tour-end'||a==='tour-finish'){tourEnd(true);return}},true);
 // keep the highlight on the right spot as the bid page redraws
 new MutationObserver(()=>{if(TOUR){clearTimeout(tourPaint._t);tourPaint._t=setTimeout(tourPaint,80)}}).observe(document.getElementById('modal')||document.body,{childList:true,subtree:false});
+
+/* ----- Workload map -----
+   Each estimator is a soft glowing blob: size = how much they're carrying, color = how full they are against their
+   capacity (green < 70%, amber 70–100%, red and pulsing over 100%). Their bids float inside as dots (bigger = bigger
+   job, nearer the edge = due sooner). Blobs that share bids are pulled together and merge at the edges. Up-for-grabs
+   bids drift in the open, pulled toward whoever has the most room. A slider looks ahead up to 4 weeks; the grid view
+   shows the same numbers week by week. Look-only for now. */
+const WL_STAGE={'Project Created':.6,'RFQ Sent':.8,'Takeoff':1,'Quotes Received':.9,'Estimating':1,'Proposal Review':.6,'Submitted':.1};
+S.wl={day:0,mode:'map'};
+function wlSize(b){const sc=scopeItems(b).length;let f=.7+Math.min(1.3,sc*.12);const v=bidValue(b);if(v)f=Math.max(f,.7+Math.min(1.3,v/2e6));return f}
+function wlTime(b,t){if(!b.due_date)return .6;const d=Math.round((parseD(b.due_date)-t)/864e5);if(d<0)return isSent(b)?0:1.2;return d<=3?1.5:d<=7?1.2:d<=14?1:d<=28?.7:.4}
+// weight a bid puts on one person on a given day
+function wlPts(b,t,role){const st=WL_STAGE[b.status];if(st==null)return 0;if(b.due_date&&parseD(b.due_date)<t&&t>new Date())return 0;return wlSize(b)*st*wlTime(b,t)*(role==='lead'?1:.5)}
+const wlOver=()=>((S.settings.workload||{}).cap)||{};
+function wlCapPos(e){const p=e.user_id?S.profiles.find(x=>x.id===e.user_id):null;const pos=(p&&posOf(p))||posByName(e.title);const c=num(pos&&pos.cap);return c&&c>0?c:6}
+function wlCap(e){const o=num(wlOver()[e.id]);return o>0?o:wlCapPos(e)}
+function wlData(day){const t=new Date();t.setHours(12,0,0,0);t.setDate(t.getDate()+day);
+  const people=S.estimators.filter(e=>e.active!==false).map(e=>({e,id:e.id,name:e.name,cap:wlCap(e),pts:0,bids:[]}));const by=new Map(people.map(p=>[p.id,p]));
+  const live=S.bids.filter(b=>!b.archived_at&&WL_STAGE[b.status]!=null);const grabs=[];
+  live.forEach(b=>{const lead=by.get(b.lead_estimator_id);if(lead){const v=wlPts(b,t,'lead');if(v>0){lead.pts+=v;lead.bids.push({b,v,role:'lead'})}}
+    (b.support_estimator_ids||[]).forEach(id=>{const p=by.get(id);if(p&&id!==b.lead_estimator_id){const v=wlPts(b,t,'help');if(v>0){p.pts+=v;p.bids.push({b,v,role:'help'})}}});
+    if(!b.lead_estimator_id&&(b.grab&&b.grab.open)){const v=wlPts(b,t,'lead');if(v>0)grabs.push({b,v})}});
+  people.forEach(p=>{p.load=p.pts/p.cap});
+  const links=[];for(let i=0;i<people.length;i++)for(let j=i+1;j<people.length;j++){const a=people[i],c=people[j];const n=a.bids.filter(x=>c.bids.some(y=>y.b.id===x.b.id)).length;if(n)links.push([i,j,n])}
+  return {t,people,links,grabs}}
+const wlColor=l=>l>1?[214,72,62]:l>=.7?[226,160,50]:[74,160,96];
+function vWorkload(){const W=S.wl;const D=wlData(W.mode==='grid'?0:W.day);W.D=D;
+  const when=W.day===0?'Today':new Date(D.t).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  const over=D.people.filter(p=>p.load>1),room=D.people.filter(p=>p.load<.7).sort((a,b)=>a.load-b.load);
+  const head=`<div class="head"><div><h1>Workload</h1><p>Who’s carrying what. Bigger blob = more work. Green has room, amber is getting full, red is over.</p></div><div class="tools"><div class="seg"><button class="${W.mode==='map'?'on':''}" data-act="wl-mode" data-v="map">Map</button><button class="${W.mode==='grid'?'on':''}" data-act="wl-mode" data-v="grid">Grid</button></div></div></div>`;
+  if(!D.people.length)return head+`<div class="empty"><b>No estimators yet.</b>Give people a position that works bids on Team → People & access.</div>`;
+  const summary=`<div class="wl-sum"><span><b>${when}</b></span>${over.length?`<span class="wl-bad">Over: ${over.map(p=>esc(p.name)+' '+Math.round(p.load*100)+'%').join(', ')}</span>`:'<span class="wl-ok">Nobody is over capacity</span>'}${room.length?`<span>Most room: ${room.slice(0,2).map(p=>esc(p.name)+' '+Math.round(p.load*100)+'%').join(', ')}</span>`:''}${D.grabs.length?`<span>${D.grabs.length} up for grabs</span>`:''}</div>`;
+  if(W.mode==='grid')return head+summary+wlGrid();
+  return head+summary+`<div class="wl-box"><canvas id="wl-cv" aria-label="Workload map"></canvas><div id="wl-tip" class="wl-tip" hidden></div></div>
+   <div class="wl-slide"><span>Today</span><input type="range" min="0" max="28" step="1" value="${W.day}" data-wlday aria-label="Look ahead"><span>4 weeks</span><b id="wl-when">${when}</b></div>
+   <div class="wl-legend"><span><i style="background:rgb(74,160,96)"></i>Has room (under 70%)</span><span><i style="background:rgb(226,160,50)"></i>Getting full</span><span><i style="background:rgb(214,72,62)"></i>Over capacity</span><span><i class="dot"></i>A bid: bigger = bigger job, nearer the edge = due sooner</span><span><i class="dot loose"></i>Up for grabs</span></div>
+   <p class="hint">Load counts each bid by its size, its step (takeoff and estimating weigh the most, a sent proposal almost nothing), how soon it’s due, and whether the person leads (full) or helps (half). Capacity is set per position on Team → Positions (6 if not set).</p>`}
+function wlGrid(){const days=[0,7,14,21];const Ds=days.map(d=>wlData(d));const cell=l=>{const c=wlColor(l);return `<td class="wl-c" style="background:rgba(${c.join(',')},${Math.min(.85,.18+l*.45)})${l>=.5?';color:#1b1b1b':''}"><b>${Math.round(l*100)}%</b></td>`};
+  return `<div class="panel scroll"><table class="team-t wl-grid"><thead><tr><th>Estimator</th><th class="r">Capacity</th>${days.map((d,i)=>`<th class="c">${i===0?'This week':'In '+(d/7)+' wk'+(d>7?'s':'')}</th>`).join('')}<th>Bids now</th></tr></thead><tbody>
+   ${Ds[0].people.map((p,pi)=>`<tr><td><span class="who">${avatar(p.id,22)}<b>${esc(p.name)}</b></span></td><td class="r num">${isAdmin()?`<input class="field sm wl-capin" data-wlcap="${p.id}" data-nomoney inputmode="decimal" value="${esc(wlOver()[p.id]??'')}" placeholder="${wlCapPos(p.e)}" title="Leave blank to use the position’s capacity">`:p.cap}</td>${Ds.map(D=>cell(D.people[pi].load)).join('')}<td class="small">${p.bids.sort((a,b)=>b.v-a.v).slice(0,4).map(x=>`<button class="linkbtn" data-act="open-bid" data-id="${x.b.id}">${esc(x.b.name)}</button>${x.role==='help'?' <span class="dim">(helping)</span>':''}`).join(', ')}${p.bids.length>4?` +${p.bids.length-4}`:''}</td></tr>`).join('')}</tbody></table></div>`}
+/* the animated map */
+const WLA={nodes:[],raf:0,last:0,hover:null};
+function wlStart(){const cv=document.getElementById('wl-cv');if(!cv){cancelAnimationFrame(WLA.raf);WLA.raf=0;return}if(WLA.raf&&WLA.cv===cv)return;WLA.cv=cv;cancelAnimationFrame(WLA.raf);
+  const box=cv.parentElement;const fit=()=>{const w=box.clientWidth,h=Math.max(360,Math.min(560,Math.round(w*.5)));if(WLA.w&&WLA.h&&(w!==WLA.w||h!==WLA.h)){const sx=w/WLA.w,sy=h/WLA.h;WLA.nodes.forEach(n=>{n.x*=sx;n.y*=sy});(WLA.grabs||[]).forEach(g=>{g.x*=sx;g.y*=sy})}cv.width=w;cv.height=h;cv.style.height=h+'px';WLA.w=w;WLA.h=h};fit();
+  WLA.fit=fit;if(!WLA.ro){WLA.ro=new ResizeObserver(()=>{if(WLA.cv&&WLA.cv.isConnected&&WLA.cv.parentElement.clientWidth)WLA.fit()});}WLA.ro.disconnect();WLA.ro.observe(box);
+  wlSync();WLA.last=performance.now();const tick=now=>{if(!cv.isConnected){WLA.raf=0;return}const dt=Math.min(.05,(now-WLA.last)/1000);WLA.last=now;wlStep(dt,now/1000);wlDraw(now/1000);WLA.raf=requestAnimationFrame(tick)};WLA.raf=requestAnimationFrame(tick);
+  cv.onmousemove=ev=>{const r=cv.getBoundingClientRect();wlHover(ev.clientX-r.left,ev.clientY-r.top)};cv.onmouseleave=()=>{WLA.hover=null;const tp=document.getElementById('wl-tip');if(tp)tp.hidden=true};
+  cv.onclick=()=>{const h=WLA.hover;if(h&&h.bid&&byId(S.bids,h.bid.id))openBid(h.bid.id)}}
+// keep nodes, retarget sizes when data changes (that's what makes it morph instead of jump)
+function wlSync(){const D=S.wl.D;if(!D)return;const old=new Map(WLA.nodes.map(n=>[n.id,n]));const w=WLA.w||800,h=WLA.h||460;
+  WLA.nodes=D.people.map((p,i)=>{const o=old.get(p.id);const a=i/D.people.length*Math.PI*2;const n=o||{id:p.id,x:w/2+Math.cos(a)*w*.28,y:h/2+Math.sin(a)*h*.28,vx:0,vy:0,r:10};
+    n.p=p;n.tr=26+58*Math.sqrt(Math.min(p.load,1.7));n.col=wlColor(p.load);n.load=p.load;n.seed=n.seed||Math.random()*10;
+    n.dots=p.bids.filter(x=>x.role==='lead'||!D.people.some(q=>q.id===x.b.lead_estimator_id)).map((x,k,arr)=>{const days=x.b.due_date?Math.max(0,(parseD(x.b.due_date)-D.t)/864e5):30;return {bid:x.b,v:x.v,ang:(k/Math.max(1,arr.length))*Math.PI*2+n.seed,rad:Math.max(.15,Math.min(.82,.82-days/30*.67)),s:3+Math.min(6,x.v*2)}});return n});
+  WLA.links=D.links;const oldG=new Map((WLA.grabs||[]).map(g=>[g.bid.id,g]));WLA.grabs=D.grabs.map(g=>{const o=oldG.get(g.b.id);return o?Object.assign(o,{v:g.v}):{bid:g.b,v:g.v,x:w/2+(Math.random()-.5)*w*.3,y:h*.12+Math.random()*h*.2}})}
+function wlStep(dt,T){const N=WLA.nodes,w=WLA.w,h=WLA.h;const calm=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  N.forEach(n=>{n.r+=(n.tr*(n.load>1&&!calm?1+.04*Math.sin(T*3+n.seed):1)-n.r)*Math.min(1,dt*3)});
+  for(let i=0;i<N.length;i++)for(let j=i+1;j<N.length;j++){const a=N[i],b=N[j];let dx=b.x-a.x,dy=b.y-a.y;const d=Math.max(1,Math.hypot(dx,dy));dx/=d;dy/=d;
+    const share=(WLA.links||[]).find(l=>(l[0]===i&&l[1]===j)||(l[0]===j&&l[1]===i));const want=share?(a.r+b.r)*.82:(a.r+b.r)*1.25+30;const f=(d-want)*(share?1.4:(d<want?1.2:.05));
+    a.vx+=dx*f*dt;a.vy+=dy*f*dt;b.vx-=dx*f*dt;b.vy-=dy*f*dt}
+  N.forEach(n=>{n.vx+=(w/2-n.x)*.08*dt;n.vy+=(h/2-n.y)*.12*dt;if(!calm){n.vx+=Math.sin(T*.5+n.seed)*6*dt;n.vy+=Math.cos(T*.4+n.seed*1.3)*6*dt}n.vx*=.92;n.vy*=.92;n.x+=n.vx*dt*8;n.y+=n.vy*dt*8;
+    n.x=Math.max(n.r+6,Math.min(w-n.r-6,n.x));n.y=Math.max(n.r+6,Math.min(h-n.r-6,n.y))});
+  const free=N.slice().sort((a,b)=>a.load-b.load)[0];(WLA.grabs||[]).forEach((g,k)=>{const tx=free?free.x+(free.r+26)*Math.cos(T*.3+k):w/2,ty=free?free.y-(free.r+26)*Math.abs(Math.sin(T*.3+k))-10:h/2;
+    g.x+=(tx-g.x)*dt*.25+(calm?0:Math.sin(T+k)*.3);g.y+=(ty-g.y)*dt*.25+(calm?0:Math.cos(T*1.2+k)*.3)})}
+function wlDraw(T){const cv=WLA.cv,ctx=cv.getContext('2d'),w=WLA.w,h=WLA.h,N=WLA.nodes;const css=getComputedStyle(document.body);const bg=css.getPropertyValue('--surface').trim()||'#fff';const ink=css.getPropertyValue('--ink').trim()||'#111';
+  ctx.clearRect(0,0,w,h);
+  // metaball field on a coarse grid, colored by whichever blobs reach each spot
+  const S2=5,cols=Math.ceil(w/S2),rows=Math.ceil(h/S2);const img=ctx.createImageData(cols,rows);const d=img.data;
+  for(let gy=0;gy<rows;gy++)for(let gx=0;gx<cols;gx++){const px=gx*S2,py=gy*S2;let f=0,r=0,g=0,b=0;
+    for(const n of N){const dx=px-n.x,dy=py-n.y;const v=n.r*n.r/(dx*dx+dy*dy+1);f+=v;r+=n.col[0]*v;g+=n.col[1]*v;b+=n.col[2]*v}
+    const k=(gy*cols+gx)*4;if(f>.55){d[k]=r/f;d[k+1]=g/f;d[k+2]=b/f;d[k+3]=Math.min(235,(f-.55)*520+70)}else if(f>.3){d[k]=r/f;d[k+1]=g/f;d[k+2]=b/f;d[k+3]=(f-.3)*160}}
+  const off=WLA.off||(WLA.off=document.createElement('canvas'));off.width=cols;off.height=rows;off.getContext('2d').putImageData(img,0,0);
+  ctx.save();ctx.imageSmoothingEnabled=true;ctx.filter='blur(2px)';ctx.drawImage(off,0,0,cols*S2,rows*S2);ctx.restore();
+  // bid dots and names
+  N.forEach(n=>{n.dots.forEach(dt=>{const a=dt.ang+T*.06;dt.x=n.x+Math.cos(a)*n.r*dt.rad;dt.y=n.y+Math.sin(a)*n.r*dt.rad;ctx.beginPath();ctx.arc(dt.x,dt.y,dt.s,0,7);ctx.fillStyle='rgba(255,255,255,.9)';ctx.fill();ctx.lineWidth=1;ctx.strokeStyle='rgba(0,0,0,.25)';ctx.stroke()});
+    const ini=(n.p.name||'?').split(/\s+/).map(s=>s[0]).join('').slice(0,2).toUpperCase();ctx.font='700 '+Math.max(12,Math.min(22,n.r*.36))+'px system-ui,sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle='#fff';ctx.fillText(ini,n.x,n.y-6);
+    ctx.font='600 11px system-ui,sans-serif';ctx.fillStyle='rgba(255,255,255,.92)';ctx.fillText(Math.round(n.load*100)+'%',n.x,n.y+Math.max(10,n.r*.22));
+    ctx.font='600 12px system-ui,sans-serif';ctx.fillStyle=ink;ctx.fillText(n.p.name,n.x,n.y+n.r+14)});
+  (WLA.grabs||[]).forEach(g=>{ctx.beginPath();ctx.arc(g.x,g.y,4+Math.min(5,g.v*1.6),0,7);ctx.fillStyle=bg;ctx.fill();ctx.setLineDash([3,3]);ctx.lineWidth=2;ctx.strokeStyle=ink;ctx.stroke();ctx.setLineDash([])})}
+function wlHover(x,y){let hit=null;for(const g of WLA.grabs||[])if(Math.hypot(x-g.x,y-g.y)<10){hit={bid:g.bid,grab:true}}
+  if(!hit)for(const n of WLA.nodes){for(const d of n.dots)if(d.x!=null&&Math.hypot(x-d.x,y-d.y)<d.s+3){hit={bid:d.bid,n}}if(hit)break;if(Math.hypot(x-n.x,y-n.y)<n.r){hit={n};break}}
+  WLA.hover=hit;const tp=document.getElementById('wl-tip');if(!tp)return;if(!hit){tp.hidden=true;WLA.cv.style.cursor='';return}
+  WLA.cv.style.cursor=hit.bid&&byId(S.bids,hit.bid.id)?'pointer':'default';
+  if(hit.bid){const b=hit.bid;tp.innerHTML=`<b>${esc(b.name)}</b><div>${hit.grab?'Up for grabs · ':''}${esc(stLabelB(b))}</div><div class="dim">${b.due_date?'Due '+fmtShort(b.due_date):'No due date'}${(b.client_ids||[]).length?' · '+esc(b.client_ids.map(clientName).join(', ')):''}</div>`}
+  else{const p=hit.n.p;tp.innerHTML=`<b>${esc(p.name)}</b> <span class="dim">${Math.round(p.load*100)}% of capacity ${p.cap}</span>${p.bids.length?`<ul>${p.bids.sort((a,b)=>b.v-a.v).slice(0,6).map(x=>`<li>${esc(x.b.name)}${x.role==='help'?' (helping)':''} <span class="dim">${x.b.due_date?fmtShort(x.b.due_date):''}</span></li>`).join('')}</ul>`:'<div class="dim">Nothing on their plate.</div>'}`}
+  tp.hidden=false;tp.style.left=Math.min(x+14,WLA.w-260)+'px';tp.style.top=Math.min(y+14,WLA.h-120)+'px'}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act=wl-mode]');if(!t)return;S.wl.mode=t.dataset.v;render()});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.wlday!=null){S.wl.day=+t.value;S.wl.D=wlData(S.wl.day);wlSync();const wn=document.getElementById('wl-when');if(wn)wn.textContent=S.wl.day===0?'Today':new Date(S.wl.D.t).toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}});
+document.addEventListener('change',e=>{if(e.target.dataset&&e.target.dataset.wlday!=null)render()});
+new MutationObserver(()=>{if(document.getElementById('wl-cv'))wlStart()}).observe(document.getElementById('main')||document.body,{childList:true});
+document.addEventListener('change',async e=>{const t=e.target;if(!t.dataset||t.dataset.wlcap==null||!isAdmin())return;const cap={...wlOver()};const v=num(t.value);if(v>0)cap[t.dataset.wlcap]=v;else delete cap[t.dataset.wlcap];
+  try{await run(sb.from('settings').upsert({key:'workload',value:{...(S.settings.workload||{}),cap}}));await loadTable('settings');render();toast('Capacity saved.')}catch(err){toast(errMsg(err))}});
