@@ -2537,3 +2537,11 @@ div.tw-pgh{cursor:default}
 .ct-brand-in{padding:14px 22px}
 @media (max-width:860px){.ct-brand{margin:0 18px}}
 .ct-brand.vp{max-width:1084px}
+/* one-pager */
+.op-wrap{display:grid;grid-template-columns:260px minmax(0,1fr);gap:18px;align-items:start}
+.op-side{position:sticky;top:0;display:flex;flex-direction:column;gap:12px}
+.op-presets{display:flex;flex-wrap:wrap;gap:6px}
+.op-presets .chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.op-checks{display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.op-prev{background:#fff;border:1px solid var(--line);border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.18);padding:.55in;max-width:8.5in;width:100%;justify-self:center;color:#1a1d1b}
+@media (max-width:900px){.op-wrap{grid-template-columns:1fr}.op-side{position:static}.op-prev{padding:24px}}

@@ -1076,6 +1076,7 @@ function bidModal(){
   if(M.picker)return pickerView();
   if(M.sup)return supView();
   if(M.rfq)return rfqView();
+  if(M.op)return opView();
   if(M.trk)return trackModal().replace('data-act="close"','data-act="trk-back"');
   const b=M.draft;const admin=isAdmin();const work=canWork(b);const isNew=b._new;
   if(!M.tab)M.tab=isNew?'project':bpTabOf(b);
@@ -1089,7 +1090,7 @@ function bidModal(){
   const archNote=b.archived_at?`<div class="notice" style="margin-bottom:14px">🗄 Archived ${fmtDate(String(b.archived_at).slice(0,10))}. It’s hidden from the pipeline and dashboard but all its history is kept.${admin?' Click <b>Restore</b> to bring it back.':''}</div>`:'';
   return `<div class="bp-head"><button class="btn ghost bp-back" data-act="close">← ${S.view==='pipeline'?'Pipeline':'Back'}</button>
     <div class="bp-title"><h2>${esc(isNew?(b.name||'New bid'):b.name||'Untitled bid')}</h2><p>${sub.join(' · ')}</p></div>
-    <div class="bp-right"><span class="bp-save" id="bp-save">${saveTxt}</span>
+    <div class="bp-right"><span class="bp-save" id="bp-save">${saveTxt}</span>${isNew?'':'<button class="btn" data-act="op-open" title="Print or save a one-page summary as PDF">🖨 Print</button>'}
       <label class="bp-status" title="Set the stage by hand, or put the bid on hold"><select class="field" data-bf="status"${DIS()}>${BID_ST.map(o=>`<option value="${esc(o)}"${o===b.status?' selected':''}>${esc(stLabel(o)==='Submitted'?'Proposal sent':o==='Quotes Received'?'Quotes':stLabel(o))}</option>`).join('')}</select></label>
       ${isNew&&work?'<button class="btn primary" data-act="save">Create bid</button>':''}</div></div>
   <div class="bp-tabs" role="tablist">${tabs}${b.status==='On Hold'?'<span class="bp-hold">'+pill('On hold','warn')+'</span>':''}</div>
@@ -11657,3 +11658,59 @@ document.addEventListener('input',e=>{const t=e.target;if(!t.dataset||!t.dataset
   let c=0,p=0;while(p<out.length&&c<before){if(/[0-9.]/.test(out[p]))c++;p++}try{t.setSelectionRange(p,p)}catch(_){}},true);
 document.addEventListener('focusout',e=>{const t=e.target;if(!t.dataset||!t.dataset.mz)return;const v=t.value.trim();if(!v)return;const n=num(v);if(n==null)return;
   const out=commas(String(Math.round(n*10000)/10000));if(out!==t.value){t.value=out;t.dispatchEvent(new Event('input',{bubbles:true}));t.dispatchEvent(new Event('change',{bubbles:true}))}},true);
+
+/* ----- printable one-pager for a bid -----
+   Pick the sections, start from a preset (site walk / review meeting / for the GC), see a live preview, then
+   print or save as PDF. Each person's last choices are remembered on their computer. */
+const OP_SECS=[['proj','Project & dates'],['gcs','GCs & contacts'],['team','Team'],['scopes','Scopes'],['vendors','Vendors & quotes'],['prices','Prices'],['numbers','Numbers by GC'],['addenda','Addenda'],['notes','Notes'],['blank','Blank notes area']];
+const OP_PRESETS={walk:['Site walk',{proj:1,gcs:0,team:1,scopes:1,vendors:1,prices:0,numbers:0,addenda:1,notes:1,blank:1}],
+  review:['Review meeting',{proj:1,gcs:1,team:1,scopes:1,vendors:1,prices:1,numbers:1,addenda:1,notes:1,blank:0}],
+  gc:['For the GC',{proj:1,gcs:0,team:1,scopes:1,vendors:0,prices:0,numbers:0,addenda:1,notes:0,blank:0}]};
+const opLoad=()=>{try{const v=JSON.parse(localStorage.getItem('bp.onepager')||'null');if(v&&v.sec)return v}catch(e){}return {preset:'review',sec:{...OP_PRESETS.review[1]}}};
+const opSave=v=>{try{localStorage.setItem('bp.onepager',JSON.stringify(v))}catch(e){}};
+function opHtml(b,sec){const on=k=>!!sec[k];const P=on('prices');const d=x=>x?fmtDate(x):'—';const r=rfqOf(b);
+  const co=COMPANY.name||CFG.companyName||APP_NAME;const logo=BRAND.loginLogo?new URL(BRAND.loginLogo,location.href).href:'';
+  const row=(l,v)=>v?`<tr><th>${esc(l)}</th><td>${v}</td></tr>`:'';
+  const h=t=>`<h2>${esc(t)}</h2>`;let o='';
+  o+=`<header class="op-h">${logo?`<img src="${esc(logo)}" alt="">`:`<b>${esc(co)}</b>`}<div><div class="op-k">Bid summary</div><h1>${esc(b.name||'Untitled bid')}</h1><div class="op-sub">${esc([b.location,normProjectType(b.project_type),b.bid_type].filter(Boolean).join(' · '))}</div></div></header>`;
+  if(on('proj'))o+=`<section>${h('Project & dates')}<table class="op-kv">${row('Stage',esc(stLabelB(b)))}${row('Bid due',d(b.due_date)+(b.due_time?' at '+esc(fmtTime(b.due_time)):''))}${row('Site walk',b.walk_date?d(b.walk_date):'')}${row('RFI deadline',b.rfi_date?d(b.rfi_date):'')}${row('Quotes due',rfqDue(b)?d(rfqDue(b)):'')}${row('Plan date',r.planDate?d(r.planDate):'')}${row('Proposal expected',b.proposal_eta?d(b.proposal_eta):'')}${row('Size',esc(b.size||''))}${row('Units',b.units?esc(String(b.units)):'')}${row('Plans',r.plans?esc(r.plansLabel||r.plans):'')}</table></section>`;
+  if(on('gcs'))o+=`<section>${h('GCs & contacts')}${b.client_ids.length?`<table class="op-t"><thead><tr><th>Company</th><th>Contact</th><th>Phone</th><th>Email</th>${on('numbers')&&P?'<th class="r">Our number</th>':''}</tr></thead><tbody>${b.client_ids.map(id=>{const c=byId(S.clients,id)||{};const nm=(b.client_contacts||{})[id]||'';const ct=(c.contacts||[]).find(x=>x.name===nm)||{};return `<tr><td><b>${esc(clientName(id))}</b></td><td>${esc(nm)}</td><td>${esc(ct.phone||c.phone||'')}</td><td>${esc(ct.email||'')}</td>${on('numbers')&&P?`<td class="r">${clientAmount(b,id)?money(clientAmount(b,id)):'—'}</td>`:''}</tr>`}).join('')}</tbody></table>`:'<p class="op-dim">No GCs yet.</p>'}</section>`;
+  if(on('team')){const ests=[b.lead_estimator_id,...(b.support_estimator_ids||[])].filter(Boolean).map(id=>byId(S.estimators,id)).filter(Boolean);
+    o+=`<section>${h('Team')}${ests.length?`<table class="op-t"><tbody>${ests.map((e,i)=>`<tr><td><b>${esc(e.name)}</b> <span class="op-dim">${i===0&&e.id===b.lead_estimator_id?'Lead':'Helping'}</span></td><td>${esc(e.title||'')}</td><td>${esc(e.phone||'')}</td><td>${esc(e.email||'')}</td></tr>`).join('')}</tbody></table>`:'<p class="op-dim">No one assigned yet.</p>'}</section>`}
+  if(on('scopes')||on('vendors')){const Q=b.quotes||[];
+    o+=`<section>${h(on('vendors')?'Scopes, vendors & quotes':'Scopes')}${b.scope_items.length?b.scope_items.map(it=>{const qs=Q.filter(q=>qHas(q,it.name));const low=P?qs.filter(q=>q.status==='Received'&&num(q.amount)!=null).sort((x,y)=>num(x.amount)-num(y.amount))[0]:null;
+      return `<div class="op-scope"><div class="op-sh"><b>${esc(it.name)}</b><span>${esc(performOf(it))}</span><span>${it.status==='Complete'?'✓ Signed off'+(it.signed_initials?' ('+esc(it.signed_initials)+')':''):esc(it.status||'Not started')}</span>${it.assignee_id?`<span>${esc(estName(it.assignee_id)||'')}</span>`:''}${it.tg?`<span>Group: ${esc(it.tg)}</span>`:''}</div>
+      ${on('vendors')?(qs.length?`<table class="op-t op-q"><tbody>${qs.map(q=>{const v=vendorOf(q.vendor_id)||{};return `<tr${q===low?' class="op-low"':''}><td><b>${esc(v.company||'Vendor')}</b>${qScopes(q).length>1?` <span class="op-dim">(also ${esc(qScopes(q).filter(n=>n!==it.name).join(', '))})</span>`:''}</td><td>${esc(v.phone||'')}</td><td>${esc(q.status||'Not requested')}</td>${P?`<td class="r">${num(q.amount)!=null?money(q.amount)+(q===low?' ◀ low':''):'—'}</td>`:''}</tr>`}).join('')}</tbody></table>`:'<p class="op-dim">No vendors yet.</p>'):''}</div>`}).join(''):'<p class="op-dim">No scopes yet.</p>'}</section>`}
+  if(on('numbers')&&P)o+=`<section>${h('Numbers')}<table class="op-kv">${row('Base, with site improvements',num(b.amount_with)!=null?money(b.amount_with):'—')}${row('Base, without site improvements',num(b.amount_without)!=null?money(b.amount_without):'—')}${row('Margin',num(b.margin)!=null?esc(String(b.margin))+'%':'')}${row('Win probability',b.probability!=null?esc(String(b.probability))+'%':'')}${row('Proposal',esc(stLabelB(b)))}</table></section>`;
+  if(on('addenda')){const A=addenda(b);o+=`<section>${h('Addenda')}${A.length?`<table class="op-t"><tbody>${A.map(a=>`<tr><td><b>#${esc(String(a.number??''))}</b></td><td>${a.date?d(a.date):''}</td><td>${esc(a.description||'')}</td><td>${a.acknowledged?'Acknowledged':'Not acknowledged'}${a.priced?' · priced':''}</td></tr>`).join('')}</tbody></table>`:'<p class="op-dim">None.</p>'}</section>`}
+  if(on('notes')&&String(b.notes||'').trim())o+=`<section>${h('Notes')}<p class="op-notes">${esc(b.notes).replace(/\n/g,'<br>')}</p></section>`;
+  if(on('blank'))o+=`<section>${h('Write-in notes')}<div class="op-lines">${'<i></i>'.repeat(12)}</div></section>`;
+  o+=`<footer class="op-f">${esc(co)} · ${esc([COMPANY.phone,COMPANY.web].filter(Boolean).join(' · '))} · Printed ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}${P?'':' · Prices left out'}</footer>`;
+  return `<div class="op-page">${o}</div>`}
+const OP_CSS=`.op-page{font-family:Helvetica,Arial,sans-serif;color:#1a1d1b;font-size:11.5pt;line-height:1.35;background:#fff}
+.op-page .op-h{display:flex;gap:18px;align-items:center;border-bottom:3px solid #4A7B56;padding-bottom:10px;margin-bottom:12px}
+.op-page .op-h img{height:46px;width:auto}.op-page h1{margin:2px 0 0;font-size:20pt}.op-page .op-k{text-transform:uppercase;letter-spacing:.12em;font-size:8pt;color:#4A7B56;font-weight:700}
+.op-page .op-sub{color:#555;font-size:10pt}.op-page h2{font-size:11pt;text-transform:uppercase;letter-spacing:.06em;color:#243D2C;border-bottom:1px solid #ccd3cd;padding-bottom:3px;margin:14px 0 6px}
+.op-page section{break-inside:avoid-page}.op-page table{border-collapse:collapse;width:100%}.op-page .op-kv th{text-align:left;width:34%;font-weight:600;color:#555;padding:2px 8px 2px 0;vertical-align:top}.op-page .op-kv td{padding:2px 0}
+.op-page .op-t td,.op-page .op-t th{padding:3px 6px;border-bottom:1px solid #e3e7e4;text-align:left;vertical-align:top}.op-page .op-t th{font-size:9pt;color:#555}.op-page .r{text-align:right!important;white-space:nowrap}
+.op-page .op-scope{margin:6px 0 8px;break-inside:avoid}.op-page .op-sh{display:flex;gap:10px;flex-wrap:wrap;align-items:baseline}.op-page .op-sh span{font-size:9.5pt;color:#555}
+.op-page .op-q{margin:3px 0 0 12px;width:calc(100% - 12px);font-size:10pt}.op-page .op-low td{background:#eaf3ec;font-weight:600}.op-page .op-dim{color:#777;font-size:9.5pt}
+.op-page .op-notes{white-space:normal;margin:0}.op-page .op-lines i{display:block;border-bottom:1px solid #bbb;height:26px}
+.op-page th,.op-page td{background:transparent!important;text-transform:none;letter-spacing:0;font-size:inherit;color:inherit;position:static}.op-page .op-kv th{color:#555!important;font-weight:600}.op-page .op-t th{font-size:9pt!important;color:#555!important}.op-page .op-q{table-layout:fixed}.op-page .op-q td:nth-child(1){width:44%}.op-page .op-q td:nth-child(2){width:20%}.op-page .op-q td:nth-child(3){width:18%}.op-page .op-low td{background:#eaf3ec!important}
+.op-page .op-f{margin-top:16px;border-top:1px solid #ccd3cd;padding-top:6px;font-size:8.5pt;color:#777;text-align:center}`;
+function opView(){const b=M.draft;const X=M.op;
+  return mhead('Print or save as PDF',`${b.name} · one page summary`).replace('data-act="close"','data-act="op-x"')+`<div class="mbody op-wrap">
+   <div class="op-side"><div class="op-presets">${Object.entries(OP_PRESETS).map(([k,[l]])=>`<button class="chip${X.preset===k?' on':''}" data-act="op-preset" data-v="${k}">${l}</button>`).join('')}</div>
+    <div class="op-checks">${OP_SECS.map(([k,l])=>`<label class="check"><input type="checkbox" data-opsec="${k}"${X.sec[k]?' checked':''}${k==='numbers'&&!X.sec.prices?' disabled':''}> ${l}${k==='numbers'&&!X.sec.prices?' <span class="dim small" style="white-space:nowrap">· needs Prices</span>':''}</label>`).join('')}</div>
+    <p class="hint">Your choices are remembered for next time. In the print window, pick <b>Save as PDF</b> to get a file.</p></div>
+   <div class="op-prev"><style>${OP_CSS}</style>${opHtml(b,X.sec)}</div></div>
+  <div class="mfoot"><div><button class="btn" data-act="op-x">Back to the bid</button></div><div class="r"><button class="btn primary" data-act="op-print">🖨 Print / save PDF</button></div></div>`}
+function opPrint(){const b=M.draft;const html=opHtml(b,M.op.sec);const w=window.open('','_blank');if(!w){toast('Your browser blocked the print window. Allow pop-ups for this site.');return}
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(b.name||'Bid')} · bid summary</title><style>@page{size:letter;margin:.55in}body{margin:0}${OP_CSS}</style></head><body>${html}<script>window.onload=()=>{setTimeout(()=>window.print(),150)}<\/script></body></html>`);w.document.close()}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='bid')return;const a=t.dataset.act;
+  if(a==='op-open'){M.op=opLoad();renderModal();return}
+  if(!M.op||!a.startsWith('op-'))return;
+  if(a==='op-x'){M.op=null;renderModal();return}
+  if(a==='op-preset'){const p=OP_PRESETS[t.dataset.v];if(p){M.op={preset:t.dataset.v,sec:{...p[1]}};opSave(M.op);renderModal()}return}
+  if(a==='op-print'){opPrint();return}});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.opsec&&M&&M.op){M.op.sec[t.dataset.opsec]=t.checked?1:0;if(t.dataset.opsec==='prices'&&!t.checked)M.op.sec.numbers=0;M.op.preset='';opSave(M.op);renderModal()}});
