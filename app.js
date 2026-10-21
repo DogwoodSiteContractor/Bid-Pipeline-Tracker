@@ -317,7 +317,7 @@ function renderNow(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
-  const views={workload:vWorkload,positions:vPositions,grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const views={btpl:vBtpl,workload:vWorkload,positions:vPositions,grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
@@ -1077,6 +1077,7 @@ function bidModal(){
   if(M.sup)return supView();
   if(M.rfq)return rfqView();
   if(M.op)return opView();
+  if(M.btpl)return btplSaveView();
   if(M.trk)return trackModal().replace('data-act="close"','data-act="trk-back"');
   const b=M.draft;const admin=isAdmin();const work=canWork(b);const isNew=b._new;
   if(!M.tab)M.tab=isNew?'project':bpTabOf(b);
@@ -1090,7 +1091,7 @@ function bidModal(){
   const archNote=b.archived_at?`<div class="notice" style="margin-bottom:14px">🗄 Archived ${fmtDate(String(b.archived_at).slice(0,10))}. It’s hidden from the pipeline and dashboard but all its history is kept.${admin?' Click <b>Restore</b> to bring it back.':''}</div>`:'';
   return `<div class="bp-head"><button class="btn ghost bp-back" data-act="close">← ${S.view==='pipeline'?'Pipeline':'Back'}</button>
     <div class="bp-title"><h2>${esc(isNew?(b.name||'New bid'):b.name||'Untitled bid')}</h2><p>${sub.join(' · ')}</p></div>
-    <div class="bp-right"><span class="bp-save" id="bp-save">${saveTxt}</span>${isNew?'':'<button class="btn" data-act="op-open" title="Print or save a one-page summary as PDF">🖨 Print</button>'}
+    <div class="bp-right"><span class="bp-save" id="bp-save">${saveTxt}</span>${isNew?'':'<button class="btn" data-act="op-open" title="Print or save a one-page summary as PDF">🖨 Print</button>'}${isNew||b._sample||!btplCan()?'':'<button class="btn" data-act="btpl-open" title="Save this bid as a template new bids can start from (scopes, usual vendors, notes; no prices)">🗂 Template</button>'}
       <label class="bp-status" title="Set the stage by hand, or put the bid on hold"><select class="field" data-bf="status"${DIS()}>${BID_ST.map(o=>`<option value="${esc(o)}"${o===b.status?' selected':''}>${esc(stLabel(o)==='Submitted'?'Proposal sent':o==='Quotes Received'?'Quotes':stLabel(o))}</option>`).join('')}</select></label>
       ${isNew&&work?'<button class="btn primary" data-act="save">Create bid</button>':''}</div></div>
   <div class="bp-tabs" role="tablist">${tabs}${b.status==='On Hold'?'<span class="bp-hold">'+pill('On hold','warn')+'</span>':''}</div>
@@ -1113,7 +1114,7 @@ function bpAdvanceHtml(b,work,isNew){
 function bpProject(b,work,admin){
   const ests=S.estimators.filter(e=>e.active!==false||e.id===b.lead_estimator_id||b.support_estimator_ids.includes(e.id));
   const clientsSorted=S.clients.slice().sort((a,c)=>a.company.localeCompare(c.company));
-  return `<fieldset><legend>Project</legend><div class="fg">
+  return btplBar(b,work)+`<fieldset><legend>Project</legend><div class="fg">
     <label class="f s2">Project name ${work?'<span class="req">required</span>':''}<input class="field" ${bf('name')} placeholder="e.g. Riverside Commerce Park"></label>
     <label class="f s2">Location<input class="field" ${bf('location')} placeholder="City, county or address"></label>
     <label class="f">Project type${sel('project_type',PROJECT_TYPES)}</label>
@@ -5258,7 +5259,8 @@ function propData(){const E=S.est,d=E.data,b=byId(S.bids,E.bidId)||{};const L=pr
     d.prop={date:todayStr(),to:(b.client_ids||[]).slice(),format:'unit',subtotals:true,showQty:true,valid:30,
       intro:`${S.settings.general?.companyName||CFG.companyName||'We'} ${S.settings.general?.companyName||CFG.companyName?'is':'are'} pleased to provide pricing for the site work on the above project.`,
       basis:ad.length?`Plans and specifications as issued, including Addend${ad.length===1?'um':'a'} ${ad.join(', ')}.`:'Plans and specifications as issued.',
-      incl:L.incl.slice(0,4),excl:L.excl.slice(),clar:L.clar.slice(0,2),inclX:'',exclX:'',clarX:'',terms:L.terms||'',sign:myName(),title:myEst()?.title||''}}
+      incl:L.incl.slice(0,4),excl:L.excl.slice(),clar:L.clar.slice(0,2),inclX:'',exclX:'',clarX:'',terms:L.terms||'',sign:myName(),title:myEst()?.title||''};
+    const BT=(b.rfq&&b.rfq.tpl)||null;if(BT){if(BT.excl)d.prop.exclX=BT.excl;if(BT.clar)d.prop.clarX=BT.clar}}
   const P=d.prop;['incl','excl','clar','to'].forEach(k=>{if(!Array.isArray(P[k]))P[k]=[]});return P}
 const propLines=t=>String(t||'').split(/\n+/).map(x=>x.trim()).filter(Boolean);
 // what the client sees for each line, depending on the format
@@ -5432,11 +5434,11 @@ function vEstimate(){const E=S.est;const tpl=!!(E&&E.tpl);const b=tpl?null:byId(
   <div class="seg est-tabs" role="tablist">${tabs.map(([k,l])=>`<button class="${E.tab===k?'on':''}" data-act="est-tab" data-v="${k}" role="tab">${l}</button>`).join('')}</div>
   ${body}${EST_PICK.html}<datalist id="cb-units">${CB_UNITS.map(u=>`<option value="${u}">`).join('')}</datalist>${estCtxMenu(d)}`}
 function estStartView(b,back){const work=canWork(b);const others=S.estIndex.filter(x=>x.bid_id!==b.id).map(x=>({x,b:byId(S.bids,x.bid_id)})).filter(o=>o.b).sort((p,q)=>String(q.x.updated_at).localeCompare(String(p.x.updated_at)));
-  const tpls=cbList('estimate').filter(t=>t.active!==false).sort((a,c)=>String(a.description).localeCompare(c.description));const sc=scopeItems(b);
+  const tpls=cbList('estimate').filter(t=>t.active!==false).sort((a,c)=>String(a.description).localeCompare(c.description));const sc=scopeItems(b);const BT=(b.rfq&&b.rfq.tpl)||(typeof rfqLS==='function'&&(rfqLS(b.id)||{}).tpl)||null;const sug=BT&&BT.est&&tpls.some(t=>t.id===BT.est)?BT.est:'';
   return `<div class="head"><div>${back}<h1>Start the estimate</h1><p>${esc(b.name)}${b.location?' · '+esc(b.location):''}</p></div></div>
     ${work?`<div class="est-start">
       <div class="est-opt"><b>From a master template</b><span>Sections, bid items, activities and production rates ready to go — then punch in your quantities.</span>
-        <div class="est-copy"><select class="field" id="est-tplsrc"><option value="">${tpls.length?'Pick a template…':'No master templates yet'}</option>${tpls.map(t=>`<option value="${t.id}">${esc(t.description)}</option>`).join('')}</select><button class="btn primary" data-act="est-create" data-v="tpl"${tpls.length?'':' disabled'}>Start</button></div></div>
+        <div class="est-copy"><select class="field" id="est-tplsrc"><option value="">${tpls.length?'Pick a template…':'No master templates yet'}</option>${tpls.map(t=>`<option value="${t.id}"${sug===t.id?' selected':''}>${esc(t.description)}</option>`).join('')}</select><button class="btn primary" data-act="est-create" data-v="tpl"${tpls.length?'':' disabled'}>Start</button></div>${sug?`<span class="small dim">Suggested by the “${esc(BT.name||'')}” bid template.</span>`:''}</div>
       <button class="est-opt" data-act="est-create" data-v="scopes"${sc.length?'':' disabled'}><b>From this bid’s scopes</b><span>${sc.length?`One section per scope (${sc.length}) — ${esc(sc.slice(0,4).map(s=>s.name).join(', '))}${sc.length>4?'…':''}`:'This bid has no scopes yet.'}</span></button>
       <button class="est-opt" data-act="est-create" data-v="blank"><b>Blank estimate</b><span>Start with one empty section.</span></button>
       <div class="est-opt"><b>Copy another estimate</b><span>Similar job? Start from its sections, items, activities and prices.</span>
@@ -6668,7 +6670,7 @@ const pAv=p=>`<span class="av" style="background:${avColor(p.id)}" title="${esc(
 /* ----- top bar: tabs come from what each person can open ----- */
 function navGroups(){const g=[];
   if(can('dash'))g.push(['dashboard',onlyMine()?'My dashboard':scopeView()?'Dashboard':role()==='board'?'Board dashboard':'Dashboard',['dashboard']]);
-  if(can('bids')){const n=typeof grabCount==='function'?grabCount():0;SUBNAV_LABEL.pipeline=onlyMine()?'My bids':'Pipeline';SUBNAV_LABEL.grabs='Up for grabs'+(n?` (${n})`:'');SUBNAV_LABEL.workload='Workload';g.push(['pipeline',(onlyMine()?'My bids':'Pipeline')+(n?` <span class="nav-badge" title="${n} up for grabs">${n}</span>`:''),['pipeline','grabs','workload']])}
+  if(can('bids')){const n=typeof grabCount==='function'?grabCount():0;SUBNAV_LABEL.pipeline=onlyMine()?'My bids':'Pipeline';SUBNAV_LABEL.grabs='Up for grabs'+(n?` (${n})`:'');SUBNAV_LABEL.workload='Workload';SUBNAV_LABEL.btpl='Bid templates';g.push(['pipeline',(onlyMine()?'My bids':'Pipeline')+(n?` <span class="nav-badge" title="${n} up for grabs">${n}</span>`:''),['pipeline','grabs','workload',...(btplCan()||btplList().length?['btpl']:[])]])}
   const twFree=!!(S.twBid&&!byId(S.bids,S.twBid));const est=[...(can('estimates')?['estimates','estimate',...(twFree?[]:['tw'])]:[]),...(can('codebook')?['cb']:[]),...(can('codebook','edit')?['settings','scopes']:[])];
   if(est.length)g.push([est[0],'Estimates',est.includes('cb')&&!est.includes('estimates')?[...est]:est]);
   if(can('jobs'))g.push(['jobs','Jobs',['jobs','job']]);
@@ -11891,3 +11893,103 @@ document.addEventListener('change',e=>{if(e.target.dataset&&e.target.dataset.wld
 new MutationObserver(()=>{if(document.getElementById('wl-cv'))wlStart()}).observe(document.getElementById('main')||document.body,{childList:true});
 document.addEventListener('change',async e=>{const t=e.target;if(!t.dataset||t.dataset.wlcap==null||!isAdmin())return;const cap={...wlOver()};const v=num(t.value);if(v>0)cap[t.dataset.wlcap]=v;else delete cap[t.dataset.wlcap];
   try{await run(sb.from('settings').upsert({key:'workload',value:{...(S.settings.workload||{}),cap}}));await loadTable('settings');render();toast('Capacity saved.')}catch(err){toast(errMsg(err))}});
+
+/* ----- Whole-bid templates -----
+   A template is a starting point for a new bid: project and bid type, the scopes (who performs each, takeoff groups),
+   the usual vendors and subs per scope, the RFQ note and plans-link text, starter notes, the master estimate template
+   to suggest, and extra exclusions / clarifications for the proposal. Never prices: quotes come in as "Not requested"
+   with no amounts. Kept in settings 'bid_templates' ({list:[...]}). Admins and precon managers create and edit them;
+   everyone who can start a bid can use them. Applying only fills things in; everything stays editable on the bid. */
+const btplList=()=>{const v=S.settings.bid_templates;return v&&Array.isArray(v.list)?v.list:[]};
+const btplById=id=>btplList().find(t=>t.id===id)||null;
+const btplCan=()=>isAdmin()||canAssign();
+async function btplPut(list){await run(sb.from('settings').upsert({key:'bid_templates',value:{...(S.settings.bid_templates||{}),list}}));await loadTable('settings')}
+function btplErr(e){const m=errMsg(e);return /permission/i.test(m)?'Only admins can save bid templates right now.':m}
+// build a template from a bid (no prices, ever)
+function btplFrom(b,opt){const vend=new Map();if(opt.vendors)(b.quotes||[]).forEach(q=>{if(!q.vendor_id||!vendorOf(q.vendor_id))return;const v=vend.get(q.vendor_id)||new Set();qScopes(q).forEach(s=>v.add(s));vend.set(q.vendor_id,v)});
+  const r=rfqOf(b);return {id:opt.id||newId(),name:opt.name.trim(),desc:(opt.desc||'').trim(),
+    project_type:opt.type?b.project_type||'':'',bid_type:opt.type?b.bid_type||'':'',
+    scopes:opt.scopes?b.scope_items.map(it=>({name:it.name,group:it.group||groupOf(it.name),perform:performOf(it),...(opt.tg&&it.tg?{tg:it.tg}:{})})):[],
+    vendors:[...vend].map(([vendor_id,s])=>({vendor_id,scopes:[...s]})),
+    note:opt.rfq?r.note||'':'',plansLabel:opt.rfq?r.plansLabel||'':'',notes:opt.notes?b.notes||'':'',
+    est:opt.est||'',excl:(opt.excl||'').trim(),clar:(opt.clar||'').trim(),by:myName(),at:new Date().toISOString()}}
+// fill a bid draft from a template; returns what it did
+function btplApply(d,t){const out={scopes:0,vendors:0};
+  if(t.project_type)d.project_type=normProjectType(t.project_type)||d.project_type;if(t.bid_type&&BID_TYPES.includes(t.bid_type))d.bid_type=t.bid_type;
+  const have=new Set(d.scope_items.map(x=>x.name.toLowerCase()));
+  (t.scopes||[]).forEach(s=>{if(!s.name||have.has(s.name.toLowerCase()))return;have.add(s.name.toLowerCase());out.scopes++;
+    d.scope_items.push({id:newId(),name:s.name,group:s.group||groupOf(s.name),perform:PERFORM.includes(s.perform)?s.perform:'Self perform',status:'Not Started',assignee_id:'',...(s.tg?{tg:s.tg}:{})})});
+  const had=new Set(d.quotes.map(q=>q.vendor_id));
+  (t.vendors||[]).forEach(v=>{if(!vendorOf(v.vendor_id))return;let n=0;(v.scopes||[]).forEach(sc=>{if(addQuote(v.vendor_id,sc))n++});if(n&&!had.has(v.vendor_id))out.vendors++});
+  if(t.notes&&!String(d.notes||'').trim())d.notes=t.notes;
+  const r=rfqOf(d);if(t.note&&!r.note)r.note=t.note;if(t.plansLabel&&!r.plansLabel)r.plansLabel=t.plansLabel;
+  r.tpl={id:t.id,name:t.name,est:t.est||'',excl:t.excl||'',clar:t.clar||''};return out}
+// shown at the top of a new bid (and on bids with no scopes yet)
+function btplBar(b,work){if(!work||b._sample)return '';const L=btplList();const used=(rfqOf(b).tpl||{}).name;
+  if(!b._new&&(b.scope_items.length||used))return used?`<p class="hint btpl-used">Started from the <b>${esc(used)}</b> template.</p>`:'';
+  if(!L.length)return btplCan()&&b._new?`<div class="btpl-bar"><span><b>Bid templates</b> <span class="dim">Save any bid as a template (🗂 in the bid header) and new bids can start from it.</span></span></div>`:'';
+  return `<div class="btpl-bar"><span><b>Start from a template</b> <span class="dim">Fills in the type, scopes, usual vendors and notes. No prices.</span></span>
+    <select class="field" id="btpl-pick"><option value="">Pick a template…</option>${L.slice().sort((a,c)=>a.name.localeCompare(c.name)).map(t=>`<option value="${t.id}"${M.btplSel===t.id?' selected':''}>${esc(t.name)} · ${t.scopes.length} scope${t.scopes.length===1?'':'s'}</option>`).join('')}</select>
+    <button class="btn primary sm" data-act="btpl-apply"${M.btplSel?'':' disabled'}>Use it</button>
+    ${M.btplSel&&btplById(M.btplSel)?`<div class="btpl-peek small">${btplPeek(btplById(M.btplSel))}</div>`:''}</div>${used?`<p class="hint btpl-used">Started from the <b>${esc(used)}</b> template.</p>`:''}`}
+function btplPeek(t){const vs=(t.vendors||[]).map(v=>vendorOf(v.vendor_id)?.company).filter(Boolean);const et=t.est?cbById(t.est):null;
+  return [t.desc?esc(t.desc):'',[t.project_type,t.bid_type].filter(Boolean).map(esc).join(' · '),t.scopes.length?`<b>Scopes:</b> ${esc(t.scopes.map(s=>s.name).join(', '))}`:'',vs.length?`<b>Vendors:</b> ${esc(vs.slice(0,8).join(', '))}${vs.length>8?` +${vs.length-8}`:''}`:'',et?`<b>Estimate:</b> ${esc(et.description)}`:''].filter(Boolean).join('<br>')}
+/* "Save as template" view inside the bid page */
+function btplSaveView(){const b=M.draft;const X=M.btpl;const L=btplList();const same=L.find(t=>t.name.trim().toLowerCase()===X.name.trim().toLowerCase());
+  const nV=new Set((b.quotes||[]).filter(q=>vendorOf(q.vendor_id)).map(q=>q.vendor_id)).size;const tgs=new Set(b.scope_items.map(i=>i.tg).filter(Boolean)).size;const r=rfqOf(b);
+  const ck=(k,l,d,dis)=>`<label class="btpl-ck${dis?' dim':''}"><input type="checkbox" data-btplf="${k}"${X[k]&&!dis?' checked':''}${dis?' disabled':''}><span><b>${l}</b>${d?`<small>${d}</small>`:''}</span></label>`;
+  const tpls=cbList('estimate').filter(t=>t.active!==false).sort((a,c)=>String(a.description).localeCompare(c.description));
+  return mhead('Save as a bid template',`From ${b.name||'this bid'}. New bids can start from it.`)+`<div class="mbody">
+   <fieldset><legend>Template</legend><div class="fg"><label class="f s2">Name<input class="field" id="btpl-name" data-btplf="name" value="${esc(X.name)}" placeholder="e.g. Retail pad, Multifamily site"></label>
+     <label class="f s2">What it’s for<input class="field" data-btplf="desc" value="${esc(X.desc)}" placeholder="Optional, e.g. Single-tenant pads under 5 acres"></label></div>
+     ${same?`<p class="hint warn-t">There’s already a template called “${esc(same.name)}”. Saving replaces it.</p>`:''}</fieldset>
+   <fieldset><legend>What goes in</legend><div class="btpl-cks">
+     ${ck('type','Project and bid type',esc([b.project_type,b.bid_type].filter(Boolean).join(' · ')))}
+     ${ck('scopes','Scopes',`${b.scope_items.length} with who performs each`,!b.scope_items.length)}
+     ${ck('tg','Takeoff groups',tgs?`${tgs} group${tgs===1?'':'s'}`:'none on this bid',!tgs||!X.scopes)}
+     ${ck('vendors','Usual vendors and subs per scope',`${nV} vendor${nV===1?'':'s'}, added as “Not requested”`,!nV)}
+     ${ck('rfq','RFQ note and plans-link text',r.note||r.plansLabel?esc((r.note||r.plansLabel).slice(0,60)):'blank on this bid',!(r.note||r.plansLabel))}
+     ${ck('notes','Bid notes',b.notes?esc(String(b.notes).slice(0,60))+(b.notes.length>60?'…':''):'blank on this bid',!b.notes)}
+   </div></fieldset>
+   <fieldset><legend>For the estimate and proposal</legend><div class="fg">
+     <label class="f s4">Master estimate template to suggest<select class="field" data-btplf="est"><option value="">None</option>${tpls.map(t=>`<option value="${t.id}"${X.est===t.id?' selected':''}>${esc(t.description)}</option>`).join('')}</select></label>
+     <label class="f s2">Extra exclusions, one per line<textarea class="field" rows="3" data-btplf="excl" placeholder="e.g. Rock excavation">${esc(X.excl)}</textarea></label>
+     <label class="f s2">Extra clarifications, one per line<textarea class="field" rows="3" data-btplf="clar" placeholder="e.g. Assumes balanced site">${esc(X.clar)}</textarea></label></div>
+     <p class="hint">These go on the proposal when the estimate is started, on top of your company’s standard lists.</p></fieldset>
+   <p class="hint"><b>No prices are saved.</b> Quote amounts, the bid’s numbers, GCs, dates and files stay with this bid only.</p></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="btpl-back">Back to the bid</button><button class="btn primary" data-act="btpl-save"${X.busy?' disabled':''}>${X.busy?'Saving…':same?'Replace template':'Save template'}</button></div></div>`}
+async function btplSave(){const X=M.btpl,b=M.draft;if(!X.name.trim()){toast('Name the template.');$('#btpl-name')?.focus();return}
+  const L=btplList().slice();const i=L.findIndex(t=>t.name.trim().toLowerCase()===X.name.trim().toLowerCase());
+  const t=btplFrom(b,{...X,id:i>=0?L[i].id:null,tg:X.tg&&X.scopes});if(i>=0)L[i]=t;else L.push(t);X.busy=true;renderModal();
+  try{await btplPut(L);M.btpl=null;renderModal();toast(`Saved the “${t.name}” template.`)}catch(e){X.busy=false;renderModal();toast(btplErr(e))}}
+/* manage page: Pipeline → Bid templates */
+S.btm=null;
+function vBtpl(){const L=btplList().slice().sort((a,c)=>a.name.localeCompare(c.name));const ed=btplCan();const R=S.btm;
+  const head=`<div class="head"><div><h1>Bid templates</h1><p>Starting points for new bids: scopes, usual vendors, notes and the estimate template. No prices.</p></div></div>`;
+  if(!L.length)return head+`<div class="empty"><b>No bid templates yet.</b>${ed?'Open a bid you like and click <b>🗂 Template</b> in its header to save it as one.':'Your precon manager can save bids as templates.'}</div>`;
+  return head+`<div class="panel scroll"><table class="team-t btpl-t"><thead><tr><th>Template</th><th>Type</th><th class="r">Scopes</th><th class="r">Vendors</th><th>Estimate</th><th>Saved</th>${ed?'<th></th>':''}</tr></thead><tbody>
+   ${L.map(t=>{const et=t.est?cbById(t.est):null;const open=R&&R.id===t.id;return `<tr><td>${open?`<input class="field sm" data-btmf="name" value="${esc(R.name)}"><input class="field sm" style="margin-top:4px" data-btmf="desc" value="${esc(R.desc)}" placeholder="What it’s for">`:`<b>${esc(t.name)}</b>${t.desc?`<div class="dim small">${esc(t.desc)}</div>`:''}`}</td>
+     <td class="small">${esc([t.project_type,t.bid_type].filter(Boolean).join(' · '))||'<span class="dim">—</span>'}</td><td class="r num" title="${esc(t.scopes.map(s=>s.name).join(', '))}">${t.scopes.length}</td><td class="r num" title="${esc((t.vendors||[]).map(v=>vendorOf(v.vendor_id)?.company).filter(Boolean).join(', '))}">${(t.vendors||[]).filter(v=>vendorOf(v.vendor_id)).length}</td>
+     <td class="small">${et?esc(et.description):'<span class="dim">—</span>'}</td><td class="small dim">${esc(t.by||'')}${t.at?' · '+new Date(t.at).toLocaleDateString('en-US',{month:'short',day:'numeric'}):''}</td>
+     ${ed?`<td class="r nowrap">${open?`<button class="btn xs primary" data-act="btm-ok">Save</button><button class="btn xs" data-act="btm-x">Cancel</button>`:`<button class="btn xs" data-act="btm-ed" data-id="${t.id}">Rename</button>${R&&R.del===t.id?`<button class="btn xs danger" data-act="btm-del" data-id="${t.id}">Delete for good</button>`:`<button class="x" data-act="btm-del" data-id="${t.id}" title="Delete">×</button>`}`}</td>`:''}</tr>`}).join('')}</tbody></table></div>
+   <p class="hint">${ed?'To change what a template carries, start a bid from it, adjust it, and save it again with the same name. ':''}Admins and precon managers create and edit templates; anyone who starts bids can use them.</p>`}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;if(!a.startsWith('btpl-')&&!a.startsWith('btm-'))return;
+  if(a==='btpl-apply'&&M&&M.kind==='bid'){const tp=btplById(M.btplSel);if(!tp)return;const r=btplApply(M.draft,tp);M.btplSel='';renderModal();toast(`Filled in from “${tp.name}”: ${r.scopes} scope${r.scopes===1?'':'s'}, ${r.vendors} vendor${r.vendors===1?'':'s'}. Everything stays editable.`);return}
+  if(a==='btpl-open'&&M&&M.kind==='bid'&&btplCan()){const b=M.draft;const r=rfqOf(b);const nV=(b.quotes||[]).some(q=>vendorOf(q.vendor_id));
+    const prev=(r.tpl&&btplById(r.tpl.id))||null;M.btpl={name:prev?prev.name:`${b.project_type||''} ${b.name||''}`.trim(),desc:prev?.desc||'',type:true,scopes:b.scope_items.length>0,tg:true,vendors:nV,rfq:!!(r.note||r.plansLabel),notes:!!b.notes,est:prev?.est||(r.tpl&&r.tpl.est)||'',excl:prev?.excl||(r.tpl&&r.tpl.excl)||'',clar:prev?.clar||(r.tpl&&r.tpl.clar)||''};
+    renderModal();setTimeout(()=>$('#btpl-name')?.select(),0);return}
+  if(a==='btpl-back'){M.btpl=null;renderModal();return}
+  if(a==='btpl-save'&&M&&M.btpl&&!M.btpl.busy){btplSave();return}
+  if(!btplCan())return;const L=btplList().slice();
+  if(a==='btm-ed'){const tp=btplById(t.dataset.id);S.btm={id:tp.id,name:tp.name,desc:tp.desc||''};render();return}
+  if(a==='btm-x'){S.btm=null;render();return}
+  if(a==='btm-ok'){const R=S.btm;if(!R.name.trim()){toast('Name the template.');return}if(L.some(x=>x.id!==R.id&&x.name.trim().toLowerCase()===R.name.trim().toLowerCase())){toast('Another template already has that name.');return}
+    const i=L.findIndex(x=>x.id===R.id);L[i]={...L[i],name:R.name.trim(),desc:R.desc.trim()};try{await btplPut(L);S.btm=null;render();toast('Template renamed.')}catch(err){toast(btplErr(err))}return}
+  if(a==='btm-del'){const id=t.dataset.id;if(!S.btm||S.btm.del!==id){S.btm={del:id};render();return}
+    try{await btplPut(L.filter(x=>x.id!==id));S.btm=null;render();toast('Template deleted. Bids already started from it are unchanged.')}catch(err){toast(btplErr(err))}}});
+document.addEventListener('change',e=>{const t=e.target;
+  if(t.id==='btpl-pick'&&M&&M.kind==='bid'){M.btplSel=t.value;renderModal();return}
+  if(t.dataset&&t.dataset.btplf&&M&&M.btpl){const k=t.dataset.btplf;M.btpl[k]=t.type==='checkbox'?t.checked:t.value;if(t.type==='checkbox'||t.tagName==='SELECT')renderModal()}});
+document.addEventListener('input',e=>{const t=e.target;
+  if(t.dataset&&t.dataset.btplf&&M&&M.btpl&&t.type!=='checkbox'&&t.tagName!=='SELECT'){M.btpl[t.dataset.btplf]=t.value;if(t.dataset.btplf==='name'){const L=btplList();const same=L.some(x=>x.name.trim().toLowerCase()===t.value.trim().toLowerCase());const btn=document.querySelector('[data-act=btpl-save]');if(btn&&!M.btpl.busy)btn.textContent=same?'Replace template':'Save template'}}
+  if(t.dataset&&t.dataset.btmf&&S.btm)S.btm[t.dataset.btmf]=t.value});

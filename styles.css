@@ -2573,3 +2573,13 @@ div.tw-pgh{cursor:default}
 .wl-grid td.wl-c{text-align:center}.wl-grid th.c{text-align:center}
 .wl-capin{width:64px;text-align:right}
 @media (max-width:640px){.wl-slide b{min-width:0}}
+
+/* whole-bid templates */
+.btpl-bar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;padding:12px 14px;margin:0 0 14px;border:1px dashed var(--line);border-radius:12px;background:var(--surface-2,var(--surface))}
+.btpl-bar>span{flex:1 1 260px}.btpl-bar select{max-width:340px;flex:1 1 220px}
+.btpl-peek{flex-basis:100%;color:var(--ink-2);line-height:1.5}
+.btpl-used{margin:-4px 0 12px}
+.btpl-cks{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px}
+.btpl-ck{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:10px;cursor:pointer}
+.btpl-ck input{margin-top:3px}.btpl-ck small{display:block;color:var(--ink-3);font-size:12px}
+.btpl-ck.dim{cursor:default;opacity:.6}
