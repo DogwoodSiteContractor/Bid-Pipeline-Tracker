@@ -2515,3 +2515,25 @@ div.tw-pgh{cursor:default}
 .em-hint{color:var(--warn);font-weight:600;margin-top:4px}
 .em-hint .linkbtn{font-weight:700}
 .money-in{font-variant-numeric:tabular-nums}
+/* client tracker / vendor price list: Dogwood frame */
+.ct-brand{background:var(--ctb,#243D2C);color:#fff}
+.ct-brand-in{max-width:860px;margin:0 auto;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:16px}
+.ct-brand-in img{max-height:48px;max-width:220px}
+.ct-brand-in .ct-co{font-size:20px;color:#fff}
+.ct-brand-in span{font-size:12px;letter-spacing:.16em;text-transform:uppercase;font-weight:700;color:rgba(255,255,255,.8)}
+.ct-brand+.ct{padding-top:26px}
+.ct-eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;font-weight:700;color:var(--accent);margin-bottom:4px}
+.ct-bar select{width:auto;flex:0 0 190px}
+.ct-footer{margin-top:34px;padding-top:18px;border-top:3px solid var(--accent);display:grid;grid-template-columns:auto 1fr auto;gap:8px 28px;align-items:start;font-size:13.5px;color:var(--ink-2)}
+.ct-f-co{display:flex;align-items:center;gap:10px}
+.ct-f-co b{font-size:15px;color:var(--ink)}
+.ct-f-mark{height:30px;width:auto}
+.ct-f-links{display:flex;flex-direction:column;gap:2px;text-align:right}
+.ct-f-links a{color:var(--accent);text-decoration:none;font-weight:600}
+.ct-f-links a:hover{text-decoration:underline}
+.ct-f-note{grid-column:1/-1;margin:10px 0 0;font-size:12px;color:var(--ink-3);text-align:center}
+@media (max-width:640px){.ct-footer{grid-template-columns:1fr;text-align:left}.ct-f-links{text-align:left}.ct-bar select{flex:1 1 140px}.ct-brand-in img{max-height:38px}}
+.ct-brand{max-width:824px;margin:0 auto;border-radius:14px}
+.ct-brand-in{padding:14px 22px}
+@media (max-width:860px){.ct-brand{margin:0 18px}}
+.ct-brand.vp{max-width:1084px}

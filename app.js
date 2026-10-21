@@ -102,6 +102,17 @@ const sb=CONFIGURED?window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAno
 
 /* ---------- company branding (colors + logo from config.js) ---------- */
 const BRAND=CFG.brand||{};
+// company details on the pages GCs and vendors see (from the email signature); config can override any of them
+const COMPANY={name:'Dogwood Site Contractors',street:'1100 Circle 75 Parkway SE, Suite 1350',city:'Atlanta, GA 30339',phone:'(770) 627-7776',web:'www.dogwoodsite.com',email:'estimating@dogwoodsite.com',...(CFG.company||{})};
+// the branded frame around the client tracker and vendor price-list pages
+function extShell(kind,inner,note){const co=COMPANY.name||CFG.companyName||APP_NAME;const lw=BRAND.loginLogoDark||BRAND.logo||'';const mark=BRAND.logo||'';
+  const web=COMPANY.web?(/^https?:/.test(COMPANY.web)?COMPANY.web:'https://'+COMPANY.web):'';
+  return `<div class="ct-brand${kind==='Price list'?' vp':''}" style="${BRAND.topBar?`--ctb:${esc(BRAND.topBar)}`:''}"><div class="ct-brand-in">${lw?`<img src="${esc(lw)}" alt="${esc(co)}">`:`<b class="ct-co">${esc(co)}</b>`}<span>${esc(kind)}</span></div></div>
+  <div class="ct ${kind==='Price list'?'vp':''}">${inner}
+   <footer class="ct-footer"><div class="ct-f-co">${mark?`<picture><source srcset="${esc(mark)}" media="(prefers-color-scheme: dark)"><img src="${esc(mark.replace(/-white(\.\w+)$/,'$1'))}" alt="" class="ct-f-mark"></picture>`:''}<b>${esc(co)}</b></div>
+    <div class="ct-f-addr">${COMPANY.street?esc(COMPANY.street)+'<br>':''}${esc(COMPANY.city||'')}</div>
+    <div class="ct-f-links">${COMPANY.phone?`<a href="tel:${esc(String(COMPANY.phone).replace(/[^\d+]/g,''))}">${esc(COMPANY.phone)}</a>`:''}${web?`<a href="${esc(web)}" target="_blank" rel="noopener">${esc(COMPANY.web)}</a>`:''}${COMPANY.email?`<a href="mailto:${esc(COMPANY.email)}">${esc(COMPANY.email)}</a>`:''}</div>
+    <p class="ct-f-note">${esc(note)}</p></footer></div>`}
 // the product's name (top bar, sign-in screen, browser tab); set appName in config.js
 const APP_NAME=String(CFG.appName||'Bid Pipeline');try{if(CFG.appName)document.title=APP_NAME}catch(e){}
 (function applyBrand(){
@@ -7879,12 +7890,12 @@ function trackCard(b){const st=trackStage(b);const e=b.estimator;const ad=b.adde
       <div><span>${b.sent?'Proposal sent':'Proposal expected by'}</span><b>${b.sent?(b.sent_date?fmtDate(b.sent_date):'Sent'):b.proposal_eta?fmtDate(b.proposal_eta):'To be confirmed'}</b></div>
       <div><span>Addenda acknowledged</span>${ad.length?`<div class="ct-ad">${ad.map(a=>`<i class="${a.acknowledged?'ok':''}" title="${a.acknowledged?'Acknowledged':'Received, not yet acknowledged'}${a.date?' · issued '+fmtShort(a.date):''}">${a.acknowledged?'✓ ':''}#${esc(a.number)}</i>`).join('')}</div>`:'<b>None so far</b>'}</div>
       <div><span>Your estimator</span>${e&&e.name?`<b>${esc(e.name)}</b>${e.title?`<small>${esc(e.title)}</small>`:''}<small>${e.phone?`<a href="tel:${esc(e.phone)}">${esc(e.phone)}</a>`:''}${e.phone&&e.email?' · ':''}${e.email?`<a href="mailto:${esc(e.email)}">${esc(e.email)}</a>`:''}</small>`:'<b>To be assigned</b>'}</div></div></article>`}
-async function trackPage(tk){const main=$('#main'),top=$('#topwrap');if(top)top.hidden=true;document.title=`Bid tracker — ${S.settings?.general?.companyName||CFG.companyName||APP_NAME}`;const co=CFG.companyName||APP_NAME;const logo=BRAND.loginLogo||'';
-  const shell=inner=>`<div class="ct"><div class="ct-head">${logo?`<img src="${esc(logo)}" alt="${esc(co)}">`:`<b class="ct-co">${esc(co)}</b>`}<span>Bid tracker</span></div>${inner}<p class="ct-foot">${esc(co)} · This page is private to your company. It updates on its own as our estimating team moves each bid along.</p></div>`;
+async function trackPage(tk){const main=$('#main'),top=$('#topwrap');if(top)top.hidden=true;document.title=`${COMPANY.name||CFG.companyName||APP_NAME} · Bid tracker`;const co=CFG.companyName||APP_NAME;const logo=BRAND.loginLogo||'';
+  void logo;const shell=inner=>extShell('Bid tracker',inner,'This page is private to your company. It updates on its own as our estimating team moves each bid along.');
   const draw=async first=>{let d=null,err=null;try{const r=await sb.rpc('client_tracker',{p_token:tk});if(r.error)err=r.error;else d=r.data}catch(e){err=e}
     if(err){if(first)main.innerHTML=shell(`<div class="ct-msg"><h1>We couldn’t load the tracker</h1><p>Please try again in a few minutes.</p></div>`);return}
     if(!d){main.innerHTML=shell(`<div class="ct-msg"><h1>This link isn’t active</h1><p>It may have been replaced. Please ask your contact at ${esc(co)} for a new one.</p></div>`);return}
-    data=d;if(!$('#ct-list'))main.innerHTML=shell(`<div class="ct-title"><h1>${esc(d.client||'Your projects')}</h1><p id="ct-count"></p></div>
+    data=d;if(!$('#ct-list'))main.innerHTML=shell(`<div class="ct-title"><div class="ct-eyebrow">Bids prepared for</div><h1>${esc(d.client||'Your projects')}</h1><p id="ct-count"></p></div>
       <div class="ct-bar"><input class="field" id="ct-q" type="search" placeholder="Search projects or locations" aria-label="Search"><select class="field" id="ct-stage" aria-label="Stage"><option value="">All stages</option>${TRACK_STEPS.slice(0,4).map(([l],i)=>`<option value="${i+1}">${l}</option>`).join('')}<option value="hold">On hold</option></select>
         <select class="field" id="ct-sort" aria-label="Sort"><option value="due">Bid due date</option><option value="name">Project name</option><option value="stage">Stage</option><option value="new">Newest first</option></select></div><div id="ct-list"></div>`);
     list()};
@@ -10867,7 +10878,7 @@ document.addEventListener('paste',async e=>{const t=e.target;if(!t||!t.dataset||
 
 /* ---------- the vendor's own page (?vp=…): no login, only their price list ---------- */
 async function vpPage(tk){const main=$('#main'),top=$('#topwrap');if(top)top.hidden=true;const co0=CFG.companyName||APP_NAME;const logo=BRAND.loginLogo||'';let D=null,rows=[],dirty=false,kind='material',busy=false,imp=null,impBusy='';
-  const shell=(co,inner)=>`<div class="ct vp"><div class="ct-head">${logo?`<img src="${esc(logo)}" alt="${esc(co)}">`:`<b class="ct-co">${esc(co)}</b>`}<span>Price list</span></div>${inner}<p class="ct-foot">${esc(co)} · This page is private to your company. Only your own price list is shown here.</p></div>`;
+  const shell=(co,inner)=>{void co;void logo;return extShell('Price list',inner,'This page is private to your company. Only your own price list is shown here.')};
   const load=async()=>{let err=null;try{const r=await sb.rpc('vendor_portal',{p_token:tk});if(r.error)err=r.error;else D=r.data}catch(x){err=x}
     if(err){main.innerHTML=shell(co0,'<div class="ct-msg"><h1>We couldn’t load your price list</h1><p>Please try again in a few minutes.</p></div>');return false}
     if(!D){main.innerHTML=shell(co0,`<div class="ct-msg"><h1>This link isn’t active</h1><p>It may have expired or been replaced. Please ask your contact at ${esc(co0)} for a new one.</p></div>`);return false}
