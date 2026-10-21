@@ -2622,3 +2622,4 @@ div.tw-pgh{cursor:default}
 .leaflet-container{font-family:inherit}
 @media (max-width:900px){.bm-wrap{grid-template-columns:1fr}.bm-map{height:60vh}}
 .bm-dark{filter:invert(1) hue-rotate(180deg) brightness(.92) contrast(.9)}
+.fr-sigs.one{grid-template-columns:minmax(0,420px)}
