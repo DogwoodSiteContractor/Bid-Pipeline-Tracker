@@ -131,7 +131,8 @@ let channel=null;
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const newId=()=>crypto.randomUUID?crypto.randomUUID():'10000000-1000-4000-8000-100000000000'.replace(/[018]/g,c=>(c^crypto.getRandomValues(new Uint8Array(1))[0]&15>>c/4).toString(16));
-const num=v=>(v===''||v==null||isNaN(+v))?null:+v;
+const num=v=>{if(v===''||v==null)return null;if(typeof v==='number')return isNaN(v)?null:v;const s=String(v).trim().replace(/[$,\s]/g,'');if(s==='')return null;
+  const m=/^(-?\d*\.?\d+)([kKmM])$/.exec(s);if(m)return +m[1]*(m[2].toLowerCase()==='k'?1e3:1e6);return isNaN(+s)?null:+s};
 const money=n=>n==null||isNaN(n)?'—':'$'+Math.round(+n).toLocaleString('en-US');
 const moneyK=n=>{n=+n||0;const a=Math.abs(n);if(a>=1e6)return '$'+(n/1e6).toFixed(a>=1e7?1:2).replace(/\.?0+$/,'')+'M';if(a>=1e3)return '$'+Math.round(n/1e3)+'K';return '$'+Math.round(n)};
 const pad=n=>String(n).padStart(2,'0');
@@ -11625,3 +11626,23 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   if(a==='tidy-open'&&isAdmin()){M={kind:'tidy',list:tidyScan()};showModal();return}
   if(a==='tidy-go'&&M&&M.kind==='tidy'&&!M.busy)tidyGo()});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.tidy!=null&&M&&M.kind==='tidy'){M.list[+t.dataset.tidy].on=t.checked;renderModal()}});
+
+/* ----- money boxes show commas as you type -----
+   Any dollar box (a "$" placeholder, or one of the known amount / price / cost fields) becomes a text box that
+   formats itself: 1250000 → 1,250,000 while typing, the cursor stays put, and "1.25M" or "250k" expands when you
+   leave the box. Everything that reads these boxes already ignores the commas. Quantity boxes on quotes and job
+   logs get commas too. Takeoff, elevation and percent boxes are left alone. */
+const MONEY_ATTR=[['bf',/^(amount_with|amount_without|awarded_amount|contract|budget)$/],['qf',/\.amount$/],['cp',/\.amount_(with|without)$/],['entf',/^(amount|rate|qty)$/],['logf',/\.(amount|rate|qty)$/],['vp',/\|price$/],['qp',/./],['qa',/./],['co',/^(bid_price|cost|quantity)$/],['jobf',/^(contract|original_contract|budget)$/],['itf',/^(budget|bid_price|cost)$/]];
+function isMoneyBox(t){if(!t||t.tagName!=='INPUT'||t.dataset.nomoney!=null||t.closest('[data-nomoney]'))return false;if(t.type!=='number'&&t.type!=='text')return false;
+  if(t.dataset.money!=null)return true;const ph=t.getAttribute('placeholder')||'';if(/\$/.test(ph)&&!/%/.test(ph))return true;
+  return MONEY_ATTR.some(([a,re])=>t.dataset[a]!=null&&re.test(t.dataset[a]))}
+const commas=v=>{const s=String(v??'');if(!s)return s;const neg=s.trim().startsWith('-');const c=s.replace(/[^0-9.]/g,'');if(!c)return s;const [i,...r]=c.split('.');const dec=r.length?'.'+r.join(''):'';const int=i.replace(/^0+(?=\d)/,'');return (neg?'-':'')+(int?int.replace(/\B(?=(\d{3})+(?!\d))/g,','):(dec?'0':''))+dec};
+function moneyPrep(root){(root.querySelectorAll?root.querySelectorAll('input'):[]).forEach(t=>{if(t.dataset.mz||!isMoneyBox(t))return;t.dataset.mz='1';
+  if(t.type==='number'){t.type='text';t.removeAttribute('step');t.removeAttribute('min')}t.setAttribute('inputmode','decimal');t.classList.add('money-in');
+  if(t.value&&document.activeElement!==t){const f=commas(t.value);if(f!==t.value)t.value=f}})}
+new MutationObserver(ms=>{for(const m of ms)for(const n of m.addedNodes)if(n.nodeType===1){if(n.tagName==='INPUT')moneyPrep(n.parentElement||n);else moneyPrep(n)}}).observe(document.documentElement,{childList:true,subtree:true});
+document.addEventListener('input',e=>{const t=e.target;if(!t.dataset||!t.dataset.mz)return;const v=t.value;if(/[kKmM]\s*$/.test(v))return;   // let "1.2M" be typed, expand on leaving
+  const pos=t.selectionStart??v.length;const before=v.slice(0,pos).replace(/[^0-9.]/g,'').length;const out=commas(v);if(out===v)return;t.value=out;
+  let c=0,p=0;while(p<out.length&&c<before){if(/[0-9.]/.test(out[p]))c++;p++}try{t.setSelectionRange(p,p)}catch(_){}},true);
+document.addEventListener('focusout',e=>{const t=e.target;if(!t.dataset||!t.dataset.mz)return;const v=t.value.trim();if(!v)return;const n=num(v);if(n==null)return;
+  const out=commas(String(Math.round(n*10000)/10000));if(out!==t.value){t.value=out;t.dispatchEvent(new Event('input',{bubbles:true}));t.dispatchEvent(new Event('change',{bubbles:true}))}},true);

@@ -2514,3 +2514,4 @@ div.tw-pgh{cursor:default}
 .q-out{font-size:12.5px;font-weight:700;color:var(--warn);margin-top:-2px}
 .em-hint{color:var(--warn);font-weight:600;margin-top:4px}
 .em-hint .linkbtn{font-weight:700}
+.money-in{font-variant-numeric:tabular-nums}
