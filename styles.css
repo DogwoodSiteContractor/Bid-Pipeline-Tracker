@@ -2621,3 +2621,4 @@ div.tw-pgh{cursor:default}
 .leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--surface);color:var(--ink)}
 .leaflet-container{font-family:inherit}
 @media (max-width:900px){.bm-wrap{grid-template-columns:1fr}.bm-map{height:60vh}}
+.bm-dark{filter:invert(1) hue-rotate(180deg) brightness(.92) contrast(.9)}

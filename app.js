@@ -12125,8 +12125,15 @@ const bmNorm=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
 function bmYard(){const m=S.settings.map||{};if(m.yard&&isFinite(m.yard.lat))return m.yard;
   try{const c=JSON.parse(localStorage.getItem('geo:yard')||'null');if(c&&isFinite(c.lat))return c}catch(e){}return null}
 const bmYardAddr=()=>{const m=S.settings.map||{};return m.yard&&m.yard.addr?m.yard.addr:[COMPANY.street,COMPANY.city].filter(Boolean).join(', ')};
-async function bmLookup(q){const u='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us&viewbox=-88.5,36.5,-79.5,29.5&q='+encodeURIComponent(q);
+async function bmLookup1(q){const u='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us&viewbox=-88.5,36.5,-79.5,29.5&q='+encodeURIComponent(q);
   const r=await fetch(u,{headers:{'Accept':'application/json'}});if(!r.ok)throw new Error('lookup '+r.status);const j=await r.json();if(!j||!j[0])return null;return {lat:+j[0].lat,lng:+j[0].lon,label:j[0].display_name}}
+// full address first, then without suite / unit, then just the city and state (marked approximate)
+async function bmLookup(q){q=String(q||'').trim();const tries=[q];
+  const noSuite=q.replace(/,?\s*(suite|ste\.?|unit|bldg\.?|building|#)\s*[\w-]+/ig,'').replace(/\s+,/g,',').trim();if(noSuite&&!tries.includes(noSuite))tries.push(noSuite);
+  const parts=q.split(',').map(x=>x.trim()).filter(Boolean);let town='';
+  if(parts.length>=3){const st=parts[parts.length-1].replace(/\s*\d{5}(-\d{4})?$/,'').trim();town=st?`${parts[parts.length-2]}, ${st}`:parts[parts.length-2];if(!tries.includes(town))tries.push(town)}
+  for(let k=0;k<tries.length;k++){if(k)await new Promise(r=>setTimeout(r,1100));const g=await bmLookup1(tries[k]);if(g)return tries[k]===town?{...g,rough:true}:g}
+  return null}
 async function bmSaveGeo(b,g){b.geo=g;const o=byId(S.bids,b.id);if(o)o.geo=g;if(g.src!=='pin'&&b.location)try{localStorage.setItem('geo:'+bmNorm(b.location),JSON.stringify({lat:g.lat,lng:g.lng}))}catch(e){}
   if(!S.geoMissing)try{const {error}=await sb.from('bids').update({geo:g}).eq('id',b.id);if(error&&/geo/i.test(error.message||'')&&/column|schema/i.test(error.message||''))S.geoMissing=true}catch(e){}}
 // look up missing locations one at a time (Nominatim allows one a second)
@@ -12134,7 +12141,7 @@ async function bmRun(){if(BM.busy)return;BM.busy=true;
   try{if(!bmYard()){const y=await bmLookup(bmYardAddr()).catch(()=>null);if(y){try{localStorage.setItem('geo:yard',JSON.stringify({...y,addr:bmYardAddr()}))}catch(e){}bmDraw()}await new Promise(r=>setTimeout(r,1100))}
     while(BM.q.length&&S.view==='pipeline'&&S.pv.mode==='map'){const id=BM.q.shift();const b=byId(S.bids,id);if(!b||bmGeo(b)||!String(b.location||'').trim())continue;
       let g=null;try{g=await bmLookup(b.location)}catch(e){}
-      if(g)await bmSaveGeo(b,{lat:g.lat,lng:g.lng,addr:b.location,src:'lookup',at:new Date().toISOString()});else BM.fail.add(b.id);
+      if(g)await bmSaveGeo(b,{lat:g.lat,lng:g.lng,addr:b.location,src:'lookup',...(g.rough?{rough:true}:{}),at:new Date().toISOString()});else BM.fail.add(b.id);
       bmDraw();bmCount();await new Promise(r=>setTimeout(r,1100))}}
   finally{BM.busy=false}}
 async function bmDrive(b){const y=bmYard(),g=bmGeo(b);if(!y||!g)return null;const key=y.lat.toFixed(4)+','+y.lng.toFixed(4);if(g.drive&&g.drive.from===key)return g.drive;
@@ -12164,7 +12171,7 @@ async function bmMount(){const el=document.getElementById('bm-map');if(!el||el.d
   if(!el.isConnected)return;el.innerHTML='';const L=window.L;
   const dark=document.documentElement.dataset.theme==='dark'||(document.documentElement.dataset.theme!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches);
   const m=L.map(el,{zoomControl:true,attributionControl:true,scrollWheelZoom:true});BM.map=m;BM.el=el;setTimeout(()=>m.invalidateSize(),120);
-  L.tileLayer(`https://{s}.basemaps.cartocdn.com/${dark?'dark_all':'rastertiles/voyager'}/{z}/{x}/{y}{r}.png`,{subdomains:'abcd',maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © <a href="https://carto.com/attributions">CARTO</a>'}).addTo(m);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,className:dark?'bm-dark':'',attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).addTo(m);
   BM.layer=L.layerGroup().addTo(m);
   if(S.bmView)m.setView(S.bmView.c,S.bmView.z);else m.setView([33.85,-84.4],8);
   m.on('moveend',()=>{S.bmView={c:m.getCenter(),z:m.getZoom()}});
@@ -12180,7 +12187,7 @@ function bmDraw(fit){const m=BM.map,L=window.L;if(!m||!BM.layer||!m.getContainer
   if(fit&&pts.length)pts.length===1?m.setView(pts[0],10):m.fitBounds(pts,{padding:[30,30],maxZoom:11})}
 function bmPop(b){const g=bmGeo(b)||{};const v=bidValue(b);const d=g.drive;const due=b.due_date?`Due ${fmtShort(b.due_date)}`:'No due date';
   return `<div class="bm-pop"><b>${esc(b.name)}</b><div class="small"><span class="bm-dot" style="background:${bmColor(b)}"></span>${esc(bmLabel(b))}</div>
-    <div class="small dim">${esc(b.location||'')}${g.src==='pin'?' · pin placed by hand':g.src==='lookup'||g.src==='cache'?' · approximate':''}</div>
+    <div class="small dim">${esc(b.location||'')}${g.src==='pin'?' · pin placed by hand':g.rough?' · only the town was found, use Move pin to fix':g.src==='lookup'||g.src==='cache'?' · approximate':''}</div>
     <div class="small">${esc((b.client_ids||[]).map(clientName).join(', ')||'No GC')}</div><div class="small">${due}${v?' · '+esc(money(v)):''}${b.lead_estimator_id?' · '+esc(estName(b.lead_estimator_id)||''):''}</div>
     <div class="small bm-drive" id="bm-drive-${b.id}">${d?`${bmDur(d.min)} from the yard · ${d.mi} mi`:'Working out the drive…'}</div>
     <div class="bm-pa"><button class="btn sm primary" data-act="open-bid" data-id="${b.id}">Open bid</button>${canWork(b)?`<button class="btn sm" data-act="bm-move" data-id="${b.id}">Move pin</button>`:''}</div></div>`}
