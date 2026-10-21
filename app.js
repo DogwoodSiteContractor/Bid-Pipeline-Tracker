@@ -12024,13 +12024,16 @@ const frNumSig=b=>JSON.stringify([bidValue(b)||0,...(b.client_ids||[]).map(id=>c
 // the automatic checks: [id, label, ok, detail when not ok]
 function frAuto(b){const its=scopeItems(b)||[];const Q=Array.isArray(b.quotes)?b.quotes:quotesFor(b.id);const ad=addenda(b).filter(a=>a.number!=null&&a.number!=='');
   const open=its.filter(x=>x.status!=='Complete'&&x.status!=='N/A');const out=Q.filter(q=>q.status==='Requested');
-  const noPrice=its.filter(it=>performOf(it)!=='Self perform').filter(it=>!Q.some(q=>qHas(q,it.name)&&(q.status==='Received'||(q.status===BUD&&num(q.amount)!=null))));
+  const noPrice=its.filter(it=>performOf(it)!=='Self perform').filter(it=>!Q.some(q=>qHas(q,it.name)&&(q.status==='Received'||num(q.amount)!=null)));
+  // say why each scope has no price: nobody answered, still out, or nobody asked
+  const why=it=>{const qs=Q.filter(q=>qHas(q,it.name));if(!qs.length)return `${it.name} (no vendor)`;if(qs.some(q=>q.status==='Requested'))return `${it.name} (quote still out)`;
+    if(qs.every(q=>['Declined','No response'].includes(q.status)))return `${it.name} (${qs.length===1?(vendorOf(qs[0].vendor_id)?.company||'vendor')+' '+(qs[0].status==='Declined'?'declined':'didn’t respond'):'no one responded'})`;return `${it.name} (not requested)`};
   const noNum=(b.client_ids||[]).filter(id=>!clientAmount(b,id));const unack=ad.filter(a=>!a.acknowledged);const nm=(L,f)=>L.slice(0,3).map(f).join(', ')+(L.length>3?'…':'');
   return [
     ['a_scopes','Every scope’s takeoff signed off',its.length&&!open.length,its.length?`${open.length} not signed off: ${nm(open,x=>x.name)}`:'No scopes on this bid'],
     ['a_addenda','Every addendum acknowledged and priced',!unack.length,`Not acknowledged: ${nm(unack,a=>'#'+a.number)}`],
     ['a_quotes','No quotes still out',!out.length,`${out.length} still out: ${nm(out,q=>vendorOf(q.vendor_id)?.company||'vendor')}`],
-    ['a_subs','Every sub scope has a price',!noPrice.length,`No price yet: ${nm(noPrice,x=>x.name)}`],
+    ['a_subs','Every sub scope has a price',!noPrice.length,`No price: ${nm(noPrice,why)}. Enter your own number on the quote, or mark this N/A if you’re carrying it another way.`],
     ['a_nums','Base number in, and a number for every GC',!!bidValue(b)&&!noNum.length,!bidValue(b)?'No base number yet':`No number for ${nm(noNum,clientName)}`],
     ['a_due','Bid date and time set',!!(b.due_date&&b.due_time),!b.due_date?'No bid due date':'No due time'],
     ['a_plan','Plan date entered (matches the latest addendum)',!!rfqOf(b).planDate,'No plan date on the Project tab']]}
