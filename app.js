@@ -202,7 +202,9 @@ const lib=()=>S.settings.scope_library&&Array.isArray(S.settings.scope_library.s
 const libScope=name=>lib().scopes.find(x=>x.name.toLowerCase()===String(name).toLowerCase());
 const groupOf=name=>libScope(name)?.group||'Other';
 const vendorScopes=v=>Array.isArray(v?.scopes)?v.scopes:[];
-const vendorFits=(v,name)=>vendorScopes(v).some(x=>x.toLowerCase()===String(name).toLowerCase());
+const vendorFits=(v,name)=>{const vs=vendorScopes(v).map(x=>String(x).toLowerCase());const n=String(name).toLowerCase();if(vs.includes(n))return true;
+  // a category fits anyone who quotes a scope inside it
+  return typeof isCatName==='function'&&isCatName(name)&&lib().scopes.some(x=>String(x.group).toLowerCase()===n&&vs.includes(x.name.toLowerCase()))};
 const performOf=it=>PERFORM.includes(it.perform)?it.perform:'Self perform';
 // scope_items: [{id,name,group,status,assignee_id,signed_initials,signed_by_name,signed_by_user,signed_by_estimator_id,signed_at}]
 function scopeItems(b){
@@ -1161,8 +1163,8 @@ function bpProject(b,work,admin){
 function bpScopeAdders(b){const L=lib();const have=new Set(b.scope_items.map(x=>x.name.toLowerCase()));const avail=SG().map(g=>[g,L.scopes.filter(x=>x.group===g&&!have.has(x.name.toLowerCase()))]).filter(([,xs])=>xs.length);
   return `<div class="adders">
      <select class="field" data-act="apply-template"><option value="">Apply a template…</option>${(L.templates||[]).map(t=>`<option value="${esc(t.id)}">${esc(t.name)} (${t.scopes.length})</option>`).join('')}</select>
-     <select class="field" data-act="add-scope"><option value="">+ Add a scope…</option>${avail.map(([g,xs])=>`<optgroup label="${esc(g)}">${xs.map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('')}</optgroup>`).join('')}</select>
-     <span style="display:flex;gap:6px"><input class="field" id="custom-scope" placeholder="Custom scope" style="width:170px"><button class="btn sm" data-act="add-custom-scope">Add</button></span></div>`}
+     ${scopeAddSelect(b)}
+     <span style="display:flex;gap:6px"><input class="field" id="custom-scope" placeholder="Custom category" style="width:170px"><button class="btn sm" data-act="add-custom-scope">Add</button></span></div>`}
 function bpRfq(b,work,admin){
   const vendorsSorted=S.vendors.slice().sort((a,c)=>a.trade.localeCompare(c.trade)||a.company.localeCompare(c.company));
   const tradesWithVendors=TRADES.filter(t=>S.vendors.some(v=>v.trade===t));
@@ -1180,7 +1182,7 @@ function bpRfq(b,work,admin){
     <span class="small dim rfq-due-note">${rfqDueNote(b,due,mixed)}</span>${sugg?`<span class="rfq-sugg">${sugg}</span>`:''}
     ${work?`<button class="btn primary" data-act="rfq-start"${b.quotes.length?'':' disabled title="Add vendors first"'}>✉ RFQ email…</button>`:''}</div>
   <fieldset><legend>Scopes, vendors & RFQs</legend>
-    <p class="hint" style="margin:0 0 10px">Pick the scopes, then the vendors and subs to price each one. Picking the same vendor for several scopes keeps it to one quote. Mark them <b>Requested</b> as the RFQs go out.</p>
+    <p class="hint" style="margin:0 0 10px">Pick the categories you’re bidding (list the scopes inside one if it helps), then the vendors and subs to price each. Picking the same vendor for several categories keeps it to one quote. Mark them <b>Requested</b> as the RFQs go out.</p>
     <div class="qgs">${quoteGroupsHtml(b,work,admin,'rfq')}</div>
     ${work?bpScopeAdders(b):''}
     ${work&&nr?`<div class="q-nr"><span>${nr} not requested yet.</span><button class="btn sm" data-act="q-reqall">Mark all requested</button></div>`:''}
@@ -1393,8 +1395,8 @@ function scopeSection(b,work){
    <div class="rows">${items.map((it,i)=>it.tg?'':scopeRow(it,i,work,team)).join('')||(items.length?'':`<div class="dim small">No scopes selected yet.${work?' Start from a template or pick scopes from the list.':''}</div>`)}</div>
    ${work?`<div class="adders">
      <select class="field" data-act="apply-template"><option value="">Apply a template…</option>${(L.templates||[]).map(t=>`<option value="${esc(t.id)}">${esc(t.name)} (${t.scopes.length})</option>`).join('')}</select>
-     <select class="field" data-act="add-scope"><option value="">+ Add a scope…</option>${avail.map(([g,xs])=>`<optgroup label="${esc(g)}">${xs.map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('')}</optgroup>`).join('')}</select>
-     <span style="display:flex;gap:6px"><input class="field" id="custom-scope" placeholder="Custom scope" style="width:170px"><button class="btn sm" data-act="add-custom-scope">Add</button></span></div>
+     ${scopeAddSelect(b)}
+     <span style="display:flex;gap:6px"><input class="field" id="custom-scope" placeholder="Custom category" style="width:170px"><button class="btn sm" data-act="add-custom-scope">Add</button></span></div>
    <p class="hint">When a scope’s takeoff is done, sign it off with your initials. Sign-offs save right away and record who did it and when.${isAdmin()?' Edit the scope list and templates on the Scopes page.':''}</p>`:''}
   </fieldset>`;
 }
@@ -1415,15 +1417,36 @@ function scopeRow(it,i,work,team){
   else if(M.signing===i)right=`<div class="signing"><input class="field" id="sign-init" maxlength="4" value="${esc(myInitials())}" aria-label="Your initials" style="width:74px;text-transform:uppercase;font-weight:700"><button class="btn sm primary" data-act="sign-confirm" data-i="${i}">Confirm sign-off</button><button class="btn sm ghost" data-act="sign-cancel">Cancel</button></div>`;
   else right=`<div class="signing"><select class="field" data-sf="${i}.status"${work?'':' disabled'} style="width:140px">${['Not Started','In Progress'].map(x=>`<option${(it.status||'Not Started')===x?' selected':''}>${x}</option>`).join('')}</select>${work?`<button class="btn sm" data-act="sign-start" data-i="${i}">Sign off</button>`:''}</div>`;
   return `<div class="scope-row${signed?' is-signed':''}">
-   <div><b style="font-weight:600">${esc(it.name)}</b><div class="dim small">${esc(it.group||'')}${subQuoteNote(it)}${logLink(it,work)}</div></div>
+   <div><b style="font-weight:600">${esc(it.name)}</b><div class="dim small">${partsOf(it).length?esc(partsOf(it).join(', ')):(it.cat?'':esc(it.group||''))}${subQuoteNote(it)}${logLink(it,work)}</div></div>
    <select class="field perf-${performOf(it)==='Self perform'?'self':performOf(it)==='Sub'?'sub':'both'}" data-sf="${i}.perform" title="Who performs this scope"${work&&!signed?'':' disabled'}>${PERFORM.map(x=>`<option${performOf(it)===x?' selected':''}>${x}</option>`).join('')}</select>
    <select class="field" data-sf="${i}.assignee_id" title="Who is doing this scope"${work&&!signed?'':' disabled'}><option value="">Whole team</option>${team.map(id=>`<option value="${id}"${it.assignee_id===id?' selected':''}>${esc(estName(id))}</option>`).join('')}</select>
    ${right}
    ${work&&(!signed||isAdmin())?`<button class="rm" data-act="rm-scope" data-i="${i}" aria-label="Remove scope">×</button>`:'<span></span>'}</div>`;
 }
-function addScope(name,group){name=String(name||'').trim();if(!name)return false;
-  if(M.draft.scope_items.some(x=>x.name.toLowerCase()===name.toLowerCase()))return false;
-  M.draft.scope_items.push({id:newId(),name,group:group||groupOf(name),perform:PERFORM.includes(libScope(name)?.perform)?libScope(name).perform:'Self perform',status:'Not Started',assignee_id:''});return true}
+// Bids are built from categories (scope groups). A detail scope is listed inside its category; vendors, who performs it
+// and the takeoff sign-off belong to the category. Scopes already on older bids stay as their own lines.
+const isCatName=n=>{const k=String(n||'').trim().toLowerCase();return !!k&&k!=='other'&&SG().some(g=>g.toLowerCase()===k)};
+const catPerform=cat=>{const xs=lib().scopes.filter(x=>String(x.group).toLowerCase()===String(cat).toLowerCase());if(!xs.length)return 'Self perform';const ps=xs.map(x=>PERFORM.includes(x.perform)?x.perform:'Self perform');return ps.every(p=>p==='Sub')?'Sub':'Self perform'};
+const partsOf=it=>Array.isArray(it&&it.parts)?it.parts:[];
+function addScope(name,group){name=String(name||'').trim();if(!name)return false;const items=M.draft.scope_items;const lc=name.toLowerCase();
+  if(items.some(x=>x.name.toLowerCase()===lc||partsOf(x).some(p=>p.toLowerCase()===lc)))return false;
+  const mk=(n,g,perf)=>({id:newId(),name:n,group:g,cat:true,parts:[],perform:perf,status:'Not Started',assignee_id:''});
+  if(isCatName(name)){const g=SG().find(x=>x.toLowerCase()===lc);items.push(mk(g,g,catPerform(g)));return true}
+  const ls=libScope(name);const cat=ls?ls.group:(group&&group!=='Other'?group:null);
+  if(cat&&isCatName(cat)){let c=items.find(x=>x.name.toLowerCase()===cat.toLowerCase());
+    if(!c){c=mk(cat,cat,catPerform(cat));items.push(c)}
+    if(!Array.isArray(c.parts))c.parts=[];c.parts.push(ls?ls.name:name);return true}
+  // not in any category: its own line
+  items.push(mk(name,'Other',PERFORM.includes(ls?.perform)?ls.perform:'Self perform'));return true}
+function scopeAddSelect(b){const items=b.scope_items;const lc=x=>String(x).toLowerCase();const on=n=>items.some(x=>lc(x.name)===lc(n)||partsOf(x).some(p=>lc(p)===lc(n)));
+  const cats=SG().filter(g=>g!=='Other'&&!on(g));const L=lib();
+  const by=SG().map(g=>[g,L.scopes.filter(x=>x.group===g&&!on(x.name)&&lc(x.name)!==lc(g))]).filter(([,xs])=>xs.length);
+  return `<select class="field" data-act="add-scope"><option value="">+ Add a category…</option>${cats.length?`<optgroup label="Categories">${cats.map(g=>`<option value="${esc(g)}">${esc(g)}</option>`).join('')}</optgroup>`:''}${by.map(([g,xs])=>`<optgroup label="${g==='Other'?'Other scopes':'A scope in '+esc(g)}">${xs.map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('')}</optgroup>`).join('')}</select>`}
+function catPartsHtml(it,i,work){if(!it.cat&&!isCatName(it.name))return '';const P=partsOf(it);
+  const avail=lib().scopes.filter(x=>String(x.group).toLowerCase()===String(it.name).toLowerCase()&&!P.some(p=>p.toLowerCase()===x.name.toLowerCase()));
+  if(!P.length&&!work)return '';
+  return `<div class="cat-parts">${P.length?'<span class="small dim">Includes</span>':''}${P.map((p,k)=>`<span class="cat-part">${esc(p)}${work?`<button class="cat-x" data-act="part-rm" data-i="${i}" data-k="${k}" aria-label="Remove ${esc(p)}">×</button>`:''}</span>`).join('')}
+    ${work?`<select class="field sm cat-add" data-act="part-add" data-i="${i}"><option value="">${P.length?'+ scope':'+ List the scopes it covers (optional)'}</option>${avail.map(x=>`<option value="${esc(x.name)}">${esc(x.name)}</option>`).join('')}<option value="__custom">Something else…</option></select>`:''}</div>`}
 const UNSIGNED={signed_initials:null,signed_by_name:null,signed_by_user:null,signed_by_estimator_id:null,signed_at:null};
 async function signScope(i){
   const it=M.draft.scope_items[i];const ini=($('#sign-init')?.value||'').trim().toUpperCase();
@@ -1472,7 +1495,7 @@ function quoteGroupsHtml(b,work,admin,mode='rfq'){
     const rmx=mode==='rfq'&&work&&(!signed||isAdmin())?`<button class="rm" data-act="rm-scope" data-i="${si}" aria-label="Remove scope" title="Remove this scope from the bid">×</button>`:'';
     if(low&&mode==='quotes')low.low=true;
     const rows=qs.map(({q,i},k)=>home(q)===it.name?quoteRow(q,i,work,admin).replace('<div class="quote q2">',`<div class="quote q2${qs[k].low?' is-low':''}">`):`<div class="q-mirror"><b>${esc(vendorOf(q.vendor_id)?.company||'Removed vendor')}</b><span class="pill ${QUOTE_CLS[q.status||'Not requested']||''}">${esc(q.status||'Not requested')}</span><span class="dim small">one quote with ${esc(home(q))} · edit it there</span></div>`).join('');
-    return block(it.name,sub,rows,it.name,ctl+rmx)}).join('');
+    return block(it.name,sub+(mode==='rfq'?catPartsHtml(it,si,work):(partsOf(it).length?`<div class="small dim">${esc(partsOf(it).join(', '))}</div>`:'')),rows,it.name,ctl+rmx)}).join('');
   const loose=Q.map((q,i)=>({q,i})).filter(o=>!home(o.q));
   const extra=loose.length?block(b.scope_items.length?'Other quotes':'Quotes',`<span class="qg-meta">Not tied to a scope on this bid</span>`,loose.map(({q,i})=>quoteRow(q,i,work,admin)).join(''),null):'';
   // same vendor on several open quotes → offer to combine
@@ -1592,7 +1615,8 @@ async function saveBid(opt={},m=M){
   m.origQuoteIds=d.quotes.map(q=>q.id);
   await Promise.all([loadTable('bids'),loadTable('quotes')]);
 }
-async function saveLib(next){const cur=lib();await run(sb.from('settings').upsert({key:'scope_library',value:{...(Array.isArray(cur.groups)?{groups:cur.groups}:{}),...(cur.galias?{galias:cur.galias}:{}),...next}}));await loadTable('settings')}
+// keeps everything already in the scope library (scopes, templates, categories…) and changes only what's passed
+async function saveLib(next){const cur=lib();await run(sb.from('settings').upsert({key:'scope_library',value:{...clone(cur),...next}}));await loadTable('settings')}
 async function saveModal(){
   const d=M.draft;const btn=$('#modal [data-act=save]');if(btn){btn.disabled=true;btn.textContent='Saving…'}
   try{
@@ -5442,7 +5466,7 @@ function estFromTpl(tpl){const D=cbD(tpl);const d=estNorm(clone(tpl.book==='sect
   ['carry','adj'].forEach(k=>{const o=d.markup[k]||{};d.markup[k]=Object.fromEntries(Object.entries(o).filter(([id])=>idm[id]).map(([id,v])=>[idm[id],v]))});
   (d.ind||[]).forEach(l=>l.id=newId());estApplyStale(estStale(d));delete d.pkgs;delete d.prop;delete d.gantt;delete d.takeoff;return d}
 async function estCreate(mode,src){const b=byId(S.bids,S.est.bidId);if(!b)return;let d=estNorm(estBlank());
-  try{if(mode==='scopes'){scopeItems(b).forEach((s,k)=>d.sections.push({id:newId(),code:String((k+1)*100),name:s.name,notes:''}))}
+  try{if(mode==='scopes'){scopeItems(b).forEach((s,k)=>d.sections.push({id:newId(),code:String((k+1)*100),name:s.name,notes:partsOf(s).length?'Includes '+partsOf(s).join(', '):''}))}
     if(mode==='copy'){if(!src)throw new Error('Pick an estimate to copy.');const r=await run(sb.from('estimates').select('data').eq('id',src).maybeSingle());if(!r)throw new Error('That estimate isn’t available.');d=estNorm(clone(r.data));delete d.prop}
     if(mode==='tpl'){const t=cbById(src);if(!t)throw new Error('Pick a master template.');d=estFromTpl(t)}
     if(!d.sections.length)d.sections.push({id:newId(),code:'100',name:'General',notes:''});
@@ -11165,12 +11189,12 @@ function scdHtml(){const L=lib();const D=S.scd;const use=n=>S.vendors.filter(v=>
   const groups=SG().filter(g=>L.scopes.some(x=>x.group===g));
   const view=`${groups.map(g=>`<div style="margin-bottom:12px"><div class="small" style="font-weight:600;margin-bottom:6px">${esc(g)}</div><div class="tagrow">${L.scopes.filter(x=>x.group===g).map(x=>`<span class="pill">${esc(x.name)}${x.perform&&x.perform!=='Self perform'?` <span class="perf-tag">${x.perform==='Sub'?'Sub':'S+S'}</span>`:''}</span>`).join('')}</div></div>`).join('')}`;
   const GL=D?D.groups.filter(g=>!g.gone):[];
-  const edit=D?`<div class="scd-rows">${D.groups.map((G,gi)=>{if(G.gone)return '';const rows=D.rows.map((r,i)=>({r,i})).filter(o=>o.r.g===G.k);const other=G.k==='Other';const first=gi===D.groups.findIndex(x=>!x.gone);return `<div class="scd-g"><div class="scd-gh">${other?`<b>Other</b><span class="small dim">always kept, catches anything ungrouped</span>`:`<input class="field sm scd-gname" data-scg="${gi}" value="${esc(G.name)}" placeholder="Group name" title="Rename this group">${first?'':`<button class="btn xs" data-act="scd-gup" data-v="${gi}" title="Move up">↑</button>`}<button class="btn xs" data-act="scd-gdel" data-v="${gi}" title="Remove group">Remove group</button>`}</div>${G.arm?`<div class="scd-arm">${rows.filter(o=>!o.r.gone).length} scope${rows.filter(o=>!o.r.gone).length===1?'':'s'} in this group. Move them to <select class="field sm" data-scgto="${gi}">${GL.filter(x=>x.k!==G.k).map(x=>`<option value="${esc(x.k)}"${(G.to||'Other')===x.k?' selected':''}>${esc(x.name)}</option>`).join('')}</select> <button class="btn xs danger" data-act="scd-gdel2" data-v="${gi}">Remove</button> <button class="btn xs" data-act="scd-gkeep" data-v="${gi}">Keep</button></div>`:''}${rows.map(({r,i})=>`<div class="scd-row${r.gone?' gone':''}"><input class="field sm" data-scd="${i}.name" value="${esc(r.name)}" placeholder="Scope name"${r.gone?' disabled':''}><select class="field sm" data-scd="${i}.g"${r.gone?' disabled':''}>${GL.map(x=>`<option value="${esc(x.k)}"${r.g===x.k?' selected':''}>${esc(x.name||'(unnamed)')}</option>`).join('')}</select><select class="field sm" data-scd="${i}.perform" title="Default when added to a bid"${r.gone?' disabled':''}>${PERFORM.map(o=>`<option${(r.perform||'Self perform')===o?' selected':''}>${o}</option>`).join('')}</select><span class="small dim">${r.orig&&use(r.orig)?use(r.orig)+' vendor'+(use(r.orig)===1?'':'s'):''}</span>${r.gone?`<button class="btn xs" data-act="scd-undo" data-v="${i}">Undo</button>`:`<button class="x" data-act="scd-del" data-v="${i}" title="Remove">×</button>`}</div>`).join('')}
-      <div class="scd-row add"><input class="field sm" data-scdnew="${esc(G.k)}" placeholder="+ Add a scope to ${esc(G.name||'this group')} and press Enter"></div></div>`}).join('')}
-      <div class="scd-g scd-gnew"><div class="scd-gh"><b>New group</b></div><input class="field sm" id="scd-gnew" placeholder="+ Type a group name and press Enter, e.g. Landscaping"><p class="small dim" style="margin:4px 0 0">Then add scopes to it, or move existing ones over with their group dropdown.</p></div></div>
+  const edit=D?`<div class="scd-rows">${D.groups.map((G,gi)=>{if(G.gone)return '';const rows=D.rows.map((r,i)=>({r,i})).filter(o=>o.r.g===G.k);const other=G.k==='Other';const first=gi===D.groups.findIndex(x=>!x.gone);return `<div class="scd-g"><div class="scd-gh">${other?`<b>Other</b><span class="small dim">always kept, for scopes that don’t fit a category</span>`:`<input class="field sm scd-gname" data-scg="${gi}" value="${esc(G.name)}" placeholder="Category name" title="Rename this category">${first?'':`<button class="btn xs" data-act="scd-gup" data-v="${gi}" title="Move up">↑</button>`}<button class="btn xs" data-act="scd-gdel" data-v="${gi}" title="Remove category">Remove category</button>`}</div>${G.arm?`<div class="scd-arm">${rows.filter(o=>!o.r.gone).length} scope${rows.filter(o=>!o.r.gone).length===1?'':'s'} in this category. Move them to <select class="field sm" data-scgto="${gi}">${GL.filter(x=>x.k!==G.k).map(x=>`<option value="${esc(x.k)}"${(G.to||'Other')===x.k?' selected':''}>${esc(x.name)}</option>`).join('')}</select> <button class="btn xs danger" data-act="scd-gdel2" data-v="${gi}">Remove</button> <button class="btn xs" data-act="scd-gkeep" data-v="${gi}">Keep</button></div>`:''}${rows.map(({r,i})=>`<div class="scd-row${r.gone?' gone':''}"><input class="field sm" data-scd="${i}.name" value="${esc(r.name)}" placeholder="Scope name"${r.gone?' disabled':''}><select class="field sm" data-scd="${i}.g"${r.gone?' disabled':''}>${GL.map(x=>`<option value="${esc(x.k)}"${r.g===x.k?' selected':''}>${esc(x.name||'(unnamed)')}</option>`).join('')}</select><select class="field sm" data-scd="${i}.perform" title="Default when added to a bid"${r.gone?' disabled':''}>${PERFORM.map(o=>`<option${(r.perform||'Self perform')===o?' selected':''}>${o}</option>`).join('')}</select><span class="small dim">${r.orig&&use(r.orig)?use(r.orig)+' vendor'+(use(r.orig)===1?'':'s'):''}</span>${r.gone?`<button class="btn xs" data-act="scd-undo" data-v="${i}">Undo</button>`:`<button class="x" data-act="scd-del" data-v="${i}" title="Remove">×</button>`}</div>`).join('')}
+      <div class="scd-row add"><input class="field sm" data-scdnew="${esc(G.k)}" placeholder="+ Add a scope to ${esc(G.name||'this category')} and press Enter"></div></div>`}).join('')}
+      <div class="scd-g scd-gnew"><div class="scd-gh"><b>New category</b></div><input class="field sm" id="scd-gnew" placeholder="+ Type a category name and press Enter, e.g. Landscaping"><p class="small dim" style="margin:4px 0 0">Then add scopes to it, or move existing ones over with their category dropdown.</p></div></div>
     <div class="adders"><button class="btn primary" data-act="scd-save"${D.busy?' disabled':''}>${D.busy?'Saving…':'Save scope list'}</button><button class="btn" data-act="scd-cancel">Cancel</button></div>
-    <p class="hint">Renaming a scope updates the vendors who quote it and your templates. Bids already using the old scope or group name keep it.</p>`:'';
-  return `<div class="panel pad" style="margin-bottom:16px"><div class="sec-h" style="margin-top:0"><h2>Scopes</h2><span>${L.scopes.length} scopes · what your team picks from on each bid${S.settings.scope_library?'':' · starter list, edit it to make it yours'}</span>${D?'':'<button class="btn sm primary" data-act="scd-edit" style="margin-left:auto">✎ Edit scopes</button>'}</div>${D?edit:view}</div>
+    <p class="hint">Renaming a scope updates the vendors who quote it and your templates. Bids already using the old scope or category name keep it.</p>`:'';
+  return `<div class="panel pad" style="margin-bottom:16px"><div class="sec-h" style="margin-top:0"><h2>Scope categories</h2><span>${SG().filter(g=>g!=='Other').length} categories · ${L.scopes.length} scopes inside them · bids are built from these${S.settings.scope_library?'':' · starter list, edit it to make it yours'}</span>${D?'':'<button class="btn sm primary" data-act="scd-edit" style="margin-left:auto">✎ Edit categories & scopes</button>'}</div>${D?edit:view}</div>
     <div class="panel pad"><div class="sec-h" style="margin-top:0"><h2>Scope templates</h2><span>Apply a set of scopes to a bid in one click</span><button class="btn sm" data-act="new-tpl" style="margin-left:auto">+ New template</button></div><div class="list">${(L.templates||[]).map(t=>`<div class="li"><div><button class="linkish" data-act="edit-tpl" data-id="${esc(t.id)}">${esc(t.name)}</button><div class="dim small">${t.scopes.map(esc).join(', ')}</div></div><span class="pill">${t.scopes.length}</span></div>`).join('')||'<div class="empty">No templates yet.</div>'}</div></div>`}
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('trd-'))return;
   if(a==='trd-edit'){S.trd={rows:TRADES.map(x=>({orig:x,name:x}))};render();return}
@@ -11196,7 +11220,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
   if(a==='scd-gkeep'){D.groups[i].arm=false;render();return}
   if(a==='scd-gdel2'){const G=D.groups[i];const to=G.to&&D.groups.some(x=>x.k===G.to&&!x.gone)?G.to:'Other';D.rows.filter(r=>r.g===G.k).forEach(r=>r.g=to);G.gone=true;G.arm=false;render();return}
   if(a==='scd-save'){const gname=new Map(D.groups.filter(g=>!g.gone).map(g=>[g.k,g.k==='Other'?'Other':(g.name.trim()||g.orig||'Other')]));
-    {const seenG=new Set();for(const g of D.groups.filter(g=>!g.gone&&g.k!=='Other')){const n=gname.get(g.k);if(n==='Other'||seenG.has(n.toLowerCase())){toast(`Two groups are named “${n}”. Give each group its own name.`);return}seenG.add(n.toLowerCase())}}
+    {const seenG=new Set();for(const g of D.groups.filter(g=>!g.gone&&g.k!=='Other')){const n=gname.get(g.k);if(n==='Other'||seenG.has(n.toLowerCase())){toast(`Two categories are named “${n}”. Give each one its own name.`);return}seenG.add(n.toLowerCase())}}
     const groups=[...D.groups.filter(g=>!g.gone&&g.k!=='Other').map(g=>gname.get(g.k)),'Other'];const oal=lib().galias||{};const galias={};D.groups.filter(g=>!g.gone&&g.orig&&g.k!=='Other').forEach(g=>{const root=oal[g.orig]||g.orig;const n=gname.get(g.k);if(n!==root)galias[n]=root});D.rows.forEach(r=>{r.group=gname.get(r.g)||'Other'});const seen=new Set();const keep=D.rows.filter(r=>!r.gone&&r.name.trim()).filter(r=>{const k=r.name.trim().toLowerCase();if(seen.has(k))return false;seen.add(k);return true});
     const scopes=keep.map(r=>({name:r.name.trim(),group:r.group,perform:PERFORM.includes(r.perform)?r.perform:'Self perform'}));const ren=new Map(D.rows.filter(r=>r.orig&&!r.gone&&r.name.trim()&&r.name.trim()!==r.orig).map(r=>[r.orig.toLowerCase(),r.name.trim()]));
     D.busy=true;render();try{const L=lib();const templates=(L.templates||[]).map(tp=>({...tp,scopes:[...new Set(tp.scopes.map(n=>ren.get(String(n).toLowerCase())||n))]}));await saveLib({groups,galias,scopes,templates});
@@ -11261,7 +11285,7 @@ function rfqDueNote(b,due,mixed){return mixed?'The quotes have different due dat
 function rfqDue(b){const r=rfqOf(b);if(r.due)return r.due;const ds=[...new Set((b.quotes||[]).filter(q=>qOpen(q)).map(q=>q.due_date).filter(Boolean))];return ds.length===1?ds[0]:''}
 const vEmail=v=>(/[^\s<>(),;]+@[^\s<>(),;]+/.exec(String(v&&v.email||''))||[''])[0];
 // scopes on this RFQ; ones you self perform go out as "(material)"
-function rfqScopes(b,qs){const ord=n=>{const i=b.scope_items.findIndex(x=>x.name.toLowerCase()===String(n).toLowerCase());return i<0?999:i};const names=[...new Set(qs.flatMap(qScopes))].sort((x,y)=>ord(x)-ord(y));return names.map(n=>{const it=b.scope_items.find(x=>x.name.toLowerCase()===String(n).toLowerCase());return {n,mat:it&&performOf(it)==='Self perform'}})}
+function rfqScopes(b,qs){const ord=n=>{const i=b.scope_items.findIndex(x=>x.name.toLowerCase()===String(n).toLowerCase());return i<0?999:i};const names=[...new Set(qs.flatMap(qScopes))].sort((x,y)=>ord(x)-ord(y));return names.map(n=>{const it=b.scope_items.find(x=>x.name.toLowerCase()===String(n).toLowerCase());const P=partsOf(it);return {n:n+(P.length?` (${P.join(', ')})`:''),mat:it&&performOf(it)==='Self perform'}})}
 function rfqMap(b,qs){const r=rfqOf(b);const lead=byId(S.estimators,b.lead_estimator_id)||{};const co=S.settings.general?.companyName||CFG.companyName||'Dogwood Site Contractors';const sc=rfqScopes(b,qs);
   return {project:b.name||'',location:b.location||'',quotes_due:rfqD(rfqDue(b)),quotes_due_time:r.time||'5PM',note:r.note||'',note_short:r.note?' '+r.note.replace(/^\W+|\W+$/g,'').replace(/^(pricing and quotes needed are for )?only /i,''):'',start_date:r.start||'TBD',plans_link:'\u0001plans\u0001',details_table:'\u0001table\u0001',
     scopes:sc.map(x=>x.n+(x.mat?' (material)':'')).join(', '),plan_date:r.planDate?rfqD(r.planDate):'',engineer:r.engineer||'',gc:b.client_ids.map(clientName).join(', '),bid_due:rfqD(b.due_date),walk_date:b.walk_date?rfqD(b.walk_date):'',rfi_date:b.rfi_date?rfqD(b.rfi_date):'',estimator:lead.name||myName(),company:co,
@@ -11968,7 +11992,7 @@ function btplErr(e){const m=errMsg(e);return /permission/i.test(m)?'Only admins 
 function btplFrom(b,opt){const vend=new Map();if(opt.vendors)(b.quotes||[]).forEach(q=>{if(!q.vendor_id||!vendorOf(q.vendor_id))return;const v=vend.get(q.vendor_id)||new Set();qScopes(q).forEach(s=>v.add(s));vend.set(q.vendor_id,v)});
   const r=rfqOf(b);return {id:opt.id||newId(),name:opt.name.trim(),desc:(opt.desc||'').trim(),
     project_type:opt.type?b.project_type||'':'',bid_type:opt.type?b.bid_type||'':'',
-    scopes:opt.scopes?b.scope_items.map(it=>({name:it.name,group:it.group||groupOf(it.name),perform:performOf(it),...(opt.tg&&it.tg?{tg:it.tg}:{})})):[],
+    scopes:opt.scopes?b.scope_items.map(it=>({name:it.name,group:it.group||groupOf(it.name),perform:performOf(it),...(it.cat?{cat:true}:{}),...(partsOf(it).length?{parts:partsOf(it).slice()}:{}),...(opt.tg&&it.tg?{tg:it.tg}:{})})):[],
     vendors:[...vend].map(([vendor_id,s])=>({vendor_id,scopes:[...s]})),
     note:opt.rfq?r.note||'':'',plansLabel:opt.rfq?r.plansLabel||'':'',notes:opt.notes?b.notes||'':'',
     est:opt.est||'',excl:(opt.excl||'').trim(),clar:(opt.clar||'').trim(),by:myName(),at:new Date().toISOString()}}
@@ -11977,7 +12001,7 @@ function btplApply(d,t){const out={scopes:0,vendors:0};
   if(t.project_type)d.project_type=normProjectType(t.project_type)||d.project_type;if(t.bid_type&&BID_TYPES.includes(t.bid_type))d.bid_type=t.bid_type;
   const have=new Set(d.scope_items.map(x=>x.name.toLowerCase()));
   (t.scopes||[]).forEach(s=>{if(!s.name||have.has(s.name.toLowerCase()))return;have.add(s.name.toLowerCase());out.scopes++;
-    d.scope_items.push({id:newId(),name:s.name,group:s.group||groupOf(s.name),perform:PERFORM.includes(s.perform)?s.perform:'Self perform',status:'Not Started',assignee_id:'',...(s.tg?{tg:s.tg}:{})})});
+    d.scope_items.push({id:newId(),name:s.name,group:s.group||groupOf(s.name),perform:PERFORM.includes(s.perform)?s.perform:'Self perform',status:'Not Started',assignee_id:'',...(s.cat?{cat:true}:{}),...(Array.isArray(s.parts)&&s.parts.length?{parts:s.parts.slice()}:{}),...(s.tg?{tg:s.tg}:{})})});
   const had=new Set(d.quotes.map(q=>q.vendor_id));
   (t.vendors||[]).forEach(v=>{if(!vendorOf(v.vendor_id))return;let n=0;(v.scopes||[]).forEach(sc=>{if(addQuote(v.vendor_id,sc))n++});if(n&&!had.has(v.vendor_id))out.vendors++});
   if(t.notes&&!String(d.notes||'').trim())d.notes=t.notes;
@@ -12257,7 +12281,7 @@ new MutationObserver(()=>{if(document.getElementById('bm-map'))bmMount()}).obser
    One place for the company-wide settings. The small ones are edited right here; the big editors that already have
    their own pages (estimate & bid settings, proposal wording, trades & scopes, positions, tabs in use…) are listed
    under "Everything else" and open in place. All of it is saved in the settings table, which only admins can write. */
-const ADM_SECS=[['company','Company','Name and contact details on the tracker and vendor pages'],['review','Final review','Checklist items, warn or hard stop, who signs'],['followup','GC follow-ups','How often to follow up after a proposal goes out'],['rfq','RFQ email','The email that asks vendors for quotes'],['map','Bid map','The yard, for drive times'],['takeoff','Takeoff imports','The reports you import for every job'],['more','Everything else','Settings that have their own pages']];
+const ADM_SECS=[['company','Company','Name and contact details on the tracker and vendor pages'],['scopes','Scope categories','The categories bids are built from, and the scopes in each'],['review','Final review','Checklist items, warn or hard stop, who signs'],['followup','GC follow-ups','How often to follow up after a proposal goes out'],['rfq','RFQ email','The email that asks vendors for quotes'],['map','Bid map','The yard, for drive times'],['takeoff','Takeoff imports','The reports you import for every job'],['more','Everything else','Settings that have their own pages']];
 S.adm={sec:'company',d:null};
 function admInit(sec){const g=S.settings.general||{};
   if(sec==='company'){const c=S.settings.company||{};return {companyName:g.companyName||'',...Object.fromEntries(['name','street','city','phone','web','email'].map(k=>['co_'+k,c[k]||'']))}}
@@ -12290,6 +12314,7 @@ function vAdmin(){if(!isAdmin())return '<div class="empty"><b>Admins only.</b>As
   if(A.sec==='map'){const y=bmYard();body=`<div class="panel pad"><div class="fg">${inp('yard','Yard address','Street, city, state',{cls:'s4'})}</div>
       <p class="hint">Drive times on the bid map start here. ${y?`Found at ${y.lat.toFixed(4)}, ${y.lng.toFixed(4)}.`:'Not looked up yet.'} ${(S.settings.map||{}).yard?'':'Until you save one, it’s the office address.'}</p></div>${save('Save and look it up')}`}
   if(A.sec==='takeoff')body=`<div class="panel pad"><div class="fg">${ta('list','Reports, one per line',8,'e.g. Earthwork\nStorm\nSanitary\nWater')}</div><p class="hint">The report slots offered when you import a takeoff into an estimate.</p></div>${save()}`;
+  if(A.sec==='scopes')body=catSetupHtml()+scdHtml();
   if(A.sec==='more'){const card=(t,dsc,act,v)=>`<div class="adm-card"><div><b>${t}</b><div class="small dim">${dsc}</div></div><button class="btn sm" data-act="${act}"${v?` data-v="${v}"`:''}>Open</button></div>`;
     body=`<div class="adm-cards">
       ${card('Estimate & bid settings','Markups, overhead, bond, indirects, crews and how bid items are priced','nav','settings')}
@@ -12327,3 +12352,33 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   if(a==='adm-acct'){S.view='acct';S.acct=S.acct||{};S.acct.tab='lists';render();return}});
 document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.admf&&S.adm&&S.adm.d&&t.type!=='radio'){S.adm.d[t.dataset.admf]=t.value;if(!S.adm.dirty){S.adm.dirty=true}}});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.admf&&S.adm&&S.adm.d&&t.type==='radio'){S.adm.d[t.dataset.admf]=t.value;S.adm.dirty=true;render()}});
+
+document.addEventListener('change',e=>{const t=e.target;if(!t.dataset||t.dataset.act!=='part-add'||!M||M.kind!=='bid'||!t.value)return;const it=M.draft.scope_items[+t.dataset.i];if(!it||!canWork(M.draft))return;
+  let v=t.value;if(v==='__custom'){v=(prompt(`A scope inside ${it.name}:`)||'').trim();if(!v){renderModal();return}}
+  if(!Array.isArray(it.parts))it.parts=[];if(!it.parts.some(p=>p.toLowerCase()===v.toLowerCase()))it.parts.push(v);if(!it.cat&&isCatName(it.name))it.cat=true;renderModal()});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act=part-rm]');if(!t||!M||M.kind!=='bid'||!canWork(M.draft))return;const it=M.draft.scope_items[+t.dataset.i];if(!it)return;it.parts=partsOf(it).filter((_,k)=>k!==+t.dataset.k);renderModal()});
+
+/* one-time: rebuild the scope list as categories (starting from the "Simple Scope List" template), with a preview */
+const CAT_START=['General Conditions','Erosion control','Demolition','Clearing','Earthwork','Sewer','Storm','Water','Paving & Concrete'];
+function catStartList(){const tp=(lib().templates||[]).find(t=>/simple/i.test(t.name||''));const names=tp?tp.scopes.slice():[];
+  const out=[];CAT_START.forEach(c=>{const m=names.find(n=>n.toLowerCase()===c.toLowerCase());out.push(m||c)});names.forEach(n=>{if(!out.some(o=>o.toLowerCase()===n.toLowerCase()))out.push(n)});return out}
+function catGuess(name,group,cats){const n=String(name).toLowerCase(),g=String(group||'').toLowerCase();const C=k=>cats.find(c=>c.toLowerCase()===k.toLowerCase())||null;
+  const own=cats.find(c=>c.toLowerCase()===n);if(own)return own;
+  const R=[[/dewater/,'Earthwork'],[/general|mobiliz|supervis|survey|testing|traffic|permit|bond|insurance/,'General Conditions'],[/erosion|silt|sediment|seed|grass|stabiliz|swppp|bmp|construction (entrance|exit)|inlet protection/,'Erosion control'],[/demo/,'Demolition'],[/clear|grub|tree/,'Clearing'],
+    [/sewer|sanitary/,'Sewer'],[/storm|drain|detention|culvert|inlet|precast|structure|water quality/,'Storm'],[/water|fire line/,'Water'],[/pav|asphalt|concrete|curb|sidewalk|aggregate base|gab|striping|sign/,'Paving & Concrete'],[/earth|grad|excavat|undercut|topsoil|pad|haul|rock|fill/,'Earthwork']];
+  for(const [re,c] of R)if(re.test(n)&&C(c))return C(c);
+  const G={'earthwork':'Earthwork','underground utilities':'Storm','erosion control':'Erosion control','site prep & demo':'Clearing','paving & concrete':'Paving & Concrete'}[g];return (G&&C(G))||'Other'}
+function catSetupHtml(){if(lib().catsV&&!S.cset)return '';const X=S.cset;
+  if(!X)return `<div class="notice cat-setup"><b>Set up categories from your Simple Scope List</b><div class="small">Turns your scope list into categories (${esc(catStartList().join(', '))}) and files each scope you have today under one of them. You’ll see where everything goes before anything changes. Bids already made aren’t touched.</div><div class="adders"><button class="btn primary sm" data-act="cset-open">Preview it</button><button class="btn ghost sm" data-act="cset-skip">Not now</button></div></div>`;
+  return `<div class="panel pad cat-setup"><h3 class="adm-h">Where each scope goes</h3><p class="small dim" style="margin:-4px 0 10px">Categories: ${esc(X.cats.join(', '))}, Other. Change any row, then apply.</p>
+    <table class="team-t"><thead><tr><th>Scope</th><th>Today</th><th>Goes in</th></tr></thead><tbody>${X.rows.map((r,i)=>`<tr><td><b>${esc(r.name)}</b></td><td class="small dim">${esc(r.group||'—')}</td><td><select class="field sm" data-cset="${i}">${[...X.cats,'Other'].map(c=>`<option${r.to===c?' selected':''}>${esc(c)}</option>`).join('')}<option value="__drop"${r.to==='__drop'?' selected':''}>Remove (the category covers it)</option></select></td></tr>`).join('')}</tbody></table>
+    <div class="adders"><button class="btn primary" data-act="cset-go"${X.busy?' disabled':''}>${X.busy?'Saving…':'Apply categories'}</button><button class="btn" data-act="cset-x">Cancel</button></div></div>`}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('cset-')||!isAdmin())return;
+  if(a==='cset-open'){const cats=catStartList();S.cset={cats,rows:lib().scopes.map(x=>{const to=catGuess(x.name,x.group,cats);return {name:x.name,group:x.group,perform:x.perform,to:to.toLowerCase()===x.name.toLowerCase()?'__drop':to}})};render();return}
+  if(a==='cset-x'){S.cset=null;render();return}
+  if(a==='cset-skip'){try{await saveLib({catsV:1});render();toast('Okay. You can still edit the categories below any time.')}catch(err){toast(errMsg(err))}return}
+  if(a==='cset-go'){const X=S.cset;X.busy=true;render();
+    try{const scopes=X.rows.filter(r=>r.to!=='__drop').map(r=>({name:r.name,group:r.to,perform:PERFORM.includes(r.perform)?r.perform:'Self perform'}));
+      await saveLib({groups:[...X.cats,'Other'],scopes,catsV:1});S.cset=null;render();toast(`Categories set up: ${X.cats.length} categories, ${scopes.length} scopes filed under them.`)}
+    catch(err){X.busy=false;render();toast(errMsg(err))}}});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.cset!=null&&S.cset){S.cset.rows[+t.dataset.cset].to=t.value}});
