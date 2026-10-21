@@ -80,6 +80,8 @@ const WIDGETS=[['kpis','Headline numbers'],['monthly','Bid and award volume by m
 const AV_COLORS=['#2C5E99','#2C7A4C','#8B5E34','#7A3E8E','#B24A2A','#2F7C83','#5A6B1E','#9C3D5C'];
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const BUCKET='bid-files';
+// estimated margin % and win probability are hidden for now; the values stay on each bid. Set true to bring them back.
+const SHOW_ODDS=false;
 const BID_COLS=['id','name','location','project_type','units','bid_type','size','status','probability','due_date','due_time','walk_date','rfi_date','lead_estimator_id','support_estimator_ids','client_ids','client_contacts','client_proposals','awarded_client_id','addenda','revisions','archived_at','scope_items','proposal_status','amount_with','amount_without','use_for','margin','follow_ups','notes','submitted_date','awarded_date','awarded_amount','awarded_to','lost_reason'];
 const Q_COLS=['id','bid_id','vendor_id','scope','status','requested_date','due_date','received_date','amount','note','file_path','file_name','meta'];
 const ENT_COLS={estimators:['id','name','title','email','phone','active'],clients:['id','company','type','phone','email','address','notes','contacts'],vendors:['id','company','vendor_type','trade','scopes','contact_name','phone','email','area','preferred','notes']};
@@ -622,6 +624,7 @@ function board(){
   const dollarRate=decVal?Math.round(won.reduce((s,b)=>s+bidValue(b),0)/decVal*100):null;
   const act=S.bids.filter(b=>live(b)&&ACTIVE.includes(b.status));
   const weighted=act.reduce((s,b)=>s+bidValue(b)*(num(b.probability)??50)/100,0);
+  const waiting=S.bids.filter(b=>live(b)&&isSent(b)&&!DECIDED.includes(b.status));
   const out=[];
   if(cfg.kpis)out.push(`<div class="wide"><div class="kpis" style="margin:0">
     ${kpi('Bids submitted',sub.length,moneyK(subVal)+' total in '+Y)}
@@ -629,7 +632,7 @@ function board(){
     ${kpi('Win rate',winRate==null?'—':winRate+'%',decided?`${won.length} of ${decided} decided`:'No decisions yet')}
     ${kpi('Dollar hit rate',dollarRate==null?'—':dollarRate+'%','Won $ ÷ decided $')}
     ${kpi('Open pipeline',moneyK(act.reduce((s,b)=>s+bidValue(b),0)),act.length+' active bids')}
-    ${kpi('Weighted pipeline',moneyK(weighted),'Value × win probability','hot')}</div></div>`);
+    ${SHOW_ODDS?kpi('Weighted pipeline',moneyK(weighted),'Value × win probability','hot'):kpi('Sent, waiting on a decision',moneyK(waiting.reduce((s,b)=>s+bidValue(b),0)),waiting.length+' proposal'+(waiting.length===1?'':'s')+' out','hot')}</div></div>`);
   if(cfg.monthly){
     const m=MONTHS.map((l,i)=>({l,s:sub.filter(b=>parseD(b.due_date||b.submitted_date)?.getMonth()===i).reduce((a,b)=>a+bidValue(b),0),
       w:won.filter(b=>parseD(b.awarded_date||b.due_date)?.getMonth()===i).reduce((a,b)=>a+wonValue(b),0)}));
@@ -1208,11 +1211,11 @@ function bpEstProp(b,work){return `${epBar(b,work)}${frHtml(b,work)}${estOn()&&!
   <fieldset><legend>Base numbers</legend><div class="fg">
     <label class="f">Base — with site improvements<input type="number" step="0.01" min="0" class="field" ${bf('amount_with','n')} placeholder="$0.00"></label>
     <label class="f">Base — without site improvements<input type="number" step="0.01" min="0" class="field" ${bf('amount_without','n')} placeholder="$0.00"></label>
-    <label class="f">Estimated margin %<input type="number" step="0.1" class="field" ${bf('margin','n')} placeholder="e.g. 12"></label>
+    ${SHOW_ODDS?`<label class="f">Estimated margin %<input type="number" step="0.1" class="field" ${bf('margin','n')} placeholder="e.g. 12"></label>`:''}
     <div class="s2"><div class="small" style="font-weight:500;color:var(--ink-2);margin-bottom:6px">Use for dashboard totals</div><div class="radio">
       <label><input type="radio" name="usefor" data-bf="use_for" value="with"${b.use_for!=='without'?' checked':''}${DIS()}> With site improvements</label>
       <label><input type="radio" name="usefor" data-bf="use_for" value="without"${b.use_for==='without'?' checked':''}${DIS()}> Without</label></div></div>
-    <label class="f s2">Win probability: <b id="probv">${b.probability??50}%</b><input type="range" min="0" max="100" step="5" data-bf="probability" data-t="n" value="${b.probability??50}"${DIS()}></label>
+    ${SHOW_ODDS?`<label class="f s2">Win probability: <b id="probv">${b.probability??50}%</b><input type="range" min="0" max="100" step="5" data-bf="probability" data-t="n" value="${b.probability??50}"${DIS()}></label>`:''}
   </div><p class="hint">These apply to every GC unless you enter a different number for them below.</p></fieldset>${clientsSection(b,work)}${revisionSection(b,work)}`}
 function bpOutcome(b,work){
   const outcome=isSent(b)||DECIDED.includes(b.status);
@@ -1639,9 +1642,9 @@ async function download(path,name){
   setTimeout(()=>URL.revokeObjectURL(url),10000);
 }
 function exportCsv(){
-  const cols=['Project','Location','Status','Clients','Lead estimator','Due date','Bid type','Project type','Units','With site impr.','Without site impr.','Dashboard value','Win %','Submitted','Awarded date','Awarded by','Awarded amount','Lost reason','Scopes signed off','Addenda','Addenda open','Latest revision','Quotes received','Quotes requested'];
+  const cols=['Project','Location','Status','Clients','Lead estimator','Due date','Bid type','Project type','Units','With site impr.','Without site impr.','Dashboard value',...(SHOW_ODDS?['Win %']:[]),'Submitted','Awarded date','Awarded by','Awarded amount','Lost reason','Scopes signed off','Addenda','Addenda open','Latest revision','Quotes received','Quotes requested'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const rows=S.bids.map(b=>{const qs=quotesFor(b.id);return [b.name,b.location,b.status,(b.client_ids||[]).map(clientName).join('; '),estName(b.lead_estimator_id),b.due_date,b.bid_type,normProjectType(b.project_type),b.units??'',b.amount_with,b.amount_without,bidValue(b),b.probability,b.submitted_date,b.awarded_date,b.awarded_client_id?clientName(b.awarded_client_id):'',b.awarded_amount,b.lost_reason,scopeItems(b).filter(x=>x.status==='Complete').length+'/'+scopeItems(b).length,addenda(b).length,openAddenda(b).length,revisions(b).length?'Rev '+revisions(b)[revisions(b).length-1].rev:'',qs.filter(x=>x.status==='Received').length,qs.length].map(q).join(',')});
+  const rows=S.bids.map(b=>{const qs=quotesFor(b.id);return [b.name,b.location,b.status,(b.client_ids||[]).map(clientName).join('; '),estName(b.lead_estimator_id),b.due_date,b.bid_type,normProjectType(b.project_type),b.units??'',b.amount_with,b.amount_without,bidValue(b),...(SHOW_ODDS?[b.probability]:[]),b.submitted_date,b.awarded_date,b.awarded_client_id?clientName(b.awarded_client_id):'',b.awarded_amount,b.lost_reason,scopeItems(b).filter(x=>x.status==='Complete').length+'/'+scopeItems(b).length,addenda(b).length,openAddenda(b).length,revisions(b).length?'Rev '+revisions(b)[revisions(b).length-1].rev:'',qs.filter(x=>x.status==='Received').length,qs.length].map(q).join(',')});
   const blob=new Blob([[cols.map(q).join(','),...rows].join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bid-pipeline-'+todayStr()+'.csv';a.click();
 }
 
@@ -8026,7 +8029,7 @@ function fuModal(){const x=M;const b=byId(S.bids,x.bidId);if(!b)return mhead('Fo
     <p class="small ${st.kind&&!st.wait?'warn-t':'dim'}" style="margin:8px 0 14px">${b.status!=='Submitted'?`This bid is ${esc(b.status)}, so follow-ups are off.`:!st.sent?'No sent date on this bid yet.':P.off?'Follow-ups are paused for this bid.':esc(st.label)+(st.due&&st.kind?` · ${st.wait?'due':'was due'} ${fmtShort(st.due)}`:'')}</p>
     ${st.kind==='outcome'?`<fieldset class="fu-hot"><legend>What did you learn in the meeting?</legend><div class="fg">
       <label class="f s2">Where we stand<select class="field" data-fuo="standing"${dis}>${FU_STANDING.map(s=>`<option${x.out.standing===s?' selected':''}>${s}</option>`).join('')}</select></label>
-      <label class="f">Decision expected<input type="date" class="field" id="fuo-dec" data-fuo="decision" value="${esc(x.out.decision)}"${dis}></label><label class="f">Win probability %<input class="field num" id="fuo-prob" data-fuo="prob" inputmode="numeric" value="${esc(x.out.prob)}"${dis}></label>
+      <label class="f">Decision expected<input type="date" class="field" id="fuo-dec" data-fuo="decision" value="${esc(x.out.decision)}"${dis}></label>${SHOW_ODDS?`<label class="f">Win probability %<input class="field num" id="fuo-prob" data-fuo="prob" inputmode="numeric" value="${esc(x.out.prob)}"${dis}></label>`:''}
       <label class="f s2">Who else is in it<input class="field" id="fuo-comp" data-fuo="comp" value="${esc(x.out.comp)}" placeholder="Other bidders, if they said"${dis}></label><label class="f s2">Notes<input class="field" id="fuo-notes" data-fuo="notes" value="${esc(x.out.notes)}" placeholder="Scope questions, what they want changed…"${dis}></label></div>
       <div class="adders"><button class="btn primary" data-act="fu-held"${dis}>Save meeting notes</button><button class="btn" data-act="fu-nomeet"${dis}>It didn’t happen</button></div></fieldset>`:''}
     <fieldset><legend>Email the GC</legend>
@@ -11696,7 +11699,7 @@ function opHtml(b,sec){const on=k=>!!sec[k];const P=on('prices');const d=x=>x?fm
     o+=`<section>${h(on('vendors')?'Scopes, vendors & quotes':'Scopes')}${b.scope_items.length?b.scope_items.map(it=>{const qs=Q.filter(q=>qHas(q,it.name));const low=P?qs.filter(q=>q.status==='Received'&&num(q.amount)!=null).sort((x,y)=>num(x.amount)-num(y.amount))[0]:null;
       return `<div class="op-scope"><div class="op-sh"><b>${esc(it.name)}</b><span>${esc(performOf(it))}</span><span>${it.status==='Complete'?'✓ Signed off'+(it.signed_initials?' ('+esc(it.signed_initials)+')':''):esc(it.status||'Not started')}</span>${it.assignee_id?`<span>${esc(estName(it.assignee_id)||'')}</span>`:''}${it.tg?`<span>Group: ${esc(it.tg)}</span>`:''}</div>
       ${on('vendors')?(qs.length?`<table class="op-t op-q"><tbody>${qs.map(q=>{const v=vendorOf(q.vendor_id)||{};return `<tr${q===low?' class="op-low"':''}><td><b>${esc(v.company||'Vendor')}</b>${qScopes(q).length>1?` <span class="op-dim">(also ${esc(qScopes(q).filter(n=>n!==it.name).join(', '))})</span>`:''}</td><td>${esc(v.phone||'')}</td><td>${esc(q.status||'Not requested')}</td>${P?`<td class="r">${num(q.amount)!=null?money(q.amount)+(q===low?' ◀ low':''):'—'}</td>`:''}</tr>`}).join('')}</tbody></table>`:'<p class="op-dim">No vendors yet.</p>'):''}</div>`}).join(''):'<p class="op-dim">No scopes yet.</p>'}</section>`}
-  if(on('numbers')&&P)o+=`<section>${h('Numbers')}<table class="op-kv">${row('Base, with site improvements',num(b.amount_with)!=null?money(b.amount_with):'—')}${row('Base, without site improvements',num(b.amount_without)!=null?money(b.amount_without):'—')}${row('Margin',num(b.margin)!=null?esc(String(b.margin))+'%':'')}${row('Win probability',b.probability!=null?esc(String(b.probability))+'%':'')}${row('Proposal',esc(stLabelB(b)))}</table></section>`;
+  if(on('numbers')&&P)o+=`<section>${h('Numbers')}<table class="op-kv">${row('Base, with site improvements',num(b.amount_with)!=null?money(b.amount_with):'—')}${row('Base, without site improvements',num(b.amount_without)!=null?money(b.amount_without):'—')}${SHOW_ODDS?row('Margin',num(b.margin)!=null?esc(String(b.margin))+'%':'')+row('Win probability',b.probability!=null?esc(String(b.probability))+'%':''):''}${row('Proposal',esc(stLabelB(b)))}</table></section>`;
   if(on('addenda')){const A=addenda(b);o+=`<section>${h('Addenda')}${A.length?`<table class="op-t"><tbody>${A.map(a=>`<tr><td><b>#${esc(String(a.number??''))}</b></td><td>${a.date?d(a.date):''}</td><td>${esc(a.description||'')}</td><td>${a.acknowledged?'Acknowledged':'Not acknowledged'}${a.priced?' · priced':''}</td></tr>`).join('')}</tbody></table>`:'<p class="op-dim">None.</p>'}</section>`}
   if(on('notes')&&String(b.notes||'').trim())o+=`<section>${h('Notes')}<p class="op-notes">${esc(b.notes).replace(/\n/g,'<br>')}</p></section>`;
   if(on('blank'))o+=`<section>${h('Write-in notes')}<div class="op-lines">${'<i></i>'.repeat(12)}</div></section>`;
