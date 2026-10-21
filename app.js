@@ -323,7 +323,7 @@ function renderNow(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;if(S.settings.company!==coApply.last){coApply.last=S.settings.company;coApply(S.settings.company)}renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
-  const views={btpl:vBtpl,workload:vWorkload,positions:vPositions,grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const views={admin:vAdmin,btpl:vBtpl,workload:vWorkload,positions:vPositions,grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
@@ -4120,7 +4120,7 @@ document.addEventListener('click',e=>{
     case 'new-vendor':M={kind:'vendor',isNew:true,draft:{id:newId(),company:'',vendor_type:S.q.vtype||'',scopes:S.q.vscope?[S.q.vscope]:[],trade:S.q.trade||TRADES[0],contact_name:'',phone:'',email:'',area:'',preferred:false,notes:''}};showModal();break;
     case 'open-vendor':{const vd=clone(byId(S.vendors,t.dataset.id));vd.scopes=vendorScopes(vd);vd.vendor_type=vd.vendor_type||'';M={kind:'vendor',draft:vd};showModal();break}
     case 'board-custom':M={kind:'board',draft:boardCfg()};showModal();break;
-    case 'company':{const c=S.settings.company||{};M={kind:'company',draft:{companyName:S.settings.general?.companyName||'',...Object.fromEntries(['name','street','city','phone','web','email'].map(k=>['co_'+k,c[k]||'']))}};showModal();break}
+    case 'company':if(isAdmin()){admGo('company');break}{const c=S.settings.company||{};M={kind:'company',draft:{companyName:S.settings.general?.companyName||'',...Object.fromEntries(['name','street','city','phone','web','email'].map(k=>['co_'+k,c[k]||'']))}};showModal();break}
     case 'calc-pick':S.calcState.id=t.dataset.id;saveCalc();render();if(window.innerWidth<760)$('.calc-body')?.scrollIntoView({block:'start'});break;
     case 'mh-add-inv':{const raw=mhDefaults(calcRaw(calcDef()));const last=raw.inv[raw.inv.length-1]||{};raw.inv.push({name:'Inlet '+(raw.inv.filter(p=>p.dir!=='out').length+1),dir:'in',elev:last.elev?(+last.elev+0.1).toFixed(2):'',size:last.size||'15',type:last.type||'RCP (wall B)'});saveCalc();refreshCalc(true);const n=document.getElementById('mh-inv-'+(raw.inv.length-1)+'-elev');if(n){n.focus();n.select()}break}
     case 'mh-rm-inv':{const raw=mhDefaults(calcRaw(calcDef()));if(raw.inv.length>1)raw.inv.splice(+t.dataset.i,1);saveCalc();refreshCalc(true);break}
@@ -6726,6 +6726,7 @@ function navGroups(){const g=[];
   if(can('contacts')||isAdmin())g.push(['clients','Contacts',[...(can('contacts')?['clients','vendors','vboard','vendor']:[]),...(isAdmin()||can('codebook','edit')?['lists']:[])]]);
   if(can('calc'))g.push(['calc','Calculators',['calc',...(twFree?['tw']:[])]]);
   if(isAdmin())g.push(['team','Team',['team','positions','access','estimators','teampm','teamoffice']]);
+  if(isAdmin())g.push(['admin','Settings',['admin']]);
   {const n=typeof plCount==='function'?plCount():0;g.push(['plan','Planner'+(n?` (${n})`:''),['plan']])}
   if(!tabOff('fun'))g.push(['fun','Break room',['fun']]);
   if(!tabOff('help'))g.push(['help','Help',['help']]);
@@ -12097,7 +12098,7 @@ function frHtml(b,work){const e=epState(b);if(e==='ns'&&!Object.keys(frOf(b).ite
   const last=R.back[R.back.length-1];
   return `<fieldset class="fr"><legend>Final review</legend>
     <div class="fr-top"><div class="fr-prog"><div class="fr-bar"><i style="width:${S2.total?Math.round(S2.done/S2.total*100):0}%"></i></div><span class="small"><b>${S2.done} of ${S2.total}</b> checked${needs.length?` · needs sign-off from ${needs.join(' and ')}`:' · signed off'}</span></div>
-      ${frIsMgr()&&e==='rr'&&work&&!epMgrFlow()?`<button class="btn sm warn" data-act="fr-back">↩ Send back</button>`:''}${isAdmin()?'<button class="btn sm ghost" data-act="fr-set" title="Checklist items and rules">⚙</button>':''}</div>
+      ${frIsMgr()&&e==='rr'&&work&&!epMgrFlow()?`<button class="btn sm warn" data-act="fr-back">↩ Send back</button>`:''}${isAdmin()?'<button class="btn sm ghost" data-act="adm-open" data-v="review" title="Checklist items and rules (Settings)">⚙</button>':''}</div>
     ${last&&e!=='sent'&&!R.sign.lead&&!R.sign.mgr?`<div class="notice fr-backnote"><b>Sent back by ${esc(last.by)}</b> · ${fmtShort(String(last.at).slice(0,10))}${last.note?`<div>${esc(last.note)}</div>`:''}${(last.open||[]).length?`<div class="small">Open then: ${esc(last.open.join(' · '))}</div>`:''}</div>`:''}
     ${M.frBack?`<div class="fr-backbox"><b>Send it back to In progress</b><textarea class="field" rows="2" id="fr-backnote" placeholder="What needs another look?"></textarea><div class="small dim">${open.length?`Open items go with it: ${esc(open.join(' · '))}`:'Everything on the list is checked.'}</div><div class="adders"><button class="btn warn" data-act="fr-back-go">Send back</button><button class="btn ghost" data-act="fr-back-x">Cancel</button></div></div>`:''}
     ${M.frNote?`<div class="fr-backbox"><b>Note</b><textarea class="field" rows="2" id="fr-notetxt">${esc((R.items[M.frNote]||{}).note||'')}</textarea><div class="adders"><button class="btn primary sm" data-act="fr-note-ok">Save note</button><button class="btn ghost sm" data-act="fr-note-x">Cancel</button></div></div>`:''}
@@ -12203,7 +12204,7 @@ function bmView(list){S.bmList=list.map(b=>b.id);const placed=list.filter(b=>bmG
       <p class="hint">Bigger pin = bigger number. Pins use each bid’s Location. Use the stage chips above to show won and lost jobs too.</p>
       ${noLoc.length?`<div class="bm-miss"><b>${noLoc.length} with no location</b>${noLoc.slice(0,8).map(b=>`<button class="linkbtn" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button>`).join('')}${noLoc.length>8?`<span class="dim small">+${noLoc.length-8} more</span>`:''}</div>`:''}
       <div id="bm-fail"></div>
-      ${isAdmin()?`<div class="bm-yard"><b>Yard</b><div class="small dim">${esc(bmYardAddr())}</div><button class="btn sm" data-act="bm-yard">Change yard</button></div>`:''}</div></div>`}
+      ${isAdmin()?`<div class="bm-yard"><b>Yard</b><div class="small dim">${esc(bmYardAddr())}</div><button class="btn sm" data-act="adm-open" data-v="map">Change yard</button></div>`:''}</div></div>`}
 function bmCountHtml(list){list=list||(S.bmList||[]).map(id=>byId(S.bids,id)).filter(Boolean);const placed=list.filter(b=>bmGeo(b)).length;const todo=list.filter(b=>!bmGeo(b)&&String(b.location||'').trim()&&!BM.fail.has(b.id)).length;
   return `<b>${placed} of ${list.length}</b> on the map${todo?` · finding ${todo} more…`:''}`}
 function bmCount(){const c=document.getElementById('bm-count');if(c)c.innerHTML=bmCountHtml();const f=document.getElementById('bm-fail');if(!f)return;
@@ -12244,3 +12245,78 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
     try{const y=await bmLookup(v.trim());if(!y){toast('Couldn’t find that address. Try adding the city and state.');return}
       await run(sb.from('settings').upsert({key:'map',value:{...(S.settings.map||{}),yard:{addr:v.trim(),lat:y.lat,lng:y.lng}}}));await loadTable('settings');try{localStorage.removeItem('geo:yard')}catch(e){}render();toast('Yard saved. Drive times update as you open pins.')}catch(err){toast(errMsg(err))}}});
 new MutationObserver(()=>{if(document.getElementById('bm-map'))bmMount()}).observe(document.getElementById('main')||document.body,{childList:true});
+
+/* ----- Settings (admins) -----
+   One place for the company-wide settings. The small ones are edited right here; the big editors that already have
+   their own pages (estimate & bid settings, proposal wording, trades & scopes, positions, tabs in use…) are listed
+   under "Everything else" and open in place. All of it is saved in the settings table, which only admins can write. */
+const ADM_SECS=[['company','Company','Name and contact details on the tracker and vendor pages'],['review','Final review','Checklist items, warn or hard stop, who signs'],['followup','GC follow-ups','How often to follow up after a proposal goes out'],['rfq','RFQ email','The email that asks vendors for quotes'],['map','Bid map','The yard, for drive times'],['takeoff','Takeoff imports','The reports you import for every job'],['more','Everything else','Settings that have their own pages']];
+S.adm={sec:'company',d:null};
+function admInit(sec){const g=S.settings.general||{};
+  if(sec==='company'){const c=S.settings.company||{};return {companyName:g.companyName||'',...Object.fromEntries(['name','street','city','phone','web','email'].map(k=>['co_'+k,c[k]||'']))}}
+  if(sec==='review'){const st=frSet();return {mode:st.mode,who:st.who,items:st.items.join('\n'),budget:st.budget.join('\n')}}
+  if(sec==='followup'){const D=fuDefaults();return {days:D.days,rounds:D.rounds}}
+  if(sec==='rfq'){const T=rfqTpl();return {cc:T.cc||'',subject:T.subject||'',body:T.body||''}}
+  if(sec==='map'){return {yard:bmYardAddr()}}
+  if(sec==='takeoff'){return {list:tkoSlots().join('\n')}}
+  return {}}
+function admGo(sec){S.view='admin';S.adm={sec,d:admInit(sec)};render();window.scrollTo(0,0)}
+function vAdmin(){if(!isAdmin())return '<div class="empty"><b>Admins only.</b>Ask an admin to change company settings.</div>';const A=S.adm;if(!A.d)A.d=admInit(A.sec);const d=A.d;
+  const inp=(k,l,ph,o={})=>`<label class="f${o.cls?' '+o.cls:''}">${l}<input class="field" ${o.type?`type="${o.type}"`:''} data-admf="${k}" value="${esc(d[k]??'')}" placeholder="${esc(ph||'')}"${o.num?' inputmode="numeric" data-nomoney':''}></label>`;
+  const ta=(k,l,rows,ph,id)=>`<label class="f s4">${l}<textarea class="field" rows="${rows}" data-admf="${k}"${id?` id="${id}"`:''} placeholder="${esc(ph||'')}">${esc(d[k]??'')}</textarea></label>`;
+  const rad=(k,v,l,h)=>`<label><input type="radio" name="adm-${k}" data-admf="${k}" value="${v}"${d[k]===v?' checked':''}> <b>${l}</b>${h?` <span class="dim">${h}</span>`:''}</label>`;
+  const save=(l='Save')=>`<div class="adders"><button class="btn primary" data-act="adm-save"${A.busy?' disabled':''}>${A.busy?'Saving…':l}</button>${A.dirty?'<span class="small warn-t">Not saved yet</span>':''}</div>`;
+  let body='';
+  if(A.sec==='company')body=`<div class="panel pad"><div class="fg">${inp('companyName','Company name in the app',APP_NAME,{cls:'s4'})}</div></div>
+    <div class="panel pad"><h3 class="adm-h">On the client tracker and vendor pages</h3><div class="fg">${inp('co_name','Name',COMPANY_DEF.name,{cls:'s2'})}${inp('co_street','Street address',COMPANY_DEF.street,{cls:'s2'})}${inp('co_city','City, state, ZIP',COMPANY_DEF.city,{cls:'s2'})}${inp('co_phone','Main phone',COMPANY_DEF.phone,{type:'tel'})}${inp('co_web','Website',COMPANY_DEF.web)}${inp('co_email','Email',COMPANY_DEF.email,{cls:'s2',type:'email'})}</div>
+      <p class="hint">Blank boxes use what’s shown in grey.</p></div>${save()}`;
+  if(A.sec==='review')body=`<div class="panel pad"><h3 class="adm-h">When the proposal is marked sent with the review unfinished</h3><div class="radio adm-col">${rad('mode','warn','Warn, and let them send it','(default)')}${rad('mode','stop','Hard stop','nobody can sign or send until the checklist is finished')}</div></div>
+    <div class="panel pad"><h3 class="adm-h">Who has to sign</h3><div class="radio adm-col">${rad('who','both','Lead estimator, then a precon manager','(default) the lead signs to send it to review; a manager approves it')}${rad('who','lead','Lead estimator only')}${rad('who','mgr','Precon manager only')}${rad('who','either','Either one')}</div></div>
+    <div class="panel pad"><h3 class="adm-h">Checklist</h3><div class="fg">${ta('items','Every bid, one item per line',11)}${ta('budget','Budget / pricing bids, one per line',5)}</div>
+      <p class="hint">The app’s own checks (scopes signed off, addenda, quotes back, sub scopes priced, GC numbers, bid date and time, plan date) are always on the list. Changing the list doesn’t clear what’s already checked on a bid.</p></div>${save()}`;
+  if(A.sec==='followup')body=`<div class="panel pad"><div class="fg">${inp('days','Days between follow-ups','7',{num:1})}${inp('rounds','How many follow-ups before it stops reminding','3',{num:1})}</div>
+      <p class="hint">After a proposal goes out, the app reminds the lead to check in with each GC this often. Any bid can still use its own schedule on its Follow-up tab.</p></div>${save()}`;
+  if(A.sec==='rfq')body=`<div class="panel pad"><div class="fg">${inp('cc','Cc','estimating@yourcompany.com',{cls:'s4'})}${inp('subject','Subject','{project} Request for Quote',{cls:'s4'})}${ta('body','Message',16,'',"adm-rfq-body")}</div>
+      <div class="rfq-keys">${RFQ_KEYS.map(([k,l])=>`<button class="chip" data-act="adm-key" data-v="${k}" title="${esc(l)}">{${k}}</button>`).join('')}</div>
+      <p class="hint">Shared by the whole team. **bold**, __underline__, and {fields} are filled in from the bid. Click a field to add it where your cursor is. A line whose field is blank is left out.</p></div>
+    <div class="adders"><button class="btn primary" data-act="adm-save"${A.busy?' disabled':''}>${A.busy?'Saving…':'Save'}</button><button class="btn ghost" data-act="adm-rfq-reset">Reset to the starting template</button>${A.dirty?'<span class="small warn-t">Not saved yet</span>':''}</div>`;
+  if(A.sec==='map'){const y=bmYard();body=`<div class="panel pad"><div class="fg">${inp('yard','Yard address','Street, city, state',{cls:'s4'})}</div>
+      <p class="hint">Drive times on the bid map start here. ${y?`Found at ${y.lat.toFixed(4)}, ${y.lng.toFixed(4)}.`:'Not looked up yet.'} ${(S.settings.map||{}).yard?'':'Until you save one, it’s the office address.'}</p></div>${save('Save and look it up')}`}
+  if(A.sec==='takeoff')body=`<div class="panel pad"><div class="fg">${ta('list','Reports, one per line',8,'e.g. Earthwork\nStorm\nSanitary\nWater')}</div><p class="hint">The report slots offered when you import a takeoff into an estimate.</p></div>${save()}`;
+  if(A.sec==='more'){const card=(t,dsc,act,v)=>`<div class="adm-card"><div><b>${t}</b><div class="small dim">${dsc}</div></div><button class="btn sm" data-act="${act}"${v?` data-v="${v}"`:''}>Open</button></div>`;
+    body=`<div class="adm-cards">
+      ${card('Estimate & bid settings','Markups, overhead, bond, indirects, crews and how bid items are priced','nav','settings')}
+      ${card('Proposal wording','Standard inclusions, exclusions, clarifications, terms and letterhead','pr-lib')}
+      ${card('Trades & scopes','The scope list, scope groups and who usually performs each','nav','lists')}
+      ${card('Positions & bid capacity','Job titles, what each does in the app, default access and workload capacity','nav','positions')}
+      ${card('Tabs in use and access','Turn whole tabs off, and see who can do what','nav','access')}
+      ${card('Bid templates','Starting points for new bids','nav','btpl')}
+      ${card('Vendor rankings','How vendors are scored','nav','vboard')}
+      ${card('Accounting lists & export','Customers, vendors, cost codes, cost types and export columns','adm-acct')}
+      ${card('Calculator materials','Materials and weights used by the calculators','calc-mats')}
+      ${card('Pipe sizes','Pipe sizes and outside diameters for the trench calculators','calc-pipes')}</div>`}
+  const cur=ADM_SECS.find(x=>x[0]===A.sec)||ADM_SECS[0];
+  return `<div class="head"><div><h1>Settings</h1><p>Company-wide settings. Only admins see this page.</p></div></div>
+   <div class="adm"><nav class="adm-nav" aria-label="Settings sections">${ADM_SECS.map(([k,l,dsc])=>`<button class="${A.sec===k?'on':''}" data-act="adm-sec" data-v="${k}"><b>${l}</b><small>${dsc}</small></button>`).join('')}</nav>
+   <div class="adm-main"><h2 class="adm-title">${cur[1]}</h2><p class="dim adm-sub">${cur[2]}</p>${body}</div></div>`}
+async function admSave(){const A=S.adm,d=A.d;const lines=s=>[...new Set(String(s||'').split('\n').map(x=>x.trim()).filter(Boolean))];const up=(key,value)=>run(sb.from('settings').upsert({key,value}));
+  A.busy=true;render();
+  try{
+    if(A.sec==='company'){await up('general',{...(S.settings.general||{}),companyName:String(d.companyName||'').trim()});const co={};['name','street','city','phone','web','email'].forEach(k=>{const v=String(d['co_'+k]||'').trim();if(v)co[k]=k==='phone'?fmtPhone(v):v});await up('company',co);coApply(co)}
+    if(A.sec==='review'){const v={mode:d.mode==='stop'?'stop':'warn',who:d.who||'both',items:lines(d.items),budget:lines(d.budget)};if(!v.items.length)throw new Error('Add at least one item to the main checklist.');await up('review',v)}
+    if(A.sec==='followup'){const days=Math.round(num(d.days)||0),rounds=Math.round(num(d.rounds)??-1);if(days<1)throw new Error('Days between follow-ups has to be at least 1.');if(rounds<0)throw new Error('Enter how many follow-ups (0 or more).');await up('general',{...(S.settings.general||{}),fuDays:days,fuRounds:rounds})}
+    if(A.sec==='rfq'){await up('rfq_email',{cc:String(d.cc||'').trim(),subject:String(d.subject||''),body:String(d.body||'')})}
+    if(A.sec==='map'){const addr=String(d.yard||'').trim();if(!addr)throw new Error('Enter the yard address.');const y=await bmLookup(addr).catch(()=>null);if(!y)throw new Error('Couldn’t find that address. Try adding the city and state.');await up('map',{...(S.settings.map||{}),yard:{addr,lat:y.lat,lng:y.lng}});try{localStorage.removeItem('geo:yard')}catch(e){}}
+    if(A.sec==='takeoff'){const L=lines(d.list);if(!L.length)throw new Error('Add at least one report.');await up('general',{...(S.settings.general||{}),tkoReports:L})}
+    await loadTable('settings');A.busy=false;A.dirty=false;A.d=admInit(A.sec);render();toast('Settings saved.')}
+  catch(e){A.busy=false;render();toast(errMsg(e))}}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('adm-'))return;
+  if(a==='adm-open'){if(M)closeModal();admGo(t.dataset.v||'company');return}
+  if(!isAdmin())return;const A=S.adm;
+  if(a==='adm-sec'){if(A.dirty&&!confirm('You have changes that aren’t saved. Leave them?'))return;A.sec=t.dataset.v;A.d=admInit(A.sec);A.dirty=false;render();return}
+  if(a==='adm-save'&&!A.busy){admSave();return}
+  if(a==='adm-rfq-reset'){A.d={cc:RFQ_DEF.cc,subject:RFQ_DEF.subject,body:RFQ_DEF.body};A.dirty=true;render();return}
+  if(a==='adm-key'){const ta=document.getElementById('adm-rfq-body');if(!ta)return;const k='{'+t.dataset.v+'}';const s0=ta.selectionStart??ta.value.length,s1=ta.selectionEnd??s0;ta.value=ta.value.slice(0,s0)+k+ta.value.slice(s1);A.d.body=ta.value;A.dirty=true;ta.focus();ta.setSelectionRange(s0+k.length,s0+k.length);return}
+  if(a==='adm-acct'){S.view='acct';S.acct=S.acct||{};S.acct.tab='lists';render();return}});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.admf&&S.adm&&S.adm.d&&t.type!=='radio'){S.adm.d[t.dataset.admf]=t.value;if(!S.adm.dirty){S.adm.dirty=true}}});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.admf&&S.adm&&S.adm.d&&t.type==='radio'){S.adm.d[t.dataset.admf]=t.value;S.adm.dirty=true;render()}});
