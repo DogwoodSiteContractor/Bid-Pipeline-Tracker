@@ -7892,14 +7892,16 @@ const trackUrl=tk=>location.origin+location.pathname+'?track='+tk;
 function trackStage(b){if(b.status==='No Bid')return {n:0,note:'We’re not able to bid this one',cls:'off'};
   if(b.status==='Awarded')return {n:5,note:b.awarded_to_you?'Awarded to us — thank you!':'Closed',cls:b.awarded_to_you?'win':'done'};
   if(b.status==='Not Awarded')return {n:5,note:'Closed',cls:'done'};
-  if(b.sent)return {n:4,note:b.sent_date?'Sent '+fmtShort(b.sent_date):'Proposal sent'};
+  if(b.sent)return {n:5,wait:true,head:'Proposal sent',note:b.sent_date?'Sent '+fmtShort(b.sent_date):'Waiting on your decision'};   // sent is done: Decision is the step we're waiting on
   if(b.status==='Proposal Review')return {n:3};if(['RFQ Sent','Takeoff','Quotes Received','Estimating','Takeoff Complete'].includes(b.status))return {n:2};
   if(b.status==='On Hold')return {n:2,note:'On hold',cls:'hold'};return {n:1}}
+// which step a bid is on for the stage filter and sort (sent and waiting counts as Proposal sent)
+const trackStep=b=>{const st=trackStage(b);return st.wait?4:st.n};
 function trackCard(b){const st=trackStage(b);const e=b.estimator;const ad=b.addenda||[];const late=b.due_date&&!b.sent&&st.n<4&&st.n>0&&daysUntil(b.due_date)<0;
-  const steps=st.n?`<ol class="ct-steps${st.cls?' '+st.cls:''}" aria-label="Stage ${st.n} of 5: ${TRACK_STEPS[st.n-1][0]}">${TRACK_STEPS.map(([l],i)=>`<li class="${i+1<st.n?'past':i+1===st.n?'now':''}"><span class="ct-dot">${i+1<st.n||(st.n===5&&i===4)?'✓':i+1}</span><span class="ct-lab">${l}</span></li>`).join('')}</ol>`:'';
-  return `<article class="ct-card"><header><div><h2>${esc(b.name)}</h2>${b.location?`<p>${esc(b.location)}</p>`:''}</div><div class="ct-now ${st.cls||''}">${st.n?esc(TRACK_STEPS[st.n-1][0]):'Not bidding'}<small>${esc(st.note||(st.n?TRACK_STEPS[st.n-1][1]:''))}</small></div></header>
+  const steps=st.n?`<ol class="ct-steps${st.cls?' '+st.cls:''}" aria-label="Stage ${st.n} of 5: ${st.wait?'Proposal sent, waiting on a decision':TRACK_STEPS[st.n-1][0]}">${TRACK_STEPS.map(([l],i)=>`<li class="${i+1<st.n?'past':i+1===st.n?'now':''}"><span class="ct-dot">${i+1<st.n||(st.n===5&&i===4&&!st.wait)?'✓':i+1}</span><span class="ct-lab">${l}</span></li>`).join('')}</ol>`:'';
+  return `<article class="ct-card"><header><div><h2>${esc(b.name)}</h2>${b.location?`<p>${esc(b.location)}</p>`:''}</div><div class="ct-now ${st.cls||''}">${st.n?esc(st.head||TRACK_STEPS[st.n-1][0]):'Not bidding'}<small>${esc(st.note||(st.n?TRACK_STEPS[st.n-1][1]:''))}</small></div></header>
     ${steps}
-    <div class="ct-facts"><div><span>Bid due</span><b>${b.due_date?fmtDate(b.due_date):'Not set'}</b>${b.due_time?`<small>${esc(b.due_time)}</small>`:''}</div>
+    <div class="ct-facts"><div><span>Bid due</span><b>${b.due_date?fmtDate(b.due_date):'Not set'}</b>${b.due_time?`<small>${esc(fuTime(b.due_time))}</small>`:''}</div>
       <div><span>${b.sent?'Proposal sent':'Proposal expected by'}</span><b>${b.sent?(b.sent_date?fmtDate(b.sent_date):'Sent'):b.proposal_eta?fmtDate(b.proposal_eta):'To be confirmed'}</b></div>
       <div><span>Addenda acknowledged</span>${ad.length?`<div class="ct-ad">${ad.map(a=>`<i class="${a.acknowledged?'ok':''}" title="${a.acknowledged?'Acknowledged':'Received, not yet acknowledged'}${a.date?' · issued '+fmtShort(a.date):''}">${a.acknowledged?'✓ ':''}#${esc(a.number)}</i>`).join('')}</div>`:'<b>None so far</b>'}</div>
       <div><span>Your estimator</span>${e&&e.name?`<b>${esc(e.name)}</b>${e.title?`<small>${esc(e.title)}</small>`:''}<small>${e.phone?`<a href="tel:${esc(e.phone)}">${esc(e.phone)}</a>`:''}${e.phone&&e.email?' · ':''}${e.email?`<a href="mailto:${esc(e.email)}">${esc(e.email)}</a>`:''}</small>`:'<b>To be assigned</b>'}</div></div></article>`}
@@ -7915,8 +7917,8 @@ async function trackPage(tk){const main=$('#main'),top=$('#topwrap');if(top)top.
   let data=null;
   const list=()=>{if(!data||!$('#ct-list'))return;const q=($('#ct-q').value||'').trim().toLowerCase(),sg=$('#ct-stage').value,so=$('#ct-sort').value;
     const all=data.bids.filter(b=>!['Awarded','Not Awarded','No Bid'].includes(b.status));
-    let L=all.filter(b=>(!q||(b.name+' '+(b.location||'')).toLowerCase().includes(q))&&(!sg||(sg==='hold'?b.status==='On Hold':b.status!=='On Hold'&&String(trackStage(b).n)===sg)));
-    const key={due:b=>b.due_date||'9999',name:b=>String(b.name).toLowerCase(),stage:b=>String(9-trackStage(b).n),new:b=>String(b.received||'')}[so];L=L.slice().sort((a,c)=>key(a).localeCompare(key(c)));if(so==='new')L.reverse();
+    let L=all.filter(b=>(!q||(b.name+' '+(b.location||'')).toLowerCase().includes(q))&&(!sg||(sg==='hold'?b.status==='On Hold':b.status!=='On Hold'&&String(trackStep(b))===sg)));
+    const key={due:b=>b.due_date||'9999',name:b=>String(b.name).toLowerCase(),stage:b=>String(9-trackStep(b)),new:b=>String(b.received||'')}[so];L=L.slice().sort((a,c)=>key(a).localeCompare(key(c)));if(so==='new')L.reverse();
     $('#ct-count').textContent=`${all.length} bid${all.length===1?'':'s'} in progress${L.length!==all.length?` · showing ${L.length}`:''} · updated ${new Date(data.as_of||Date.now()).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}`;
     $('#ct-list').innerHTML=L.map(trackCard).join('')||`<div class="ct-msg"><p>${all.length?'Nothing matches that search.':'No bids in progress right now.'}</p></div>`};
   document.addEventListener('input',e=>{if(e.target.id==='ct-q')list()});document.addEventListener('change',e=>{if(e.target.id==='ct-stage'||e.target.id==='ct-sort')list()});
