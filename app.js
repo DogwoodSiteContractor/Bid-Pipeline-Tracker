@@ -905,7 +905,7 @@ function vEstimators(){if(isAdmin()){S.view='team';S.teamRole='bids';return vTea
 function vClients(){
   const q=(S.q.cl||'').toLowerCase();const eng=S.q.clKind==='eng';const nEng=S.clients.filter(isDesignCo).length;const list=S.clients.filter(c=>isDesignCo(c)===eng).filter(c=>!q||[c.company,c.type,...(c.contacts||[]).map(x=>x.name)].join(' ').toLowerCase().includes(q)).sort((a,b)=>a.company.localeCompare(b.company));
   const showStats=bidsAll()&&can('bids');
-  return dbHead(eng?'Engineers & designers':'Clients & GCs',list.length+' companies','new-client',eng?'+ Add engineer or designer':'+ Add client or GC','clients')+`<div class="bar"><div class="seg"><button class="${eng?'':'on'}" data-act="cl-kind" data-v="gc">Owners & GCs ${S.clients.length-nEng}</button><button class="${eng?'on':''}" data-act="cl-kind" data-v="eng">Engineers & designers ${nEng}</button></div><input id="q-cl" class="field search" data-q="cl" placeholder="Search companies or contacts" value="${esc(S.q.cl||'')}"></div>
+  return dbHead(eng?'Engineers & designers':'Clients & GCs',list.length+' companies','new-client',eng?'+ Add engineer or designer':'+ Add client or GC','clients')+`<div class="bar"><div class="seg"><button class="${eng?'':'on'}" data-act="cl-kind" data-v="gc">Owners & GCs ${S.clients.length-nEng}</button><button class="${eng?'on':''}" data-act="cl-kind" data-v="eng">Engineers & designers ${nEng}</button></div><input id="q-cl" class="field search" data-q="cl" placeholder="Search companies or contacts" value="${esc(S.q.cl||'')}">${isAdmin()?'<button class="btn sm ghost" data-act="tidy-open" title="Put every phone number in one format and fix email typos, across clients, vendors and people">Tidy phones & emails</button>':''}</div>
   <div class="panel scroll"><table><thead><tr><th>Company</th><th>Type</th><th>Contacts</th>${showStats?'<th class="r">Bids</th><th class="r">$ bid</th><th class="r">Won</th><th class="r">Win rate</th>':'<th>Phone</th>'}</tr></thead><tbody>
   ${list.map(c=>{const bs=S.bids.filter(b=>(b.client_ids||[]).includes(c.id));const w=bs.filter(b=>clientWon(b,c.id)).length,l=bs.filter(b=>clientLost(b,c.id)).length;
    return `<tr class="click" data-act="open-client" data-id="${c.id}"><td class="proj">${esc(c.company)}</td><td>${esc(c.type)}</td><td class="small">${(c.contacts||[]).map(x=>esc(x.name)).filter(Boolean).join(', ')||'<span class="dim">—</span>'}</td>${showStats?`<td class="r num">${bs.length}</td><td class="r num">${moneyK(bs.reduce((s,b)=>s+clientAmount(b,c.id),0))}</td><td class="r num">${w}</td><td class="r num">${w+l?Math.round(w/(w+l)*100)+'%':'—'}</td>`:`<td class="small">${esc(c.phone)}</td>`}</tr>`}).join('')
@@ -962,7 +962,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
+  const html={tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='bid'?' bidpage':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -1534,7 +1534,7 @@ async function saveModal(){
       const t={est:'estimators',client:'clients',vendor:'vendors'}[M.kind];
       if(!String(d.name??d.company??'').trim())throw new Error(M.kind==='est'?'Add a name.':'Add a company name.');
       if(M.kind==='client')d.contacts=(d.contacts||[]).filter(c=>c.name||c.email||c.phone);
-      const row={};ENT_COLS[t].forEach(k=>row[k]=d[k]);
+      tidyContactRow(d);const row={};ENT_COLS[t].forEach(k=>row[k]=d[k]);
       await run(sb.from(t).upsert(row));await loadTable(t);toast('Saved');
     }else if(M.kind==='board'){await run(sb.from('settings').upsert({key:'board',value:{widgets:d}}));await loadTable('settings');toast('Board view saved')}
     else if(M.kind==='lib'){
@@ -1928,13 +1928,13 @@ async function readDirFile(file,type){
 async function runDirImport(){
   const P=M.plan;M.running=true;renderModal();const res={created:0,contacts:0,skipped:0,failed:[]};
   const table=P.type==='clients'?'clients':'vendors';const cols=ENT_COLS[table];
-  const rows=P.items.filter(x=>x.action==='new').map(x=>{const r={id:newId()};cols.forEach(k=>{if(k!=='id'&&x.f[k]!==undefined)r[k]=x.f[k]});return r});
+  const rows=P.items.filter(x=>x.action==='new').map(x=>{const r={id:newId()};cols.forEach(k=>{if(k!=='id'&&x.f[k]!==undefined)r[k]=x.f[k]});return tidyContactRow(r)});
   res.skipped=P.items.filter(x=>x.action==='duplicate'||x.action==='error').length;
   try{
     for(let i=0;i<rows.length;i+=100){const chunk=rows.slice(i,i+100);try{await run(sb.from(table).insert(chunk));res.created+=chunk.length}
       catch(e){for(const r of chunk){try{await run(sb.from(table).insert(r));res.created++}catch(e2){res.failed.push(`${r.company}: ${errMsg(e2)}`)}}}}
     for(const x of P.items.filter(x=>x.action==='contacts')){
-      try{await run(sb.from('clients').update({contacts:[...(x.existing.contacts||[]),...x.newContacts]}).eq('id',x.existing.id));res.contacts+=x.newContacts.length}
+      try{await run(sb.from('clients').update({contacts:[...(x.existing.contacts||[]),...x.newContacts.map(c=>tidyContactRow({...c}))]}).eq('id',x.existing.id));res.contacts+=x.newContacts.length}
       catch(e){res.failed.push(`${x.f.company}: ${errMsg(e)}`)}}
     await loadTable(table);
   }catch(e){res.failed.push(errMsg(e))}
@@ -6724,7 +6724,7 @@ function accessModal(){const d=M.draft;const admin=d.role==='admin';const self=d
     ${Object.values(d.perms).some(Boolean)&&!admin?'<button class="btn sm ghost" data-act="acc-reset">Reset to role defaults</button>':''}</fieldset>${acctBox(d)}</div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="acc-save">Save</button></div></div>`}
 async function accessSave(){const d=M.draft;const perms={};Object.entries(d.perms).forEach(([a,v])=>{if(v)perms[a]=v});
-  const row={full_name:String(d.full_name||'').trim(),title:String(d.title||'').trim(),phone:String(d.phone||'').trim(),perms};if(d.id!==S.session.user.id)row.role=d.role;
+  const row={full_name:String(d.full_name||'').trim(),title:String(d.title||'').trim(),phone:fmtPhone(String(d.phone||'').trim()),perms};if(d.id!==S.session.user.id)row.role=d.role;
   try{await run(sb.from('profiles').update(row).eq('id',d.id));await loadProfiles();await loadPms();closeModal();toast('Saved');render()}
   catch(e){toast(/title|phone|perms|executive|check constraint/i.test(errMsg(e))?'Run supabase/update-18-team-access.sql in Supabase first.':errMsg(e))}}
 FOCUS_ATTRS.push('data-accf');
@@ -11562,3 +11562,66 @@ function reviewPanel(){if(!can('bids'))return '';const mgr=isAdmin()||canAssign(
   if(!L.length)return '';
   return `<div class="panel pad rv-panel"><div class="rv-h"><b>📋 ${L.length} bid${L.length===1?'':'s'} ready for review</b><span class="small dim">${mgr?'Estimate and proposal are done. Check the number, then mark it sent.':'Waiting on a manager to check it.'}</span></div>
     <div class="list">${L.map(b=>{const n=daysUntil(b.due_date);return `<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button><div class="dim small">${esc((b.client_ids||[]).map(clientName).join(', ')||'No GC')} · lead ${esc(estName(b.lead_estimator_id)||'—')}${bidValue(b)?' · '+money(bidValue(b)):''}</div></div><span class="small ${n!=null&&n<=1?'bad-t':''}">${b.due_date?`due ${fmtShort(b.due_date)}${n!=null?` (${n<0?'past due':n===0?'today':n+' day'+(n===1?'':'s')})`:''}`:'no due date'}</span></div>`}).join('')}</div></div>`}
+
+/* ----- phone and email cleanup -----
+   Phones format themselves as (770) 627-7776 when you leave the box (extensions kept). Emails are checked for
+   common typos and offer a one-click fix. Saves and Excel imports get the same cleanup, and admins can tidy the
+   existing contacts in one pass (they see every change first). */
+function fmtPhone(v){const raw=String(v??'').trim();if(!raw)return '';
+  const m=/^(.*?)(?:\s*(?:x|ext\.?|extension|#)\s*(\d{1,6}))\s*$/i.exec(raw);const main=m?m[1]:raw,ext=m?m[2]:'';
+  let d=main.replace(/\D/g,'');if(d.length===11&&d[0]==='1')d=d.slice(1);
+  if(d.length!==10)return raw;   // not a US number: leave it as typed
+  return `(${d.slice(0,3)}) ${d.slice(3,6)}-${d.slice(6)}${ext?' x'+ext:''}`}
+const EMAIL_FIX={'gmial.com':'gmail.com','gmal.com':'gmail.com','gmail.co':'gmail.com','gamil.com':'gmail.com','gnail.com':'gmail.com','gmai.com':'gmail.com','yahooo.com':'yahoo.com','yaho.com':'yahoo.com','hotmial.com':'hotmail.com','hotmal.com':'hotmail.com','outlok.com':'outlook.com','outloo.com':'outlook.com','dogwoodsite.co':'dogwoodsite.com','dogwoodsites.com':'dogwoodsite.com'};
+// {ok:true} | {ok:false, msg, fix?}
+function checkEmail(v){const e=String(v??'').trim();if(!e)return {ok:true};
+  let s=e.toLowerCase().replace(/\s+/g,'').replace(/^mailto:/,'').replace(/@{2,}/g,'@').replace(/\.{2,}/g,'.').replace(/[.,;]+$/,'');
+  s=s.replace(/\.(con|cmo|ocm|vom|xom|comm|om|cm)$/,'.com').replace(/\.(nte|ent)$/,'.net').replace(/\.(ogr|rog)$/,'.org');
+  const at=s.indexOf('@');if(at>0){const dom=s.slice(at+1);if(EMAIL_FIX[dom])s=s.slice(0,at+1)+EMAIL_FIX[dom]}
+  const valid=/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/i.test(s);
+  if(valid&&s===e)return {ok:true};
+  if(valid)return {ok:false,msg:`Did you mean ${s}?`,fix:s};
+  if(!e.includes('@'))return {ok:false,msg:'This doesn’t look like an email address (no @).'};
+  return {ok:false,msg:'This doesn’t look like a complete email address.'}}
+const isPhoneBox=t=>t&&t.tagName==='INPUT'&&(t.type==='tel'||/(^|\.)phone$/.test(t.dataset.ef||t.dataset.ctf||t.dataset.accf||t.dataset.ua||''));
+// "Website or email" on a client: only check it when it has an @ in it
+const isEmailBox=t=>t&&t.tagName==='INPUT'&&(t.type==='email'&&!t.closest('#auth-form,#forgot-form,form')||/(^|\.)email$/.test(t.dataset.ef||t.dataset.ctf||t.dataset.ua||''));
+function emailHint(t,res){let h=t.parentElement.querySelector(':scope > .em-hint');if(res.ok){if(h)h.remove();return}
+  if(!h){h=document.createElement('div');h.className='em-hint small';t.insertAdjacentElement('afterend',h)}
+  h.innerHTML=`${esc(res.msg)}${res.fix?` <button type="button" class="linkbtn" data-emfix="${esc(res.fix)}">Use it</button>`:''}`}
+document.addEventListener('focusout',e=>{const t=e.target;if(!t||t.disabled||t.readOnly)return;
+  if(isPhoneBox(t)){const f=fmtPhone(t.value);if(f!==t.value){t.value=f;t.dispatchEvent(new Event('input',{bubbles:true}));t.dispatchEvent(new Event('change',{bubbles:true}))}return}
+  if(isEmailBox(t)){const v=t.value.trim();if(t.dataset.ef==='email'&&M&&M.kind==='client'&&!v.includes('@')){emailHint(t,{ok:true});return}emailHint(t,checkEmail(v))}},true);
+document.addEventListener('mousedown',e=>{const b=e.target.closest('[data-emfix]');if(!b)return;e.preventDefault();const t=b.closest('.em-hint')?.previousElementSibling;if(t&&t.tagName==='INPUT'){t.value=b.dataset.emfix;t.dispatchEvent(new Event('input',{bubbles:true}));t.dispatchEvent(new Event('change',{bubbles:true}));b.closest('.em-hint').remove()}},true);
+// the same cleanup on whatever is about to be saved
+function tidyContactRow(r){if(!r||typeof r!=='object')return r;if(r.phone)r.phone=fmtPhone(r.phone);if(r.email&&String(r.email).includes('@')){const c=checkEmail(r.email);if(!c.ok&&c.fix)r.email=c.fix}
+  if(Array.isArray(r.contacts))r.contacts=r.contacts.map(x=>tidyContactRow({...x}));return r}
+
+/* one pass over what's already in the app (admins) */
+function tidyScan(){const ch=[];const add=(kind,label,field,from,to,apply)=>{if(from!==to)ch.push({kind,label,field,from,to,apply,on:true})};
+  S.clients.forEach(c=>{add('Client',c.company,'Phone',c.phone||'',fmtPhone(c.phone||''),{t:'clients',id:c.id,k:'phone'});
+    if(String(c.email||'').includes('@')){const r=checkEmail(c.email);if(r.fix)add('Client',c.company,'Email',c.email,r.fix,{t:'clients',id:c.id,k:'email'})}
+    (c.contacts||[]).forEach((x,i)=>{add('Client contact',`${c.company} · ${x.name||'contact'}`,'Phone',x.phone||'',fmtPhone(x.phone||''),{t:'clients',id:c.id,ci:i,k:'phone'});
+      const r=checkEmail(x.email||'');if(r.fix)add('Client contact',`${c.company} · ${x.name||'contact'}`,'Email',x.email,r.fix,{t:'clients',id:c.id,ci:i,k:'email'})})});
+  S.vendors.forEach(v=>{add('Vendor',v.company,'Phone',v.phone||'',fmtPhone(v.phone||''),{t:'vendors',id:v.id,k:'phone'});const r=checkEmail(v.email||'');if(r.fix)add('Vendor',v.company,'Email',v.email,r.fix,{t:'vendors',id:v.id,k:'email'})});
+  S.estimators.forEach(x=>{add('Estimator',x.name,'Phone',x.phone||'',fmtPhone(x.phone||''),{t:'estimators',id:x.id,k:'phone'});const r=checkEmail(x.email||'');if(r.fix)add('Estimator',x.name,'Email',x.email,r.fix,{t:'estimators',id:x.id,k:'email'})});
+  S.profiles.forEach(p=>add('Person',personName(p),'Phone',p.phone||'',fmtPhone(p.phone||''),{t:'profiles',id:p.id,k:'phone'}));
+  return ch}
+function tidyModal(){const L=M.list;const n=L.filter(x=>x.on).length;const bad=L.filter(x=>x.field==='Email');
+  return mhead('Tidy contacts','Phone numbers in one format, and email typos fixed. Untick anything you want left alone.')+`<div class="mbody">
+   ${L.length?`<div class="panel scroll"><table class="team-t"><thead><tr><th></th><th>Where</th><th>Field</th><th>Now</th><th>Becomes</th></tr></thead><tbody>${L.map((x,i)=>`<tr><td><input type="checkbox" data-tidy="${i}"${x.on?' checked':''}></td><td><b>${esc(x.label)}</b><div class="dim small">${esc(x.kind)}</div></td><td>${x.field}</td><td class="dim">${esc(x.from)}</td><td><b>${esc(x.to)}</b></td></tr>`).join('')}</tbody></table></div>`
+     :'<div class="empty"><b>Everything already looks tidy.</b>No phone numbers or emails need changing.</div>'}
+   ${bad.length?`<p class="hint">${bad.length} email${bad.length===1?'':'s'} look${bad.length===1?'s':''} like a typo. Check those before applying.</p>`:''}
+   <p class="hint">Phone numbers that aren’t 10-digit US numbers are left as they are.</p></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button>${L.length?`<button class="btn primary" data-act="tidy-go"${n&&!M.busy?'':' disabled'}>${M.busy?'Saving…':`Apply ${n} change${n===1?'':'s'}`}</button>`:''}</div></div>`}
+async function tidyGo(){const L=M.list.filter(x=>x.on);M.busy=true;renderModal();let ok=0,bad=0;
+  const groups=new Map();L.forEach(x=>{const k=x.apply.t+'|'+x.apply.id;if(!groups.has(k))groups.set(k,[]);groups.get(k).push(x)});
+  for(const [k,xs] of groups){const [t,id]=k.split('|');const row={};
+    if(t==='clients'){const c=byId(S.clients,id);let contacts=null;xs.forEach(x=>{if(x.apply.ci!=null){contacts=contacts||(c.contacts||[]).map(y=>({...y}));contacts[x.apply.ci][x.apply.k]=x.to}else row[x.apply.k]=x.to});if(contacts)row.contacts=contacts}
+    else xs.forEach(x=>{row[x.apply.k]=x.to});
+    try{await run(sb.from(t).update(row).eq('id',id));ok+=xs.length}catch(e){bad+=xs.length}}
+  await Promise.all([loadTable('clients'),loadTable('vendors'),loadTable('estimators'),loadProfiles()]);closeModal();render();toast(`Tidied ${ok} contact detail${ok===1?'':'s'}${bad?`, ${bad} couldn’t be saved`:''}.`)}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
+  if(a==='tidy-open'&&isAdmin()){M={kind:'tidy',list:tidyScan()};showModal();return}
+  if(a==='tidy-go'&&M&&M.kind==='tidy'&&!M.busy)tidyGo()});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.tidy!=null&&M&&M.kind==='tidy'){M.list[+t.dataset.tidy].on=t.checked;renderModal()}});

@@ -2512,3 +2512,5 @@ div.tw-pgh{cursor:default}
 .prog-bar i.open b{background:var(--warn)}
 .prog-lab span.open{color:var(--warn);font-weight:600}
 .q-out{font-size:12.5px;font-weight:700;color:var(--warn);margin-top:-2px}
+.em-hint{color:var(--warn);font-weight:600;margin-top:4px}
+.em-hint .linkbtn{font-weight:700}
