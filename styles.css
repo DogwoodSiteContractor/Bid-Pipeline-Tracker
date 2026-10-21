@@ -2583,3 +2583,23 @@ div.tw-pgh{cursor:default}
 .btpl-ck{display:flex;gap:8px;align-items:flex-start;padding:8px 10px;border:1px solid var(--line);border-radius:10px;cursor:pointer}
 .btpl-ck input{margin-top:3px}.btpl-ck small{display:block;color:var(--ink-3);font-size:12px}
 .btpl-ck.dim{cursor:default;opacity:.6}
+
+/* final review checklist */
+.fr .fr-top{display:flex;gap:10px;align-items:center;margin-bottom:8px}.fr-prog{flex:1;display:flex;flex-direction:column;gap:4px}
+.fr-bar{height:8px;border-radius:4px;background:var(--mute-soft,#e6e6e6);overflow:hidden}.fr-bar i{display:block;height:100%;background:var(--good,#3c8a55);transition:width .3s}
+.fr-h{font-family:"Montserrat",system-ui,sans-serif;font-weight:700;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-3);margin:12px 0 4px}
+.fr-item{display:flex;gap:10px;align-items:flex-start;justify-content:space-between;padding:7px 4px;border-bottom:1px solid var(--line)}
+.fr-item:last-of-type{border-bottom:0}.fr-l{display:flex;gap:10px;align-items:flex-start;flex:1}.fr-l input{margin-top:3px}
+.fr-item b{font-weight:600}.fr-item.na b{color:var(--ink-3);text-decoration:line-through}.fr-item.ok b{color:var(--ink-2)}
+.fr-r{display:flex;gap:10px;flex:none}
+.fr-mk{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;font-size:11px;font-weight:800;flex:none;margin-top:1px;background:var(--bad,#c0392b);color:#fff}
+.fr-item.ok .fr-mk{background:var(--good,#3c8a55)}.fr-item.na .fr-mk{background:var(--ink-3)}
+.fr-auto{font-size:10.5px;border:1px solid var(--line);border-radius:4px;padding:0 4px;color:var(--ink-3);vertical-align:1px}
+.fr-na{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}.fr-na input{flex:1;min-width:180px}
+.fr-sigs{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}
+.fr-sig{border:1px dashed var(--line);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:4px;align-items:flex-start;min-height:76px}
+.fr-sig.on{border-style:solid;border-color:var(--good,#3c8a55)}
+.fr-ini{font-family:"Brush Script MT","Segoe Script",cursive;font-size:24px;line-height:1;color:var(--good,#3c8a55)}
+.fr-backbox{border:2px solid var(--accent);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:6px;margin:6px 0}
+.fr-backnote{margin:6px 0}.fr-gate{margin:0 0 6px}
+@media (max-width:640px){.fr-sigs{grid-template-columns:1fr}.fr-item{flex-direction:column}.fr-r{padding-left:28px}}

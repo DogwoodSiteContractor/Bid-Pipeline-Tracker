@@ -1078,6 +1078,7 @@ function bidModal(){
   if(M.rfq)return rfqView();
   if(M.op)return opView();
   if(M.btpl)return btplSaveView();
+  if(M.frSet)return frSetView();
   if(M.trk)return trackModal().replace('data-act="close"','data-act="trk-back"');
   const b=M.draft;const admin=isAdmin();const work=canWork(b);const isNew=b._new;
   if(!M.tab)M.tab=isNew?'project':bpTabOf(b);
@@ -1182,9 +1183,9 @@ function epBar(b,work){const e=epState(b);const steps=[['ns','Not started'],['ip
     <div class="small dim">${e==='ns'?'Click <b>In progress</b> when you start the estimate.':e==='ip'?'When the number and proposal are done, mark it <b>Ready for review</b>. Managers see it on their dashboard.':e==='rr'?'Waiting on review. Once it’s checked, click <b>Sent</b> when the proposal goes out.':'Sent. Follow-up and the outcome are on the next tab.'}</div>
     ${M.epArm?`<div class="notice" style="margin-top:8px">This proposal is marked sent${b.client_ids.some(id=>propOf(b,id).status==='Sent')?' to '+b.client_ids.filter(id=>propOf(b,id).status==='Sent').map(clientName).join(', '):''}. Moving it back clears those sent marks. <button class="btn sm warn" data-act="ep-set" data-v="${M.epArm}" data-ok="1">Yes, move it back</button> <button class="btn sm ghost" data-act="ep-unarm">Keep it sent</button></div>`:''}
     ${M.epSend?epSendHtml(b):''}</div>`}
-function epSendHtml(b){const X=M.epSend;return `<div class="ep-send"><b>Who did the proposal go to?</b>
+function epSendHtml(b){const X=M.epSend;const G=frGate(b);return `<div class="ep-send">${frGateHtml(b)}<b>Who did the proposal go to?</b>
   ${b.client_ids.length?`<div class="ep-gcs">${b.client_ids.map(id=>`<label class="check"><input type="checkbox" data-epgc="${id}"${X.sel.has(id)?' checked':''}> ${esc(clientName(id))} <span class="dim small">${clientAmount(b,id)?money(clientAmount(b,id)):'no number'}</span>${propOf(b,id).status==='Sent'?' '+pill('already sent','info'):''}</label>`).join('')}</div>`:'<p class="small dim" style="margin:6px 0">No GCs on this bid yet. It will just be marked sent.</p>'}
-  <div class="adders"><label class="f" style="flex-direction:row;align-items:center;gap:8px">Sent on <input type="date" class="field" data-epdate value="${esc(X.date)}" style="width:auto"></label><button class="btn primary" data-act="ep-send-go"${b.client_ids.length&&!X.sel.size?' disabled':''}>✓ Mark proposal sent</button><button class="btn ghost" data-act="ep-send-x">Cancel</button></div>
+  <div class="adders"><label class="f" style="flex-direction:row;align-items:center;gap:8px">Sent on <input type="date" class="field" data-epdate value="${esc(X.date)}" style="width:auto"></label><button class="btn primary" data-act="ep-send-go"${(b.client_ids.length&&!X.sel.size)||(G.stop&&!G.ok)?' disabled':''}>✓ ${G.ok||G.stop?'Mark proposal sent':'Send it anyway'}</button><button class="btn ghost" data-act="ep-send-x">Cancel</button></div>
   <p class="hint" style="margin:0">This marks the bid Proposal sent and starts the GC follow-up clock.</p></div>`}
 function epOpenSend(){const b=M.draft;M.epSend={sel:new Set(b.client_ids.filter(id=>propOf(b,id).status!=='Lost')),date:todayStr()};renderModal()}
 function epGo(k,ok){const b=M.draft;const e=epState(b);if(k===e&&k!=='sent')return;
@@ -1195,10 +1196,10 @@ function epGo(k,ok){const b=M.draft;const e=epState(b);if(k===e&&k!=='sent')retu
   if(k==='ip'){b.status='Estimating';b.proposal_status='In Progress'}
   if(k==='rr'){b.status='Proposal Review';b.proposal_status='Complete'}
   renderModal();toast(k==='rr'?'Ready for review. Managers see it on their dashboard.':k==='ip'?'Estimate & proposal in progress.':'Set to not started.')}
-function epSendGo(){const b=M.draft;const X=M.epSend;const d=X.date||todayStr();const cp={...(b.client_proposals||{})};
+function epSendGo(){const b=M.draft;const X=M.epSend;{const G=frGate(b);if(G.stop&&!G.ok){toast('Finish the final review first.');return}}const d=X.date||todayStr();const cp={...(b.client_proposals||{})};
   [...X.sel].forEach(id=>{cp[id]={...propOf(b,id),status:'Sent',sent_date:propOf(b,id).sent_date||d}});b.client_proposals=cp;
   b.proposal_status='Sent';b.status='Submitted';if(!b.submitted_date)b.submitted_date=d;M.epSend=null;M.tab='outcome';renderModal();toast(`Proposal sent${X.sel.size?` to ${[...X.sel].map(clientName).join(', ')}`:''}. GC follow-up starts from ${fmtShort(d)}.`)}
-function bpEstProp(b,work){return `${epBar(b,work)}${estOn()&&!b._sample?estBidBlock(b,work):''}
+function bpEstProp(b,work){return `${epBar(b,work)}${frHtml(b,work)}${estOn()&&!b._sample?estBidBlock(b,work):''}
   <fieldset><legend>Base numbers</legend><div class="fg">
     <label class="f">Base — with site improvements<input type="number" step="0.01" min="0" class="field" ${bf('amount_with','n')} placeholder="$0.00"></label>
     <label class="f">Base — without site improvements<input type="number" step="0.01" min="0" class="field" ${bf('amount_without','n')} placeholder="$0.00"></label>
@@ -1532,6 +1533,8 @@ async function saveBid(opt={},m=M){
   // RFQ details (quotes due, plans link, engineer…): own column so bids still save before update-39 is run
   if(d.rfq&&typeof d.rfq==='object'){try{localStorage.setItem('rfq:'+row.id,JSON.stringify(d.rfq))}catch(e){}
     if(!S.rfqMissing){try{const {error}=await sb.from('bids').update({rfq:d.rfq}).eq('id',row.id);if(error)S.rfqMissing=true}catch(e){S.rfqMissing=true}}}
+  // final review: its own column (update-42). Sign-offs are written the moment they happen, so keep whatever is on the server
+  if(d.review&&typeof d.review==='object'&&!S.reviewMissing&&JSON.stringify(d.review)!==JSON.stringify((byId(S.bids,row.id)||{}).review||{})){try{const {data:cur,error:e1}=await sb.from('bids').select('review').eq('id',row.id).maybeSingle();if(e1)throw e1;const rv={...d.review,sign:(cur&&cur.review&&cur.review.sign)||{}};const {error}=await sb.from('bids').update({review:rv}).eq('id',row.id);if(error)throw error;d.review=rv}catch(e){if(/review/i.test(errMsg(e))&&/column|schema/i.test(errMsg(e)))S.reviewMissing=true;else throw e}}
   if(wasNew&&(row.client_ids||[]).length&&!S.trackMissing)setTimeout(()=>{if(!M)trackOpen(row.client_ids,row.id)},400);
   if(isAdmin()){const gone=(m.origQuoteIds||[]).filter(id=>!d.quotes.some(q=>q.id===id));if(gone.length)await run(sb.from('quotes').delete().in('id',gone))}
   if(d.quotes.length)await run(sb.from('quotes').upsert(d.quotes.map(quoteRowData)));
@@ -11576,7 +11579,7 @@ function reviewPanel(){if(!can('bids'))return '';const mgr=isAdmin()||canAssign(
   const L=S.bids.filter(b=>!b.archived_at&&b.status==='Proposal Review'&&(mgr||(me&&(b.lead_estimator_id===me.id||(b.support_estimator_ids||[]).includes(me.id))))).sort((a,c)=>String(a.due_date||'9').localeCompare(String(c.due_date||'9')));
   if(!L.length)return '';
   return `<div class="panel pad rv-panel"><div class="rv-h"><b>📋 ${L.length} bid${L.length===1?'':'s'} ready for review</b><span class="small dim">${mgr?'Estimate and proposal are done. Check the number, then mark it sent.':'Waiting on a manager to check it.'}</span></div>
-    <div class="list">${L.map(b=>{const n=daysUntil(b.due_date);return `<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button><div class="dim small">${esc((b.client_ids||[]).map(clientName).join(', ')||'No GC')} · lead ${esc(estName(b.lead_estimator_id)||'—')}${bidValue(b)?' · '+money(bidValue(b)):''}</div></div><span class="small ${n!=null&&n<=1?'bad-t':''}">${b.due_date?`due ${fmtShort(b.due_date)}${n!=null?` (${n<0?'past due':n===0?'today':n+' day'+(n===1?'':'s')})`:''}`:'no due date'}</span></div>`}).join('')}</div></div>`}
+    <div class="list">${L.map(b=>{const n=daysUntil(b.due_date);return `<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button><div class="dim small">${esc((b.client_ids||[]).map(clientName).join(', ')||'No GC')} · lead ${esc(estName(b.lead_estimator_id)||'—')}${bidValue(b)?' · '+money(bidValue(b)):''}</div>${(()=>{const s=frStats(b),R=frOf(b);return `<div class="small">Review ${s.done}/${s.total} · lead ${R.sign.lead?'✓':'—'} · manager ${R.sign.mgr?'✓':'—'}</div>`})()}</div><span class="small ${n!=null&&n<=1?'bad-t':''}">${b.due_date?`due ${fmtShort(b.due_date)}${n!=null?` (${n<0?'past due':n===0?'today':n+' day'+(n===1?'':'s')})`:''}`:'no due date'}</span></div>`}).join('')}</div></div>`}
 
 /* ----- phone and email cleanup -----
    Phones format themselves as (770) 627-7776 when you leave the box (extensions kept). Emails are checked for
@@ -11993,3 +11996,102 @@ document.addEventListener('change',e=>{const t=e.target;
 document.addEventListener('input',e=>{const t=e.target;
   if(t.dataset&&t.dataset.btplf&&M&&M.btpl&&t.type!=='checkbox'&&t.tagName!=='SELECT'){M.btpl[t.dataset.btplf]=t.value;if(t.dataset.btplf==='name'){const L=btplList();const same=L.some(x=>x.name.trim().toLowerCase()===t.value.trim().toLowerCase());const btn=document.querySelector('[data-act=btpl-save]');if(btn&&!M.btpl.busy)btn.textContent=same?'Replace template':'Save template'}}
   if(t.dataset&&t.dataset.btmf&&S.btm)S.btm[t.dataset.btmf]=t.value});
+
+/* ----- Final bid review checklist -----
+   Lives on the Estimate & proposal tab once the estimate is under way. Two kinds of items:
+   • automatic ones the app checks from the bid (scopes signed off, addenda acknowledged, quotes back, every sub scope
+     priced, numbers for every GC, bid date and time, plan date). They tick themselves; you can mark one N/A with a reason.
+   • manual ones from an editable list (Settings on this panel, admins), with a shorter list for Budget / pricing bids.
+   Then the lead estimator and the precon manager sign. Signatures are enforced in the database (update-42).
+   "Mark proposal sent" checks it: warn with override (default) or hard stop, and who must sign (both by default).
+   Stored on the bid in bids.review; settings in settings 'review'. */
+const FR_DEF_ITEMS=['Cut / fill balance checked against the geotech report','Rock and undercut allowances carried','Haul-off and dump site figured','Erosion control phases included','Utility tie-ins and taps covered','Testing, permits, bonds and insurance covered','Mobilizations and schedule make sense','Alternates and unit prices filled in on the GC’s bid form','Exclusions match the plans','Proposal PDF read through'];
+const FR_DEF_BUDGET=['Allowances and assumptions stated on the proposal','Exclusions match the plans','Proposal PDF read through'];
+const frSet=()=>{const v=S.settings.review||{};return {mode:v.mode==='stop'?'stop':'warn',who:['both','lead','mgr','either'].includes(v.who)?v.who:'both',items:Array.isArray(v.items)&&v.items.length?v.items:FR_DEF_ITEMS,budget:Array.isArray(v.budget)?v.budget:FR_DEF_BUDGET}};
+const frSlug=t=>'m_'+String(t).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,48);
+function frOf(b){if(!b.review||typeof b.review!=='object')b.review={};const R=b.review;if(!R.items||typeof R.items!=='object')R.items={};if(!R.sign||typeof R.sign!=='object')R.sign={};if(!Array.isArray(R.back))R.back=[];return R}
+const frNumSig=b=>JSON.stringify([bidValue(b)||0,...(b.client_ids||[]).map(id=>clientAmount(b,id)||0)]);
+// the automatic checks: [id, label, ok, detail when not ok]
+function frAuto(b){const its=scopeItems(b)||[];const Q=Array.isArray(b.quotes)?b.quotes:quotesFor(b.id);const ad=addenda(b).filter(a=>a.number!=null&&a.number!=='');
+  const open=its.filter(x=>x.status!=='Complete'&&x.status!=='N/A');const out=Q.filter(q=>q.status==='Requested');
+  const noPrice=its.filter(it=>performOf(it)!=='Self perform').filter(it=>!Q.some(q=>qHas(q,it.name)&&(q.status==='Received'||(q.status===BUD&&num(q.amount)!=null))));
+  const noNum=(b.client_ids||[]).filter(id=>!clientAmount(b,id));const unack=ad.filter(a=>!a.acknowledged);const nm=(L,f)=>L.slice(0,3).map(f).join(', ')+(L.length>3?'…':'');
+  return [
+    ['a_scopes','Every scope’s takeoff signed off',its.length&&!open.length,its.length?`${open.length} not signed off: ${nm(open,x=>x.name)}`:'No scopes on this bid'],
+    ['a_addenda','Every addendum acknowledged and priced',!unack.length,`Not acknowledged: ${nm(unack,a=>'#'+a.number)}`],
+    ['a_quotes','No quotes still out',!out.length,`${out.length} still out: ${nm(out,q=>vendorOf(q.vendor_id)?.company||'vendor')}`],
+    ['a_subs','Every sub scope has a price',!noPrice.length,`No price yet: ${nm(noPrice,x=>x.name)}`],
+    ['a_nums','Base number in, and a number for every GC',!!bidValue(b)&&!noNum.length,!bidValue(b)?'No base number yet':`No number for ${nm(noNum,clientName)}`],
+    ['a_due','Bid date and time set',!!(b.due_date&&b.due_time),!b.due_date?'No bid due date':'No due time'],
+    ['a_plan','Plan date entered (matches the latest addendum)',!!rfqOf(b).planDate,'No plan date on the Project tab']]}
+function frManual(b){const st=frSet();return (b.bid_type==='Budget / pricing'?st.budget:st.items).map(t=>[frSlug(t),t])}
+// everything still open, as labels
+function frOpen(b){const R=frOf(b);const L=[];frAuto(b).forEach(([id,l,ok])=>{const r=R.items[id]||{};if(!ok&&!r.na)L.push(l)});frManual(b).forEach(([id,l])=>{const r=R.items[id]||{};if(!r.ok&&!r.na)L.push(l)});return L}
+function frNeeds(b){const R=frOf(b);const w=frSet().who;const L=!!R.sign.lead,G=!!R.sign.mgr;
+  return w==='both'?[...(L?[]:['lead estimator']),...(G?[]:['precon manager'])]:w==='lead'?(L?[]:['lead estimator']):w==='mgr'?(G?[]:['precon manager']):(L||G?[]:['lead estimator or precon manager'])}
+const frIsMgr=()=>isAdmin()||canAssign();
+const frIsLead=b=>{const me=myEst();return !!me&&b.lead_estimator_id===me.id};
+function frStats(b){const a=frAuto(b),m=frManual(b);const R=frOf(b);const done=a.filter(([id,,ok])=>ok||(R.items[id]||{}).na).length+m.filter(([id])=>(R.items[id]||{}).ok||(R.items[id]||{}).na).length;return {done,total:a.length+m.length}}
+function frHtml(b,work){const e=epState(b);if(e==='ns'&&!Object.keys(frOf(b).items).length)return '';const R=frOf(b);const st=frSet();const S2=frStats(b);const naOpen=M.frNa;
+  const row=(id,label,kind,ok,detail)=>{const r=R.items[id]||{};const na=!!r.na;const done=kind==='auto'?ok:!!r.ok;
+    const state=na?'na':done?'ok':'open';
+    return `<div class="fr-item ${state}"><div class="fr-l">${kind==='auto'?`<span class="fr-mk" title="Checked by the app">${na?'–':done?'✓':'!'}</span>`:`<input type="checkbox" data-frck="${id}"${done?' checked':''}${work&&!na?'':' disabled'} aria-label="${esc(label)}">`}
+      <div><b>${esc(label)}</b>${kind==='auto'?' <span class="fr-auto">auto</span>':''}${!done&&!na&&detail?`<div class="small bad-t">${esc(detail)}</div>`:''}${na?`<div class="small dim">N/A: ${esc(r.why||'')}${r.by?' · '+esc(r.by):''}</div>`:done&&kind!=='auto'&&r.by?`<div class="small dim">${esc(r.by)} · ${fmtShort(String(r.at||'').slice(0,10))}</div>`:''}${r.note?`<div class="small">📝 ${esc(r.note)}</div>`:''}
+      ${naOpen===id?`<div class="fr-na"><input class="field sm" id="fr-why" placeholder="Why it doesn’t apply"><button class="btn xs primary" data-act="fr-na-ok" data-id="${id}">Mark N/A</button><button class="btn xs" data-act="fr-na-x">Cancel</button></div>`:''}</div></div>
+      ${work?`<div class="fr-r">${na?`<button class="linkbtn" data-act="fr-na-undo" data-id="${id}">Undo N/A</button>`:done&&kind==='auto'?'':`<button class="linkbtn" data-act="fr-na" data-id="${id}">N/A</button>`}<button class="linkbtn" data-act="fr-note" data-id="${id}">${r.note?'Edit note':'Note'}</button></div>`:''}</div>`};
+  const sig=(k,label,can,why)=>{const s=R.sign[k];const changed=s&&s.num&&s.num!==frNumSig(b);
+    return `<div class="fr-sig${s?' on':''}"><div class="small dim">${label}</div>${s?`<div class="fr-ini">${esc(initials(s.name||''))}</div><div class="small"><b>${esc(s.name||'')}</b> · ${fmtShort(String(s.at||'').slice(0,10))}</div>${changed?'<div class="small warn-t">Numbers changed since signing</div>':''}${s.uid===myId()?`<button class="linkbtn" data-act="fr-unsign" data-v="${k}">Take back</button>`:''}`
+      :can?`<button class="btn sm primary" data-act="fr-sign" data-v="${k}">Sign off</button>`:`<div class="small dim">${why}</div>`}</div>`};
+  const auto=frAuto(b),man=frManual(b);const open=frOpen(b);const needs=frNeeds(b);
+  const last=R.back[R.back.length-1];
+  return `<fieldset class="fr"><legend>Final review</legend>
+    <div class="fr-top"><div class="fr-prog"><div class="fr-bar"><i style="width:${S2.total?Math.round(S2.done/S2.total*100):0}%"></i></div><span class="small"><b>${S2.done} of ${S2.total}</b> checked${needs.length?` · needs sign-off from ${needs.join(' and ')}`:' · signed off'}</span></div>
+      ${frIsMgr()&&e==='rr'&&work?`<button class="btn sm warn" data-act="fr-back">↩ Send back</button>`:''}${isAdmin()?'<button class="btn sm ghost" data-act="fr-set" title="Checklist items and rules">⚙</button>':''}</div>
+    ${last&&e!=='sent'&&!R.sign.lead&&!R.sign.mgr?`<div class="notice fr-backnote"><b>Sent back by ${esc(last.by)}</b> · ${fmtShort(String(last.at).slice(0,10))}${last.note?`<div>${esc(last.note)}</div>`:''}${(last.open||[]).length?`<div class="small">Open then: ${esc(last.open.join(' · '))}</div>`:''}</div>`:''}
+    ${M.frBack?`<div class="fr-backbox"><b>Send it back to In progress</b><textarea class="field" rows="2" id="fr-backnote" placeholder="What needs another look?"></textarea><div class="small dim">${open.length?`Open items go with it: ${esc(open.join(' · '))}`:'Everything on the list is checked.'}</div><div class="adders"><button class="btn warn" data-act="fr-back-go">Send back</button><button class="btn ghost" data-act="fr-back-x">Cancel</button></div></div>`:''}
+    ${M.frNote?`<div class="fr-backbox"><b>Note</b><textarea class="field" rows="2" id="fr-notetxt">${esc((R.items[M.frNote]||{}).note||'')}</textarea><div class="adders"><button class="btn primary sm" data-act="fr-note-ok">Save note</button><button class="btn ghost sm" data-act="fr-note-x">Cancel</button></div></div>`:''}
+    <div class="fr-h">Checked by the app</div>${auto.map(([id,l,ok,d])=>row(id,l,'auto',ok,d)).join('')}
+    <div class="fr-h">Before it goes out${b.bid_type==='Budget / pricing'?' <span class="dim small">(budget list)</span>':''}</div>${man.map(([id,l])=>row(id,l,'man')).join('')}
+    <div class="fr-sigs">${sig('lead','Lead estimator',work&&(frIsLead(b)||isAdmin()),b.lead_estimator_id?'Waiting on '+esc(estName(b.lead_estimator_id)||'the lead'):'No lead on this bid. An admin can sign for them.')}${sig('mgr','Precon manager',frIsMgr(),'Waiting on a precon manager')}</div>
+    <p class="hint">${st.mode==='stop'?'The proposal can’t be marked sent until this is finished and signed.':'Marking the proposal sent warns you if anything here is still open.'} ${st.who==='both'?'Both the lead and a precon manager sign.':st.who==='lead'?'The lead estimator signs.':st.who==='mgr'?'A precon manager signs.':'Either the lead or a precon manager signs.'}</p></fieldset>`}
+// shown inside "Mark proposal sent"
+function frGate(b){const open=frOpen(b),needs=frNeeds(b);return {ok:!open.length&&!needs.length,open,needs,stop:frSet().mode==='stop'}}
+function frGateHtml(b){const g=frGate(b);if(g.ok)return '<div class="small good-t">✓ Final review finished and signed.</div>';
+  return `<div class="notice ${g.stop?'bad':''} fr-gate"><b>${g.stop?'Finish the final review first.':'The final review isn’t finished.'}</b>${g.open.length?`<div class="small">Open: ${esc(g.open.slice(0,6).join(' · '))}${g.open.length>6?` +${g.open.length-6} more`:''}</div>`:''}${g.needs.length?`<div class="small">Needs sign-off from ${esc(g.needs.join(' and '))}.</div>`:''}${g.stop?'':'<div class="small dim">You can still send it.</div>'}</div>`}
+// write the review straight away (sign-offs are checked by the database)
+async function frPush(b,undo){if(b._new||b._sample)return true;try{const {error}=await sb.from('bids').update({review:b.review}).eq('id',b.id);if(error)throw error;const o=byId(S.bids,b.id);if(o)o.review=clone(b.review);return true}
+  catch(e){if(undo)undo();renderModal();toast(/review/i.test(errMsg(e))&&/column/i.test(errMsg(e))?'The review checklist needs update-42 in Supabase.':errMsg(e));return false}}
+function frTouch(b,id,patch){const R=frOf(b);R.items[id]={...(R.items[id]||{}),...patch,by:myName(),at:new Date().toISOString()};if(patch.ok===false&&!patch.na)delete R.items[id].ok}
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.frck&&M&&M.kind==='bid'&&canWork(M.draft)){frTouch(M.draft,t.dataset.frck,{ok:t.checked});renderModal()}});
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='bid'||t.tagName==='SELECT')return;const a=t.dataset.act;if(!a.startsWith('fr-'))return;const b=M.draft;const R=frOf(b);
+  if(a==='fr-set'){if(isAdmin()){const st=frSet();M.frSet={mode:st.mode,who:st.who,items:st.items.join('\n'),budget:st.budget.join('\n')};renderModal()}return}
+  if(a==='fr-na'){M.frNa=t.dataset.id;M.frNote=null;renderModal();setTimeout(()=>$('#fr-why')?.focus(),0);return}
+  if(a==='fr-na-x'){M.frNa=null;renderModal();return}
+  if(a==='fr-na-ok'){const why=($('#fr-why')?.value||'').trim();if(!why){toast('Say why it doesn’t apply.');$('#fr-why')?.focus();return}frTouch(b,t.dataset.id,{na:true,why});M.frNa=null;renderModal();return}
+  if(a==='fr-na-undo'){const r=R.items[t.dataset.id]||{};delete r.na;delete r.why;renderModal();return}
+  if(a==='fr-note'){M.frNote=t.dataset.id;M.frNa=null;renderModal();setTimeout(()=>$('#fr-notetxt')?.focus(),0);return}
+  if(a==='fr-note-x'){M.frNote=null;renderModal();return}
+  if(a==='fr-note-ok'){const id=M.frNote;R.items[id]={...(R.items[id]||{}),note:($('#fr-notetxt')?.value||'').trim()};M.frNote=null;renderModal();return}
+  if(a==='fr-sign'){const k=t.dataset.v;if(k==='mgr'&&!frIsMgr())return;if(k==='lead'&&!(frIsLead(b)||isAdmin()))return;
+    if(b._new){toast('Create the bid first.');return}
+    const prev=R.sign[k];R.sign[k]={uid:myId(),name:myName(),at:new Date().toISOString(),num:frNumSig(b),open:frOpen(b).length};renderModal();
+    if(await frPush(b,()=>{if(prev)R.sign[k]=prev;else delete R.sign[k]})){const n=frOpen(b).length;toast(`Signed off as ${k==='mgr'?'precon manager':'lead estimator'}${n?` with ${n} item${n===1?'':'s'} still open`:''}.`)}return}
+  if(a==='fr-unsign'){const k=t.dataset.v;const prev=R.sign[k];delete R.sign[k];renderModal();if(await frPush(b,()=>{R.sign[k]=prev}))toast('Sign-off taken back.');return}
+  if(a==='fr-back'){M.frBack=true;renderModal();setTimeout(()=>$('#fr-backnote')?.focus(),0);return}
+  if(a==='fr-back-x'){M.frBack=false;renderModal();return}
+  if(a==='fr-back-go'){if(!frIsMgr())return;const note=($('#fr-backnote')?.value||'').trim();const sv=clone(R);R.back.push({by:myName(),at:new Date().toISOString(),note,open:frOpen(b)});delete R.sign.lead;delete R.sign.mgr;M.frBack=false;
+    if(await frPush(b,()=>{b.review=sv})){epGo('ip');toast(`Sent back to ${estName(b.lead_estimator_id)||'the estimator'}. It’s In progress again.`)}return}
+  if(a==='fr-set-x'){M.frSet=null;renderModal();return}
+  if(a==='fr-set-save'&&isAdmin()){const X=M.frSet;const lines=s=>[...new Set(String(s||'').split('\n').map(x=>x.trim()).filter(Boolean))];
+    const v={mode:X.mode,who:X.who,items:lines(X.items),budget:lines(X.budget)};if(!v.items.length){toast('Add at least one item to the main list.');return}
+    try{await run(sb.from('settings').upsert({key:'review',value:v}));await loadTable('settings');M.frSet=null;renderModal();toast('Review checklist saved.')}catch(err){toast(errMsg(err))}return}});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.frs&&M&&M.frSet)M.frSet[t.dataset.frs]=t.value});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.frs&&M&&M.frSet&&t.type==='radio'){M.frSet[t.dataset.frs]=t.value;renderModal()}});
+function frSetView(){const X=M.frSet;const rad=(k,v,l,d)=>`<label><input type="radio" name="frs-${k}" data-frs="${k}" value="${v}"${X[k]===v?' checked':''}> <b>${l}</b>${d?` <span class="dim">${d}</span>`:''}</label>`;
+  return mhead('Final review settings','For every bid. Changing the list doesn’t clear what’s already checked on a bid.')+`<div class="mbody">
+   <fieldset><legend>When the proposal is marked sent with the review unfinished</legend><div class="radio" style="flex-direction:column;align-items:flex-start;gap:8px">${rad('mode','warn','Warn, and let them send it','(default)')}${rad('mode','stop','Hard stop','it can’t be marked sent until the review is done')}</div></fieldset>
+   <fieldset><legend>Who has to sign</legend><div class="radio" style="flex-direction:column;align-items:flex-start;gap:8px">${rad('who','both','Both the lead estimator and a precon manager','(default)')}${rad('who','lead','Lead estimator only')}${rad('who','mgr','Precon manager only')}${rad('who','either','Either one')}</div></fieldset>
+   <fieldset><legend>Checklist</legend><div class="fg"><label class="f s2">Every bid, one item per line<textarea class="field" rows="11" data-frs="items">${esc(X.items)}</textarea></label>
+     <label class="f s2">Budget / pricing bids, one per line<textarea class="field" rows="11" data-frs="budget">${esc(X.budget)}</textarea></label></div>
+     <p class="hint">The app’s own checks (scopes signed off, addenda, quotes back, sub scopes priced, GC numbers, bid date and time, plan date) are always on the list. Any of them can be marked N/A on a bid with a reason.</p></fieldset></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="fr-set-x">Back to the bid</button><button class="btn primary" data-act="fr-set-save">Save</button></div></div>`}
