@@ -15,7 +15,7 @@ const BID_ABOUT={'Project Created':'Invitation is in; nothing started yet','RFQ 
 const BID_CLS={'Project Created':'','RFQ Sent':'st2','Takeoff':'st3','Quotes Received':'st4','Estimating':'warn','Proposal Review':'hot','Submitted':'info','On Hold':'','Awarded':'good','Not Awarded':'bad','No Bid':'na'};
 const ST_LABEL={'Estimating':'Estimate & proposal','Proposal Review':'Ready for review'};const stLabel=s=>ST_LABEL[s]||s;
 const stPill=(s,b)=>pill(b?stLabelB(b):stLabel(s),BID_CLS[s]);
-function stLabelB(b){if(b.status!=='Quotes Received')return stLabel(b.status);const qs=(b.quotes||quotesFor(b.id)).filter(qAsked);const out=qs.filter(q=>q.status==='Requested').length;
+function stLabelB(b){if(b.status==='Proposal Review'&&typeof epPhase==='function'){const ph=epPhase(b);if(ph==='ir')return 'In review';if(ph==='ok')return 'Ready to send'}if(b.status!=='Quotes Received')return stLabel(b.status);const qs=(b.quotes||quotesFor(b.id)).filter(qAsked);const out=qs.filter(q=>q.status==='Requested').length;
   return !qs.length?'Quotes':out?`Waiting on quotes ${qs.length-out}/${qs.length}`:'Quotes in'}
 const ACTIVE=['Project Created','RFQ Sent','Takeoff','Quotes Received','Estimating','Proposal Review','Submitted','On Hold'];
 const PRE_SUBMIT=['Project Created','RFQ Sent','Takeoff','Quotes Received','Estimating','Proposal Review'];
@@ -1003,7 +1003,9 @@ function openBid(id){
   d.scope_items=clone(scopeItems(b));d.project_type=normProjectType(d.project_type)||'Commercial';d.client_proposals=d.client_proposals||{};d.client_contacts=d.client_contacts||{};d.awarded_client_id=d.awarded_client_id||'';d.addenda=Array.isArray(d.addenda)?d.addenda:[];d.revisions=Array.isArray(d.revisions)?d.revisions:[];d.due_time=d.due_time?String(d.due_time).slice(0,5):'';
   ['due_date','walk_date','rfi_date','submitted_date','awarded_date'].forEach(k=>d[k]=d[k]||'');
   d.lead_estimator_id=d.lead_estimator_id||'';d.quotes=clone(quotesFor(id));d.quotes.forEach(q=>{['requested_date','due_date','received_date'].forEach(k=>q[k]=q[k]||'')});
+  const claim=d.status==='Proposal Review'&&!d._sample&&frIsMgr()&&canWork(d)&&epMgrFlow()&&epClaim(d);
   M={kind:'bid',draft:d,origQuoteIds:d.quotes.map(q=>q.id)};M.bpSig=bpSig(d);bpHash(id);showModal();
+  if(claim){frPush(d);toast('You’re reviewing this one. It shows as In review.')}
 }
 const getPath=p=>p.split('.').reduce((o,k)=>o?.[k],M.draft);
 function bf(path,type){return `data-bf="${path}"${type?` data-t="${type}"`:''} value="${esc(getPath(path)??'')}"${DIS()}`}
@@ -1075,7 +1077,7 @@ function bpProgress(b,key){const Q=b.quotes||[];
   if(key==='rfq'){if(!b.scope_items.length)return 'No scopes';const bq=Q.filter(q=>q.status===BUD).length;const out=Q.filter(qAsked).length;return Q.length?(bq===Q.length?`${bq} budget`:`${out}/${Q.length-bq} requested`):`${b.scope_items.length} scopes`}
   if(key==='takeoff'){const s=b.scope_items.filter(x=>x.status==='Complete'||x.status==='N/A').length;return b.scope_items.length?`${s}/${b.scope_items.length} signed`:'—'}
   if(key==='quotes'){const asked=Q.filter(qAsked);const back=asked.filter(q=>q.status!=='Requested').length;return asked.length?`${back}/${asked.length} back`:'—'}
-  if(key==='estprop'){const e=epState(b);return ({ns:'Not started',ip:'In progress',rr:'Ready for review',sent:'Sent'})[e]+(bidValue(b)?' · '+moneyK(bidValue(b)):'')}
+  if(key==='estprop'){return EP_LABEL[epPhase(b)]+(bidValue(b)?' · '+moneyK(bidValue(b)):'')}
   if(key==='proposal'){const n=b.client_ids.length;const s=b.client_ids.filter(id=>['Sent','Lost','Awarded'].includes(propOf(b,id).status)).length;return n?`${s}/${n} sent`:'—'}
   if(key==='outcome'){return DECIDED.includes(b.status)?b.status:isSent(b)?'Waiting':'—'}
   return ''}
@@ -1186,18 +1188,51 @@ function bpQuotes(b,work,admin){
     <div class="qgs">${quoteGroupsHtml(b,work,admin,'quotes')}</div></fieldset>`}
 // where the estimate & proposal stands: not started → in progress → ready for review → sent
 function epState(b){return isSent(b)||DECIDED.includes(b.status)?'sent':b.status==='Proposal Review'?'rr':b.status==='Estimating'?'ip':'ns'}
-function epBar(b,work){const e=epState(b);const steps=[['ns','Not started'],['ip','In progress'],['rr','Ready for review'],['sent','Sent']];const ix=steps.findIndex(x=>x[0]===e);
-  return `<div class="ep-bar"><div class="ep-steps">${steps.map(([k,l],i)=>`<button class="ep-step${i<ix?' past':''}${k===e?' on':''}" data-act="ep-set" data-v="${k}"${work?'':' disabled'}><i>${i<ix?'✓':i+1}</i>${l}</button>`).join('')}</div>
-    <div class="small dim">${e==='ns'?'Click <b>In progress</b> when you start the estimate.':e==='ip'?'When the number and proposal are done, mark it <b>Ready for review</b>. Managers see it on their dashboard.':e==='rr'?'Waiting on review. Once it’s checked, click <b>Sent</b> when the proposal goes out.':'Sent. Follow-up and the outcome are on the next tab.'}</div>
+// manager review inside "Ready for review": waiting → In review (a manager opened it) → Ready to send (approved).
+// Kept on the bid's review (review.claim / review.ok); the stored status stays Proposal Review.
+const epMgrFlow=()=>frSet().who!=='lead';
+function epPhase(b){const e=epState(b);if(e!=='rr'||!epMgrFlow())return e;const R=(b.review&&typeof b.review==='object')?b.review:{};return R.ok?'ok':R.claim?'ir':'rr'}
+const EP_LABEL={ns:'Not started',ip:'In progress',rr:'Ready for review',ir:'In review',ok:'Ready to send',sent:'Sent'};
+function epBar(b,work){const ph=epPhase(b);const steps=[['ns','Not started'],['ip','In progress'],['rr','Ready for review'],...(epMgrFlow()?[['ir','In review'],['ok','Ready to send']]:[]),['sent','Sent']];const ix=steps.findIndex(x=>x[0]===ph);
+  const R=frOf(b);const mgr=frIsMgr()&&work;const when=x=>x&&x.at?fmtShort(String(x.at).slice(0,10))+' '+fuTime(new Date(x.at).toTimeString().slice(0,5)):'';
+  const hint=ph==='ns'?'Click <b>In progress</b> when you start the estimate.':ph==='ip'?(epLeadFirst()?'When the number and proposal are done, work through the <b>Final review</b> below and sign off as lead. That sends it to <b>Ready for review</b> for a manager.':'When the number and proposal are done, mark it <b>Ready for review</b>. Managers see it on their dashboard.')
+    :ph==='rr'?(epMgrFlow()?(mgr?'Waiting on a manager. Opening it as a manager marks it <b>In review</b>.':'Waiting for a precon manager to pick it up.'):'Waiting on review. Once it’s checked, click <b>Sent</b> when the proposal goes out.')
+    :ph==='ir'?`<b>In review</b> by ${esc(R.claim.name||'a manager')} since ${when(R.claim)}.${mgr?' Approve it as ready to send, or send it back.':''}`
+    :ph==='ok'?`<b>Approved</b> by ${esc(R.ok.name||'a manager')} ${when(R.ok)}. Click <b>Sent</b> when the proposal goes out.`:'Sent. Follow-up and the outcome are on the next tab.';
+  const mgrOnly=k=>k==='ir'||k==='ok';
+  return `<div class="ep-bar"><div class="ep-steps">${steps.map(([k,l],i)=>`<button class="ep-step${i<ix?' past':''}${k===ph?' on':''}" data-act="ep-set" data-v="${k}"${work&&(!mgrOnly(k)||frIsMgr())?'':' disabled'}${mgrOnly(k)&&!frIsMgr()?' title="A precon manager sets this"':''}><i>${i<ix?'✓':i+1}</i>${l}</button>`).join('')}</div>
+    <div class="small dim">${hint}</div>
+    ${mgr&&(ph==='ir'||ph==='rr')&&epMgrFlow()?`<div class="adders ep-mgr"><button class="btn primary sm" data-act="ep-set" data-v="ok">✓ Approve, ready to send</button><button class="btn warn sm" data-act="fr-back">↩ Send back</button></div>`:''}
+    ${M.epApArm?`<div class="notice" style="margin-top:8px"><b>The final review still has open items:</b> ${esc(frOpen(b).slice(0,5).join(' · '))}${frOpen(b).length>5?' …':''} <button class="btn sm warn" data-act="ep-set" data-v="ok" data-ok="1">Approve anyway</button> <button class="btn sm ghost" data-act="ep-unarm">Cancel</button></div>`:''}
     ${M.epArm?`<div class="notice" style="margin-top:8px">This proposal is marked sent${b.client_ids.some(id=>propOf(b,id).status==='Sent')?' to '+b.client_ids.filter(id=>propOf(b,id).status==='Sent').map(clientName).join(', '):''}. Moving it back clears those sent marks. <button class="btn sm warn" data-act="ep-set" data-v="${M.epArm}" data-ok="1">Yes, move it back</button> <button class="btn sm ghost" data-act="ep-unarm">Keep it sent</button></div>`:''}
     ${M.epSend?epSendHtml(b):''}</div>`}
+// the lead signs the final review before it goes to the manager (when the lead's signature is required)
+const epLeadFirst=()=>['both','lead'].includes(frSet().who);
+function epRrReady(b){const R=frOf(b);
+  if(frSet().mode==='stop'&&frOpen(b).length){toast('Finish the final review checklist first.');epToSig();return false}
+  if(epLeadFirst()&&!R.sign.lead){toast(b.lead_estimator_id?'The lead estimator signs off on the final review first. Signing sends it to Ready for review.':'Add a lead estimator, and have them sign off on the final review first.');epToSig();return false}return true}
+function epToSig(){setTimeout(()=>{const el=document.querySelector('.fr-sigs');if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('fr-flash');setTimeout(()=>el.classList.remove('fr-flash'),1600)}},50)}
+// a manager picks it up / approves it
+function epClaim(b){const R=frOf(b);if(R.claim||R.ok)return false;R.claim={uid:myId(),name:myName(),at:new Date().toISOString()};return true}
+async function epApprove(force){const b=M.draft;if(!frIsMgr()||!canWork(b))return;const open=frOpen(b);const st=frSet();
+  if(open.length&&st.mode==='stop'){toast('Finish the final review checklist before approving.');return}
+  if(open.length&&!force){M.epApArm=true;renderModal();return}M.epApArm=null;
+  const R=frOf(b);const sv=clone(R);if(b.status!=='Proposal Review'){b.status='Proposal Review';b.proposal_status='Complete'}
+  if(!R.claim)R.claim={uid:myId(),name:myName(),at:new Date().toISOString()};R.ok={uid:myId(),name:myName(),at:new Date().toISOString()};
+  if(!R.sign.mgr)R.sign.mgr={uid:myId(),name:myName(),at:new Date().toISOString(),num:frNumSig(b),open:open.length};
+  renderModal();if(await frPush(b,()=>{b.review=sv}))toast('Approved and signed. It’s ready to send.')}
 function epSendHtml(b){const X=M.epSend;const G=frGate(b);return `<div class="ep-send">${frGateHtml(b)}<b>Who did the proposal go to?</b>
   ${b.client_ids.length?`<div class="ep-gcs">${b.client_ids.map(id=>`<label class="check"><input type="checkbox" data-epgc="${id}"${X.sel.has(id)?' checked':''}> ${esc(clientName(id))} <span class="dim small">${clientAmount(b,id)?money(clientAmount(b,id)):'no number'}</span>${propOf(b,id).status==='Sent'?' '+pill('already sent','info'):''}</label>`).join('')}</div>`:'<p class="small dim" style="margin:6px 0">No GCs on this bid yet. It will just be marked sent.</p>'}
   <div class="adders"><label class="f" style="flex-direction:row;align-items:center;gap:8px">Sent on <input type="date" class="field" data-epdate value="${esc(X.date)}" style="width:auto"></label><button class="btn primary" data-act="ep-send-go"${(b.client_ids.length&&!X.sel.size)||(G.stop&&!G.ok)?' disabled':''}>✓ ${G.ok||G.stop?'Mark proposal sent':'Send it anyway'}</button><button class="btn ghost" data-act="ep-send-x">Cancel</button></div>
   <p class="hint" style="margin:0">This marks the bid Proposal sent and starts the GC follow-up clock.</p></div>`}
 function epOpenSend(){const b=M.draft;M.epSend={sel:new Set(b.client_ids.filter(id=>propOf(b,id).status!=='Lost')),date:todayStr()};renderModal()}
-function epGo(k,ok){const b=M.draft;const e=epState(b);if(k===e&&k!=='sent')return;
+function epGo(k,ok){const b=M.draft;const e=epState(b);const ph=epPhase(b);if(k===ph&&k!=='sent')return;
   if(k==='sent'){epOpenSend();return}
+  if(k==='ok'){epApprove(!!ok);return}
+  if(k==='rr'&&ph!=='ir'&&ph!=='ok'&&!epRrReady(b))return;
+  if(k==='ir'){if(!frIsMgr())return;const R=frOf(b);delete R.ok;if(!R.claim)epClaim(b);if(b.status!=='Proposal Review'){b.status='Proposal Review';b.proposal_status='Complete'}M.epApArm=null;renderModal();frPush(b);toast('Marked In review.');return}
+  // anything else takes it out of a manager's hands
+  {const R=frOf(b);if(R.claim||R.ok){delete R.claim;delete R.ok;M.epApArm=null;setTimeout(()=>frPush(b),0)}}
   if(e==='sent'&&!ok){M.epArm=k;renderModal();return}M.epArm=null;
   if(e==='sent'){b.client_ids.forEach(id=>{const p=propOf(b,id);if(p.status==='Sent'){b.client_proposals={...(b.client_proposals||{}),[id]:{...p,status:'Not sent'}}}})}
   if(k==='ns'){b.status=['Estimating','Proposal Review','Submitted'].includes(b.status)?'Quotes Received':b.status;b.proposal_status='Not Started'}
@@ -11583,7 +11618,7 @@ document.addEventListener('keydown',e=>{const t=e.target;if(t.id==='pos-new'&&e.
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.uapos!=null&&M&&M.kind==='useradd'){M.title=t.value;const pos=posByName(t.value);if(pos&&pos.role)M.role=pos.role;renderModal()}});
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='bid'||t.tagName==='SELECT')return;const a=t.dataset.act;
   if(a==='ep-set'){if(!canWork(M.draft))return;epGo(t.dataset.v,!!t.dataset.ok);return}
-  if(a==='ep-unarm'){M.epArm=null;renderModal();return}
+  if(a==='ep-unarm'){M.epArm=null;M.epApArm=null;renderModal();return}
   if(a==='ep-send-x'){M.epSend=null;renderModal();return}
   if(a==='ep-send-go'){epSendGo();return}});
 document.addEventListener('change',e=>{const t=e.target;if(!M||!M.epSend)return;if(t.dataset.epgc){t.checked?M.epSend.sel.add(t.dataset.epgc):M.epSend.sel.delete(t.dataset.epgc);renderModal()}else if(t.dataset.epdate!=null)M.epSend.date=t.value});
@@ -11592,7 +11627,7 @@ function reviewPanel(){if(!can('bids'))return '';const mgr=isAdmin()||canAssign(
   const L=S.bids.filter(b=>!b.archived_at&&b.status==='Proposal Review'&&(mgr||(me&&(b.lead_estimator_id===me.id||(b.support_estimator_ids||[]).includes(me.id))))).sort((a,c)=>String(a.due_date||'9').localeCompare(String(c.due_date||'9')));
   if(!L.length)return '';
   return `<div class="panel pad rv-panel"><div class="rv-h"><b>📋 ${L.length} bid${L.length===1?'':'s'} ready for review</b><span class="small dim">${mgr?'Estimate and proposal are done. Check the number, then mark it sent.':'Waiting on a manager to check it.'}</span></div>
-    <div class="list">${L.map(b=>{const n=daysUntil(b.due_date);return `<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button><div class="dim small">${esc((b.client_ids||[]).map(clientName).join(', ')||'No GC')} · lead ${esc(estName(b.lead_estimator_id)||'—')}${bidValue(b)?' · '+money(bidValue(b)):''}</div>${(()=>{const s=frStats(b),R=frOf(b);return `<div class="small">Review ${s.done}/${s.total} · lead ${R.sign.lead?'✓':'—'} · manager ${R.sign.mgr?'✓':'—'}</div>`})()}</div><span class="small ${n!=null&&n<=1?'bad-t':''}">${b.due_date?`due ${fmtShort(b.due_date)}${n!=null?` (${n<0?'past due':n===0?'today':n+' day'+(n===1?'':'s')})`:''}`:'no due date'}</span></div>`}).join('')}</div></div>`}
+    <div class="list">${L.map(b=>{const n=daysUntil(b.due_date);return `<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button><div class="dim small">${esc((b.client_ids||[]).map(clientName).join(', ')||'No GC')} · lead ${esc(estName(b.lead_estimator_id)||'—')}${bidValue(b)?' · '+money(bidValue(b)):''}</div>${(()=>{const s=frStats(b),R=frOf(b);const ph=epPhase(b);return `<div class="small">${ph==='ir'?`<b>In review</b> · ${esc((R.claim||{}).name||'')} · `:ph==='ok'?'<b class="good-t">Ready to send</b> · ':''}Review ${s.done}/${s.total} · lead ${R.sign.lead?'✓':'—'} · manager ${R.sign.mgr?'✓':'—'}</div>`})()}</div><span class="small ${n!=null&&n<=1?'bad-t':''}">${b.due_date?`due ${fmtShort(b.due_date)}${n!=null?` (${n<0?'past due':n===0?'today':n+' day'+(n===1?'':'s')})`:''}`:'no due date'}</span></div>`}).join('')}</div></div>`}
 
 /* ----- phone and email cleanup -----
    Phones format themselves as (770) 627-7776 when you leave the box (extensions kept). Emails are checked for
@@ -12062,7 +12097,7 @@ function frHtml(b,work){const e=epState(b);if(e==='ns'&&!Object.keys(frOf(b).ite
   const last=R.back[R.back.length-1];
   return `<fieldset class="fr"><legend>Final review</legend>
     <div class="fr-top"><div class="fr-prog"><div class="fr-bar"><i style="width:${S2.total?Math.round(S2.done/S2.total*100):0}%"></i></div><span class="small"><b>${S2.done} of ${S2.total}</b> checked${needs.length?` · needs sign-off from ${needs.join(' and ')}`:' · signed off'}</span></div>
-      ${frIsMgr()&&e==='rr'&&work?`<button class="btn sm warn" data-act="fr-back">↩ Send back</button>`:''}${isAdmin()?'<button class="btn sm ghost" data-act="fr-set" title="Checklist items and rules">⚙</button>':''}</div>
+      ${frIsMgr()&&e==='rr'&&work&&!epMgrFlow()?`<button class="btn sm warn" data-act="fr-back">↩ Send back</button>`:''}${isAdmin()?'<button class="btn sm ghost" data-act="fr-set" title="Checklist items and rules">⚙</button>':''}</div>
     ${last&&e!=='sent'&&!R.sign.lead&&!R.sign.mgr?`<div class="notice fr-backnote"><b>Sent back by ${esc(last.by)}</b> · ${fmtShort(String(last.at).slice(0,10))}${last.note?`<div>${esc(last.note)}</div>`:''}${(last.open||[]).length?`<div class="small">Open then: ${esc(last.open.join(' · '))}</div>`:''}</div>`:''}
     ${M.frBack?`<div class="fr-backbox"><b>Send it back to In progress</b><textarea class="field" rows="2" id="fr-backnote" placeholder="What needs another look?"></textarea><div class="small dim">${open.length?`Open items go with it: ${esc(open.join(' · '))}`:'Everything on the list is checked.'}</div><div class="adders"><button class="btn warn" data-act="fr-back-go">Send back</button><button class="btn ghost" data-act="fr-back-x">Cancel</button></div></div>`:''}
     ${M.frNote?`<div class="fr-backbox"><b>Note</b><textarea class="field" rows="2" id="fr-notetxt">${esc((R.items[M.frNote]||{}).note||'')}</textarea><div class="adders"><button class="btn primary sm" data-act="fr-note-ok">Save note</button><button class="btn ghost sm" data-act="fr-note-x">Cancel</button></div></div>`:''}
@@ -12089,9 +12124,12 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
   if(a==='fr-note-x'){M.frNote=null;renderModal();return}
   if(a==='fr-note-ok'){const id=M.frNote;R.items[id]={...(R.items[id]||{}),note:($('#fr-notetxt')?.value||'').trim()};M.frNote=null;renderModal();return}
   if(a==='fr-sign'){const k=t.dataset.v;if(k==='mgr'&&!frIsMgr())return;if(k==='lead'&&!(frIsLead(b)||isAdmin()))return;
+    if(frSet().mode==='stop'&&frOpen(b).length){toast('Finish the checklist before signing off.');return}
     if(b._new){toast('Create the bid first.');return}
     const prev=R.sign[k];R.sign[k]={uid:myId(),name:myName(),at:new Date().toISOString(),num:frNumSig(b),open:frOpen(b).length};renderModal();
-    if(await frPush(b,()=>{if(prev)R.sign[k]=prev;else delete R.sign[k]})){const n=frOpen(b).length;toast(`Signed off as ${k==='mgr'?'precon manager':'lead estimator'}${n?` with ${n} item${n===1?'':'s'} still open`:''}.`)}return}
+    if(await frPush(b,()=>{if(prev)R.sign[k]=prev;else delete R.sign[k]})){const n=frOpen(b).length;
+      if(k==='lead'&&epMgrFlow()&&['ns','ip'].includes(epState(b))){epGo('rr');toast(`Signed off${n?` with ${n} item${n===1?'':'s'} still open`:''}. It’s Ready for review for a manager now.`)}
+      else toast(`Signed off as ${k==='mgr'?'precon manager':'lead estimator'}${n?` with ${n} item${n===1?'':'s'} still open`:''}.`)}return}
   if(a==='fr-unsign'){const k=t.dataset.v;const prev=R.sign[k];delete R.sign[k];renderModal();if(await frPush(b,()=>{R.sign[k]=prev}))toast('Sign-off taken back.');return}
   if(a==='fr-back'){M.frBack=true;renderModal();setTimeout(()=>$('#fr-backnote')?.focus(),0);return}
   if(a==='fr-back-x'){M.frBack=false;renderModal();return}

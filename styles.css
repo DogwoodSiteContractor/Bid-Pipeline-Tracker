@@ -2623,3 +2623,4 @@ div.tw-pgh{cursor:default}
 @media (max-width:900px){.bm-wrap{grid-template-columns:1fr}.bm-map{height:60vh}}
 .bm-dark{filter:invert(1) hue-rotate(180deg) brightness(.92) contrast(.9)}
 .fr-sigs.one{grid-template-columns:minmax(0,420px)}
+.fr-flash{animation:frflash 1.6s ease}@keyframes frflash{0%,60%{box-shadow:0 0 0 3px var(--accent)}100%{box-shadow:none}}
