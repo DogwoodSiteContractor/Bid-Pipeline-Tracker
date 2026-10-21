@@ -103,7 +103,11 @@ const sb=CONFIGURED?window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAno
 /* ---------- company branding (colors + logo from config.js) ---------- */
 const BRAND=CFG.brand||{};
 // company details on the pages GCs and vendors see (from the email signature); config can override any of them
-const COMPANY={name:'Dogwood Site Contractors',street:'1100 Circle 75 Parkway SE, Suite 1350',city:'Atlanta, GA 30339',phone:'(770) 627-7776',web:'www.dogwoodsite.com',email:'estimating@dogwoodsite.com',...(CFG.company||{})};
+const COMPANY_DEF={name:'Dogwood Site Contractors',street:'1100 Circle 75 Parkway SE, Suite 1350',city:'Atlanta, GA 30339',phone:'(770) 627-7776',web:'www.dogwoodsite.com',email:'estimating@dogwoodsite.com',...(CFG.company||{})};
+const COMPANY={...COMPANY_DEF};
+// company details from Settings (settings 'company'; public pages read them with public_company(), update-42)
+function coApply(v){Object.assign(COMPANY,COMPANY_DEF);if(v&&typeof v==='object')Object.keys(COMPANY_DEF).forEach(k=>{const x=String(v[k]||'').trim();if(x)COMPANY[k]=x})}
+async function coLoadPublic(){try{const r=await sb.rpc('public_company');if(!r.error&&r.data)coApply(r.data)}catch(e){}}
 // the branded frame around the client tracker and vendor price-list pages
 function extShell(kind,inner,note){const co=COMPANY.name||CFG.companyName||APP_NAME;const lw=BRAND.loginLogoDark||BRAND.logo||'';const mark=BRAND.logo||'';
   const web=COMPANY.web?(/^https?:/.test(COMPANY.web)?COMPANY.web:'https://'+COMPANY.web):'';
@@ -315,7 +319,7 @@ function renderNow(){
   if(S.needPassword||(S.profile&&S.profile.must_change_pw)){top.hidden=true;main.innerHTML=setPasswordScreen();return}
   if(!S.profile){top.hidden=true;main.innerHTML=`<div class="auth">${dozerLoader('Loading')}</div>`;return}
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
-  top.hidden=false;renderTop();
+  top.hidden=false;if(S.settings.company!==coApply.last){coApply.last=S.settings.company;coApply(S.settings.company)}renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
   const views={btpl:vBtpl,workload:vWorkload,positions:vPositions,grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
@@ -742,16 +746,17 @@ function vPipeline(){
   const nf=pvFilterCount();const total=list.reduce((x,b)=>x+bidValue(b),0);
   const ICON={cards:'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1"/><rect x="9" y="9" width="5.5" height="5.5" rx="1"/></svg>',
     list:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3.5h12M2 8h12M2 12.5h12"/></svg>',
-    calendar:'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="12" rx="1.5"/><path d="M1.5 6.5h13M5 1v3M11 1v3"/></svg>'};
+    calendar:'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="12" rx="1.5"/><path d="M1.5 6.5h13M5 1v3M11 1v3"/></svg>',
+    map:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14.5s-4.5-4.2-4.5-7.7a4.5 4.5 0 0 1 9 0c0 3.5-4.5 7.7-4.5 7.7z"/><circle cx="8" cy="6.8" r="1.6"/></svg>'};
   const body=!list.length&&pv.mode!=='calendar'?`<div class="panel"><div class="empty"><b>No bids match</b>${pool.length?(q||nf||S.filter!=='active'?`Try a different search or filter. <button class="linkbtn" data-act="pv-reset">Clear search and filters</button>`:'Nothing active right now.'):est?'Bids assigned to you will appear here.':'Create your first bid to fill the pipeline.'}</div></div>`
-    :pv.mode==='list'?listView(list):pv.mode==='calendar'?calendarView(list):`<div class="cards${S.selMode?' selecting':''}">${list.map(card).join('')}</div>`;
+    :pv.mode==='list'?listView(list):pv.mode==='calendar'?calendarView(list):pv.mode==='map'?bmView(list):`<div class="cards${S.selMode?' selecting':''}">${list.map(card).join('')}</div>`;
   return `<div class="head"><div><h1>${est?'My bids':'Pipeline'}</h1><p>${pool.filter(live).length} bid${pool.filter(live).length===1?'':'s'}${est?' assigned to you':' on file'}</p></div><div class="tools">${mineSeg()}${est||scopeView()?'':'<button class="btn" data-act="export-xlsx">Export Excel</button><button class="btn ghost" data-act="export">CSV</button>'}${isAdmin()?`<button class="btn" data-act="arch-open" title="Archive old or filler bids in one go: all of them, an Excel import, everything due before a date…">🗄 Archive…</button><button class="btn${S.selMode?' primary':''}" data-act="sel-mode">${S.selMode?'Selecting…':'Select'}</button>`:''}${isAdmin()?'<button class="btn" data-act="import">Import from Excel</button><button class="btn primary" data-act="new-bid">+ New bid</button>':''}</div></div>
   <div class="bar">${FILTERS.map(([k,l,fn])=>`<button class="chip ${S.filter===k?'on':''}" data-act="filter" data-v="${k}">${l}<b>${base.filter(b=>live(b)&&fn(b)).length}</b></button>`).join('')}${base.some(b=>b.archived_at)||inArch?`<button class="chip ${inArch?'on':''}" data-act="filter" data-v="archived">🗄 Archived<b>${base.filter(b=>b.archived_at).length}</b></button>`:''}</div>
   <div class="pv-bar">
     <div class="pv-search"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><input id="q-pipe" class="field" placeholder="Search projects, GCs, estimators, scopes, vendors, notes…" value="${esc(S.q.pipe||'')}" data-q="pipe" aria-label="Search bids">${S.q.pipe?'<button class="rm" data-act="pv-clearq" aria-label="Clear search">×</button>':'<kbd>/</kbd>'}</div>
     <button class="btn${pv.open||nf?' on-soft':''}" data-act="pv-filters" aria-expanded="${pv.open}"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12l-4.5 5.5V13l-3 1.5V8.5z"/></svg>Filters${nf?` <span class="count">${nf}</span>`:''}</button>
     ${pv.mode!=='calendar'?`<label class="pv-sort"><span class="dim small">Sort</span><select class="field" data-act="pv-sortsel" aria-label="Sort by">${SORTS.map(([k,l])=>`<option value="${k}"${pv.sort===k?' selected':''}>${l}</option>`).join('')}</select><button class="btn sm ghost" data-act="pv-dir" title="Reverse order" aria-label="Reverse order">${(pv.dir||'asc')==='desc'?'↓':'↑'}</button></label>`:''}
-    <div class="vseg" role="tablist" aria-label="View">${[['cards','Cards'],['list','List'],['calendar','Calendar']].map(([k,l])=>`<button role="tab" aria-selected="${pv.mode===k}" class="${pv.mode===k?'on':''}" data-act="pv-mode" data-v="${k}" title="${l} view">${ICON[k]}<span>${l}</span></button>`).join('')}</div>
+    <div class="vseg" role="tablist" aria-label="View">${[['cards','Cards'],['list','List'],['calendar','Calendar'],['map','Map']].map(([k,l])=>`<button role="tab" aria-selected="${pv.mode===k}" class="${pv.mode===k?'on':''}" data-act="pv-mode" data-v="${k}" title="${l} view">${ICON[k]}<span>${l}</span></button>`).join('')}</div>
   </div>
   ${pv.open?filterPanel(est):''}
   ${nf?`<div class="pv-pills">${activePills()}<button class="linkbtn" data-act="pv-clearf">Clear all filters</button></div>`:''}
@@ -1484,7 +1489,8 @@ function vendorModal(){const v=M.draft,isNew=M.isNew;const s=vendorStats(v.id);
 function boardModal(){const cfg=M.draft;return mhead('Customize board view','Choose what board members see. Saved for everyone.')+`<div class="mbody"><fieldset><legend>Sections</legend><div class="rows">
   ${WIDGETS.map(([k,l])=>`<label class="check"><input type="checkbox" data-wf="${k}" ${cfg[k]?'checked':''}> ${l}</label>`).join('')}</div></fieldset></div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="save">Save view</button></div></div>`}
-function companyModal(){return mhead('Company','Shown at the top of the app for your whole team.')+`<div class="mbody"><fieldset><legend>Details</legend><div class="fg"><label class="f s4">Company name${ef('companyName','Your company name')}</label></div></fieldset></div>
+function companyModal(){return mhead('Company','Shown at the top of the app, and on the client tracker and vendor pages.')+`<div class="mbody"><fieldset><legend>In the app</legend><div class="fg"><label class="f s4">Company name${ef('companyName','Your company name')}</label></div></fieldset>
+  <fieldset><legend>On the client tracker and vendor pages</legend><div class="fg"><label class="f s2">Name${ef('co_name',COMPANY_DEF.name)}</label><label class="f s2">Street address${ef('co_street',COMPANY_DEF.street)}</label><label class="f s2">City, state, ZIP${ef('co_city',COMPANY_DEF.city)}</label><label class="f">Main phone<input type="tel" class="field" data-ef="co_phone" value="${esc(M.draft.co_phone||'')}" placeholder="${esc(COMPANY_DEF.phone)}"></label><label class="f">Website${ef('co_web',COMPANY_DEF.web)}</label><label class="f s2">Email<input type="email" class="field" data-ef="co_email" value="${esc(M.draft.co_email||'')}" placeholder="${esc(COMPANY_DEF.email)}"></label></div><p class="hint">Blank boxes use what’s shown in grey. These show to clients and vendors as soon as you save (needs update-42).</p></fieldset></div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="save">Save</button></div></div>`}
 
 /* ---------- saving ---------- */
@@ -1580,7 +1586,8 @@ async function saveModal(){
       if(!list.length)throw new Error('Add at least one material with a weight.');
       await run(sb.from('settings').upsert({key:'calc_materials',value:{list}}));await loadTable('settings');toast('Material weights saved');if(S.view==='calc')render();
     }
-    else if(M.kind==='company'){await run(sb.from('settings').upsert({key:'general',value:{companyName:(d.companyName||'').trim()}}));await loadTable('settings');toast('Company name saved')}
+    else if(M.kind==='company'){await run(sb.from('settings').upsert({key:'general',value:{...(S.settings.general||{}),companyName:(d.companyName||'').trim()}}));
+      const co={};['name','street','city','phone','web','email'].forEach(k=>{const v=String(d['co_'+k]||'').trim();if(v)co[k]=k==='phone'?fmtPhone(v):v});await run(sb.from('settings').upsert({key:'company',value:co}));await loadTable('settings');coApply(co);toast('Company details saved')}
     closeModal();
   }catch(e){toast(errMsg(e));if(btn){btn.disabled=false;btn.textContent='Try again'}}
 }
@@ -4075,7 +4082,7 @@ document.addEventListener('click',e=>{
     case 'new-vendor':M={kind:'vendor',isNew:true,draft:{id:newId(),company:'',vendor_type:S.q.vtype||'',scopes:S.q.vscope?[S.q.vscope]:[],trade:S.q.trade||TRADES[0],contact_name:'',phone:'',email:'',area:'',preferred:false,notes:''}};showModal();break;
     case 'open-vendor':{const vd=clone(byId(S.vendors,t.dataset.id));vd.scopes=vendorScopes(vd);vd.vendor_type=vd.vendor_type||'';M={kind:'vendor',draft:vd};showModal();break}
     case 'board-custom':M={kind:'board',draft:boardCfg()};showModal();break;
-    case 'company':M={kind:'company',draft:{companyName:S.settings.general?.companyName||''}};showModal();break;
+    case 'company':{const c=S.settings.company||{};M={kind:'company',draft:{companyName:S.settings.general?.companyName||'',...Object.fromEntries(['name','street','city','phone','web','email'].map(k=>['co_'+k,c[k]||'']))}};showModal();break}
     case 'calc-pick':S.calcState.id=t.dataset.id;saveCalc();render();if(window.innerWidth<760)$('.calc-body')?.scrollIntoView({block:'start'});break;
     case 'mh-add-inv':{const raw=mhDefaults(calcRaw(calcDef()));const last=raw.inv[raw.inv.length-1]||{};raw.inv.push({name:'Inlet '+(raw.inv.filter(p=>p.dir!=='out').length+1),dir:'in',elev:last.elev?(+last.elev+0.1).toFixed(2):'',size:last.size||'15',type:last.type||'RCP (wall B)'});saveCalc();refreshCalc(true);const n=document.getElementById('mh-inv-'+(raw.inv.length-1)+'-elev');if(n){n.focus();n.select()}break}
     case 'mh-rm-inv':{const raw=mhDefaults(calcRaw(calcDef()));if(raw.inv.length>1)raw.inv.splice(+t.dataset.i,1);saveCalc();refreshCalc(true);break}
@@ -7896,7 +7903,7 @@ function trackCard(b){const st=trackStage(b);const e=b.estimator;const ad=b.adde
       <div><span>${b.sent?'Proposal sent':'Proposal expected by'}</span><b>${b.sent?(b.sent_date?fmtDate(b.sent_date):'Sent'):b.proposal_eta?fmtDate(b.proposal_eta):'To be confirmed'}</b></div>
       <div><span>Addenda acknowledged</span>${ad.length?`<div class="ct-ad">${ad.map(a=>`<i class="${a.acknowledged?'ok':''}" title="${a.acknowledged?'Acknowledged':'Received, not yet acknowledged'}${a.date?' · issued '+fmtShort(a.date):''}">${a.acknowledged?'✓ ':''}#${esc(a.number)}</i>`).join('')}</div>`:'<b>None so far</b>'}</div>
       <div><span>Your estimator</span>${e&&e.name?`<b>${esc(e.name)}</b>${e.title?`<small>${esc(e.title)}</small>`:''}<small>${e.phone?`<a href="tel:${esc(e.phone)}">${esc(e.phone)}</a>`:''}${e.phone&&e.email?' · ':''}${e.email?`<a href="mailto:${esc(e.email)}">${esc(e.email)}</a>`:''}</small>`:'<b>To be assigned</b>'}</div></div></article>`}
-async function trackPage(tk){const main=$('#main'),top=$('#topwrap');if(top)top.hidden=true;document.title=`${COMPANY.name||CFG.companyName||APP_NAME} · Bid tracker`;const co=CFG.companyName||APP_NAME;const logo=BRAND.loginLogo||'';
+async function trackPage(tk){const main=$('#main'),top=$('#topwrap');if(top)top.hidden=true;await coLoadPublic();document.title=`${COMPANY.name||CFG.companyName||APP_NAME} · Bid tracker`;const co=CFG.companyName||APP_NAME;const logo=BRAND.loginLogo||'';
   void logo;const shell=inner=>extShell('Bid tracker',inner,'This page is private to your company. It updates on its own as our estimating team moves each bid along.');
   const draw=async first=>{let d=null,err=null;try{const r=await sb.rpc('client_tracker',{p_token:tk});if(r.error)err=r.error;else d=r.data}catch(e){err=e}
     if(err){if(first)main.innerHTML=shell(`<div class="ct-msg"><h1>We couldn’t load the tracker</h1><p>Please try again in a few minutes.</p></div>`);return}
@@ -8190,8 +8197,9 @@ const TOURS={
   'dashboard:board':[{t:'The board view is results and trends rather than daily work.'},{s:'.kpis',t:'Headline numbers for the year you’ve picked: bids, wins, win rate and awarded value.'},{s:'[data-act=year]',t:'Change the year here.'},{s:'h:Bid and award volume',t:'What you bid and what you won, month by month.'},{s:'h:Pipeline by stage',t:'How many bids, and how many dollars, sit in each stage right now.'},{s:'h:Top clients',t:'Which GCs send you the most work and which ones actually award it.'},{s:'h:Estimator performance',t:'Bids, wins and win rate per estimator.'},{s:'h:Why we lose',t:'The reasons entered when a bid is marked Not Awarded. Worth reading before you price the next one.'},{s:'[data-act=board-custom]',t:'Customize view lets you hide the panels you don’t use.'}],
   'modal:fulist':[{t:'Every submitted bid that’s waiting on a GC, most overdue first.'},{s:'#ful-q',t:'Search by project, GC or estimator.'},{s:'[data-act=fu-f]',t:'Due now, coming up this week, or everything.'},{s:'[data-act=fu-offold]',t:'If old bids are cluttering the list, this pauses everything that went out more than a month ago in one go.'},{s:'[data-act=fu-open]',t:'Follow up opens that bid’s follow-up window with an email ready to send.'}],
   /* ---- bids ---- */
-  pipeline:[{t:'The pipeline is every bid, in the order the work happens: created, RFQ sent, takeoff, quotes received, estimating, proposal review, submitted.'},{s:'[data-act=filter]',t:'These chips filter by stage. The number is how many bids are sitting there.'},{s:'.pv-search',t:'Search by project, GC, estimator, scope or vendor.'},{s:'[data-act=pv-filters]',t:'More filters: estimator, GC, due date, value, project type, and flags like open addenda.'},{s:'[data-act=pv-mode]',t:'Three ways to look at it: cards, a sortable list, or a calendar of due dates.'},{s:'[data-act=new-bid]',t:'New invitation in? Start it here.'},{s:'[data-act=import]',t:'Or bring in a whole spreadsheet of bids at once.'},{s:'.prog',t:'Each card’s bar shows how far along that bid is, and names the stage it’s in.'},{s:'.card',t:'Click a card to open the bid.'}],
+  pipeline:[{t:'The pipeline is every bid, in the order the work happens: created, RFQ sent, takeoff, quotes received, estimating, proposal review, submitted.'},{s:'[data-act=filter]',t:'These chips filter by stage. The number is how many bids are sitting there.'},{s:'.pv-search',t:'Search by project, GC, estimator, scope or vendor.'},{s:'[data-act=pv-filters]',t:'More filters: estimator, GC, due date, value, project type, and flags like open addenda.'},{s:'[data-act=pv-mode]',t:'Four ways to look at it: cards, a sortable list, a calendar of due dates, or a map.'},{s:'[data-act=new-bid]',t:'New invitation in? Start it here.'},{s:'[data-act=import]',t:'Or bring in a whole spreadsheet of bids at once.'},{s:'.prog',t:'Each card’s bar shows how far along that bid is, and names the stage it’s in.'},{s:'.card',t:'Click a card to open the bid.'}],
   'pipeline:list':[{t:'Same bids, as a table.'},{s:'th',t:'Click a column heading to sort by it. Click again to flip the order.'},{s:'[data-act=sel-mode]',t:'Select lets you tick several bids and archive or delete them together.'},{s:'[data-act=export-xlsx]',t:'Export sends what you’re looking at to Excel.'},{s:'[data-act=pv-mode]',t:'Switch back to cards or over to the calendar here.'}],
+  'pipeline:map':[{t:'Every bid you’re showing, on a map. Pins are colored by step and sized by the number.'},{s:'#bm-map',t:'Click a pin for the GC, due date, number and drive time from the yard, or to open the bid.'},{s:'.bm-legend',t:'What the colors mean. Use the stage chips at the top to show won and lost jobs too.'},{s:'[data-act=pv-mode]',t:'Switch back to cards, the list or the calendar here.'}],
   'pipeline:calendar':[{t:'Bid due dates, site walks, RFI deadlines and quote need-by dates on a calendar.'},{s:'[data-act=pv-mode]',t:'Switch back to cards or the list here.'}],
   'modal:bid':[{s:'.bp-tabs',t:'Each tab is a step in the pipeline. “now” marks where the bid stands. Open any tab at any time; looking never moves the bid.'},{s:'[data-act=bp-advance]',t:'When a step is done this lights up. Click it to move the bid to the next step. If something’s still open it tells you, and you can advance anyway.'},{s:'#bp-save',t:'Everything saves on its own a second after you stop typing.'},{s:'.trk-row',t:'Each GC gets one private tracker link so they can see where their bids stand without calling you.'},{s:'.req-ban',t:'This bid isn’t yours, so it’s read-only. Ask to work on it and the lead estimator or a manager can add you.'},{s:'legend:Project',t:'The basics: name, location, type, the bid due date and when the GC should expect your proposal.'},{s:'legend:Estimating team',t:'One lead, plus anyone helping. “Entire team” adds every estimator at once.'},{s:'legend:Scopes, vendors & RFQs',t:'Pick the scopes, then the vendors and subs for each. The same vendor across several scopes is one quote. Mark them Requested as the RFQs go out.'},{s:'legend:Scope takeoff',t:'List the scopes and sign each one off when its takeoff is done.'},{s:'legend:Estimator log',t:'Notes between estimators on this bid: questions, assumptions, things to check.'},{s:'legend:Addendum log',t:'Log each addendum, then tick it once it’s acknowledged and priced. The GC sees which ones you’ve acknowledged.'},{s:'legend:Estimate',t:'Open the estimate from here. Its total can be pushed up to the proposal.'},{s:'legend:Proposal',t:'The number you’re going with, your margin and how likely you think the win is.'},{s:'legend:Bidding to',t:'Each GC you’re sending it to, with their own amount and sent date if it differs.'},{s:'legend:Proposal revision log',t:'Every time the number changes after it’s out, record it here so there’s a trail.'},{s:'legend:Project files',t:'Plans, specs, addenda, takeoffs. Anything the next person will need.'},{s:'legend:GC follow-up log',t:'Calls and emails with the GC after the proposal goes out.'},{s:'legend:Outcome',t:'Won or lost, the awarded amount, and why if you lost.'},{s:'[data-act=sup-start]',t:'Supersede is for when the same project comes back under new plans or a new name.'},{s:'[data-act=save]',t:'Nothing is kept until you save.'}],
   'modal:track':[{t:'This is the GC’s private tracker link. It shows them the stage of every bid they’ve sent you. No prices, no other GCs.'},{s:'#trk-url',t:'Copy the link, or preview exactly what they’ll see.'},{s:'#trk-body',t:'An email is written for you. Change anything you like.'},{s:'[data-act=trk-mail]',t:'Open it in your own email and send it. Each GC only needs the link once.'},{s:'[data-act=trk-new]',t:'If a link gets into the wrong hands, an admin can replace it. The old one stops working.'}],
@@ -10883,7 +10891,7 @@ document.addEventListener('paste',async e=>{const t=e.target;if(!t||!t.dataset||
   render();toast(`${n} row${n===1?'':'s'} pasted.`)});
 
 /* ---------- the vendor's own page (?vp=…): no login, only their price list ---------- */
-async function vpPage(tk){const main=$('#main'),top=$('#topwrap');if(top)top.hidden=true;const co0=CFG.companyName||APP_NAME;const logo=BRAND.loginLogo||'';let D=null,rows=[],dirty=false,kind='material',busy=false,imp=null,impBusy='';
+async function vpPage(tk){const main=$('#main'),top=$('#topwrap');if(top)top.hidden=true;await coLoadPublic();const co0=CFG.companyName||APP_NAME;const logo=BRAND.loginLogo||'';let D=null,rows=[],dirty=false,kind='material',busy=false,imp=null,impBusy='';
   const shell=(co,inner)=>{void co;void logo;return extShell('Price list',inner,'This page is private to your company. Only your own price list is shown here.')};
   const load=async()=>{let err=null;try{const r=await sb.rpc('vendor_portal',{p_token:tk});if(r.error)err=r.error;else D=r.data}catch(x){err=x}
     if(err){main.innerHTML=shell(co0,'<div class="ct-msg"><h1>We couldn’t load your price list</h1><p>Please try again in a few minutes.</p></div>');return false}
@@ -12095,3 +12103,91 @@ function frSetView(){const X=M.frSet;const rad=(k,v,l,d)=>`<label><input type="r
      <label class="f s2">Budget / pricing bids, one per line<textarea class="field" rows="11" data-frs="budget">${esc(X.budget)}</textarea></label></div>
      <p class="hint">The app’s own checks (scopes signed off, addenda, quotes back, sub scopes priced, GC numbers, bid date and time, plan date) are always on the list. Any of them can be marked N/A on a bid with a reason.</p></fieldset></div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="fr-set-x">Back to the bid</button><button class="btn primary" data-act="fr-set-save">Save</button></div></div>`}
+
+/* ----- Bid map (Pipeline → Map) -----
+   Every bid the pipeline is showing (same chips, search and filters) as a pin on a real map: colored by step, sized
+   by value. Click a pin for the GC, due date, number and drive time from the yard, and to open the bid.
+   Locations come from the bid's Location box, looked up with OpenStreetMap (Nominatim, one lookup a second) and
+   saved on the bid (bids.geo, update-42) so each one is only looked up once. If a pin lands in the wrong spot,
+   "Move pin" and click the right spot. Drive time comes from the public OSRM router and is saved too.
+   The yard is set by an admin (settings 'map'); until then it's the office address. */
+const BM={map:null,layer:null,q:[],busy:false,moving:null,fail:new Set(),lib:null};
+const BM_COL=['#8E9AA6','#4A7FC1','#2E9BB0','#7A62C9','#D88A1E','#C9572F','#3E8E57'];
+const BM_DECIDED={Awarded:'#2F7D3E','Not Awarded':'#9B9B9B','No Bid':'#B5B5B5'};
+const bmColor=b=>BM_DECIDED[b.status]||BM_COL[Math.max(0,Math.min(6,stageIdx(b.status)))];
+const bmLabel=b=>DECIDED.includes(b.status)?b.status:STAGE_NAMES[Math.max(0,Math.min(6,stageIdx(b.status)))];
+function bmLib(){if(window.L&&window.L.map)return Promise.resolve();if(BM.lib)return BM.lib;
+  BM.lib=new Promise((ok,no)=>{const c=document.createElement('link');c.rel='stylesheet';c.href='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css';document.head.appendChild(c);
+    const s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';s.onload=()=>ok();s.onerror=()=>{BM.lib=null;no(new Error('The map couldn’t load. Check your connection.'))};document.head.appendChild(s)});return BM.lib}
+const bmGeo=b=>{const g=b.geo&&typeof b.geo==='object'?b.geo:null;if(g&&isFinite(g.lat)&&isFinite(g.lng)&&(g.src==='pin'||bmNorm(g.addr)===bmNorm(b.location)))return g;
+  try{const c=JSON.parse(localStorage.getItem('geo:'+bmNorm(b.location))||'null');if(c&&isFinite(c.lat))return {...c,addr:b.location,src:'cache'}}catch(e){}return null};
+const bmNorm=s=>String(s||'').trim().toLowerCase().replace(/\s+/g,' ');
+function bmYard(){const m=S.settings.map||{};if(m.yard&&isFinite(m.yard.lat))return m.yard;
+  try{const c=JSON.parse(localStorage.getItem('geo:yard')||'null');if(c&&isFinite(c.lat))return c}catch(e){}return null}
+const bmYardAddr=()=>{const m=S.settings.map||{};return m.yard&&m.yard.addr?m.yard.addr:[COMPANY.street,COMPANY.city].filter(Boolean).join(', ')};
+async function bmLookup(q){const u='https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=us&viewbox=-88.5,36.5,-79.5,29.5&q='+encodeURIComponent(q);
+  const r=await fetch(u,{headers:{'Accept':'application/json'}});if(!r.ok)throw new Error('lookup '+r.status);const j=await r.json();if(!j||!j[0])return null;return {lat:+j[0].lat,lng:+j[0].lon,label:j[0].display_name}}
+async function bmSaveGeo(b,g){b.geo=g;const o=byId(S.bids,b.id);if(o)o.geo=g;if(g.src!=='pin'&&b.location)try{localStorage.setItem('geo:'+bmNorm(b.location),JSON.stringify({lat:g.lat,lng:g.lng}))}catch(e){}
+  if(!S.geoMissing)try{const {error}=await sb.from('bids').update({geo:g}).eq('id',b.id);if(error&&/geo/i.test(error.message||'')&&/column|schema/i.test(error.message||''))S.geoMissing=true}catch(e){}}
+// look up missing locations one at a time (Nominatim allows one a second)
+async function bmRun(){if(BM.busy)return;BM.busy=true;
+  try{if(!bmYard()){const y=await bmLookup(bmYardAddr()).catch(()=>null);if(y){try{localStorage.setItem('geo:yard',JSON.stringify({...y,addr:bmYardAddr()}))}catch(e){}bmDraw()}await new Promise(r=>setTimeout(r,1100))}
+    while(BM.q.length&&S.view==='pipeline'&&S.pv.mode==='map'){const id=BM.q.shift();const b=byId(S.bids,id);if(!b||bmGeo(b)||!String(b.location||'').trim())continue;
+      let g=null;try{g=await bmLookup(b.location)}catch(e){}
+      if(g)await bmSaveGeo(b,{lat:g.lat,lng:g.lng,addr:b.location,src:'lookup',at:new Date().toISOString()});else BM.fail.add(b.id);
+      bmDraw();bmCount();await new Promise(r=>setTimeout(r,1100))}}
+  finally{BM.busy=false}}
+async function bmDrive(b){const y=bmYard(),g=bmGeo(b);if(!y||!g)return null;const key=y.lat.toFixed(4)+','+y.lng.toFixed(4);if(g.drive&&g.drive.from===key)return g.drive;
+  try{const r=await fetch(`https://router.project-osrm.org/route/v1/driving/${y.lng},${y.lat};${g.lng},${g.lat}?overview=false`);const j=await r.json();const rt=j&&j.routes&&j.routes[0];if(!rt)return null;
+    const d={mi:Math.round(rt.distance/1609.34),min:Math.round(rt.duration/60),from:key};await bmSaveGeo(b,{...g,drive:d});return d}catch(e){return null}}
+const bmDur=m=>m==null?'':m<60?m+' min':Math.floor(m/60)+' hr'+(m%60?' '+(m%60)+' min':'');
+function bmView(list){S.bmList=list.map(b=>b.id);const placed=list.filter(b=>bmGeo(b)).length;const noLoc=list.filter(b=>!String(b.location||'').trim());
+  const stages=STAGE_NAMES.slice(0,6).map((n,i)=>`<span><i style="background:${BM_COL[i]}"></i>${esc(n)}</span>`).join('')+`<span><i style="background:${BM_DECIDED.Awarded}"></i>Awarded</span><span><i style="background:${BM_DECIDED['Not Awarded']}"></i>Lost / no bid</span>`;
+  return `<div class="bm-wrap"><div id="bm-map" class="bm-map" role="region" aria-label="Map of bids"><div class="bm-load">${dozerLoader('Loading the map')}</div></div>
+    <div class="bm-side"><div class="bm-count" id="bm-count">${bmCountHtml(list)}</div>
+      ${BM.moving?`<div class="notice">Click the map where <b>${esc(byId(S.bids,BM.moving)?.name||'the bid')}</b> is. <button class="linkbtn" data-act="bm-move-x">Cancel</button></div>`:''}
+      <div class="bm-legend">${stages}<span><i class="yard">🏗</i>The yard</span></div>
+      <p class="hint">Bigger pin = bigger number. Pins use each bid’s Location. Use the stage chips above to show won and lost jobs too.</p>
+      ${noLoc.length?`<div class="bm-miss"><b>${noLoc.length} with no location</b>${noLoc.slice(0,8).map(b=>`<button class="linkbtn" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button>`).join('')}${noLoc.length>8?`<span class="dim small">+${noLoc.length-8} more</span>`:''}</div>`:''}
+      <div id="bm-fail"></div>
+      ${isAdmin()?`<div class="bm-yard"><b>Yard</b><div class="small dim">${esc(bmYardAddr())}</div><button class="btn sm" data-act="bm-yard">Change yard</button></div>`:''}</div></div>`}
+function bmCountHtml(list){list=list||(S.bmList||[]).map(id=>byId(S.bids,id)).filter(Boolean);const placed=list.filter(b=>bmGeo(b)).length;const todo=list.filter(b=>!bmGeo(b)&&String(b.location||'').trim()&&!BM.fail.has(b.id)).length;
+  return `<b>${placed} of ${list.length}</b> on the map${todo?` · finding ${todo} more…`:''}`}
+function bmCount(){const c=document.getElementById('bm-count');if(c)c.innerHTML=bmCountHtml();const f=document.getElementById('bm-fail');if(!f)return;
+  const L=[...BM.fail].map(id=>byId(S.bids,id)).filter(b=>b&&!bmGeo(b)&&(S.bmList||[]).includes(b.id));
+  f.innerHTML=L.length?`<div class="bm-miss"><b>${L.length} couldn’t be found</b>${L.slice(0,8).map(b=>`<span class="small">${esc(b.name)} <span class="dim">(${esc(b.location)})</span>${canWork(b)?` <button class="linkbtn" data-act="bm-move" data-id="${b.id}">Place it</button>`:''}</span>`).join('')}</div>`:''}
+async function bmMount(){const el=document.getElementById('bm-map');if(!el||el.dataset.on)return;
+  // keep one map alive across re-renders: put the existing one back in place
+  if(BM.el&&BM.map&&BM.el!==el){el.replaceWith(BM.el);BM.map.invalidateSize();bmDraw();bmCount();BM.q=(S.bmList||[]).filter(id=>{const b=byId(S.bids,id);return b&&!bmGeo(b)&&String(b.location||'').trim()&&!BM.fail.has(id)});bmRun();return}
+  el.dataset.on='1';
+  try{await bmLib()}catch(e){el.innerHTML=`<div class="empty">${esc(e.message)}</div>`;return}
+  if(!el.isConnected)return;el.innerHTML='';const L=window.L;
+  const dark=document.documentElement.dataset.theme==='dark'||(document.documentElement.dataset.theme!=='light'&&matchMedia('(prefers-color-scheme: dark)').matches);
+  const m=L.map(el,{zoomControl:true,attributionControl:true,scrollWheelZoom:true});BM.map=m;BM.el=el;setTimeout(()=>m.invalidateSize(),120);
+  L.tileLayer(`https://{s}.basemaps.cartocdn.com/${dark?'dark_all':'rastertiles/voyager'}/{z}/{x}/{y}{r}.png`,{subdomains:'abcd',maxZoom:19,attribution:'© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · © <a href="https://carto.com/attributions">CARTO</a>'}).addTo(m);
+  BM.layer=L.layerGroup().addTo(m);
+  if(S.bmView)m.setView(S.bmView.c,S.bmView.z);else m.setView([33.85,-84.4],8);
+  m.on('moveend',()=>{S.bmView={c:m.getCenter(),z:m.getZoom()}});
+  m.on('click',async ev=>{if(!BM.moving)return;const b=byId(S.bids,BM.moving);BM.moving=null;if(!b)return;await bmSaveGeo(b,{lat:ev.latlng.lat,lng:ev.latlng.lng,addr:b.location||'',src:'pin',at:new Date().toISOString()});BM.fail.delete(b.id);toast(`Pin moved for ${b.name}.`);render()});
+  const first=!S.bmView;bmDraw(first);
+  BM.q=(S.bmList||[]).filter(id=>{const b=byId(S.bids,id);return b&&!bmGeo(b)&&String(b.location||'').trim()&&!BM.fail.has(id)});bmCount();bmRun()}
+function bmDraw(fit){const m=BM.map,L=window.L;if(!m||!BM.layer||!m.getContainer().isConnected)return;BM.layer.clearLayers();const pts=[];
+  const list=(S.bmList||[]).map(id=>byId(S.bids,id)).filter(Boolean);const vals=list.map(bidValue).filter(Boolean);const top=Math.max(1,...vals);
+  list.forEach(b=>{const g=bmGeo(b);if(!g)return;pts.push([g.lat,g.lng]);const v=bidValue(b);const r=7+(v?Math.sqrt(v/top)*13:0);
+    const mk=L.circleMarker([g.lat,g.lng],{radius:r,color:'#fff',weight:2,fillColor:bmColor(b),fillOpacity:.88}).addTo(BM.layer);
+    mk.bindTooltip(esc(b.name),{direction:'top',offset:[0,-r]});mk.bindPopup(()=>bmPop(b),{minWidth:230});mk.on('popupopen',async()=>{const d=await bmDrive(b);const el=document.getElementById('bm-drive-'+b.id);if(el)el.textContent=d?`${bmDur(d.min)} from the yard · ${d.mi} mi`:'Drive time not available'})});
+  const y=bmYard();if(y){L.marker([y.lat,y.lng],{icon:L.divIcon({className:'bm-yardpin',html:'🏗',iconSize:[28,28]}),title:'The yard',zIndexOffset:1000}).bindTooltip('The yard').addTo(BM.layer);if(!pts.length)pts.push([y.lat,y.lng])}
+  if(fit&&pts.length)pts.length===1?m.setView(pts[0],10):m.fitBounds(pts,{padding:[30,30],maxZoom:11})}
+function bmPop(b){const g=bmGeo(b)||{};const v=bidValue(b);const d=g.drive;const due=b.due_date?`Due ${fmtShort(b.due_date)}`:'No due date';
+  return `<div class="bm-pop"><b>${esc(b.name)}</b><div class="small"><span class="bm-dot" style="background:${bmColor(b)}"></span>${esc(bmLabel(b))}</div>
+    <div class="small dim">${esc(b.location||'')}${g.src==='pin'?' · pin placed by hand':g.src==='lookup'||g.src==='cache'?' · approximate':''}</div>
+    <div class="small">${esc((b.client_ids||[]).map(clientName).join(', ')||'No GC')}</div><div class="small">${due}${v?' · '+esc(money(v)):''}${b.lead_estimator_id?' · '+esc(estName(b.lead_estimator_id)||''):''}</div>
+    <div class="small bm-drive" id="bm-drive-${b.id}">${d?`${bmDur(d.min)} from the yard · ${d.mi} mi`:'Working out the drive…'}</div>
+    <div class="bm-pa"><button class="btn sm primary" data-act="open-bid" data-id="${b.id}">Open bid</button>${canWork(b)?`<button class="btn sm" data-act="bm-move" data-id="${b.id}">Move pin</button>`:''}</div></div>`}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('bm-'))return;
+  if(a==='bm-move'){BM.moving=t.dataset.id;if(BM.map)BM.map.closePopup();render();toast('Click the map where the project is.');return}
+  if(a==='bm-move-x'){BM.moving=null;render();return}
+  if(a==='bm-yard'&&isAdmin()){const v=prompt('Yard address (used for drive times):',bmYardAddr());if(!v||!v.trim())return;
+    try{const y=await bmLookup(v.trim());if(!y){toast('Couldn’t find that address. Try adding the city and state.');return}
+      await run(sb.from('settings').upsert({key:'map',value:{...(S.settings.map||{}),yard:{addr:v.trim(),lat:y.lat,lng:y.lng}}}));await loadTable('settings');try{localStorage.removeItem('geo:yard')}catch(e){}render();toast('Yard saved. Drive times update as you open pins.')}catch(err){toast(errMsg(err))}}});
+new MutationObserver(()=>{if(document.getElementById('bm-map'))bmMount()}).observe(document.getElementById('main')||document.body,{childList:true});
