@@ -250,7 +250,7 @@ const role=()=>S.profile?.role||'pending';
 const isAdmin=()=>role()==='admin';
 const myEst=()=>S.estimators.find(e=>e.user_id&&e.user_id===S.session?.user?.id)||null;
 const assigned=b=>{const me=myEst();return !!me&&(b.lead_estimator_id===me.id||(b.support_estimator_ids||[]).includes(me.id))};
-const canWork=b=>can('bids','edit')&&(bidsAll()||assigned(b));
+const canWork=b=>!!(b&&b._sample)||can('bids','edit')&&(bidsAll()||assigned(b));
 const myName=()=>S.profile?.full_name||myEst()?.name||S.session?.user?.email||'';
 
 /* ---------- data ---------- */
@@ -321,7 +321,7 @@ function renderNow(){
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
-  main.innerHTML=(estsTabFor()?estsTabs(estsTabFor()):subNav())+views[S.view]();
+  main.innerHTML=(estsTabFor()?estsTabs(estsTabFor()):subNav())+(typeof tourBanner==='function'&&S.view===(navItems()[0]||[])[0]?tourBanner():'')+views[S.view]();
   keep.forEach(([id,top])=>{const e=id&&document.getElementById(id);if(e)e.scrollTop=top});
   if(fid){const n=document.getElementById(fid);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});try{n.setSelectionRange(pos,pe??pos)}catch(e){}if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();if(S.view==='calc'&&$('#tk-canvas'))tkMount();if(S.view==='tw')twMount();
@@ -965,7 +965,7 @@ async function makeEstimatorFor(uid){const p=byId(S.profiles,uid);if(!p)return;
 
 /* ---------- modals ---------- */
 let M=null;
-function closeModal(){const ae=document.activeElement;if(ae&&$('#modal')?.contains(ae))ae.blur();if(M&&M.kind==='bid'&&!M.picker&&!M.sup){bpHash('');if(bpCanAuto()&&bpSig(M.draft)!==M.bpSig){const m=M;saveBid({auto:true},m).then(()=>toast(`Saved ${m.draft.name}`)).catch(e=>toast('Not saved: '+errMsg(e)))}}const back=M&&M.kind==='lib'&&M.back;if(back){M=back;renderModal();return}M=null;$('#modal').innerHTML='';document.body.style.overflow=''}
+function closeModal(){const ae=document.activeElement;if(ae&&$('#modal')?.contains(ae))ae.blur();if(M&&M.kind==='bid'&&M.draft&&M.draft._sample&&!M.picker&&!M.sup&&!M.rfq&&!M.op&&!M.trk){setTimeout(()=>{if(TOUR&&TOUR.kind==='bids'){TOUR=null;tourLayer().innerHTML='';tourMark()}tourCleanup();render()},0)}if(M&&M.kind==='bid'&&!M.picker&&!M.sup){bpHash('');if(bpCanAuto()&&bpSig(M.draft)!==M.bpSig){const m=M;saveBid({auto:true},m).then(()=>toast(`Saved ${m.draft.name}`)).catch(e=>toast('Not saved: '+errMsg(e)))}}const back=M&&M.kind==='lib'&&M.back;if(back){M=back;renderModal();return}M=null;$('#modal').innerHTML='';document.body.style.overflow=''}
 function showModal(){document.body.style.overflow='hidden';renderModal(true)}
 // keep the cursor in the same field when a modal re-renders
 const FOCUS_ATTRS=['data-grab','data-rfqf','data-rfqsubj','data-rfqt','data-bprfq','data-itp','data-jip','data-itf','data-entf','data-logf','data-jobf','data-logdate','data-ef','data-bf','data-qf','data-cp','data-ad','data-rv','data-sf','data-lf','data-ctf','data-ff','data-tn','data-pickq','data-bulktype'];
@@ -1083,7 +1083,7 @@ function bidModal(){
   const cur=bpStageIdx(b);
   const due=b.due_date?`Due ${fmtShort(b.due_date)}${b.due_time?' '+fuTime(b.due_time):''}${(()=>{const n=daysUntil(b.due_date);return n==null?'':n<0?` · ${-n} day${n===-1?'':'s'} ago`:n===0?' · today':` · ${n} day${n===1?'':'s'}`})()}`:'No due date';
   const sub=[b.client_ids.map(clientName).join(', ')||'No GC yet',due,b.lead_estimator_id?'Lead: '+esc(estName(b.lead_estimator_id)||''):'No lead estimator'].filter(Boolean);
-  const saveTxt=isNew?'Not created yet':!work?'Read-only':(M.bpErr?'<span class="bad">Not saved</span>':'Saved');
+  const saveTxt=b._sample?'Practice · not saved':isNew?'Not created yet':!work?'Read-only':(M.bpErr?'<span class="bad">Not saved</span>':'Saved');
   const tabs=BP_TABS.map(([k,l],i)=>{const st=i<cur?'past':i===cur?'now':'';const skip=false;
     return `<button class="bp-tab ${st}${M.tab===k?' on':''}" data-act="bp-tab" data-v="${k}"><i>${i<cur?'✓':i+1}</i><span><b>${esc(l)}${skip?'':''}</b><small>${esc(isNew&&k!=='project'?'':bpProgress(b,k))}</small></span></button>`}).join('');
   const body={project:bpProject,rfq:bpRfq,takeoff:bpTakeoff,quotes:bpQuotes,estprop:bpEstProp,outcome:bpOutcome}[M.tab](b,work,admin);
@@ -1095,7 +1095,7 @@ function bidModal(){
       ${isNew&&work?'<button class="btn primary" data-act="save">Create bid</button>':''}</div></div>
   <div class="bp-tabs" role="tablist">${tabs}${b.status==='On Hold'?'<span class="bp-hold">'+pill('On hold','warn')+'</span>':''}</div>
   <div class="mbody bp-body"><div class="bp-grid"><div class="bp-main">${archNote}${supBanner(b)}${bidReqBanner(b)}${trkStrip(b)}${body}</div><aside class="bp-aside">${bpAside(b,work,admin,isNew)}</aside></div></div>
-  <div class="mfoot bp-foot"><div style="display:flex;gap:8px;flex-wrap:wrap">${work&&!isNew?'<button class="btn" data-act="sup-start" title="Same project, new name or details — keeps everything and records the change">↻ Supersede</button>':''}${admin&&!isNew?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button><button class="btn" data-act="${b.archived_at?'bid-restore':'bid-archive'}">${b.archived_at?'Restore':'Archive'}</button>${b.status==='Awarded'?`<button class="btn" data-act="create-job">${S.jobs.some(j=>j.bid_id===b.id)?'Open job':'Create job'}</button>`:''}`:''}</div>
+  <div class="mfoot bp-foot"><div style="display:flex;gap:8px;flex-wrap:wrap">${b._sample?'<span class="pill info">Practice bid · nothing is saved</span>':''}${work&&!isNew&&!b._sample?'<button class="btn" data-act="sup-start" title="Same project, new name or details — keeps everything and records the change">↻ Supersede</button>':''}${admin&&!isNew&&!b._sample?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button><button class="btn" data-act="${b.archived_at?'bid-restore':'bid-archive'}">${b.archived_at?'Restore':'Archive'}</button>${b.status==='Awarded'?`<button class="btn" data-act="create-job">${S.jobs.some(j=>j.bid_id===b.id)?'Open job':'Create job'}</button>`:''}`:''}</div>
   <div class="r">${bpAdvanceHtml(b,work,isNew)}</div></div>`;
 }
 const estOn=()=>!tabOff('estimates');
@@ -1197,7 +1197,7 @@ function epGo(k,ok){const b=M.draft;const e=epState(b);if(k===e&&k!=='sent')retu
 function epSendGo(){const b=M.draft;const X=M.epSend;const d=X.date||todayStr();const cp={...(b.client_proposals||{})};
   [...X.sel].forEach(id=>{cp[id]={...propOf(b,id),status:'Sent',sent_date:propOf(b,id).sent_date||d}});b.client_proposals=cp;
   b.proposal_status='Sent';b.status='Submitted';if(!b.submitted_date)b.submitted_date=d;M.epSend=null;M.tab='outcome';renderModal();toast(`Proposal sent${X.sel.size?` to ${[...X.sel].map(clientName).join(', ')}`:''}. GC follow-up starts from ${fmtShort(d)}.`)}
-function bpEstProp(b,work){return `${epBar(b,work)}${estOn()?estBidBlock(b,work):''}
+function bpEstProp(b,work){return `${epBar(b,work)}${estOn()&&!b._sample?estBidBlock(b,work):''}
   <fieldset><legend>Base numbers</legend><div class="fg">
     <label class="f">Base — with site improvements<input type="number" step="0.01" min="0" class="field" ${bf('amount_with','n')} placeholder="$0.00"></label>
     <label class="f">Base — without site improvements<input type="number" step="0.01" min="0" class="field" ${bf('amount_without','n')} placeholder="$0.00"></label>
@@ -1243,14 +1243,14 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
 const BPA={saving:false,typed:0};
 const bpSig=d=>{try{return JSON.stringify(d,(k,v)=>k&&k[0]==='_'&&k!=='_new'?undefined:v)}catch(e){return ''}};
 function bpSaveUI(html){const n=document.getElementById('bp-save');if(n)n.innerHTML=html}
-const bpCanAuto=()=>M&&M.kind==='bid'&&!M.picker&&!M.sup&&M.draft&&!M.draft._new&&canWork(M.draft);
+const bpCanAuto=()=>M&&M.kind==='bid'&&!M.picker&&!M.sup&&M.draft&&!M.draft._new&&!M.draft._sample&&canWork(M.draft);
 async function bpSave(){if(!bpCanAuto()||BPA.saving)return;const m=M;const d=m.draft;if(d.quotes.some(q=>q._uploading)||m.uploading)return;
   BPA.saving=true;m.dirtyDuring=false;const before=bpSig(d);bpSaveUI('Saving…');
   try{await saveBid({auto:true},m);m.bpErr='';m.bpSig=m.dirtyDuring?before:bpSig(d);if(M===m){bpSaveUI('Saved');const p=document.querySelector('.bp-tabs');if(p&&!m.dirtyDuring&&document.activeElement&&!$('#modal').contains(document.activeElement))renderModal()}}
   catch(e){m.bpErr=errMsg(e);m.bpSig=before;if(M===m)bpSaveUI(`<span class="bad" title="${esc(m.bpErr)}">Not saved: ${esc(m.bpErr)}</span>`)}
   finally{BPA.saving=false}}
 setInterval(()=>{if(!bpCanAuto()||BPA.saving)return;if(Date.now()-BPA.typed<900)return;const s=bpSig(M.draft);if(M.bpSig==null){M.bpSig=s;return}if(s!==M.bpSig)bpSave()},700);
-document.addEventListener('input',e=>{if(M&&M.kind==='bid'&&$('#modal')?.contains(e.target)){BPA.typed=Date.now();if(BPA.saving)M.dirtyDuring=true;if(!M.draft._new&&canWork(M.draft))bpSaveUI('Editing…')}},true);
+document.addEventListener('input',e=>{if(M&&M.kind==='bid'&&$('#modal')?.contains(e.target)){BPA.typed=Date.now();if(BPA.saving)M.dirtyDuring=true;if(!M.draft._new&&!M.draft._sample&&canWork(M.draft))bpSaveUI('Editing…')}},true);
 // a link to the bid: #bid=<id>
 function bpHash(id){try{const h=id?'#bid='+id:'';if(location.hash!==h)history.replaceState(null,'',location.pathname+location.search+h)}catch(e){}}
 window.addEventListener('hashchange',()=>{const m=/^#bid=([\w-]+)/.exec(location.hash);if(m&&S.session&&(!M||M.draft?.id!==m[1])&&byId(S.bids,m[1]))openBid(m[1])});
@@ -1489,7 +1489,7 @@ function companyModal(){return mhead('Company','Shown at the top of the app for 
 const nullIfEmpty=v=>v===''||v===undefined?null:v;
 function quoteRowData(q){const r={};Q_COLS.forEach(k=>r[k]=q[k]);{const cur=S.quotes.find(x=>x.id===q.id);const m={...(q.meta||{}),...(cur?.meta||{})};const sc=qScopes(q);if(sc.length>1)m.scopes=sc;else delete m.scopes;r.meta=m}['requested_date','due_date','received_date','file_path','file_name'].forEach(k=>r[k]=nullIfEmpty(r[k]));r.updated_by=S.session.user.id;return r}
 async function saveBid(opt={},m=M){
-  const d=m.draft;
+  const d=m.draft;if(d&&d._sample)return;   // the practice bid is never saved
   if(d.quotes.some(q=>q._uploading)||m.uploading)throw new Error('Wait for the upload to finish.');
   if(!canWork(d))throw new Error('You don’t have permission to change this bid.');
   if(!d.name.trim())throw new Error('Add a project name before saving.');
@@ -1596,7 +1596,7 @@ async function deleteModal(){
 
 /* ---------- files ---------- */
 const safeName=n=>n.replace(/[^\w.\-]+/g,'_').slice(-120);
-async function uploadTo(bidId,folder,file){
+async function uploadTo(bidId,folder,file){if(bidId==='sample-bid')throw new Error('This is a practice bid, so files aren’t uploaded.');
   const path=`${bidId}/${folder}/${newId()}-${safeName(file.name)}`;
   const {error}=await sb.storage.from(BUCKET).upload(path,file,{contentType:file.type||'application/octet-stream',upsert:false});
   if(error)throw error;return path;
@@ -6887,7 +6887,7 @@ async function fbSend(){const d=M.draft;if(!String(d.title).trim()){toast('Add a
 /* ---------- Help page ---------- */
 function vHelp(){const H=S.help;if(S.myFb===null){S.myFb=[];loadMyFb()}
   const openFb=(S.myFb||[]).filter(f=>FB_OPEN.has(f.status)).length;
-  const head=`<div class="head"><div><h1>Help</h1><p>How to use each part of the app, and a direct line to the developer.</p></div><div class="tools"><button class="btn primary" data-act="fb-open">Send feedback</button></div></div>
+  const head=`<div class="head"><div><h1>Help</h1><p>How to use each part of the app, and a direct line to the developer.</p></div><div class="tools"><button class="btn" data-act="tour-start">🎓 Take the guided tour</button><button class="btn primary" data-act="fb-open">Send feedback</button></div></div>
   <div class="seg acct-tabs"><button class="${H.tab==='tut'?'on':''}" data-act="help-tab" data-v="tut">Tutorials</button><button class="${H.tab==='fb'?'on':''}" data-act="help-tab" data-v="fb">My feedback${openFb?` <small>${openFb} open</small>`:''}</button></div>`;
   if(H.tab==='fb')return head+helpFb();
   const head2=head+asSwitches();
@@ -11385,7 +11385,7 @@ async function trkSendsLoad(force){if(S.trkSends&&!force)return;if(trkSendsLoad.
 const trkLast=cid=>(S.trkSends||[]).filter(r=>r.client_id===cid&&r.sent_at).sort((x,y)=>String(y.sent_at).localeCompare(String(x.sent_at)))[0]||null;
 const trkAgo=at=>{const d=Math.floor((Date.now()-new Date(at).getTime())/864e5);return d<=0?'today':d===1?'yesterday':d+' days ago'};
 function trkState(cid){const r=trkLast(cid);if(!r)return {k:'none'};const days=Math.floor((Date.now()-new Date(r.sent_at).getTime())/864e5);const next=new Date(new Date(r.sent_at).getTime()+TRK_DAYS*864e5);return {k:days<TRK_DAYS?'ok':'due',r,days,next}}
-function trkStrip(b){if(!b||b._new||!can('bids','edit'))return '';const ids=(b.client_ids||[]).filter(id=>byId(S.clients,id));if(!ids.length)return '';
+function trkStrip(b){if(!b||b._new||b._sample||!can('bids','edit'))return '';const ids=(b.client_ids||[]).filter(id=>byId(S.clients,id));if(!ids.length)return '';
   if(!S.trkSends&&!S.trkMissing){trkSendsLoad();return ''}
   const rows=ids.map(id=>{const c=byId(S.clients,id);const st=trkState(id);
     const msg=st.k==='none'?'<b>Tracker link not sent yet</b>':st.k==='ok'?`Tracker link sent ${fmtShort(String(st.r.sent_at).slice(0,10))} (${trkAgo(st.r.sent_at)})${st.r.sent_by_name?' by '+esc(st.r.sent_by_name):''} · no need to resend until ${st.next.toLocaleDateString('en-US',{month:'short',day:'numeric'})}`:`Last sent ${fmtShort(String(st.r.sent_at).slice(0,10))}, ${st.days} days ago · time to send it again`;
@@ -11714,3 +11714,89 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   if(a==='op-preset'){const p=OP_PRESETS[t.dataset.v];if(p){M.op={preset:t.dataset.v,sec:{...p[1]}};opSave(M.op);renderModal()}return}
   if(a==='op-print'){opPrint();return}});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.opsec&&M&&M.op){M.op.sec[t.dataset.opsec]=t.checked?1:0;if(t.dataset.opsec==='prices'&&!t.checked)M.op.sec.numbers=0;M.op.preset='';opSave(M.op);renderModal()}});
+
+/* ----- guided tour on a practice bid -----
+   A first-week walkthrough. People who work bids get the bid steps on a practice bid that is never saved; people who
+   run jobs or work in the office get a tour of the parts of the app they use. Offered once on the dashboard
+   (per person, on this computer) and can be restarted from Help. */
+const TOUR_KEY=()=>'bp.tour.'+(myId()||'');
+const tourDone=()=>{try{return !!localStorage.getItem(TOUR_KEY())}catch(e){return true}};
+const tourMark=()=>{try{localStorage.setItem(TOUR_KEY(),new Date().toISOString())}catch(e){}};
+let TOUR=null;
+function tourKind(){const p=S.profiles.find(x=>x.id===myId())||S.profile||{};if(typeof worksBids==='function'&&worksBids(p))return 'bids';const pos=typeof posOf==='function'?posOf(p):null;if(pos&&pos.jobs||role()==='pm')return 'jobs';return can('bids')?'bids':'office'}
+function tourBanner(){if(tourDone()||TOUR)return '';const k=tourKind();
+  return `<div class="tour-ban"><span class="tour-ico">🎓</span><div><b>New here? Take the ${k==='bids'?'3':'2'}-minute tour.</b><div class="small dim">${k==='bids'?'Walk a practice bid from invite to proposal sent. Nothing you do in it is saved.':'A quick look at the parts of the app you’ll use most.'}</div></div><button class="btn primary sm" data-act="tour-start">Start the tour</button><button class="btn ghost sm" data-act="tour-skip">Not now</button></div>`}
+// the practice bid: only in memory, with made-up GC, vendors and quotes
+const TS={gc:'sample-gc',v1:'sample-v1',v2:'sample-v2',v3:'sample-v3',est:'sample-est'};
+function tourSample(){const today=new Date();const iso=n=>{const d=new Date(today);d.setDate(d.getDate()+n);return d.toISOString().slice(0,10)};const me=myEst();
+  const add=(arr,row)=>{if(!arr.some(x=>x.id===row.id))arr.push(row)};
+  add(S.clients,{id:TS.gc,company:'Practice GC Builders',type:'GC',contacts:[{name:'Pat Practice',phone:'(404) 555-0100',email:'pat@practicegc.com'}],_sample:true});
+  add(S.vendors,{id:TS.v1,company:'Practice Pipe Co.',vendor_type:'Supplier',trade:'Pipe & utility supply',phone:'(770) 555-0111',email:'quotes@practicepipe.com',scopes:['Storm drainage'],_sample:true});
+  add(S.vendors,{id:TS.v2,company:'Practice Erosion LLC',vendor_type:'Subcontractor',trade:'Erosion control',phone:'(770) 555-0122',email:'bids@practiceerosion.com',scopes:['Erosion control'],_sample:true});
+  add(S.vendors,{id:TS.v3,company:'Practice Silt Fence',vendor_type:'Subcontractor',trade:'Erosion control',phone:'(770) 555-0133',email:'est@practicesilt.com',scopes:['Erosion control'],_sample:true});
+  if(!me)add(S.estimators,{id:TS.est,name:'You (practice)',title:'Estimator',active:true,_sample:true});
+  const b=Object.assign(newBid(),{id:'sample-bid',name:'Practice: Oak Ridge Retail Pad',location:'Cumming, GA',project_type:'Commercial',bid_type:'Hard bid',size:'6 acres',status:'RFQ Sent',
+    due_date:iso(10),due_time:'14:00',walk_date:iso(3),rfi_date:iso(6),client_ids:[TS.gc],client_contacts:{[TS.gc]:'Pat Practice'},lead_estimator_id:me?me.id:TS.est,amount_with:null,
+    scope_items:[{id:'ss1',name:'Storm drainage',group:'Underground utilities',perform:'Self perform',status:'In Progress',assignee_id:''},{id:'ss2',name:'Erosion control',group:'Erosion control',perform:'Sub',status:'Not Started',assignee_id:''},{id:'ss3',name:'Mass grading',group:'Earthwork',perform:'Self perform',status:'Not Started',assignee_id:''}],
+    quotes:[{id:'sq1',bid_id:'sample-bid',vendor_id:TS.v1,scope:'Storm drainage',status:'Received',requested_date:iso(-2),due_date:iso(5),received_date:iso(-1),amount:84250,note:''},{id:'sq2',bid_id:'sample-bid',vendor_id:TS.v2,scope:'Erosion control',status:'Requested',requested_date:iso(-2),due_date:iso(5),received_date:'',amount:null,note:''},{id:'sq3',bid_id:'sample-bid',vendor_id:TS.v3,scope:'Erosion control',status:'Not requested',requested_date:'',due_date:'',received_date:'',amount:null,note:''}],
+    notes:'This is a practice bid. Try anything; nothing here is saved.',_new:false,_sample:true});
+  b.rfq={due:iso(5),time:'5PM'};return b}
+function tourCleanup(){S.clients=S.clients.filter(x=>!x._sample);S.vendors=S.vendors.filter(x=>!x._sample);S.estimators=S.estimators.filter(x=>!x._sample)}
+const TOUR_BIDS=[
+  {c:true,t:'Welcome to your practice bid',x:'This is a made-up bid so you can learn by clicking around. Nothing you do here is saved, and nobody else sees it. Use Next to move along, or explore on your own any time.'},
+  {tab:'project',sel:'.bp-tabs',t:'One tab per step',x:'A bid moves through these steps: Project, Scopes & RFQs, Takeoff, Quotes, Estimate & proposal, then follow-up and the outcome. “now” marks where the bid is. You can open any tab at any time; looking never moves the bid.'},
+  {tab:'project',sel:'[data-bf=due_date]',t:'Start with the basics',x:'Project name, location, bid date and time, site walk and RFI deadline. Add who you’re bidding to and the estimating team below. Everything saves on its own a second after you stop typing.'},
+  {tab:'project',sel:'[data-act=bp-advance]',t:'Advance when a step is done',x:'This lights up when the step is finished. If something’s still open it tells you what, and you can still advance.'},
+  {tab:'rfq',sel:'.rfq-bar',t:'One quotes-due date, one RFQ email',x:'Set when quotes are due for the whole RFQ. ✉ RFQ email writes the request in Dogwood’s format with every vendor in Bcc, ready to send from Outlook.'},
+  {tab:'rfq',sel:'.qg',t:'Scopes with their vendors',x:'Each scope has its own row with the vendors and subs pricing it. Picking the same vendor for several scopes keeps it to one quote. Mark them Requested as the RFQs go out.'},
+  {tab:'takeoff',sel:'.scope-row, .tg-card',t:'Takeoff and sign-offs',x:'When a scope’s takeoff is done, sign it off with your initials. You can also group scopes so one person, one status and one sign-off covers them all.'},
+  {tab:'quotes',sel:'.qgs',t:'Quotes coming back',x:'Put in the amount or upload the quote and it’s marked Received. The low number in each scope is highlighted, and the card on the pipeline shows how many are still out.'},
+  {tab:'estprop',sel:'.ep-bar',t:'Estimate & proposal',x:'Not started → In progress → Ready for review → Sent. Ready for review shows up on the precon manager’s dashboard. Sent asks which GCs it went to and starts the follow-up clock.'},
+  {tab:'estprop',sel:'[data-act=op-open]',t:'Print or save a summary',x:'A one-page summary for the site walk or a review meeting. Pick what goes on it; prices are left off unless you want them.'},
+  {tab:'outcome',sel:'.bp-main fieldset',t:'Follow-up and the outcome',x:'After it’s sent, log GC follow-ups here and record whether you won. The app reminds you when a follow-up is due.'},
+  {c:true,t:'That’s the whole flow',x:'When you’re ready, open a real bid from the Pipeline (or Up for grabs). You can take this tour again any time from Help.',end:true}];
+const TOUR_APP={jobs:[
+  {c:true,t:'Welcome',x:'A quick look at the parts of the app you’ll use most. Use Next to move along.'},
+  {view:'dashboard',sel:'.head',t:'Your dashboard',x:'What’s due, what’s waiting on you, and what changed. It’s the first thing you see each morning.'},
+  {view:'jobs',sel:'.head',t:'Jobs',x:'Awarded bids become jobs: budget, cost to date, pay apps and change orders.'},
+  {view:'plan',sel:'.head',t:'Planner',x:'Your own to-do list and calendar, plus a team board for anything you share.'},
+  {view:'help',sel:'.head',t:'Help is always here',x:'Tutorials for every part of the app, and a direct line to the developer. You can take this tour again from here.',end:true}],
+ office:[
+  {c:true,t:'Welcome',x:'A quick look at the parts of the app you’ll use most. Use Next to move along.'},
+  {view:'dashboard',sel:'.head',t:'Your dashboard',x:'Where bids stand, what’s due, and the numbers that matter.'},
+  {view:'pipeline',sel:'.head',t:'The pipeline',x:'Every bid, in the order the work happens. Click any bid to see the details.'},
+  {view:'plan',sel:'.head',t:'Planner',x:'Your own to-do list and calendar, plus a team board for anything you share.'},
+  {view:'help',sel:'.head',t:'Help is always here',x:'Tutorials for every part of the app, and a direct line to the developer. You can take this tour again from here.',end:true}]};
+function tourStart(kind){kind=kind||tourKind();if(M)closeModal();
+  if(kind==='bids'){const b=tourSample();M={kind:'bid',draft:b,origQuoteIds:[],tab:'project'};M.bpSig=bpSig(b);showModal();TOUR={kind,i:0,steps:TOUR_BIDS}}
+  else{const okV=v=>!v||navGroups().some(g=>g[2].includes(v));TOUR={kind,i:0,steps:(TOUR_APP[kind]||TOUR_APP.office).filter(s=>okV(s.view))}}
+  tourGo(0)}
+function tourGo(i){if(!TOUR)return;TOUR.i=Math.max(0,Math.min(i,TOUR.steps.length-1));const st=TOUR.steps[TOUR.i];
+  if(TOUR.kind==='bids'){if(!M||M.kind!=='bid'||!M.draft._sample){tourEnd(false);return}M.rfq=null;M.op=null;M.trk=null;if(st.tab&&M.tab!==st.tab){M.tab=st.tab;renderModal()}}
+  else if(st.view&&S.view!==st.view){S.view=st.view;render()}
+  setTimeout(tourPaint,60)}
+function tourEnd(done){const was=TOUR;TOUR=null;const L=$('#tour');if(L){L.innerHTML='';L.dataset.k=''}if(done!==false)tourMark();
+  if(was&&was.kind==='bids'&&M&&M.kind==='bid'&&M.draft._sample){M=null;$('#modal').innerHTML='';document.body.style.overflow=''}tourCleanup();render()}
+function tourLayer(){let L=$('#tour');if(!L){L=document.createElement('div');L.id='tour';document.body.appendChild(L)}return L}
+function tourPaint(){const L=tourLayer();if(!TOUR){L.innerHTML='';return}const T=TOUR,ix=T.i,st=T.steps[ix];const n=T.steps.length;
+  let el=st.sel?[...document.querySelectorAll(st.sel)].find(x=>x.offsetParent!==null):null;if(el)el.scrollIntoView({block:'center',behavior:'smooth'});
+  const key=T.kind+':'+ix;
+  const draw=()=>{if(TOUR!==T||T.i!==ix)return;const r=el&&el.isConnected?el.getBoundingClientRect():null;const W=innerWidth,H=innerHeight;const cw=Math.min(360,W-24);
+    let x=(W-cw)/2,y=H/2-110;if(r){y=r.bottom+14;x=Math.min(Math.max(12,r.left),W-cw-12);if(y+220>H)y=Math.max(12,r.top-230)}
+    if(L.dataset.k!==key||!L.querySelector('.tour-card')){L.dataset.k=key;
+      L.innerHTML=`<div class="tour-ring"></div><div class="tour-dim"></div><div class="tour-card" role="dialog" aria-label="Guided tour"><div class="tour-n">${ix+1} of ${n}${T.kind==='bids'?' · practice bid':''}</div><b>${esc(st.t)}</b><p>${esc(st.x)}</p>
+      <div class="tour-btns"><button class="btn ghost sm" data-act="tour-end">${st.end?'Close':'End tour'}</button><span style="flex:1"></span>${ix?'<button class="btn sm" data-act="tour-back">Back</button>':''}${st.end?'<button class="btn primary sm" data-act="tour-finish">Done</button>':'<button class="btn primary sm" data-act="tour-next">Next</button>'}</div></div>`}
+    const ring=L.querySelector('.tour-ring'),dim=L.querySelector('.tour-dim'),card=L.querySelector('.tour-card');
+    ring.style.display=r?'':'none';dim.style.display=r?'none':'';if(r)Object.assign(ring.style,{left:r.left-6+'px',top:r.top-6+'px',width:r.width+12+'px',height:r.height+12+'px'});
+    Object.assign(card.style,{left:x+'px',top:y+'px',width:cw+'px'})};
+  draw();setTimeout(draw,380)}
+addEventListener('resize',()=>{if(TOUR)tourPaint()});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('tour-'))return;e.stopPropagation();
+  if(a==='tour-start'){tourStart(t.dataset.v);return}
+  if(a==='tour-skip'){tourMark();render();return}
+  if(!TOUR&&a!=='tour-end'&&a!=='tour-finish')return;
+  if(a==='tour-next'){tourGo(TOUR.i+1);return}
+  if(a==='tour-back'){tourGo(TOUR.i-1);return}
+  if(a==='tour-end'||a==='tour-finish'){tourEnd(true);return}},true);
+// keep the highlight on the right spot as the bid page redraws
+new MutationObserver(()=>{if(TOUR){clearTimeout(tourPaint._t);tourPaint._t=setTimeout(tourPaint,80)}}).observe(document.getElementById('modal')||document.body,{childList:true,subtree:false});
