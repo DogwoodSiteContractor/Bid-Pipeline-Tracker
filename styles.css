@@ -2663,3 +2663,4 @@ div.tw-pgh{cursor:default}
 .peq-menu button:hover,.peq-menu button:focus{background:var(--mute-soft,rgba(0,0,0,.06));outline:none}
 .peq-added td{background:color-mix(in srgb,var(--accent) 7%,transparent)}.peq-xd{display:flex;gap:6px;align-items:center}
 .peq-tag{font-size:10.5px;border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--ink-3);flex:none}
+.peq-desc.can{cursor:text;border-bottom:1px dashed transparent}.peq-desc.can:hover,.peq-desc.can:focus{border-bottom-color:var(--ink-3);outline:none}
