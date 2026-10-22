@@ -1004,7 +1004,7 @@ const DIS=()=>M&&M.kind==='bid'?(canWork(M.draft)?'':' disabled'):M&&(M.kind==='
 function newBid(){return{id:newId(),name:'',location:'',project_type:'Commercial',bid_type:'Hard bid',size:'',status:'Project Created',probability:50,
   due_date:'',due_time:'',walk_date:'',rfi_date:'',lead_estimator_id:'',support_estimator_ids:[],client_ids:[],client_contacts:{},client_proposals:{},awarded_client_id:'',addenda:[],revisions:[],
   scope_items:[],
-  proposal_status:'Not Started',amount_with:null,amount_without:null,use_for:'with',margin:null,follow_ups:[],notes:'',
+  proposal_status:'Not Started',amount_with:null,amount_without:null,use_for:'without',margin:null,follow_ups:[],notes:'',
   submitted_date:'',awarded_date:'',awarded_amount:null,awarded_to:'',lost_reason:'',quotes:[],_new:true}}
 function openBid(id){
   const b=byId(S.bids,id);if(!b)return;
@@ -1252,16 +1252,19 @@ function epGo(k,ok){const b=M.draft;const e=epState(b);const ph=epPhase(b);if(k=
 function epSendGo(){const b=M.draft;const X=M.epSend;{const G=frGate(b);if(G.stop&&!G.ok){toast('Finish the final review first.');return}}const d=X.date||todayStr();const cp={...(b.client_proposals||{})};
   [...X.sel].forEach(id=>{cp[id]={...propOf(b,id),status:'Sent',sent_date:propOf(b,id).sent_date||d}});b.client_proposals=cp;
   b.proposal_status='Sent';b.status='Submitted';if(!b.submitted_date)b.submitted_date=d;M.epSend=null;M.tab='outcome';renderModal();toast(`Proposal sent${X.sel.size?` to ${[...X.sel].map(clientName).join(', ')}`:''}. GC follow-up starts from ${fmtShort(d)}.`)}
+// one base number for every GC (without site improvements); a "with site improvements" number only when the bid has one
+function baseNumbersHtml(b,work){const hasW=num(b.amount_with)!=null||M.showWith;const both=num(b.amount_with)!=null&&num(b.amount_without)!=null;
+  return `<fieldset><legend>Our number</legend><div class="fg bn-fg">
+    <label class="f">${hasW?'Base bid, without site improvements':'Base bid'}<input type="number" step="0.01" min="0" class="field bn-main" ${bf('amount_without','n')} placeholder="$0.00"></label>
+    ${hasW?`<label class="f">With site improvements<span class="bn-with"><input type="number" step="0.01" min="0" class="field" ${bf('amount_with','n')} placeholder="$0.00">${work?'<button class="rm" data-act="with-rm" title="Remove the with-site-improvements number" aria-label="Remove">×</button>':''}</span></label>`
+      :work?`<div class="f bn-add"><span>&nbsp;</span><button class="btn sm ghost" data-act="with-add">+ Add a number with site improvements</button></div>`:''}
+    ${both?`<div class="s2"><div class="small" style="font-weight:500;color:var(--ink-2);margin-bottom:6px">Use for dashboard totals</div><div class="radio">
+      <label><input type="radio" name="usefor" data-bf="use_for" value="without"${b.use_for!=='with'?' checked':''}${DIS()}> Without site improvements</label>
+      <label><input type="radio" name="usefor" data-bf="use_for" value="with"${b.use_for==='with'?' checked':''}${DIS()}> With</label></div></div>`:''}
+    ${SHOW_ODDS?`<label class="f">Estimated margin %<input type="number" step="0.1" class="field" ${bf('margin','n')} placeholder="e.g. 12"></label><label class="f s2">Win probability: <b id="probv">${b.probability??50}%</b><input type="range" min="0" max="100" step="5" data-bf="probability" data-t="n" value="${b.probability??50}"${DIS()}></label>`:''}
+  </div><p class="hint">Every GC gets ${hasW?'these numbers':'this number'}. If one GC gets a different number, change it on their row below.</p></fieldset>`}
 function bpEstProp(b,work){return `${epBar(b,work)}${frHtml(b,work)}${estOn()&&!b._sample?estBidBlock(b,work):''}
-  <fieldset><legend>Base numbers</legend><div class="fg">
-    <label class="f">Base — with site improvements<input type="number" step="0.01" min="0" class="field" ${bf('amount_with','n')} placeholder="$0.00"></label>
-    <label class="f">Base — without site improvements<input type="number" step="0.01" min="0" class="field" ${bf('amount_without','n')} placeholder="$0.00"></label>
-    ${SHOW_ODDS?`<label class="f">Estimated margin %<input type="number" step="0.1" class="field" ${bf('margin','n')} placeholder="e.g. 12"></label>`:''}
-    <div class="s2"><div class="small" style="font-weight:500;color:var(--ink-2);margin-bottom:6px">Use for dashboard totals</div><div class="radio">
-      <label><input type="radio" name="usefor" data-bf="use_for" value="with"${b.use_for!=='without'?' checked':''}${DIS()}> With site improvements</label>
-      <label><input type="radio" name="usefor" data-bf="use_for" value="without"${b.use_for==='without'?' checked':''}${DIS()}> Without</label></div></div>
-    ${SHOW_ODDS?`<label class="f s2">Win probability: <b id="probv">${b.probability??50}%</b><input type="range" min="0" max="100" step="5" data-bf="probability" data-t="n" value="${b.probability??50}"${DIS()}></label>`:''}
-  </div><p class="hint">These apply to every GC unless you enter a different number for them below.</p></fieldset>${clientsSection(b,work)}${revisionSection(b,work)}`}
+  ${baseNumbersHtml(b,work)}${clientsSection(b,work)}${revisionSection(b,work)}`}
 function bpOutcome(b,work){
   const outcome=isSent(b)||DECIDED.includes(b.status);
   return `${fuRow(b)}
@@ -1314,24 +1317,27 @@ function clientsSection(b,work){
   const d=work?'':' disabled';
   const clientsSorted=S.clients.slice().sort((a,c)=>a.company.localeCompare(c.company));
   const amts=b.client_ids.map(id=>clientAmount(b,id)).filter(Boolean);
+  const hasW=num(b.amount_with)!=null||b.client_ids.some(id=>num(propOf(b,id).amount_with)!=null);const multi=b.client_ids.length>1;
+  // a GC's amount: blank shows the base in grey; typing a number gives just that GC a different number
+  const amtBox=(id,p,k,label)=>{const own=num(p[k])!=null;const base=num(b[k]);if(!multi&&!own)return '';
+    return `<div class="f gc-amt${own?' own':''}"><label for="gca-${id}-${k}">${label}</label><input id="gca-${id}-${k}" type="number" step="0.01" min="0" class="field" data-cp="${id}.${k}" data-t="n" value="${esc(p[k]??'')}" placeholder="${base!=null?money(base):'$'}" title="${own?'A different number for this GC':'Same as the base bid. Type to give this GC a different number.'}"${d}>${own?`<button class="linkbtn small gc-reset" data-act="cp-reset" data-id="${id}" data-k="${k}" title="Use the base number again">↺ use base</button>`:''}</div>`};
   const rows=b.client_ids.map(id=>{
-    const c=byId(S.clients,id);const cs=c?.contacts||[];const ct=cs.find(x=>x.name===b.client_contacts?.[id]);const p=propOf(b,id);
+    const c=byId(S.clients,id);const cs=c?.contacts||[];const ct=cs.find(x=>x.name===b.client_contacts?.[id]);const p=propOf(b,id);const ownW=num(p.amount_with)!=null,ownO=num(p.amount_without)!=null;
     const won=b.status==='Awarded'&&b.awarded_client_id===id;
     const status=won?`<div class="signing">${pill('Awarded ✓','good')}${work?'<button class="btn sm ghost" data-act="unaward">Undo</button>':''}</div>`
       :`<div class="signing"><select class="field" data-cp="${id}.status"${d} style="width:110px">${CP_ST.map(x=>`<option${(p.status||'Not sent')===x?' selected':''}>${x}</option>`).join('')}</select>${work?`<button class="btn sm" data-act="award" data-id="${id}">${b.status==='Awarded'&&b.awarded_client_id?'Switch award here':'Mark awarded'}</button>`:''}</div>`;
     return `<div class="gc-row${won?' is-won':''}">
       <div><b style="font-weight:600">${esc(clientName(id))}</b><div class="dim small">${esc(c?.type||'')}${ct?.phone?' · '+esc(ct.phone):''}${ct?.email?' · '+esc(ct.email):''}</div>
         <select class="field" data-cc="${id}"${d} style="margin-top:6px"><option value="">Contact…</option>${cs.map(x=>`<option${b.client_contacts?.[id]===x.name?' selected':''}>${esc(x.name)}</option>`).join('')}</select></div>
-      <label class="f">With site impr.<input type="number" step="0.01" min="0" class="field" data-cp="${id}.amount_with" data-t="n" value="${esc(p.amount_with??'')}" placeholder="${num(b.amount_with)!=null?money(b.amount_with):'$'}"${d}></label>
-      <label class="f">Without<input type="number" step="0.01" min="0" class="field" data-cp="${id}.amount_without" data-t="n" value="${esc(p.amount_without??'')}" placeholder="${num(b.amount_without)!=null?money(b.amount_without):'$'}"${d}></label>
-      <label class="f">Sent on<input type="date" class="field" data-cp="${id}.sent_date" value="${esc(p.sent_date||'')}"${d}></label>
+      ${amtBox(id,p,'amount_without',hasW?'Without site impr.':'Number')||(multi?'<span></span>':'<div class="gc-same small dim">Gets the base bid</div>')}${(hasW&&amtBox(id,p,'amount_with','With site impr.'))||'<span></span>'}
+      ${(p.status&&p.status!=='Not sent')||p.sent_date?`<label class="f">Sent on<input type="date" class="field" data-cp="${id}.sent_date" value="${esc(p.sent_date||'')}"${d}></label>`:'<span></span>'}
       <div class="f">Proposal${status}</div>
       ${work?`<button class="rm" data-act="rm-client" data-id="${id}" aria-label="Remove">×</button>`:'<span></span>'}</div>`}).join('');
   return `<fieldset><legend>Bidding to & proposals</legend>
     ${b.client_ids.length>1&&amts.length?`<p class="hint" style="margin:0 0 10px">${b.client_ids.length} GCs · proposals range ${money(Math.min(...amts))} – ${money(Math.max(...amts))}</p>`:''}
     <div class="rows">${rows||'<div class="dim small">No GCs, owners or contractors added yet.</div>'}</div>
     ${work?`<div class="adders"><select class="field" data-act="add-client"><option value="">+ Add a GC, owner or contractor…</option>${clientsSorted.filter(c=>!b.client_ids.includes(c.id)).map(c=>`<option value="${c.id}">${esc(c.company)}${c.type?' ('+esc(c.type)+')':''}</option>`).join('')}</select></div>
-    <p class="hint">${S.clients.length?'Add everyone you’re sending a number to. Leave an amount blank to use the base proposal. When the job is awarded, click <b>Mark awarded</b> on the winning GC — the others are marked lost.':'No clients on file yet. Add them in the Clients & GCs tab.'}</p>`:''}
+    <p class="hint">${S.clients.length?'Add everyone you’re sending a number to. They all get the base bid; to give one GC a different number, type it in their box. Set each proposal’s status by hand, and when the job is awarded click <b>Mark awarded</b> on the winning GC (the others are marked lost).':'No clients on file yet. Add them in the Clients & GCs tab.'}</p>`:''}
   </fieldset>`;
 }
 function addendaSection(b,work){
@@ -12559,3 +12565,10 @@ function peqHl(){if(!M||!M.draft)return new Set();if(!M.peqHl||M.peqHlId!==M.dra
 document.addEventListener('click',e=>{if(!M||!M.peq)return;const tr=e.target.closest&&e.target.closest('.peq-t tr[data-peqrow]');if(!tr)return;
   {const hit=e.target.closest('input,button,select,a,[data-act],textarea');if(hit&&tr.contains(hit))return}if(String(window.getSelection&&window.getSelection())!=='')return;
   const H=peqHl();const id=tr.dataset.peqrow;H.has(id)?H.delete(id):H.add(id);tr.classList.toggle('hl',H.has(id));try{localStorage.setItem('peqhl:'+M.draft.id,JSON.stringify([...H]))}catch(err){}});
+
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='bid'||!canWork(M.draft))return;const a=t.dataset.act;const b=M.draft;
+  if(a==='with-add'){M.showWith=true;renderModal();setTimeout(()=>document.querySelector('[data-bf="amount_with"]')?.focus(),20);return}
+  if(a==='with-rm'){b.amount_with=null;b.use_for='without';(b.client_ids||[]).forEach(id=>{const p=propOf(b,id);if(p.amount_with!=null)b.client_proposals={...b.client_proposals,[id]:{...p,amount_with:null}}});M.showWith=false;renderModal();toast('Removed the with-site-improvements number.');return}
+  if(a==='cp-reset'){const id=t.dataset.id,k=t.dataset.k;const p=propOf(b,id);b.client_proposals={...(b.client_proposals||{}),[id]:{...p,[k]:null}};renderModal()}});
+// leaving a base number box redraws, so the dashboard choice and the GCs' boxes follow at once
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid'||!t.dataset)return;const k=t.dataset.bf||(t.dataset.cp||'').split('.')[1];if(!['amount_with','amount_without'].includes(k))return;setTimeout(()=>{if(!M||M.kind!=='bid')return;const f=document.activeElement;const sel=f&&f!==document.body?(f.id?'#'+CSS.escape(f.id):['bf','cp','act','cc'].map(k=>f.dataset&&f.dataset[k]!=null?`[data-${k}="${CSS.escape(f.dataset[k])}"]`:'').find(Boolean)):null;renderModal();if(sel){const n=document.querySelector(sel);if(n)n.focus()}},0)});

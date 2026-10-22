@@ -2673,3 +2673,6 @@ div.tw-pgh{cursor:default}
 .qg-lows{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:3px}.qg-lt{color:var(--ink-2);font-weight:600}
 .qg-sub{display:flex;gap:10px;align-items:baseline;margin:6px 2px 0;padding-top:6px;border-top:1px dashed var(--line);font-size:13px}.qg-sub:first-of-type{border-top:0;padding-top:0}
 .qg-sub .qg-low{margin-left:auto}
+.bn-with{display:flex;gap:6px;align-items:center}.bn-with .field{flex:1}.bn-add{justify-content:flex-end}
+.gc-amt.own input{border-color:var(--accent);font-weight:700}.gc-same{align-self:center}
+.gc-amt{position:relative}.gc-amt .gc-reset{position:absolute;right:0;top:0;font-size:12px}
