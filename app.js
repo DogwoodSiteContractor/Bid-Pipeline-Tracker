@@ -1098,6 +1098,7 @@ function bidModal(){
   if(M.op)return opView();
   if(M.btpl)return btplSaveView();
   if(M.frSet)return frSetView();
+  if(M.peq)return peqView();
   if(M.trk)return trackModal().replace('data-act="close"','data-act="trk-back"');
   const b=M.draft;const admin=isAdmin();const work=canWork(b);const isNew=b._new;
   if(!M.tab)M.tab=isNew?'project':bpTabOf(b);
@@ -1189,7 +1190,7 @@ function bpRfq(b,work,admin){
     ${work?`<div class="adders"><button class="btn sm" data-act="pick-open"${b.scope_items.length&&S.vendors.length?'':' disabled title="Add scopes and vendors first"'}>Select vendors scope by scope…</button><select class="field" data-act="add-quote"><option value="">+ Add a vendor or sub…</option>${vendorsSorted.map(v=>`<option value="${v.id}">${esc(v.company)} (${esc(v.trade)})</option>`).join('')}</select>
     ${tradesWithVendors.length?`<select class="field" data-act="add-trade"><option value="">+ Add every vendor in a trade…</option>${tradesWithVendors.map(t=>`<option>${esc(t)}</option>`).join('')}</select>`:''}</div>`:''}
   </fieldset>`}
-function bpTakeoff(b,work){return `${scopeSection(b,work)}${logSection(b,work)}${addendaSection(b,work)}`}
+function bpTakeoff(b,work){return `${peqPanel(b,work)}${scopeSection(b,work)}${logSection(b,work)}${addendaSection(b,work)}`}
 function bpQuotes(b,work,admin){
   const asked=b.quotes.filter(qAsked);
   return `<fieldset><legend>Quotes back</legend>
@@ -12286,7 +12287,7 @@ new MutationObserver(()=>{if(document.getElementById('bm-map'))bmMount()}).obser
    One place for the company-wide settings. The small ones are edited right here; the big editors that already have
    their own pages (estimate & bid settings, proposal wording, trades & scopes, positions, tabs in use…) are listed
    under "Everything else" and open in place. All of it is saved in the settings table, which only admins can write. */
-const ADM_SECS=[['company','Company','Name and contact details on the tracker and vendor pages'],['scopes','Scope categories','The categories bids are built from, and the scopes in each'],['review','Final review','Checklist items, warn or hard stop, who signs'],['followup','GC follow-ups','How often to follow up after a proposal goes out'],['rfq','RFQ email','The email that asks vendors for quotes'],['map','Bid map','The yard, for drive times'],['takeoff','Takeoff imports','The reports you import for every job'],['more','Everything else','Settings that have their own pages']];
+const ADM_SECS=[['company','Company','Name and contact details on the tracker and vendor pages'],['scopes','Scope categories','The categories bids are built from, and the scopes in each'],['pesheet','Bid item sheet','The bid items estimators fill in for the ProEstimate import'],['review','Final review','Checklist items, warn or hard stop, who signs'],['followup','GC follow-ups','How often to follow up after a proposal goes out'],['rfq','RFQ email','The email that asks vendors for quotes'],['map','Bid map','The yard, for drive times'],['takeoff','Takeoff imports','The reports you import for every job'],['more','Everything else','Settings that have their own pages']];
 S.adm={sec:'company',d:null};
 function admInit(sec){const g=S.settings.general||{};
   if(sec==='company'){const c=S.settings.company||{};return {companyName:g.companyName||'',...Object.fromEntries(['name','street','city','phone','web','email'].map(k=>['co_'+k,c[k]||'']))}}
@@ -12320,6 +12321,7 @@ function vAdmin(){if(!isAdmin())return '<div class="empty"><b>Admins only.</b>As
       <p class="hint">Drive times on the bid map start here. ${y?`Found at ${y.lat.toFixed(4)}, ${y.lng.toFixed(4)}.`:'Not looked up yet.'} ${(S.settings.map||{}).yard?'':'Until you save one, it’s the office address.'}</p></div>${save('Save and look it up')}`}
   if(A.sec==='takeoff')body=`<div class="panel pad"><div class="fg">${ta('list','Reports, one per line',8,'e.g. Earthwork\nStorm\nSanitary\nWater')}</div><p class="hint">The report slots offered when you import a takeoff into an estimate.</p></div>${save()}`;
   if(A.sec==='scopes')body=catSetupHtml()+scdHtml();
+  if(A.sec==='pesheet')body=peSheetHtml();
   if(A.sec==='more'){const card=(t,dsc,act,v)=>`<div class="adm-card"><div><b>${t}</b><div class="small dim">${dsc}</div></div><button class="btn sm" data-act="${act}"${v?` data-v="${v}"`:''}>Open</button></div>`;
     body=`<div class="adm-cards">
       ${card('Estimate & bid settings','Markups, overhead, bond, indirects, crews and how bid items are priced','nav','settings')}
@@ -12396,3 +12398,110 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   if(a==='qg-all'){const S2=qgShut(b);if(t.dataset.v==='shut')b.scope_items.forEach(it=>S2.add(it.name));else S2.clear();qgShutSave(b);renderModal();return}
   if(a==='qg-mv'){if(!canWork(b))return;const i=+t.dataset.i,j=i+(+t.dataset.d);const L=b.scope_items;if(j<0||j>=L.length)return;[L[i],L[j]]=[L[j],L[i]];renderModal();
     requestAnimationFrame(()=>{const btn=document.querySelector(`[data-act=qg-mv][data-i="${j}"][data-d="${t.dataset.d}"]`)||document.querySelector(`[data-act=qg-mv][data-i="${j}"]`);if(btn&&!btn.disabled)btn.focus();else{const el=document.querySelectorAll('.qg')[j];if(el)el.scrollIntoView({block:'nearest'})}});return}});
+
+/* ----- Bid item sheet → ProEstimate import -----
+   The master list of bid items (sort code, pay item, cost code, description, unit, category) lives in settings
+   'pe_sheet' and is kept by managers in Settings → Bid item sheet (load it from the "Bid Work Sheet" of the ProEst
+   template, then edit). On each bid, Takeoff → Bid item quantities is a spreadsheet-style page to type quantities.
+   Export writes the same thing the template's "Bid Import" sheet does: every item with a quantity, in sort order,
+   7 columns, pay items as numbers shown to 3 decimals. Quantities are kept on the bid (bids.rfq.peq, by item id). */
+const PEQ_COLS=['Sort Code','Pay Item','Cost Code','Pay Item Description','Quantity','Unit','Category'];
+const peSheet=()=>{const v=S.settings.pe_sheet;return v&&Array.isArray(v.items)?v.items:[]};
+const peCats=()=>{const seen=[];peSheet().forEach(x=>{if(x.g&&!seen.includes(x.g))seen.push(x.g)});return seen};
+const peCanEdit=()=>isAdmin()||canAssign();
+const peQ=b=>{const r=rfqOf(b);if(!r.peq||typeof r.peq!=='object')r.peq={};return r.peq};
+const pePay=v=>{const n=num(v);return n==null?'':n.toFixed(3)};
+function peFilled(b){const q=peQ(b);return peSheet().filter(x=>num(q[x.id])!=null&&num(q[x.id])!==0)}
+/* read a ProEst template (or any sheet with these columns) */
+async function peRead(file){const X=await loadXLSX();const wb=X.read(await file.arrayBuffer(),{type:'array'});
+  const name=wb.SheetNames.find(n=>/bid\s*work\s*sheet/i.test(n))||wb.SheetNames.find(n=>{const r=X.utils.sheet_to_json(wb.Sheets[n],{header:1,blankrows:false})[0]||[];return r.some(h=>/pay\s*item/i.test(String(h)))&&r.some(h=>/desc/i.test(String(h)))})||wb.SheetNames[0];
+  const rows=X.utils.sheet_to_json(wb.Sheets[name],{header:1,blankrows:false,raw:true});const H=(rows[0]||[]).map(h=>String(h||'').trim().toLowerCase());
+  const col=re=>H.findIndex(h=>re.test(h));const ci={s:col(/sort/),p:col(/pay\s*item(?!.*desc)/),c:col(/cost\s*code/),d:col(/desc/),q:col(/quant|qty/),u:col(/^unit/),g:col(/categ/)};
+  if(ci.d<0||ci.p<0)throw new Error('Couldn’t find the Pay Item and Description columns in that file.');
+  const seen=new Set();const items=[];let dup=0;
+  rows.slice(1).forEach((r,k)=>{const d=String(r[ci.d]??'').trim();if(!d)return;const key=[r[ci.s],r[ci.p],r[ci.c],d,r[ci.u],r[ci.g]].join('|');if(seen.has(key)){dup++;return}seen.add(key);
+    items.push({id:newId(),s:num(r[ci.s])??(k+1)*10,p:num(r[ci.p])??String(r[ci.p]??''),c:num(r[ci.c])??String(r[ci.c]??''),d,u:String(r[ci.u]??'').trim(),g:String(r[ci.g]??'').trim()||'Other'})});
+  return {items,dup,sheet:name}}
+/* ---------- on the bid ---------- */
+function peqPanel(b,work){const L=peSheet();if(!L.length)return peCanEdit()?`<div class="notice peq-panel"><b>Bid item quantities for ProEstimate</b><div class="small">Load your bid item list in <button class="linkbtn" data-act="adm-open" data-v="pesheet">Settings → Bid item sheet</button> and estimators can fill in quantities here and export the ProEstimate import.</div></div>`:'';
+  const n=peFilled(b).length;
+  return `<div class="panel pad peq-panel"><div class="peq-ph"><div><b>Bid item quantities for ProEstimate</b><div class="small dim">${n?`${n} of ${L.length} bid items have a quantity`:`${L.length} bid items to choose from`}</div></div>
+    <div class="adders" style="margin:0"><button class="btn primary" data-act="peq-open">${n?'Open the sheet':'Fill in quantities'}</button>${n?`<button class="btn" data-act="peq-export">⬇ Export for ProEstimate</button>`:''}</div></div></div>`}
+function peqView(){const b=M.draft;const X=M.peq;const work=canWork(b);const q=peQ(b);const L=peSheet();const qs=X.q.trim().toLowerCase();
+  const show=x=>(!qs||(x.d+' '+pePay(x.p)+' '+x.c+' '+x.g).toLowerCase().includes(qs))&&(!X.only||num(q[x.id])!=null)&&(!X.cat||x.g===X.cat);
+  const cats=peCats();const filled=peFilled(b);const byCat=c=>filled.filter(x=>x.g===c).length;
+  const groups=cats.map(c=>[c,L.filter(x=>x.g===c&&show(x))]).filter(([,xs])=>xs.length);
+  const rows=groups.map(([c,xs])=>{const shut=X.shut.has(c)&&!qs&&!X.only;return `<tbody class="peq-g"><tr class="peq-gh"><td colspan="5"><button class="qg-tog" data-act="peq-tog" data-v="${esc(c)}" aria-expanded="${!shut}">${shut?'▸':'▾'}</button><b>${esc(c)}</b> <span class="small dim">${L.filter(x=>x.g===c).length} items${byCat(c)?` · <b class="good-t">${byCat(c)} with quantities</b>`:''}</span></td></tr>
+    ${shut?'':xs.map(x=>{const v=q[x.id];return `<tr class="${num(v)!=null?'has':''}"><td class="num dim">${esc(pePay(x.p))}</td><td>${esc(x.d)}</td><td class="peq-q"><input class="field sm num" data-peq="${x.id}" inputmode="decimal" data-nomoney value="${v==null?'':esc(String(v))}"${work?'':' disabled'} aria-label="Quantity for ${esc(x.d)}"></td><td class="dim">${esc(x.u)}</td><td class="dim small">${esc(String(x.c))}</td></tr>`}).join('')}</tbody>`}).join('');
+  return `<div class="mhead peq-head"><div><h2>Bid item quantities</h2><p>${esc(b.name||'This bid')} · ${filled.length} item${filled.length===1?'':'s'} with a quantity</p></div><div class="r" style="display:flex;gap:8px;align-items:center"><button class="btn primary" data-act="peq-export"${filled.length?'':' disabled'}>⬇ Export for ProEstimate</button><button class="btn" data-act="peq-x">Back to the bid</button></div></div>
+   <div class="mbody peq">
+     <div class="peq-bar"><input class="field" id="peq-q" data-peqq placeholder="Search bid items, pay item numbers…" value="${esc(X.q)}"><select class="field" data-peqcat><option value="">All categories</option>${cats.map(c=>`<option${X.cat===c?' selected':''}>${esc(c)}${byCat(c)?` (${byCat(c)})`:''}</option>`).join('')}</select>
+       <label class="check"><input type="checkbox" data-peqonly${X.only?' checked':''}> Only items with quantities</label><span style="flex:1"></span><button class="linkbtn" data-act="peq-all" data-v="${groups.every(([c])=>X.shut.has(c))?'open':'shut'}">${groups.every(([c])=>X.shut.has(c))?'▾ Expand all':'▸ Collapse all'}</button>${work&&filled.length?'<button class="linkbtn danger-t" data-act="peq-clear">Clear all quantities</button>':''}</div>
+     ${X.arm?`<div class="notice">Clear all ${filled.length} quantities on this bid? <button class="btn sm warn" data-act="peq-clear" data-ok="1">Clear them</button> <button class="btn sm ghost" data-act="peq-unarm">Cancel</button></div>`:''}
+     <div class="panel scroll peq-wrap"><table class="team-t peq-t"><thead><tr><th>Pay item</th><th>Description</th><th class="r">Quantity</th><th>Unit</th><th>Cost code</th></tr></thead>${rows||`<tbody><tr><td colspan="5"><div class="empty">${X.only?'No quantities entered yet.':'Nothing matches.'}</div></td></tr></tbody>`}</table></div>
+     <p class="hint">Enter or ↓ moves down, ↑ moves up. Paste a column of numbers from Excel and it fills down. Saved with the bid as you type. Export gives the same file as the template’s Bid Import sheet: only items with a quantity, in sort order.</p></div>`}
+async function peqExport(b){const items=peFilled(b);if(!items.length){toast('No quantities yet.');return}let X;try{X=await loadXLSX()}catch(e){toast(errMsg(e));return}const q=peQ(b);
+  const n=v=>typeof v==='number'?v:(num(v)??v);
+  const aoa=[PEQ_COLS,...items.slice().sort((a,c)=>(num(a.s)??0)-(num(c.s)??0)).map(x=>[n(x.s),n(x.p),n(x.c),x.d,num(q[x.id]),x.u,x.g])];
+  const ws=X.utils.aoa_to_sheet(aoa);for(let r=1;r<aoa.length;r++){['B','C'].forEach(cl=>{const c=ws[cl+(r+1)];if(c&&c.t==='n')c.z='0.000'});const e=ws['E'+(r+1)];if(e)e.z='#,##0.00'}
+  ws['!cols']=[{wch:11},{wch:11},{wch:11},{wch:60},{wch:12},{wch:8},{wch:20}];
+  const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Bid Import');X.writeFile(wb,`${(b.name||'Bid')} - ProEst Bid Import.xlsx`.replace(/[\\/:*?"<>|]/g,'-'));toast(`Exported ${items.length} bid item${items.length===1?'':'s'} for ProEstimate.`)}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='bid'||t.tagName==='SELECT')return;const a=t.dataset.act;if(!a.startsWith('peq-'))return;const b=M.draft;
+  if(a==='peq-open'){M.peq={q:'',cat:'',only:false,shut:new Set(),arm:false};const f=peFilled(b);if(f.length){peCats().forEach(c=>{if(!f.some(x=>x.g===c))M.peq.shut.add(c)})}renderModal();setTimeout(()=>{const i=document.querySelector('[data-peq]');if(i&&canWork(b))i.focus()},50);return}
+  if(a==='peq-x'){M.peq=null;renderModal();return}
+  if(a==='peq-export'){peqExport(b);return}
+  if(a==='peq-tog'){const s=M.peq.shut;const c=t.dataset.v;s.has(c)?s.delete(c):s.add(c);renderModal();return}
+  if(a==='peq-all'){const s=M.peq.shut;if(t.dataset.v==='shut')peCats().forEach(c=>s.add(c));else s.clear();renderModal();return}
+  if(a==='peq-clear'){if(!canWork(b))return;if(!t.dataset.ok){M.peq.arm=true;renderModal();return}rfqOf(b).peq={};M.peq.arm=false;renderModal();toast('Quantities cleared.');return}
+  if(a==='peq-unarm'){M.peq.arm=false;renderModal();return}});
+document.addEventListener('input',e=>{const t=e.target;if(!M||!M.peq)return;
+  if(t.dataset.peq!=null){const v=t.value.trim();const q=peQ(M.draft);if(v===''){delete q[t.dataset.peq]}else{const n=num(v);if(n!=null)q[t.dataset.peq]=n}t.closest('tr')?.classList.toggle('has',v!=='');return}
+  if(t.dataset.peqq!=null){M.peq.q=t.value;clearTimeout(peqView._t);peqView._t=setTimeout(()=>renderModal(),180)}});
+document.addEventListener('change',e=>{const t=e.target;if(!M||!M.peq)return;
+  if(t.dataset.peqcat!=null){M.peq.cat=t.value;if(t.value)M.peq.shut.delete(t.value);renderModal();return}
+  if(t.dataset.peqonly!=null){M.peq.only=t.checked;renderModal();return}
+  if(t.dataset.peq!=null){const p=document.querySelector('.peq-head p');if(p){const n=peFilled(M.draft).length;p.textContent=`${M.draft.name||'This bid'} · ${n} item${n===1?'':'s'} with a quantity`}}});
+document.addEventListener('keydown',e=>{const t=e.target;if(!t.dataset||t.dataset.peq==null)return;
+  if(e.key==='Enter'||e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const all=[...document.querySelectorAll('[data-peq]')];const i=all.indexOf(t);const n=all[i+(e.key==='ArrowUp'?-1:1)];if(n){n.focus();n.select()}}});
+document.addEventListener('paste',e=>{const t=e.target;if(!t.dataset||t.dataset.peq==null||!M||!M.peq)return;const txt=(e.clipboardData||window.clipboardData).getData('text');const lines=txt.replace(/\r/g,'').split('\n');if(lines.length<2)return;
+  e.preventDefault();while(lines.length&&lines[lines.length-1]==='')lines.pop();const all=[...document.querySelectorAll('[data-peq]')];const i=all.indexOf(t);const q=peQ(M.draft);let n=0;
+  lines.forEach((ln,k)=>{const el=all[i+k];if(!el)return;const v=String(ln.split('\t')[0]).trim();if(v===''){delete q[el.dataset.peq];el.value=''}else{const x=num(v);if(x==null)return;q[el.dataset.peq]=x;el.value=String(x);n++}el.closest('tr')?.classList.toggle('has',v!=='')});
+  toast(`Pasted ${n} quantit${n===1?'y':'ies'}.`)});
+/* ---------- Settings → Bid item sheet ---------- */
+function peSheetHtml(){const A=S.adm;const L=peSheet();const P=A.pe||(A.pe={q:'',cat:'',edit:null,imp:null});const ed=peCanEdit();
+  if(P.imp){const I=P.imp;const cats=[...new Set(I.items.map(x=>x.g))];
+    return `<div class="panel pad"><h3 class="adm-h">Load ${I.items.length} bid items from “${esc(I.file)}”</h3><p class="small">From the <b>${esc(I.sheet)}</b> sheet: ${cats.map(c=>`${esc(c)} ${I.items.filter(x=>x.g===c).length}`).join(' · ')}.${I.dup?` ${I.dup} exact duplicate row${I.dup===1?' was':'s were'} left out.`:''}</p>
+      ${L.length?`<div class="radio adm-col"><label><input type="radio" name="pe-mode" data-pemode value="replace"${I.mode!=='merge'?' checked':''}> <b>Replace the list</b> <span class="dim">quantities already on bids stay with items that keep the same pay item number</span></label><label><input type="radio" name="pe-mode" data-pemode value="merge"${I.mode==='merge'?' checked':''}> <b>Add only new items</b> <span class="dim">by pay item number; nothing already there changes</span></label></div>`:''}
+      <div class="adders"><button class="btn primary" data-act="pe-imp-go"${P.busy?' disabled':''}>${P.busy?'Saving…':'Load them'}</button><button class="btn" data-act="pe-imp-x">Cancel</button></div></div>`}
+  const qs=P.q.trim().toLowerCase();const cats=peCats();const show=L.filter(x=>(!qs||(x.d+' '+pePay(x.p)+' '+x.c).toLowerCase().includes(qs))&&(!P.cat||x.g===P.cat));
+  const E=P.edit;const inp=(k,v,w,ph)=>`<input class="field sm" data-pef="${k}" value="${esc(v??'')}" style="width:${w}"${ph?` placeholder="${ph}"`:''} data-nomoney>`;
+  const row=x=>E&&E.id===x.id?`<tr class="peq-edit"><td>${inp('s',E.s,'70px')}</td><td>${inp('p',E.p,'80px')}</td><td>${inp('c',E.c,'70px')}</td><td>${inp('d',E.d,'100%')}</td><td>${inp('u',E.u,'64px')}</td><td><input class="field sm" data-pef="g" list="pe-cats" value="${esc(E.g)}" style="width:150px"></td><td class="nowrap"><button class="btn xs primary" data-act="pe-ok">Save</button><button class="btn xs" data-act="pe-cancel">Cancel</button></td></tr>`
+    :`<tr><td class="num dim">${esc(String(x.s))}</td><td class="num">${esc(pePay(x.p))}</td><td class="num dim">${esc(String(x.c))}</td><td>${esc(x.d)}</td><td>${esc(x.u)}</td><td class="small">${esc(x.g)}</td><td class="nowrap">${ed?`<button class="btn xs" data-act="pe-ed" data-id="${x.id}">Edit</button>${P.del===x.id?`<button class="btn xs danger arm" data-act="pe-del" data-id="${x.id}">Delete</button>`:`<button class="x" data-act="pe-del" data-id="${x.id}" title="Delete">×</button>`}`:''}</td></tr>`;
+  return `<div class="panel pad"><div class="peq-bar" style="margin:0 0 10px">${ed?`<label class="btn sm primary">⬆ Load from Excel<input type="file" accept=".xlsx,.xls,.xlsm,.csv" data-peimp hidden></label>`:''}${L.length?`<button class="btn sm" data-act="pe-dl">⬇ Download the list</button>`:''}${ed?`<button class="btn sm" data-act="pe-add">+ Add a bid item</button>`:''}<span style="flex:1"></span>${L.length?`<input class="field" data-peadmq placeholder="Search" value="${esc(P.q)}" style="max-width:220px"><select class="field" data-peadmcat style="max-width:200px"><option value="">All categories</option>${cats.map(c=>`<option${P.cat===c?' selected':''}>${esc(c)}</option>`).join('')}</select>`:''}</div>
+     ${L.length?`<p class="small dim" style="margin:0 0 8px">${L.length} bid items in ${cats.length} categories${show.length!==L.length?` · showing ${show.length}`:''}. Estimators see them in this order (by sort code).</p>
+     <datalist id="pe-cats">${cats.map(c=>`<option value="${esc(c)}">`).join('')}</datalist>
+     <div class="scroll peq-wrap"><table class="team-t peq-t"><thead><tr><th>Sort</th><th>Pay item</th><th>Cost code</th><th>Description</th><th>Unit</th><th>Category</th><th></th></tr></thead><tbody>${E&&E.isNew?row(E):''}${show.map(row).join('')}</tbody></table></div>`
+     :`<div class="empty"><b>No bid items yet.</b>Use ⬆ Load from Excel and pick your ProEst template. The app reads the Bid Work Sheet: sort code, pay item, cost code, description, unit and category.</div>`}</div>
+   <p class="hint">Pay items are exported as numbers shown to three decimals (200.400), the way the template does. Admins and precon managers can change the list.</p>`}
+async function pePut(items){await run(sb.from('settings').upsert({key:'pe_sheet',value:{...(S.settings.pe_sheet||{}),items:items.slice().sort((a,c)=>(num(a.s)??0)-(num(c.s)??0))}}));await loadTable('settings')}
+document.addEventListener('change',async e=>{const t=e.target;
+  if(t.dataset&&t.dataset.peimp!=null&&t.files&&t.files[0]){const f=t.files[0];t.value='';try{const r=await peRead(f);if(!r.items.length){toast('No bid items found in that file.');return}S.adm.pe.imp={...r,file:f.name,mode:'replace'};render()}catch(err){toast(errMsg(err))}return}
+  if(t.dataset&&t.dataset.pemode!=null&&S.adm.pe&&S.adm.pe.imp){S.adm.pe.imp.mode=t.value;return}
+  if(t.dataset&&t.dataset.peadmcat!=null){S.adm.pe.cat=t.value;render();return}});
+document.addEventListener('input',e=>{const t=e.target;if(!S.adm||!S.adm.pe)return;
+  if(t.dataset&&t.dataset.peadmq!=null){S.adm.pe.q=t.value;clearTimeout(peSheetHtml._t);peSheetHtml._t=setTimeout(()=>{render();const i=document.querySelector('[data-peadmq]');if(i){i.focus();i.setSelectionRange(i.value.length,i.value.length)}},200);return}
+  if(t.dataset&&t.dataset.pef&&S.adm.pe.edit){S.adm.pe.edit[t.dataset.pef]=t.value}});
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('pe-')||['pe-open','pe-close','pe-run'].includes(a))return;if(S.view!=='admin'||!S.adm||!S.adm.pe)return;const P=S.adm.pe;
+  if(a==='pe-dl'){let X;try{X=await loadXLSX()}catch(err){toast(errMsg(err));return}const ws=X.utils.aoa_to_sheet([['Sort Code','Pay Item','Cost Code','Description','Quantity','Unit','Category'],...peSheet().map(x=>[x.s,x.p,x.c,x.d,null,x.u,x.g])]);
+    for(let r=2;r<=peSheet().length+1;r++)['B','C'].forEach(cl=>{const c=ws[cl+r];if(c&&c.t==='n')c.z='0.000'});const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Bid Work Sheet');X.writeFile(wb,`Bid item sheet ${todayStr()}.xlsx`);return}
+  if(!peCanEdit())return;const L=peSheet().map(x=>({...x}));
+  if(a==='pe-imp-x'){P.imp=null;render();return}
+  if(a==='pe-imp-go'){const I=P.imp;let next;if(I.mode==='merge'&&L.length){const have=new Set(L.map(x=>pePay(x.p)));next=[...L,...I.items.filter(x=>!have.has(pePay(x.p)))]}
+    else{const old=new Map(L.map(x=>[pePay(x.p)+'|'+String(x.d).toLowerCase(),x.id]));next=I.items.map(x=>({...x,id:old.get(pePay(x.p)+'|'+String(x.d).toLowerCase())||x.id}))}
+    P.busy=true;render();try{await pePut(next);P.imp=null;P.busy=false;render();toast(`Bid item sheet saved: ${next.length} items.`)}catch(err){P.busy=false;render();toast(errMsg(err))}return}
+  if(a==='pe-add'){const last=L[L.length-1];P.edit={id:newId(),isNew:true,s:last?(num(last.s)||0)+10:10,p:'',c:'',d:'',u:'EACH',g:P.cat||last?.g||''};render();setTimeout(()=>document.querySelector('[data-pef=d]')?.focus(),0);return}
+  if(a==='pe-ed'){const x=L.find(y=>y.id===t.dataset.id);P.edit={...x};P.del=null;render();return}
+  if(a==='pe-cancel'){P.edit=null;render();return}
+  if(a==='pe-ok'){const E=P.edit;if(!String(E.d||'').trim()){toast('Add a description.');return}const x={id:E.id,s:num(E.s)??0,p:num(E.p)??String(E.p||''),c:num(E.c)??String(E.c||''),d:String(E.d).trim(),u:String(E.u||'').trim().toUpperCase(),g:String(E.g||'').trim()||'Other'};
+    const next=E.isNew?[...L,x]:L.map(y=>y.id===x.id?x:y);try{await pePut(next);P.edit=null;render();toast('Bid item saved.')}catch(err){toast(errMsg(err))}return}
+  if(a==='pe-del'){const id=t.dataset.id;if(P.del!==id){P.del=id;render();return}try{await pePut(L.filter(y=>y.id!==id));P.del=null;render();toast('Bid item deleted.')}catch(err){toast(errMsg(err))}}});

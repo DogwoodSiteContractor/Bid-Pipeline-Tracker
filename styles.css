@@ -2648,3 +2648,13 @@ div.tw-pgh{cursor:default}
 .qg-mv{display:inline-flex;gap:2px}.qg-arr{border:1px solid var(--line);background:var(--surface);color:var(--ink-2);border-radius:6px;width:26px;height:26px;cursor:pointer;font-size:13px;padding:0}
 .qg-arr:hover:not(:disabled){border-color:var(--accent);color:var(--ink)}.qg-arr:disabled{opacity:.3;cursor:default}
 .qg-bar{display:flex;justify-content:flex-end;margin:-4px 0 2px}
+
+/* bid item sheet (ProEstimate) */
+.peq-panel{margin-bottom:14px}.peq-ph{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.peq-head{position:sticky;top:0;z-index:2;background:var(--bg)}
+.peq-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px}.peq-bar .field{width:auto}.peq-bar #peq-q{flex:1 1 260px;min-width:200px}
+.peq-wrap{max-height:none}
+.peq-t td{padding-top:4px;padding-bottom:4px;vertical-align:middle}.peq-t .peq-q{width:130px;text-align:right}.peq-t .peq-q input{width:110px;text-align:right}
+.peq-t tr.has td{background:color-mix(in srgb,var(--good,#3c8a55) 9%,transparent)}.peq-t tr.has .peq-q input{font-weight:700}
+.peq-gh td{background:var(--surface);border-top:2px solid var(--line);padding-top:8px!important}.peq-gh .qg-tog{margin-right:4px}
+.peq-edit td{background:var(--surface)}
