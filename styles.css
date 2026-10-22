@@ -2658,3 +2658,8 @@ div.tw-pgh{cursor:default}
 .peq-t tr.has td{background:color-mix(in srgb,var(--good,#3c8a55) 9%,transparent)}.peq-t tr.has .peq-q input{font-weight:700}
 .peq-gh td{background:var(--surface);border-top:2px solid var(--line);padding-top:8px!important}.peq-gh .qg-tog{margin-right:4px}
 .peq-edit td{background:var(--surface)}
+.peq-menu{position:fixed;z-index:200;background:var(--surface);border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.25);padding:4px;display:flex;flex-direction:column;min-width:190px}
+.peq-menu button{border:0;background:none;text-align:left;padding:8px 12px;border-radius:7px;cursor:pointer;font:inherit;font-size:14px;color:var(--ink)}
+.peq-menu button:hover,.peq-menu button:focus{background:var(--mute-soft,rgba(0,0,0,.06));outline:none}
+.peq-added td{background:color-mix(in srgb,var(--accent) 7%,transparent)}.peq-xd{display:flex;gap:6px;align-items:center}
+.peq-tag{font-size:10.5px;border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--ink-3);flex:none}

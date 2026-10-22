@@ -12411,7 +12411,10 @@ const peCats=()=>{const seen=[];peSheet().forEach(x=>{if(x.g&&!seen.includes(x.g
 const peCanEdit=()=>isAdmin()||canAssign();
 const peQ=b=>{const r=rfqOf(b);if(!r.peq||typeof r.peq!=='object')r.peq={};return r.peq};
 const pePay=v=>{const n=num(v);return n==null?'':n.toFixed(3)};
-function peFilled(b){const q=peQ(b);return peSheet().filter(x=>num(q[x.id])!=null&&num(q[x.id])!==0)}
+// rows an estimator added on this bid only (right-click a row → Add row above / below); not added to the master list
+const peX=b=>{const r=rfqOf(b);if(!Array.isArray(r.peqx))r.peqx=[];return r.peqx};
+function peList(b){const xs=peX(b).map(x=>({...x,x:true}));if(!xs.length)return peSheet();return [...peSheet(),...xs].sort((a,c)=>(num(a.s)??0)-(num(c.s)??0))}
+function peFilled(b){const q=peQ(b);return peList(b).filter(x=>num(q[x.id])!=null&&num(q[x.id])!==0&&String(x.d||'').trim())}
 /* read a ProEst template (or any sheet with these columns) */
 async function peRead(file){const X=await loadXLSX();const wb=X.read(await file.arrayBuffer(),{type:'array'});
   const name=wb.SheetNames.find(n=>/bid\s*work\s*sheet/i.test(n))||wb.SheetNames.find(n=>{const r=X.utils.sheet_to_json(wb.Sheets[n],{header:1,blankrows:false})[0]||[];return r.some(h=>/pay\s*item/i.test(String(h)))&&r.some(h=>/desc/i.test(String(h)))})||wb.SheetNames[0];
@@ -12427,19 +12430,21 @@ function peqPanel(b,work){const L=peSheet();if(!L.length)return peCanEdit()?`<di
   const n=peFilled(b).length;
   return `<div class="panel pad peq-panel"><div class="peq-ph"><div><b>Bid item quantities for ProEstimate</b><div class="small dim">${n?`${n} of ${L.length} bid items have a quantity`:`${L.length} bid items to choose from`}</div></div>
     <div class="adders" style="margin:0"><button class="btn primary" data-act="peq-open">${n?'Open the sheet':'Fill in quantities'}</button>${n?`<button class="btn" data-act="peq-export">⬇ Export for ProEstimate</button>`:''}</div></div></div>`}
-function peqView(){const b=M.draft;const X=M.peq;const work=canWork(b);const q=peQ(b);const L=peSheet();const qs=X.q.trim().toLowerCase();
+function peqView(){const b=M.draft;const X=M.peq;const work=canWork(b);const q=peQ(b);const L=peList(b);const qs=X.q.trim().toLowerCase();
   const show=x=>(!qs||(x.d+' '+pePay(x.p)+' '+x.c+' '+x.g).toLowerCase().includes(qs))&&(!X.only||num(q[x.id])!=null)&&(!X.cat||x.g===X.cat);
-  const cats=peCats();const filled=peFilled(b);const byCat=c=>filled.filter(x=>x.g===c).length;
+  const cats=[...peCats(),...peX(b).map(x=>x.g).filter(g=>g&&!peCats().includes(g))].filter((g,i,a)=>a.indexOf(g)===i);const filled=peFilled(b);const byCat=c=>filled.filter(x=>x.g===c).length;
   const groups=cats.map(c=>[c,L.filter(x=>x.g===c&&show(x))]).filter(([,xs])=>xs.length);
   const rows=groups.map(([c,xs])=>{const shut=X.shut.has(c)&&!qs&&!X.only;return `<tbody class="peq-g"><tr class="peq-gh"><td colspan="5"><button class="qg-tog" data-act="peq-tog" data-v="${esc(c)}" aria-expanded="${!shut}">${shut?'▸':'▾'}</button><b>${esc(c)}</b> <span class="small dim">${L.filter(x=>x.g===c).length} items${byCat(c)?` · <b class="good-t">${byCat(c)} with quantities</b>`:''}</span></td></tr>
-    ${shut?'':xs.map(x=>{const v=q[x.id];return `<tr class="${num(v)!=null?'has':''}"><td class="num dim">${esc(pePay(x.p))}</td><td>${esc(x.d)}</td><td class="peq-q"><input class="field sm num" data-peq="${x.id}" inputmode="decimal" data-nomoney value="${v==null?'':esc(String(v))}"${work?'':' disabled'} aria-label="Quantity for ${esc(x.d)}"></td><td class="dim">${esc(x.u)}</td><td class="dim small">${esc(String(x.c))}</td></tr>`}).join('')}</tbody>`}).join('');
+    ${shut?'':xs.map(x=>{const v=q[x.id];const xi=(a,val,w,ph)=>`<input class="field sm" data-peqx="${x.id}.${a}" value="${esc(val??'')}" placeholder="${ph}" style="width:${w}" data-nomoney${work?'':' disabled'}>`;
+      if(x.x)return `<tr class="peq-added${num(v)!=null?' has':''}" data-peqrow="${x.id}"><td>${xi('p',x.p===''?'':pePay(x.p),'86px','Pay item')}</td><td><div class="peq-xd">${xi('d',x.d,'100%','Description')}<span class="peq-tag" title="Added on this bid only">added</span></div></td><td class="peq-q"><input class="field sm num" data-peq="${x.id}" inputmode="decimal" data-nomoney value="${v==null?'':esc(String(v))}"${work?'':' disabled'} aria-label="Quantity"></td><td>${xi('u',x.u,'64px','Unit')}</td><td>${xi('c',x.c,'64px','Code')}</td></tr>`;
+      return `<tr class="${num(v)!=null?'has':''}" data-peqrow="${x.id}"><td class="num dim">${esc(pePay(x.p))}</td><td>${esc(x.d)}</td><td class="peq-q"><input class="field sm num" data-peq="${x.id}" inputmode="decimal" data-nomoney value="${v==null?'':esc(String(v))}"${work?'':' disabled'} aria-label="Quantity for ${esc(x.d)}"></td><td class="dim">${esc(x.u)}</td><td class="dim small">${esc(String(x.c))}</td></tr>`}).join('')}</tbody>`}).join('');
   return `<div class="mhead peq-head"><div><h2>Bid item quantities</h2><p>${esc(b.name||'This bid')} · ${filled.length} item${filled.length===1?'':'s'} with a quantity</p></div><div class="r" style="display:flex;gap:8px;align-items:center"><button class="btn primary" data-act="peq-export"${filled.length?'':' disabled'}>⬇ Export for ProEstimate</button><button class="btn" data-act="peq-x">Back to the bid</button></div></div>
    <div class="mbody peq">
      <div class="peq-bar"><input class="field" id="peq-q" data-peqq placeholder="Search bid items, pay item numbers…" value="${esc(X.q)}"><select class="field" data-peqcat><option value="">All categories</option>${cats.map(c=>`<option${X.cat===c?' selected':''}>${esc(c)}${byCat(c)?` (${byCat(c)})`:''}</option>`).join('')}</select>
        <label class="check"><input type="checkbox" data-peqonly${X.only?' checked':''}> Only items with quantities</label><span style="flex:1"></span><button class="linkbtn" data-act="peq-all" data-v="${groups.every(([c])=>X.shut.has(c))?'open':'shut'}">${groups.every(([c])=>X.shut.has(c))?'▾ Expand all':'▸ Collapse all'}</button>${work&&filled.length?'<button class="linkbtn danger-t" data-act="peq-clear">Clear all quantities</button>':''}</div>
      ${X.arm?`<div class="notice">Clear all ${filled.length} quantities on this bid? <button class="btn sm warn" data-act="peq-clear" data-ok="1">Clear them</button> <button class="btn sm ghost" data-act="peq-unarm">Cancel</button></div>`:''}
      <div class="panel scroll peq-wrap"><table class="team-t peq-t"><thead><tr><th>Pay item</th><th>Description</th><th class="r">Quantity</th><th>Unit</th><th>Cost code</th></tr></thead>${rows||`<tbody><tr><td colspan="5"><div class="empty">${X.only?'No quantities entered yet.':'Nothing matches.'}</div></td></tr></tbody>`}</table></div>
-     <p class="hint">Enter or ↓ moves down, ↑ moves up. Paste a column of numbers from Excel and it fills down. Saved with the bid as you type. Export gives the same file as the template’s Bid Import sheet: only items with a quantity, in sort order.</p></div>`}
+     <p class="hint">Right-click a row to add a bid item above or below it (on this bid only). Enter or ↓ moves down, ↑ moves up. Paste a column of numbers from Excel and it fills down. Saved with the bid as you type. Export gives the same file as the template’s Bid Import sheet: only items with a quantity, in sort order.</p></div>`}
 async function peqExport(b){const items=peFilled(b);if(!items.length){toast('No quantities yet.');return}let X;try{X=await loadXLSX()}catch(e){toast(errMsg(e));return}const q=peQ(b);
   const n=v=>typeof v==='number'?v:(num(v)??v);
   const aoa=[PEQ_COLS,...items.slice().sort((a,c)=>(num(a.s)??0)-(num(c.s)??0)).map(x=>[n(x.s),n(x.p),n(x.c),x.d,num(q[x.id]),x.u,x.g])];
@@ -12505,3 +12510,22 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
   if(a==='pe-ok'){const E=P.edit;if(!String(E.d||'').trim()){toast('Add a description.');return}const x={id:E.id,s:num(E.s)??0,p:num(E.p)??String(E.p||''),c:num(E.c)??String(E.c||''),d:String(E.d).trim(),u:String(E.u||'').trim().toUpperCase(),g:String(E.g||'').trim()||'Other'};
     const next=E.isNew?[...L,x]:L.map(y=>y.id===x.id?x:y);try{await pePut(next);P.edit=null;render();toast('Bid item saved.')}catch(err){toast(errMsg(err))}return}
   if(a==='pe-del'){const id=t.dataset.id;if(P.del!==id){P.del=id;render();return}try{await pePut(L.filter(y=>y.id!==id));P.del=null;render();toast('Bid item deleted.')}catch(err){toast(errMsg(err))}}});
+
+/* right-click menu on the quantity sheet: add a row above / below (this bid only), delete an added row */
+function peqMenuClose(){document.getElementById('peq-menu')?.remove()}
+document.addEventListener('contextmenu',e=>{const tr=e.target.closest&&e.target.closest('tr[data-peqrow]');if(!tr||!M||!M.peq||!canWork(M.draft))return;e.preventDefault();peqMenuClose();
+  const id=tr.dataset.peqrow;const it=peList(M.draft).find(x=>x.id===id);if(!it)return;
+  const m=document.createElement('div');m.id='peq-menu';m.className='peq-menu';m.setAttribute('role','menu');
+  m.innerHTML=`<button role="menuitem" data-act="peqm-add" data-id="${id}" data-w="above">↑ Add row above</button><button role="menuitem" data-act="peqm-add" data-id="${id}" data-w="below">↓ Add row below</button>${it.x?`<button role="menuitem" class="danger-t" data-act="peqm-del" data-id="${id}">× Delete this row</button>`:''}`;
+  document.body.appendChild(m);const r=m.getBoundingClientRect();m.style.left=Math.min(e.clientX,innerWidth-r.width-8)+'px';m.style.top=Math.min(e.clientY,innerHeight-r.height-8)+'px';m.querySelector('button').focus()});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act^="peqm-"]');if(!t){if(!e.target.closest('#peq-menu'))peqMenuClose();return}
+  const b=M&&M.draft;peqMenuClose();if(!b||!M.peq||!canWork(b))return;const L=peList(b);const i=L.findIndex(x=>x.id===t.dataset.id);if(i<0)return;const it=L[i];
+  if(t.dataset.act==='peqm-del'){rfqOf(b).peqx=peX(b).filter(x=>x.id!==it.id);delete peQ(b)[it.id];renderModal();toast('Row deleted.');return}
+  const above=t.dataset.w==='above';const nb=above?L[i-1]:L[i+1];const a=num(it.s)??0;let sc;
+  if(nb&&nb.g===it.g){const m2=(a+(num(nb.s)??a))/2;sc=Math.round(m2)!==a&&Math.round(m2)!==num(nb.s)?Math.round(m2):m2}else sc=above?a-1:a+1;
+  const row={id:newId(),s:sc,p:'',c:it.c,d:'',u:it.u||'EACH',g:it.g};peX(b).push(row);M.peq.shut.delete(it.g);renderModal();
+  setTimeout(()=>{const el=document.querySelector(`[data-peqx="${row.id}.d"]`);if(el)el.focus()},30)});
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('peq-menu')){peqMenuClose();e.stopPropagation()}},true);
+document.addEventListener('scroll',()=>peqMenuClose(),true);
+document.addEventListener('input',e=>{const t=e.target;if(!t.dataset||t.dataset.peqx==null||!M||!M.peq)return;const [id,k]=t.dataset.peqx.split('.');const x=peX(M.draft).find(y=>y.id===id);if(!x)return;
+  if(k==='p'||k==='c'){const v=t.value.trim();x[k]=v===''?'':(num(v)??v)}else x[k]=k==='u'?t.value.trim().toUpperCase():t.value});
