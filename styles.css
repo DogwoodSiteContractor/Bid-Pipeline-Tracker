@@ -2664,3 +2664,8 @@ div.tw-pgh{cursor:default}
 .peq-added td{background:color-mix(in srgb,var(--accent) 7%,transparent)}.peq-xd{display:flex;gap:6px;align-items:center}
 .peq-tag{font-size:10.5px;border:1px solid var(--line);border-radius:4px;padding:0 5px;color:var(--ink-3);flex:none}
 .peq-desc.can{cursor:text;border-bottom:1px dashed transparent}.peq-desc.can:hover,.peq-desc.can:focus{border-bottom-color:var(--ink-3);outline:none}
+.peq-t tr[data-peqrow]{cursor:pointer}.peq-t tr[data-peqrow] input{cursor:text}
+.peq-t tr.hl td{background:color-mix(in srgb,#F2B705 22%,transparent)!important}
+.peq-t tr.hl td:first-child{box-shadow:inset 3px 0 0 #E0A800}
+.peq-t tr[data-peqrow]:focus-within td{box-shadow:inset 0 1px 0 var(--accent),inset 0 -1px 0 var(--accent)}
+.peq-t tr.hl:focus-within td:first-child{box-shadow:inset 3px 0 0 #E0A800,inset 0 1px 0 var(--accent),inset 0 -1px 0 var(--accent)}
