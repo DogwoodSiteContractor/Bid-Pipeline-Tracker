@@ -12522,15 +12522,16 @@ function peqMenuClose(){document.getElementById('peq-menu')?.remove()}
 document.addEventListener('contextmenu',e=>{const tr=e.target.closest&&e.target.closest('tr[data-peqrow]');if(!tr||!M||!M.peq||!canWork(M.draft))return;e.preventDefault();peqMenuClose();
   const id=tr.dataset.peqrow;const it=peList(M.draft).find(x=>x.id===id);if(!it)return;
   const m=document.createElement('div');m.id='peq-menu';m.className='peq-menu';m.setAttribute('role','menu');
-  m.innerHTML=`<button role="menuitem" data-act="peqm-add" data-id="${id}" data-w="above">↑ Add row above</button><button role="menuitem" data-act="peqm-add" data-id="${id}" data-w="below">↓ Add row below</button>${it.x?`<button role="menuitem" class="danger-t" data-act="peqm-del" data-id="${id}">× Delete this row</button>`:''}`;
+  m.innerHTML=`<button role="menuitem" data-act="peqm-add" data-id="${id}" data-w="above">↑ Add row above</button><button role="menuitem" data-act="peqm-add" data-id="${id}" data-w="below">↓ Add row below</button><span class="peq-msep"></span><button role="menuitem" data-act="peqm-add" data-id="${id}" data-w="above" data-copy="1">⧉ Copy row above</button><button role="menuitem" data-act="peqm-add" data-id="${id}" data-w="below" data-copy="1">⧉ Copy row below</button>${it.x?`<button role="menuitem" class="danger-t" data-act="peqm-del" data-id="${id}">× Delete this row</button>`:''}`;
   document.body.appendChild(m);const r=m.getBoundingClientRect();m.style.left=Math.min(e.clientX,innerWidth-r.width-8)+'px';m.style.top=Math.min(e.clientY,innerHeight-r.height-8)+'px';m.querySelector('button').focus()});
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act^="peqm-"]');if(!t){if(!e.target.closest('#peq-menu'))peqMenuClose();return}
   const b=M&&M.draft;peqMenuClose();if(!b||!M.peq||!canWork(b))return;const L=peList(b);const i=L.findIndex(x=>x.id===t.dataset.id);if(i<0)return;const it=L[i];
   if(t.dataset.act==='peqm-del'){rfqOf(b).peqx=peX(b).filter(x=>x.id!==it.id);delete peQ(b)[it.id];renderModal();toast('Row deleted.');return}
   const above=t.dataset.w==='above';const nb=above?L[i-1]:L[i+1];const a=num(it.s)??0;let sc;
   if(nb&&nb.g===it.g){const m2=(a+(num(nb.s)??a))/2;sc=Math.round(m2)!==a&&Math.round(m2)!==num(nb.s)?Math.round(m2):m2}else sc=above?a-1:a+1;
-  const row={id:newId(),s:sc,p:'',c:it.c,d:'',u:it.u||'EACH',g:it.g};peX(b).push(row);M.peq.shut.delete(it.g);renderModal();
-  setTimeout(()=>{const el=document.querySelector(`[data-peqx="${row.id}.d"]`);if(el)el.focus()},30)});
+  const copy=!!t.dataset.copy;const row={id:newId(),s:sc,p:copy?it.p:'',c:it.c,d:copy?it.d:'',u:it.u||'EACH',g:it.g};peX(b).push(row);
+  if(copy){const qv=peQ(b)[it.id];if(qv!=null)peQ(b)[row.id]=qv}M.peq.shut.delete(it.g);renderModal();peqCount();
+  setTimeout(()=>{const el=document.querySelector(copy?`[data-peq="${row.id}"]`:`[data-peqx="${row.id}.d"]`);if(el){el.focus();if(copy)el.select()}},30);if(copy)toast('Row copied. Change its description or quantity as needed.')});
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('peq-menu')){peqMenuClose();e.stopPropagation()}},true);
 document.addEventListener('scroll',()=>peqMenuClose(),true);
 document.addEventListener('input',e=>{const t=e.target;if(!t.dataset||t.dataset.peqx==null||!M||!M.peq)return;const [id,k]=t.dataset.peqx.split('.');const x=peX(M.draft).find(y=>y.id===id);if(!x)return;
