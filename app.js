@@ -12857,6 +12857,7 @@ function funPothole(){const F=S.fun;const H=F.hole||phInit();const p=H.p;const u
   const R=H.report;
   const side=`<div class="ph-side">
     ${R&&up&&(R.lines.length||R.bad)?`<div class="panel pad ph-rep"><b>Trip report</b>${R.bad?`<p class="small ph-bad">${esc(R.bad)}</p>`:''}${R.lines.length?`<ul class="small">${R.lines.map(l=>`<li>${esc(l)}</li>`).join('')}</ul>`:''}${R.total?`<div><b>+${R.total} coins</b></div>`:''}</div>`:''}
+    ${up&&s.water&&p.gear.pump<1&&p.coins<PH_GEAR.pump.cost?`<div class="panel pad ph-bedrock"><b>🌊 Flooded and broke?</b><p class="small">The super will lend you his pump this once so you can get back to work.</p><button class="btn primary" data-act="ph-borrow">Borrow the super’s pump</button></div>`:''}
     ${s.max>=PH_BED&&up?`<div class="panel pad ph-bedrock"><b>⛰️ You hit bedrock!</b><p class="small">This site is dug out. Start a new one and the super pays 250 coins. You keep all your upgrades.</p><button class="btn primary" data-act="ph-newsite">Start a new site (+250)</button></div>`:''}
     <div class="panel pad"><div class="ph-shop-h"><b>Tool trailer</b><span>🪙 ${p.coins.toLocaleString()}</span></div>${up?'':'<p class="small dim" style="margin:4px 0 8px">You can only shop up top. Climb out to spend coins.</p>'}
       <div class="small dim ph-sec">Shovel</div>${['spd','str','bkt'].map(upRow).join('')}<div class="small dim ph-sec">Lamp</div>${['rng','bat'].map(upRow).join('')}<div class="small dim ph-sec">Gear</div>${['box','pump','loc'].map(gearRow).join('')}
@@ -12868,7 +12869,7 @@ function funPothole(){const F=S.fun;const H=F.hole||phInit();const p=H.p;const u
       <p>Bring finds to the top to get paid. The super also pays 2 coins for every new 2 ft of trench, and the inspector adds a safety bonus for a clean trip.</p>
       <p><b>Watch out for:</b> 🟡 gas lines (you’ll hear a hiss next to one; hitting it ends the trip), 🟠 fiber lines (cutting one costs coins), 🔵 water mains and 💧 damp spots near spring lines (they flood the trench), and soft sand (caves in unless you have a trench box). Harder ground deeper down needs a stronger shovel.</p>
       <p>Keys: P = pump, L = locator.</p></div></details>
-    ${s.max>0&&up?`<button class="btn sm ghost" data-act="ph-abandon">Walk away from this site and start fresh</button>`:''}</div>`;
+    <div class="panel pad"><b>This site</b><p class="small dim" style="margin:4px 0 8px">Stuck? Walking away gives you a fresh site and keeps your coins and upgrades. Starting over wipes coins, upgrades and gear too, but your deepest dig and trophies stay.</p>${up?`<div class="adders"><button class="btn sm" data-act="ph-abandon">Walk away, new site</button><button class="btn sm ghost" data-act="ph-reset">Start over from scratch</button></div>`:'<p class="small dim">Climb out first.</p>'}</div></div>`;
   setTimeout(phDraw,0);
   return `<div class="ph">
     <div class="panel pad ph-main"><div id="ph-hud" class="ph-hud">${phHud(H)}</div><div class="ph-wrap"><canvas id="ph-cv" aria-label="Pothole dig site"></canvas></div><div id="ph-msg" class="ph-msg"></div>
@@ -12876,7 +12877,10 @@ function funPothole(){const F=S.fun;const H=F.hole||phInit();const p=H.p;const u
     ${side}</div>`}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||S.view!=='fun')return;const a=t.dataset.act;if(!/^ph-/.test(a))return;
   if(a==='ph-use')phUse(t.dataset.v);else if(a==='ph-buy')phBuy(t.dataset.kind,t.dataset.k);else if(a==='ph-newsite')phNewSiteGo(false);
-  else if(a==='ph-abandon'){if(!t.classList.contains('arm')){t.classList.add('arm');t.textContent='Click again to walk away (your coins and upgrades stay)';setTimeout(()=>{t.classList.remove('arm');t.textContent='Walk away from this site and start fresh'},3500);return}phNewSiteGo(true)}});
+  else if(a==='ph-borrow'){const H=S.fun.hole;if(!H||H.y!==0||!H.p.site.water||H.p.gear.pump>0)return;H.p.gear.pump=1;phSay(H,'🚿 The super lent you his pump. Go use it down at the water (P).','good');phRemote(H).then(()=>render());render()}
+  else if(a==='ph-abandon'||a==='ph-reset'){const lbl=t.textContent;if(!t.classList.contains('arm')){t.classList.add('arm');t.textContent=a==='ph-reset'?'Click again: wipe coins and upgrades':'Click again to walk away';setTimeout(()=>{t.classList.remove('arm');t.textContent=lbl},3500);return}
+    if(a==='ph-reset'){const H=S.fun.hole;if(!H||H.y!==0)return;const o=H.p;const n=phNewProg();n.best=o.best;n.found=o.found;n.trips=o.trips;n.sites=o.sites;n.dino=o.dino;n.dry=o.dry;n.wo=o.wo;H.p=n;H.x=6;H.y=0;H.haul=[];H.report=null;H.bat=phMaxBat(H);phLoadSite(H);phSay(H,'Fresh start. New site, starter gear, empty wallet.','good');phRemote(H).then(()=>render());render()}
+    else phNewSiteGo(true)}});
 let phHold=null;const phStop=()=>{clearTimeout(phHold);clearInterval(phHold);phHold=null};
 document.addEventListener('pointerdown',e=>{const b=e.target.closest&&e.target.closest('[data-phmv]');if(!b)return;e.preventDefault();const [dx,dy]=b.dataset.phmv.split(',').map(Number);phStop();phLast=0;phStep(dx,dy);
   phHold=setTimeout(()=>{phHold=setInterval(()=>{if(S.view!=='fun'||S.fun.game!=='pothole'){phStop();return}phStep(dx,dy)},150)},320)});
