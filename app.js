@@ -63,6 +63,17 @@ function tradesApply(){const L=S.settings&&S.settings.trades&&Array.isArray(S.se
 const CLIENT_TYPES=['General contractor','Developer','Owner','Municipality / public','Engineer','Designer / architect','Other'];
 // engineers and designers are kept apart from the owners and GCs you bid to
 const isDesignCo=c=>/engineer|designer|architect/i.test(String(c&&c.type||''));const gcClients=()=>S.clients.filter(c=>!isDesignCo(c));
+// developers & owners: their own contact list, and their own role on a bid
+const isOwnerCo=c=>/developer|owner/i.test(String(c&&c.type||''));
+const coKind=c=>isDesignCo(c)?'eng':isOwnerCo(c)?'own':'gc';
+// on a bid each company is a GC / client (gets the proposal) and/or a developer / owner; pre-ticked from its type
+function cRole(b,id){const r=((b.client_proposals||{})[id]||{}).role;if(r&&typeof r==='object'&&(r.gc||r.own))return {gc:!!r.gc,own:!!r.own};const own=isOwnerCo(byId(S.clients,id));return {gc:!own,own}}
+// who gets the proposal: the GCs / clients, or the developers / owners when there's no GC on the bid
+function propIds(b){const ids=b.client_ids||[];const g=ids.filter(id=>cRole(b,id).gc);return g.length?g:ids.filter(id=>cRole(b,id).own)}
+const ownerIds=b=>(b.client_ids||[]).filter(id=>cRole(b,id).own);
+// "GC: Evergreen · Owner: Sprouts" style line for headers and cards
+function partyLine(b,o={}){const P=propIds(b),O=ownerIds(b).filter(id=>!P.includes(id)||!cRole(b,id).gc);const nm=ids=>ids.slice(0,o.max||3).map(id=>esc(clientName(id))).join(', ')+(ids.length>(o.max||3)?` +${ids.length-(o.max||3)}`:'');
+  const gcs=(b.client_ids||[]).filter(id=>cRole(b,id).gc);const parts=[];if(gcs.length)parts.push(nm(gcs));if(O.length)parts.push(`${gcs.length?'Owner: ':''}${nm(O)}`);return parts.join(' · ')||(o.none??'No GC yet')}
 const PROJECT_TYPES=['Industrial','Commercial','Residential','Single Family','Townhomes','Single Family & Townhomes','Apartments','Public / municipal','Institutional','Other'];
 // older names and common variations → current project type
 const PROJECT_TYPE_ALIASES={singlefamily:'Single Family',sfr:'Single Family',singlefamilyhomes:'Single Family',multifamily:'Apartments',apartment:'Apartments',apartments:'Apartments',townhome:'Townhomes',townhouses:'Townhomes',townhouse:'Townhomes',townhomes:'Townhomes',
@@ -176,15 +187,15 @@ const propOf=(b,cid)=>(b.client_proposals||{})[cid]||{};
 const pick=(b,w,o)=>b.use_for==='without'?(o??w):(w??o);
 function clientAmount(b,cid){const p=propOf(b,cid);return pick(b,num(p.amount_with)??num(b.amount_with),num(p.amount_without)??num(b.amount_without))??0}
 const bidValue=b=>{const base=pick(b,num(b.amount_with),num(b.amount_without));if(base!=null)return base;
-  const a=(b.client_ids||[]).map(id=>clientAmount(b,id)).filter(Boolean);return a.length?Math.max(...a):0};
+  const a=propIds(b).map(id=>clientAmount(b,id)).filter(Boolean);return a.length?Math.max(...a):0};
 const wonValue=b=>num(b.awarded_amount)??(b.awarded_client_id?clientAmount(b,b.awarded_client_id):bidValue(b));
-const clientWon=(b,cid)=>b.status==='Awarded'&&(b.awarded_client_id?b.awarded_client_id===cid:(b.client_ids||[]).length===1);
+const clientWon=(b,cid)=>b.status==='Awarded'&&(b.awarded_client_id?b.awarded_client_id===cid:propIds(b).length===1&&propIds(b)[0]===cid);
 const clientLost=(b,cid)=>!clientWon(b,cid)&&(b.status==='Not Awarded'||propOf(b,cid).status==='Lost'||(b.status==='Awarded'&&!!b.awarded_client_id));
 /* ---- addenda & proposal revisions ---- */
 const addenda=b=>Array.isArray(b.addenda)?b.addenda:[];
 const revisions=b=>Array.isArray(b.revisions)?b.revisions:[];
 const openAddenda=b=>addenda(b).filter(a=>!a.priced||!a.acknowledged);
-function revSnap(b){const gcs={};(b.client_ids||[]).forEach(id=>{const p=propOf(b,id);gcs[id]={w:num(p.amount_with)??num(b.amount_with),o:num(p.amount_without)??num(b.amount_without)}});return{w:num(b.amount_with),o:num(b.amount_without),gcs}}
+function revSnap(b){const gcs={};propIds(b).forEach(id=>{const p=propOf(b,id);gcs[id]={w:num(p.amount_with)??num(b.amount_with),o:num(p.amount_without)??num(b.amount_without)}});return{w:num(b.amount_with),o:num(b.amount_without),gcs}}
 function snapValue(b,sn){if(!sn)return null;const base=pick(b,sn.w,sn.o);if(base!=null)return base;const a=Object.values(sn.gcs||{}).map(g=>pick(b,g.w,g.o)).filter(v=>v!=null);return a.length?Math.max(...a):null}
 // revisions are about dollar amounts: the base numbers, and the number for each GC that's on both versions
 function revSame(a,b){if(!a||!b)return false;const eq=(x,y)=>(num(x)??null)===(num(y)??null);if(!eq(a.w,b.w)||!eq(a.o,b.o))return false;
@@ -197,7 +208,7 @@ const revShown=b=>revClean(revisions(b));
 function addRevision(d,reason,auto){const r=revisions(d);d.revisions=r;r.push({id:newId(),rev:r.length?Math.max(...r.map(x=>+x.rev||0))+1:0,date:todayStr(),reason,addendum:'',snapshot:revSnap(d),by:myName(),auto:!!auto})}
 // addenda issued after the latest revision on a bid that has gone out
 function staleAddenda(b){const r=revisions(b);if(!r.length)return [];const last=r[r.length-1].date||'';const used=new Set(r.map(x=>String(x.addendum)));return addenda(b).filter(a=>a.date&&a.date>last&&!used.has(String(a.number)))}
-function clientsLine(b,max=2){const ids=b.client_ids||[];if(!ids.length)return 'No client assigned';
+function clientsLine(b,max=2){const ids=propIds(b);if(!ids.length)return 'No client assigned';
   if(b.status==='Awarded'&&b.awarded_client_id)return 'Awarded by '+esc(clientName(b.awarded_client_id))+(ids.length>1?` <span class="dim">(bid to ${ids.length})</span>`:'');
   return ids.slice(0,max).map(id=>esc(clientName(id))).join(', ')+(ids.length>max?` +${ids.length-max} more`:'')}
 const yearOf=b=>+(String(b.due_date||b.submitted_date||'').slice(0,4))||new Date(b.created_at||Date.now()).getFullYear();
@@ -245,7 +256,7 @@ function stageInfo(b,qs){
     sc.length?`${scDone} of ${sc.length} scopes signed off`:'No scopes selected yet',
     qs.length?`${qIn} of ${qs.length} quotes in`:'No quotes requested',
     b.status==='Proposal Review'?'Ready for review: estimate and proposal are done':'Working on the estimate and proposal',
-    (b.client_ids||[]).length>1?`Sent to ${(b.client_ids||[]).filter(id=>['Sent','Lost','Awarded'].includes(propOf(b,id).status)).length} of ${b.client_ids.length} GCs · waiting on decision`:'Waiting on GC decision',
+    propIds(b).length>1?`Sent to ${propIds(b).filter(id=>['Sent','Lost','Awarded'].includes(propOf(b,id).status)).length} of ${propIds(b).length} GCs · waiting on decision`:'Waiting on GC decision',
     b.status==='Awarded'?'Awarded':b.status==='Not Awarded'?'Not awarded':b.status==='No Bid'?'Passed on this bid':''][current];
   return {st,current,detail:detail+(!decided&&current>3&&qOut?` · ${qOut} quote${qOut===1?'':'s'} still out`:''),decided,qOut:current>3&&!decided?qOut:0};
 }
@@ -346,7 +357,7 @@ function renderNow(){
 }
 // top-bar tabs; related pages share a tab and get small sub-tabs inside it
 function navItems(){return navGroups().map(g=>[g[0],g[1]])}
-const SUBNAV_LABEL={lists:'Trades & scopes',clients:'Clients & GCs',vendors:'Vendors & subs',vboard:'Vendor rankings',team:'People & access',positions:'Positions',access:'Access chart'};
+const SUBNAV_LABEL={lists:'Trades & scopes',clients:'Companies',vendors:'Vendors & subs',vboard:'Vendor rankings',team:'People & access',positions:'Positions',access:'Access chart'};
 function subNav(){const g=navGroups().find(x=>x[2].includes(S.view));if(!g)return '';const subs=g[2].filter(v=>SUBNAV_LABEL[v]);if(subs.length<2)return '';
   return `<div class="subnav">${subs.map(v=>`<button class="${S.view===v?'on':''}" data-act="nav" data-v="${v}">${SUBNAV_LABEL[v]}</button>`).join('')}</div>`}
 function renderTop(){setTimeout(()=>{presPaint();presTrack(false)},0);
@@ -457,7 +468,7 @@ function bidTable(list,opts={}){
   const rows=list.map(b=>{const qs=quotesFor(b.id);const rec=qs.filter(q=>q.status==='Received').length;const me=myEst();
     return `<tr class="click" data-act="open-bid" data-id="${b.id}">
     <td><div class="proj">${esc(b.name)}</div><div class="dim small">${esc(b.location||b.project_type||'')}</div></td>
-    <td>${(b.client_ids||[]).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}${clientWon(b,id)?' '+pill('Awarded','good'):''}${(b.client_ids.length>1&&clientAmount(b,id))?` <span class="dim small">${moneyK(clientAmount(b,id))}</span>`:''}</div>`).join('')||'<span class="dim">—</span>'}</td>
+    <td>${propIds(b).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}${clientWon(b,id)?' '+pill('Awarded','good'):''}${(propIds(b).length>1&&clientAmount(b,id))?` <span class="dim small">${moneyK(clientAmount(b,id))}</span>`:''}</div>`).join('')||'<span class="dim">—</span>'}${ownerIds(b).filter(id=>!propIds(b).includes(id)).map(id=>`<div class="dim small" style="white-space:nowrap">Owner: ${esc(clientName(id))}</div>`).join('')}</td>
     ${opts.mine?`<td>${me&&b.lead_estimator_id===me.id?pill('Lead','hot'):pill('Support')}</td>`:`<td>${b.lead_estimator_id?`<span class="who">${avatar(b.lead_estimator_id)}${esc(estName(b.lead_estimator_id))}</span>`:'<span class="dim">Unassigned</span>'}</td>`}
     <td>${dueCell(b)}</td><td>${scopeBar(b)}</td><td>${pill(b.proposal_status||'Not Started',PROP_CLS[b.proposal_status])}</td>
     <td class="num">${qs.length?`${rec}/${qs.length}`:'<span class="dim">—</span>'}</td>
@@ -531,7 +542,7 @@ function ovNumber(b){const v=bidValue(b);const w=amtVal(b,'amount_with'),wo=amtV
   return `<div style="font-weight:700;white-space:nowrap">${v?money(v):'—'} <span class="dim small" style="font-weight:500">${usesWo?'w/o':'w/'}</span></div>${other!=null&&other!==v?`<div class="dim small" style="white-space:nowrap">${money(other)} ${usesWo?'w/':'w/o'}</div>`:''}`}
 function amtCell(b,key){
   const base=num(b[key]);if(base!=null)return money(base);
-  const a=(b.client_ids||[]).map(id=>num(propOf(b,id)[key])).filter(v=>v!=null);
+  const a=propIds(b).map(id=>num(propOf(b,id)[key])).filter(v=>v!=null);
   if(!a.length)return '<span class="dim">—</span>';
   const lo=Math.min(...a),hi=Math.max(...a);return lo===hi?money(hi):`${moneyK(lo)}–${moneyK(hi)}`;
 }
@@ -539,7 +550,7 @@ function amtCell(b,key){
 const OV_KEY='bp-ov';const ovDefault=()=>({sort:'due',dir:1,q:'',status:'',est:'',client:'',type:'',due:'',prop:''});
 S.ov=(()=>{const d=ovDefault();try{Object.assign(d,JSON.parse(localStorage.getItem(OV_KEY)||'{}'))}catch(e){}return d})();
 const saveOv=()=>{try{localStorage.setItem(OV_KEY,JSON.stringify(S.ov))}catch(e){}};
-function amtVal(b,key){const base=num(b[key]);if(base!=null)return base;const a=(b.client_ids||[]).map(id=>num(propOf(b,id)[key])).filter(v=>v!=null);return a.length?Math.max(...a):null}
+function amtVal(b,key){const base=num(b[key]);if(base!=null)return base;const a=propIds(b).map(id=>num(propOf(b,id)[key])).filter(v=>v!=null);return a.length?Math.max(...a):null}
 function groupRank(b,groups){const it=scopeItems(b).filter(x=>ovIn(groups,ovGroupOf(x)));if(!it.length)return null;const done=it.filter(x=>x.status==='Complete').length;return done/it.length+(it.some(x=>x.status==='In Progress')&&done<it.length?0.001:0)}
 function ovSortVal(b,k){
   if(k==='name')return (b.name||'').toLowerCase();if(k==='client')return (b.client_ids||[]).map(clientName).sort()[0]?.toLowerCase()||null;
@@ -569,7 +580,7 @@ function overviewTable(all){
   const th=(k,label,cls='')=>`<th class="${cls}${O.sort===k?' sorted':''}" aria-sort="${O.sort===k?(O.dir>0?'ascending':'descending'):'none'}"><button class="ov-sort" data-act="ov-sort" data-k="${k}">${label}<span class="ov-arr" aria-hidden="true">${O.sort===k?(O.dir>0?'▲':'▼'):'↕'}</span></button></th>`;
   const rows=list.map(b=>`<tr class="click" data-act="open-bid" data-id="${b.id}">
     <td class="ov-p"><div class="proj">${esc(b.name)}</div><div class="dim small">${[normProjectType(b.project_type),unitsText(b),b.lead_estimator_id?estName(b.lead_estimator_id):''].filter(Boolean).map(esc).join(' · ')}</div></td>
-    <td>${(b.client_ids||[]).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}</div>`).join('')||'<span class="dim">—</span>'}</td>
+    <td>${propIds(b).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}</div>`).join('')||'<span class="dim">—</span>'}${ownerIds(b).filter(id=>!propIds(b).includes(id)).map(id=>`<div class="dim small" style="white-space:nowrap">Owner: ${esc(clientName(id))}</div>`).join('')}</td>
     <td>${dueCell(b)}</td>
     ${groups.map(([,g])=>`<td>${groupStatus(b,g)}</td>`).join('')}
     <td>${pill(b.proposal_status||'Not Started',PROP_CLS[b.proposal_status])}${revShown(b).length>1||lastTouch(b)?`<div class="dim small" style="margin-top:3px">${[revShown(b).length>1?'Rev '+esc(revShown(b)[revShown(b).length-1].rev):'',lastTouch(b)?'GC contact '+fmtShort(lastTouch(b)):''].filter(Boolean).join(' · ')}</div>`:''}${openAddenda(b).length?`<div class="small" style="margin-top:3px;color:var(--warn);font-weight:600;white-space:nowrap">${openAddenda(b).length} addend${openAddenda(b).length===1?'um':'a'} open</div>`:''}</td>
@@ -649,6 +660,7 @@ function board(){
     ${kpi('Win rate',winRate==null?'—':winRate+'%',decided?`${won.length} of ${decided} decided`:'No decisions yet')}
     ${kpi('Dollar hit rate',dollarRate==null?'—':dollarRate+'%','Won $ ÷ decided $')}
     ${kpi('Open pipeline',moneyK(act.reduce((s,b)=>s+bidValue(b),0)),act.length+' active bids')}
+    ${(()=>{const T=yb.map(inHouse).filter(t=>t&&t.sent);const avg=T.length?Math.round(T.reduce((x,t)=>x+t.n,0)/T.length):null;return kpi('Avg turnaround',avg==null?'—':avg+' day'+(avg===1?'':'s'),T.length?`Intake to sent, ${T.length} proposal${T.length===1?'':'s'} in ${Y}`:'No proposals sent yet')})()}
     ${SHOW_ODDS?kpi('Weighted pipeline',moneyK(weighted),'Value × win probability','hot'):kpi('Sent, waiting on a decision',moneyK(waiting.reduce((s,b)=>s+bidValue(b),0)),waiting.length+' proposal'+(waiting.length===1?'':'s')+' out','hot')}</div></div>`);
   if(cfg.monthly){
     const m=MONTHS.map((l,i)=>({l,s:sub.filter(b=>parseD(b.due_date||b.submitted_date)?.getMonth()===i).reduce((a,b)=>a+bidValue(b),0),
@@ -663,7 +675,7 @@ function board(){
     out.push(panel('Pipeline by stage',Y+'',hbars(st.map(x=>({l:x.l,w:x.v/mx,v:`${moneyK(x.v)} · ${x.n}`,c:cls[x.l]||''})))));
   }
   if(cfg.clients){
-    const g={};yb.forEach(b=>(b.client_ids||[]).forEach(id=>{g[id]=g[id]||{n:0,v:0,w:0,d:0};g[id].n++;g[id].v+=clientAmount(b,id);if(clientWon(b,id)){g[id].w++;g[id].d++}else if(clientLost(b,id))g[id].d++}));
+    const g={};yb.forEach(b=>propIds(b).forEach(id=>{g[id]=g[id]||{n:0,v:0,w:0,d:0};g[id].n++;g[id].v+=clientAmount(b,id);if(clientWon(b,id)){g[id].w++;g[id].d++}else if(clientLost(b,id))g[id].d++}));
     const rows=Object.entries(g).sort((a,b)=>b[1].v-a[1].v).slice(0,8);
     out.push(panel('Top clients & GCs','By dollars bid',rows.length?`<div class="scroll"><table><thead><tr><th>Client</th><th class="r">Bids</th><th class="r">$ bid</th><th class="r">Won</th><th class="r">Win rate</th></tr></thead><tbody>${rows.map(([id,x])=>`<tr><td>${esc(clientName(id))}</td><td class="r num">${x.n}</td><td class="r num">${moneyK(x.v)}</td><td class="r num">${x.w}</td><td class="r num">${x.d?Math.round(x.w/x.d*100)+'%':'—'}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No client data for this year.</div>'));
   }
@@ -822,7 +834,7 @@ function listView(list){
     return `<tr class="click${picked?' picked':''}" data-act="open-bid" data-id="${b.id}" tabindex="0">
       ${S.selMode?`<td class="ck"><span class="pickbox" aria-hidden="true">${picked?'✓':''}</span></td>`:''}
       <td><div class="proj">${esc(b.name)}${b.archived_at?' <span class="pill na" style="font-size:11px">Archived</span>':''} ${supTag(b)}</div><div class="dim small">${[normProjectType(b.project_type),unitsText(b),b.location].filter(Boolean).map(esc).join(' · ')}</div></td>
-      <td class="small">${(b.client_ids||[]).slice(0,2).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}${clientWon(b,id)?' ✓':''}</div>`).join('')}${(b.client_ids||[]).length>2?`<div class="dim">+${b.client_ids.length-2} more</div>`:''}${(b.client_ids||[]).length?'':'<span class="dim">—</span>'}</td>
+      <td class="small">${propIds(b).slice(0,2).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}${clientWon(b,id)?' ✓':''}</div>`).join('')}${propIds(b).length>2?`<div class="dim">+${propIds(b).length-2} more</div>`:''}${propIds(b).length?'':'<span class="dim">—</span>'}${ownerIds(b).filter(id=>!propIds(b).includes(id)).map(id=>`<div class="dim small" style="white-space:nowrap">Owner: ${esc(clientName(id))}</div>`).join('')}${''}</td>
       <td class="small">${b.lead_estimator_id?`<span class="who">${avatar(b.lead_estimator_id,22)}${esc(estName(b.lead_estimator_id))}</span>`:'<span class="dim">—</span>'}</td>
       <td>${dueCell(b)}</td>
       <td>${stPill(b.status,b)}</td>
@@ -916,17 +928,24 @@ function palRun(i){const it=(S.pal.items||[])[i];if(!it)return;palClose();closeM
 
 function scopePills(b){const it=scopeItems(b);if(!it.length)return '<span class="dim small">No scopes selected</span>';
   return it.slice(0,6).map(x=>`<span class="pill ${scopeCls(x)}" title="${esc(x.name+': '+(x.status||'Not Started')+' · '+performOf(x))}">${esc(x.name)}${performOf(x)!=='Self perform'?` <span class="perf-tag">${PERF_SHORT[performOf(x)]==='Sub'?'Sub':'S+S'}</span>`:''}${x.status==='Complete'?' ✓'+(x.signed_initials?' '+esc(x.signed_initials):''):''}</span>`).join('')+(it.length>6?`<span class="pill na">+${it.length-6} more</span>`:'')}
+// intake: the day the invitation came in (set on the Project tab; otherwise the day the bid was entered)
+function intakeOf(b){const r=b&&b.rfq&&typeof b.rfq==='object'?b.rfq:{};if(r.intake)return String(r.intake).slice(0,10);const c=b&&b.created_at?new Date(b.created_at):null;return c&&!isNaN(c)?`${c.getFullYear()}-${String(c.getMonth()+1).padStart(2,'0')}-${String(c.getDate()).padStart(2,'0')}`:''}
+const dayDiff=(a,b2)=>Math.round((parseD(b2)-parseD(a))/864e5);
+// in house N days while it's being worked; turned around in N days once sent
+function inHouse(b){if(!b||b._new)return null;const i=intakeOf(b);if(!i)return null;
+  if(isSent(b)){const s=fuSentDate(b);if(!s)return null;const n=Math.max(0,dayDiff(i,s));return {n,sent:true,text:`Turned around in ${n} day${n===1?'':'s'}`,short:`${n}d turnaround`}}
+  if(DECIDED.includes(b.status))return null;const n=Math.max(0,dayDiff(i,todayStr()));return {n,sent:false,text:`In house ${n} day${n===1?'':'s'}`,short:`${n}d in house`}}
 function card(b){
   const qs=quotesFor(b.id);const rec=qs.filter(q=>q.status==='Received').length;const v=bidValue(b);const nf=filesFor(b.id).length;
   const team=[b.lead_estimator_id,...(b.support_estimator_ids||[])].filter(id=>byId(S.estimators,id));
   const picked=S.selMode&&S.sel?.has(b.id);
   return `<div class="card${picked?' picked':''}" role="button" tabindex="0" data-act="open-bid" data-id="${b.id}"${S.selMode?` aria-pressed="${picked?'true':'false'}"`:''}>${S.selMode?`<span class="pickbox" aria-hidden="true">${picked?'✓':''}</span>`:''}
-   <div class="card-top"><div><h3>${esc(b.name)}${b.archived_at?' <span class="pill na" style="font-size:11px;vertical-align:3px">Archived</span>':''}</h3>${supTag(b,true)}<div class="meta">${clientsLine(b)}</div>${b.project_type||unitsText(b)?`<div class="meta" style="margin-top:1px">${[normProjectType(b.project_type),unitsText(b)].filter(Boolean).map(esc).join(' · ')}</div>`:''}</div>${stPill(b.status,b)}</div>
+   <div class="card-top"><div><h3>${esc(b.name)}${b.archived_at?' <span class="pill na" style="font-size:11px;vertical-align:3px">Archived</span>':''}</h3>${supTag(b,true)}<div class="meta">${clientsLine(b)}${(()=>{const P=propIds(b);const O=ownerIds(b).filter(id=>!P.includes(id));return O.length?` · <span class="dim">Owner: ${O.slice(0,2).map(id=>esc(clientName(id))).join(', ')}</span>`:''})()}</div>${b.project_type||unitsText(b)?`<div class="meta" style="margin-top:1px">${[normProjectType(b.project_type),unitsText(b)].filter(Boolean).map(esc).join(' · ')}</div>`:''}</div>${stPill(b.status,b)}</div>
    ${progress(b)}${(()=>{const n=stageInfo(b,qs).qOut;return n?`<div class="q-out">⏳ ${n} quote${n===1?'':'s'} still out</div>`:''})()}
    <div class="row">${dueCell(b)}<div style="text-align:right">${v?`<div class="val">${money(v)}</div><div class="dim small">${b.use_for==='without'?'Without':'With'} site improvements</div>`:`<div class="dim small">Proposal ${esc((b.proposal_status||'Not Started').toLowerCase())}</div>`}</div></div>
    <div class="scopes">${scopePills(b)}</div>
    <div class="foot"><span class="who" style="gap:3px">${team.map(id=>avatar(id,24)).join('')||'<span class="dim small">No estimator</span>'}</span>
-   <span class="dim small" style="margin-left:auto">${qs.length?`Quotes ${rec}/${qs.length} in`:'No vendor quotes'}${nf?` · ${nf} file${nf===1?'':'s'}`:''}${addenda(b).length?` · ${addenda(b).length} add.${openAddenda(b).length?` <b style="color:var(--warn)">(${openAddenda(b).length} open)</b>`:''}`:''}${revisions(b).length>1?` · Rev ${revisions(b)[revisions(b).length-1].rev}`:''}</span></div></div>`;
+   <span class="dim small" style="margin-left:auto">${qs.length?`Quotes ${rec}/${qs.length} in`:'No vendor quotes'}${nf?` · ${nf} file${nf===1?'':'s'}`:''}${addenda(b).length?` · ${addenda(b).length} add.${openAddenda(b).length?` <b style="color:var(--warn)">(${openAddenda(b).length} open)</b>`:''}`:''}${revShown(b).length>1?` · Rev ${revShown(b)[revShown(b).length-1].rev}`:''}${(()=>{const t=inHouse(b);return t?` · ${t.short}`:''})()}</span></div></div>`;
 }
 
 /* ----- directories ----- */
@@ -940,9 +959,9 @@ function vEstimators(){if(isAdmin()){S.view='team';S.teamRole='bids';return vTea
   ||`<tr><td colspan="8"><div class="empty"><b>No estimators yet</b>Add the people who price your work.</div></td></tr>`}</tbody></table></div>`;
 }
 function vClients(){
-  const q=(S.q.cl||'').toLowerCase();const eng=S.q.clKind==='eng';const nEng=S.clients.filter(isDesignCo).length;const list=S.clients.filter(c=>isDesignCo(c)===eng).filter(c=>!q||[c.company,c.type,...(c.contacts||[]).map(x=>x.name)].join(' ').toLowerCase().includes(q)).sort((a,b)=>a.company.localeCompare(b.company));
+  const q=(S.q.cl||'').toLowerCase();const K=['eng','own'].includes(S.q.clKind)?S.q.clKind:'gc';const eng=K==='eng';const nEng=S.clients.filter(isDesignCo).length;const nOwn=S.clients.filter(c=>coKind(c)==='own').length;const list=S.clients.filter(c=>coKind(c)===K).filter(c=>!q||[c.company,c.type,...(c.contacts||[]).map(x=>x.name)].join(' ').toLowerCase().includes(q)).sort((a,b)=>a.company.localeCompare(b.company));
   const showStats=bidsAll()&&can('bids');
-  return dbHead(eng?'Engineers & designers':'Clients & GCs',list.length+' companies','new-client',eng?'+ Add engineer or designer':'+ Add client or GC','clients')+`<div class="bar"><div class="seg"><button class="${eng?'':'on'}" data-act="cl-kind" data-v="gc">Owners & GCs ${S.clients.length-nEng}</button><button class="${eng?'on':''}" data-act="cl-kind" data-v="eng">Engineers & designers ${nEng}</button></div><input id="q-cl" class="field search" data-q="cl" placeholder="Search companies or contacts" value="${esc(S.q.cl||'')}">${isAdmin()?'<button class="btn sm ghost" data-act="tidy-open" title="Put every phone number in one format and fix email typos, across clients, vendors and people">Tidy phones & emails</button>':''}</div>
+  return dbHead(eng?'Engineers & designers':K==='own'?'Developers & owners':'GCs & clients',list.length+' companies','new-client',eng?'+ Add engineer or designer':K==='own'?'+ Add developer or owner':'+ Add GC or client','clients')+`<div class="bar"><div class="seg"><button class="${K==='gc'?'on':''}" data-act="cl-kind" data-v="gc">GCs & clients ${S.clients.length-nEng-nOwn}</button><button class="${K==='own'?'on':''}" data-act="cl-kind" data-v="own">Developers & owners ${nOwn}</button><button class="${eng?'on':''}" data-act="cl-kind" data-v="eng">Engineers & designers ${nEng}</button></div><input id="q-cl" class="field search" data-q="cl" placeholder="Search companies or contacts" value="${esc(S.q.cl||'')}">${isAdmin()?'<button class="btn sm ghost" data-act="tidy-open" title="Put every phone number in one format and fix email typos, across clients, vendors and people">Tidy phones & emails</button>':''}</div>
   <div class="panel scroll"><table><thead><tr><th>Company</th><th>Type</th><th>Contacts</th>${showStats?'<th class="r">Bids</th><th class="r">$ bid</th><th class="r">Won</th><th class="r">Win rate</th>':'<th>Phone</th>'}</tr></thead><tbody>
   ${list.map(c=>{const bs=S.bids.filter(b=>(b.client_ids||[]).includes(c.id));const w=bs.filter(b=>clientWon(b,c.id)).length,l=bs.filter(b=>clientLost(b,c.id)).length;
    return `<tr class="click" data-act="open-client" data-id="${c.id}"><td class="proj">${esc(c.company)}</td><td>${esc(c.type)}</td><td class="small">${(c.contacts||[]).map(x=>esc(x.name)).filter(Boolean).join(', ')||'<span class="dim">—</span>'}</td>${showStats?`<td class="r num">${bs.length}</td><td class="r num">${moneyK(bs.reduce((s,b)=>s+clientAmount(b,c.id),0))}</td><td class="r num">${w}</td><td class="r num">${w+l?Math.round(w/(w+l)*100)+'%':'—'}</td>`:`<td class="small">${esc(c.phone)}</td>`}</tr>`}).join('')
@@ -1082,12 +1101,12 @@ const bpTabOf=b=>BP_TABS[Math.min(BP_TABS.length-1,bpStageIdx(b))][0];
 function bpSubScopes(b){return b.scope_items.filter(it=>performOf(it)!=='Self perform')}
 // what's still open on each step, in plain words
 function bpMissing(b,key){const m=[];const Q=b.quotes||[];
-  if(key==='project'){if(!String(b.name||'').trim())m.push('Project name');if(!b.due_date)m.push('Bid due date');if(!b.lead_estimator_id)m.push('Lead estimator');if(!b.client_ids.length)m.push('Who you’re bidding to')}
+  if(key==='project'){if(!String(b.name||'').trim())m.push('Project name');if(!b.due_date)m.push('Bid due date');if(!b.lead_estimator_id)m.push('Lead estimator');if(!propIds(b).length)m.push('Who you’re bidding to')}
   if(key==='rfq'){if(!b.scope_items.length)m.push('Pick the scopes');const none=bpSubScopes(b).filter(it=>!Q.some(q=>qHas(q,it.name)));if(none.length)m.push(`${none.length} sub scope${none.length===1?'':'s'} with no vendor (${none.slice(0,3).map(x=>x.name).join(', ')}${none.length>3?'…':''})`);const nr=Q.filter(q=>(q.status||'Not requested')==='Not requested').length;if(nr)m.push(`${nr} quote${nr===1?'':'s'} not requested yet`)}
   if(key==='takeoff'){const open=b.scope_items.filter(x=>x.status!=='Complete'&&x.status!=='N/A');if(!b.scope_items.length)m.push('No scopes on the bid');else if(open.length)m.push(`${open.length} of ${b.scope_items.length} scopes not signed off`)}
   if(key==='quotes'){const w=Q.filter(q=>q.status==='Requested').length;if(w)m.push(`${w} quote${w===1?'':'s'} still out`);const nr=Q.filter(q=>(q.status||'Not requested')==='Not requested').length;if(nr)m.push(`${nr} not requested`);const no=bpSubScopes(b).filter(it=>!Q.some(q=>qHas(q,it.name)&&(q.status==='Received'||(q.status===BUD&&num(q.amount)!=null))));if(no.length)m.push(`${no.length} sub scope${no.length===1?'':'s'} with no price back`)}
-  if(key==='estprop'){if(num(b.amount_with)==null&&num(b.amount_without)==null&&!b.client_ids.some(id=>clientAmount(b,id)))m.push('Enter the base number');if(b.status==='Proposal Review'){if(!b.client_ids.length)m.push('Add who you’re bidding to');const noAmt=b.client_ids.filter(id=>!clientAmount(b,id));if(noAmt.length&&b.client_ids.length)m.push(`No number for ${noAmt.map(clientName).join(', ')}`)}}
-  if(key==='proposal'){if(!b.client_ids.length)m.push('Add who you’re bidding to');const noAmt=b.client_ids.filter(id=>!clientAmount(b,id));if(noAmt.length)m.push(`No number for ${noAmt.map(clientName).join(', ')}`)}
+  if(key==='estprop'){if(num(b.amount_with)==null&&num(b.amount_without)==null&&!propIds(b).some(id=>clientAmount(b,id)))m.push('Enter the base number');if(b.status==='Proposal Review'){if(!b.client_ids.length)m.push('Add who you’re bidding to');const noAmt=b.client_ids.filter(id=>!clientAmount(b,id));if(noAmt.length&&b.client_ids.length)m.push(`No number for ${noAmt.map(clientName).join(', ')}`)}}
+  if(key==='proposal'){if(!propIds(b).length)m.push('Add who you’re bidding to');const noAmt=propIds(b).filter(id=>!clientAmount(b,id));if(noAmt.length)m.push(`No number for ${noAmt.map(clientName).join(', ')}`)}
   return m}
 function bpProgress(b,key){const Q=b.quotes||[];
   if(key==='project'){const n=bpMissing(b,key).length;return n?`${n} to fill`:'✓'}
@@ -1095,7 +1114,7 @@ function bpProgress(b,key){const Q=b.quotes||[];
   if(key==='takeoff'){const s=b.scope_items.filter(x=>x.status==='Complete'||x.status==='N/A').length;return b.scope_items.length?`${s}/${b.scope_items.length} signed`:'—'}
   if(key==='quotes'){const asked=Q.filter(qAsked);const back=asked.filter(q=>q.status!=='Requested').length;return asked.length?`${back}/${asked.length} back`:'—'}
   if(key==='estprop'){return EP_LABEL[epPhase(b)]+(bidValue(b)?' · '+moneyK(bidValue(b)):'')}
-  if(key==='proposal'){const n=b.client_ids.length;const s=b.client_ids.filter(id=>['Sent','Lost','Awarded'].includes(propOf(b,id).status)).length;return n?`${s}/${n} sent`:'—'}
+  if(key==='proposal'){const n=propIds(b).length;const s=propIds(b).filter(id=>['Sent','Lost','Awarded'].includes(propOf(b,id).status)).length;return n?`${s}/${n} sent`:'—'}
   if(key==='outcome'){return DECIDED.includes(b.status)?b.status:isSent(b)?'Waiting':'—'}
   return ''}
 
@@ -1112,7 +1131,7 @@ function bidModal(){
   if(!M.tab)M.tab=isNew?'project':bpTabOf(b);
   const cur=bpStageIdx(b);
   const due=b.due_date?`Due ${fmtShort(b.due_date)}${b.due_time?' '+fuTime(b.due_time):''}${(()=>{const n=daysUntil(b.due_date);return n==null?'':n<0?` · ${-n} day${n===-1?'':'s'} ago`:n===0?' · today':` · ${n} day${n===1?'':'s'}`})()}`:'No due date';
-  const sub=[b.client_ids.map(clientName).join(', ')||'No GC yet',due,b.lead_estimator_id?'Lead: '+esc(estName(b.lead_estimator_id)||''):'No lead estimator'].filter(Boolean);
+  const sub=[partyLine(b),...(()=>{const t=inHouse(b);return t?[t.text]:[]})(),due,b.lead_estimator_id?'Lead: '+esc(estName(b.lead_estimator_id)||''):'No lead estimator'].filter(Boolean);
   const saveTxt=b._sample?'Practice · not saved':isNew?'Not created yet':!work?'Read-only':(M.bpErr?'<span class="bad">Not saved</span>':'Saved');
   const tabs=BP_TABS.map(([k,l],i)=>{const st=i<cur?'past':i===cur?'now':'';const skip=false;
     return `<button class="bp-tab ${st}${M.tab===k?' on':''}" data-act="bp-tab" data-v="${k}"><i>${i<cur?'✓':i+1}</i><span><b>${esc(l)}${skip?'':''}</b><small>${esc(isNew&&k!=='project'?'':bpProgress(b,k))}</small></span></button>`}).join('');
@@ -1157,12 +1176,15 @@ function bpProject(b,work,admin){
     <label class="f">Site walk / pre-bid<input type="date" class="field" ${bf('walk_date')}></label>
     <label class="f">RFI deadline<input type="date" class="field" ${bf('rfi_date')}></label>
     <label class="f" title="Shown to the client on their tracker. Blank = the bid due date.">Proposal expected by<input type="date" class="field" ${bf('proposal_eta')}></label>
+    <label class="f" title="The day the invitation came in. Blank = the day the bid was entered.">Intake date<input type="date" class="field" data-bprfq="intake" value="${esc(rfqOf(b).intake||(b._new?todayStr():intakeOf(b)))}"${work?'':' disabled'}></label>
     <label class="f" title="The date on the plan set you're bidding from">Plan date<input type="date" class="field" data-bprfq="planDate" value="${esc(rfqOf(b).planDate||'')}"${work?'':' disabled'}></label>
   </div></fieldset>
   <fieldset><legend>Bidding to</legend>
-    <div class="bp-gcs">${b.client_ids.map(id=>{const c=byId(S.clients,id);const cs=c?.contacts||[];return `<div class="bp-gc"><div><b>${esc(clientName(id))}</b><div class="dim small">${esc(c?.type||'')}</div></div><select class="field sm" data-cc="${id}"${work?'':' disabled'}><option value="">Contact…</option>${cs.map(x=>`<option${b.client_contacts?.[id]===x.name?' selected':''}>${esc(x.name)}</option>`).join('')}</select>${work?`<button class="rm" data-act="rm-client" data-id="${id}" aria-label="Remove">×</button>`:''}</div>`}).join('')||'<div class="dim small">No GCs yet.</div>'}</div>
-    ${work?`<div class="adders"><select class="field" data-act="add-client"><option value="">+ Add a GC, owner or contractor…</option>${clientsSorted.filter(c=>!b.client_ids.includes(c.id)).map(c=>`<option value="${c.id}">${esc(c.company)}${c.type?' ('+esc(c.type)+')':''}</option>`).join('')}</select></div>`:''}
-    <p class="hint">Each GC’s number and proposal are on the <b>Estimate & proposal</b> tab.</p></fieldset>
+    <div class="bp-gcs">${b.client_ids.map(id=>{const c=byId(S.clients,id);const cs=c?.contacts||[];const R=cRole(b,id);const dis=work?'':' disabled';return `<div class="bp-gc"><div><b>${esc(clientName(id))}</b><div class="dim small">${esc(c?.type||'')}</div></div>
+      <div class="bp-roles" role="group" aria-label="Role on this bid"><label class="check${R.gc?' on':''}"><input type="checkbox" data-crole="${id}.gc"${R.gc?' checked':''}${dis}> GC / client</label><label class="check${R.own?' on':''}"><input type="checkbox" data-crole="${id}.own"${R.own?' checked':''}${dis}> Developer / owner</label></div>
+      <select class="field sm" data-cc="${id}"${dis}><option value="">Contact…</option>${cs.map(x=>`<option${b.client_contacts?.[id]===x.name?' selected':''}>${esc(x.name)}</option>`).join('')}</select>${work?`<button class="rm" data-act="rm-client" data-id="${id}" aria-label="Remove">×</button>`:''}</div>`}).join('')||'<div class="dim small">No GC, client, developer or owner yet.</div>'}</div>
+    ${work?`<div class="adders">${clientPickHtml(b)}</div>`:''}
+    <p class="hint">Tick what each company is on this job: <b>GC / client</b> gets the proposal, <b>Developer / owner</b> is the project’s developer or owner. A company can be both. With no GC on the bid, the developer / owner gets the proposal. Numbers and proposals are on the <b>Estimate & proposal</b> tab.</p></fieldset>
   <fieldset><legend>Estimating team</legend><div class="fg">
     <label class="f s2">Lead estimator<select class="field" data-bf="lead_estimator_id"${admin?'':' disabled'}><option value="">Unassigned</option>${ests.map(e=>`<option value="${e.id}"${b.lead_estimator_id===e.id?' selected':''}>${esc(e.name)}${e.title?' — '+esc(e.title):''}</option>`).join('')}</select></label>
     <div class="f s2" style="display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:500;color:var(--ink-2)">Supporting estimators
@@ -1222,7 +1244,7 @@ function epBar(b,work){const ph=epPhase(b);const steps=[['ns','Not started'],['i
     <div class="small dim">${hint}</div>
     ${mgr&&(ph==='ir'||ph==='rr')&&epMgrFlow()?`<div class="adders ep-mgr"><button class="btn primary sm" data-act="ep-set" data-v="ok">✓ Approve, ready to send</button><button class="btn warn sm" data-act="fr-back">↩ Send back</button></div>`:''}
     ${M.epApArm?`<div class="notice" style="margin-top:8px"><b>The final review still has open items:</b> ${esc(frOpen(b).slice(0,5).join(' · '))}${frOpen(b).length>5?' …':''} <button class="btn sm warn" data-act="ep-set" data-v="ok" data-ok="1">Approve anyway</button> <button class="btn sm ghost" data-act="ep-unarm">Cancel</button></div>`:''}
-    ${M.epArm?`<div class="notice" style="margin-top:8px">This proposal is marked sent${b.client_ids.some(id=>propOf(b,id).status==='Sent')?' to '+b.client_ids.filter(id=>propOf(b,id).status==='Sent').map(clientName).join(', '):''}. Moving it back clears those sent marks. <button class="btn sm warn" data-act="ep-set" data-v="${M.epArm}" data-ok="1">Yes, move it back</button> <button class="btn sm ghost" data-act="ep-unarm">Keep it sent</button></div>`:''}
+    ${M.epArm?`<div class="notice" style="margin-top:8px">This proposal is marked sent${propIds(b).some(id=>propOf(b,id).status==='Sent')?' to '+propIds(b).filter(id=>propOf(b,id).status==='Sent').map(clientName).join(', '):''}. Moving it back clears those sent marks. <button class="btn sm warn" data-act="ep-set" data-v="${M.epArm}" data-ok="1">Yes, move it back</button> <button class="btn sm ghost" data-act="ep-unarm">Keep it sent</button></div>`:''}
     ${M.epSend?epSendHtml(b):''}</div>`}
 // the lead signs the final review before it goes to the manager (when the lead's signature is required)
 const epLeadFirst=()=>['both','lead'].includes(frSet().who);
@@ -1240,10 +1262,10 @@ async function epApprove(force){const b=M.draft;if(!frIsMgr()||!canWork(b))retur
   if(!R.sign.mgr)R.sign.mgr={uid:myId(),name:myName(),at:new Date().toISOString(),num:frNumSig(b),open:open.length};
   renderModal();if(await frPush(b,()=>{b.review=sv}))toast('Approved and signed. It’s ready to send.')}
 function epSendHtml(b){const X=M.epSend;const G=frGate(b);return `<div class="ep-send">${frGateHtml(b)}<b>Who did the proposal go to?</b>
-  ${b.client_ids.length?`<div class="ep-gcs">${b.client_ids.map(id=>`<label class="check"><input type="checkbox" data-epgc="${id}"${X.sel.has(id)?' checked':''}> ${esc(clientName(id))} <span class="dim small">${clientAmount(b,id)?money(clientAmount(b,id)):'no number'}</span>${propOf(b,id).status==='Sent'?' '+pill('already sent','info'):''}</label>`).join('')}</div>`:'<p class="small dim" style="margin:6px 0">No GCs on this bid yet. It will just be marked sent.</p>'}
+  ${propIds(b).length?`<div class="ep-gcs">${propIds(b).map(id=>`<label class="check"><input type="checkbox" data-epgc="${id}"${X.sel.has(id)?' checked':''}> ${esc(clientName(id))} <span class="dim small">${clientAmount(b,id)?money(clientAmount(b,id)):'no number'}</span>${propOf(b,id).status==='Sent'?' '+pill('already sent','info'):''}</label>`).join('')}</div>`:'<p class="small dim" style="margin:6px 0">No GCs on this bid yet. It will just be marked sent.</p>'}
   <div class="adders"><label class="f" style="flex-direction:row;align-items:center;gap:8px">Sent on <input type="date" class="field" data-epdate value="${esc(X.date)}" style="width:auto"></label><button class="btn primary" data-act="ep-send-go"${(b.client_ids.length&&!X.sel.size)||(G.stop&&!G.ok)?' disabled':''}>✓ ${G.ok||G.stop?'Mark proposal sent':'Send it anyway'}</button><button class="btn ghost" data-act="ep-send-x">Cancel</button></div>
   <p class="hint" style="margin:0">This marks the bid Proposal sent and starts the GC follow-up clock.</p></div>`}
-function epOpenSend(){const b=M.draft;M.epSend={sel:new Set(b.client_ids.filter(id=>propOf(b,id).status!=='Lost')),date:todayStr()};renderModal()}
+function epOpenSend(){const b=M.draft;M.epSend={sel:new Set(propIds(b).filter(id=>propOf(b,id).status!=='Lost')),date:todayStr()};renderModal()}
 function epGo(k,ok){const b=M.draft;const e=epState(b);const ph=epPhase(b);if(k===ph&&k!=='sent')return;
   if(k==='sent'){epOpenSend();return}
   if(k==='ok'){epApprove(!!ok);return}
@@ -1252,7 +1274,7 @@ function epGo(k,ok){const b=M.draft;const e=epState(b);const ph=epPhase(b);if(k=
   // anything else takes it out of a manager's hands
   {const R=frOf(b);if(R.claim||R.ok){delete R.claim;delete R.ok;M.epApArm=null;setTimeout(()=>frPush(b),0)}}
   if(e==='sent'&&!ok){M.epArm=k;renderModal();return}M.epArm=null;
-  if(e==='sent'){b.client_ids.forEach(id=>{const p=propOf(b,id);if(p.status==='Sent'){b.client_proposals={...(b.client_proposals||{}),[id]:{...p,status:'Not sent'}}}})}
+  if(e==='sent'){propIds(b).forEach(id=>{const p=propOf(b,id);if(p.status==='Sent'){b.client_proposals={...(b.client_proposals||{}),[id]:{...p,status:'Not sent'}}}})}
   if(k==='ns'){b.status=['Estimating','Proposal Review','Submitted'].includes(b.status)?'Quotes Received':b.status;b.proposal_status='Not Started'}
   if(k==='ip'){b.status='Estimating';b.proposal_status='In Progress'}
   if(k==='rr'){b.status='Proposal Review';b.proposal_status='Complete'}
@@ -1280,15 +1302,25 @@ function bpOutcome(b,work){
   ${outcome?`<fieldset><legend>${DECIDED.includes(b.status)?esc(b.status):'Submitted'}</legend><div class="fg">
     <label class="f">Submitted on<input type="date" class="field" ${bf('submitted_date')}></label>
     ${b.status==='Awarded'?`<label class="f">Awarded on<input type="date" class="field" ${bf('awarded_date')}></label>
-    <label class="f">Awarded by<select class="field" data-act="award-sel"${DIS()}><option value="">${b.client_ids.length?'Pick the GC…':'Add GCs first'}</option>${b.client_ids.map(id=>`<option value="${id}"${b.awarded_client_id===id?' selected':''}>${esc(clientName(id))}</option>`).join('')}</select></label>
+    <label class="f">Awarded by<select class="field" data-act="award-sel"${DIS()}><option value="">${propIds(b).length?'Pick the GC…':'Add GCs first'}</option>${propIds(b).map(id=>`<option value="${id}"${b.awarded_client_id===id?' selected':''}>${esc(clientName(id))}</option>`).join('')}</select></label>
     <label class="f">Contract amount<input type="number" step="0.01" class="field" ${bf('awarded_amount','n')} placeholder="${b.awarded_client_id&&clientAmount(b,b.awarded_client_id)?money(clientAmount(b,b.awarded_client_id)):'Defaults to bid value'}"></label>`:''}
     ${b.status==='Not Awarded'?`<label class="f">Lost reason${sel('lost_reason',LOST_REASONS)}</label><label class="f s2">Awarded to / low number<input class="field" ${bf('awarded_to')} placeholder="Who got it, and at what price"></label>`:''}
   </div></fieldset>`:''}
   <fieldset><legend>GC follow-up log</legend><div class="rows">
     ${b.follow_ups.map((f,i)=>`<div class="rowline fu"><input type="date" class="field" data-ff="${i}.date" value="${esc(f.date||'')}"${DIS()}><input type="text" class="field" data-ff="${i}.note" value="${esc(f.note||'')}" placeholder="e.g. Called PM, decision expected next week"${DIS()}>${work?`<button class="rm" data-act="rm-fu" data-i="${i}" aria-label="Remove">×</button>`:'<span></span>'}</div>`).join('')||'<div class="dim small">No follow-ups logged.</div>'}
   </div>${work?'<div class="adders"><button class="btn sm" data-act="add-fu">+ Log a follow-up</button></div>':''}</fieldset>`}
+/* project folder: a pasted SharePoint / OneDrive web link that opens for everyone with access.
+   A File Explorer path (C:\Users\…) is different on every computer and browsers won't open it, so it's caught with help. */
+const folderBad=v=>/^([a-z]:[\\/]|\\\\|file:)/i.test(String(v||'').trim());
+const folderOk=v=>/^https?:\/\/\S+$/i.test(String(v||'').trim());
+function folderCard(b,work){const r=rfqOf(b);const v=String(r.folder||'').trim();const ed=M&&M.fEdit;const dis=work?'':' disabled';
+  const help=`<details class="fold-help"><summary>How do I get the link?</summary><ol><li>In File Explorer, right-click the bid’s folder.</li><li>Choose <b>OneDrive → Copy link</b> (or <b>View online</b> and copy the address from the browser).</li><li>Paste it here. It starts with <b>https://</b>.</li></ol><p>Anyone with access to the SharePoint site can open it, then use <b>Sync</b> or <b>Open in File Explorer</b> to work from their own computer.</p></details>`;
+  if(v&&folderOk(v)&&!ed)return `<div class="bp-card fold-card"><h4>Project folder</h4><a class="btn primary fold-open" href="${esc(v)}" target="_blank" rel="noopener">📁 Open project folder</a><div class="fold-meta small dim">${esc(/sharepoint\.com/i.test(v)?'SharePoint':(()=>{try{return new URL(v).hostname}catch(e){return 'Link'}})())}${work?` · <button class="linkbtn small" data-act="fold-ed">Change</button>`:''}</div></div>`;
+  if(!work&&!v)return '';
+  return `<div class="bp-card fold-card"><h4>Project folder</h4><div class="fold-row"><input class="field" id="fold-in" data-fold placeholder="Paste the SharePoint folder link" value="${esc(v)}"${dis}>${work&&v&&ed?'<button class="btn sm ghost" data-act="fold-x">Done</button>':''}</div>
+    ${folderBad(v)?`<div class="notice fold-warn small"><b>That’s a File Explorer path.</b> It points to a folder on one computer, so it won’t open for anyone else (and browsers can’t open it). Paste the folder’s SharePoint link instead.</div>`:v&&!folderOk(v)?`<div class="small warn-t">This doesn’t look like a web link. It should start with https://</div>`:''}${help}</div>`}
 function bpAside(b,work,admin,isNew){const files=isNew?[]:filesFor(b.id);
-  return `<div class="bp-card"><h4>Notes</h4><textarea class="field" data-bf="notes" placeholder="Scope clarifications, bid strategy, site conditions…"${DIS()}>${esc(b.notes||'')}</textarea></div>
+  return `${folderCard(b,work)}<div class="bp-card"><h4>Notes</h4><textarea class="field" data-bf="notes" placeholder="Scope clarifications, bid strategy, site conditions…"${DIS()}>${esc(b.notes||'')}</textarea></div>
   <div class="bp-card"><h4>Project files <span class="dim small">${files.length||''}</span></h4>
     ${isNew?'<p class="hint" style="margin:0">Create the bid first, then attach plans, specs and addenda.</p>':`
     <div class="bp-files">${files.map(f=>`<div class="bp-file"><button class="linkish" data-act="dl" data-path="${esc(f.file_path)}" data-name="${esc(f.file_name)}" title="Download">${esc(f.file_name)}</button><span class="dim small">${esc(f.category)}${f.size_bytes?' · '+fmtSize(f.size_bytes):''}</span>${admin||f.uploaded_by===S.session.user.id?`<button class="rm" data-act="rm-file" data-id="${f.id}" title="Delete file">×</button>`:''}</div>`).join('')||'<div class="dim small">No files yet.</div>'}</div>
@@ -1321,15 +1353,19 @@ document.addEventListener('input',e=>{if(M&&M.kind==='bid'&&$('#modal')?.contain
 function bpHash(id){try{const h=id?'#bid='+id:'';if(location.hash!==h)history.replaceState(null,'',location.pathname+location.search+h)}catch(e){}}
 window.addEventListener('hashchange',()=>{const m=/^#bid=([\w-]+)/.exec(location.hash);if(m&&S.session&&(!M||M.draft?.id!==m[1])&&byId(S.bids,m[1]))openBid(m[1])});
 
+// one picker for everyone you bid to, split into GCs & clients / Developers & owners (engineers left out)
+function clientPickHtml(b){const avail=S.clients.filter(c=>!b.client_ids.includes(c.id)&&!isDesignCo(c)).sort((a,c)=>a.company.localeCompare(c.company));
+  const grp=(l,k)=>{const xs=avail.filter(c=>coKind(c)===k);return xs.length?`<optgroup label="${l}">${xs.map(c=>`<option value="${c.id}">${esc(c.company)}${c.type?' · '+esc(c.type):''}</option>`).join('')}</optgroup>`:''};
+  return `<select class="field" data-act="add-client"><option value="">+ Add a GC, client, developer or owner…</option>${grp('GCs & clients','gc')}${grp('Developers & owners','own')}</select>`}
 function clientsSection(b,work){
   const d=work?'':' disabled';
   const clientsSorted=S.clients.slice().sort((a,c)=>a.company.localeCompare(c.company));
-  const amts=b.client_ids.map(id=>clientAmount(b,id)).filter(Boolean);
-  const hasW=num(b.amount_with)!=null||b.client_ids.some(id=>num(propOf(b,id).amount_with)!=null);const multi=b.client_ids.length>1;
+  const PI=propIds(b);const amts=PI.map(id=>clientAmount(b,id)).filter(Boolean);
+  const hasW=num(b.amount_with)!=null||PI.some(id=>num(propOf(b,id).amount_with)!=null);const multi=PI.length>1;
   // a GC's amount: blank shows the base in grey; typing a number gives just that GC a different number
   const amtBox=(id,p,k,label)=>{const own=num(p[k])!=null;const base=num(b[k]);if(!multi&&!own)return '';
     return `<div class="f gc-amt${own?' own':''}"><label for="gca-${id}-${k}">${label}</label><input id="gca-${id}-${k}" type="number" step="0.01" min="0" class="field" data-cp="${id}.${k}" data-t="n" value="${esc(p[k]??'')}" placeholder="${base!=null?money(base):'$'}" title="${own?'A different number for this GC':'Same as the base bid. Type to give this GC a different number.'}"${d}>${own?`<button class="linkbtn small gc-reset" data-act="cp-reset" data-id="${id}" data-k="${k}" title="Use the base number again">↺ use base</button>`:''}</div>`};
-  const rows=b.client_ids.map(id=>{
+  const rows=PI.map(id=>{
     const c=byId(S.clients,id);const cs=c?.contacts||[];const ct=cs.find(x=>x.name===b.client_contacts?.[id]);const p=propOf(b,id);const ownW=num(p.amount_with)!=null,ownO=num(p.amount_without)!=null;
     const won=b.status==='Awarded'&&b.awarded_client_id===id;
     const status=won?`<div class="signing">${pill('Awarded ✓','good')}${work?'<button class="btn sm ghost" data-act="unaward">Undo</button>':''}</div>`
@@ -1342,9 +1378,9 @@ function clientsSection(b,work){
       <div class="f">Proposal${status}</div>
       ${work?`<button class="rm" data-act="rm-client" data-id="${id}" aria-label="Remove">×</button>`:'<span></span>'}</div>`}).join('');
   return `<fieldset><legend>Bidding to & proposals</legend>
-    ${b.client_ids.length>1&&amts.length?`<p class="hint" style="margin:0 0 10px">${b.client_ids.length} GCs · proposals range ${money(Math.min(...amts))} – ${money(Math.max(...amts))}</p>`:''}
+    ${PI.length>1&&amts.length?`<p class="hint" style="margin:0 0 10px">${PI.length} GCs · proposals range ${money(Math.min(...amts))} – ${money(Math.max(...amts))}</p>`:''}
     <div class="rows">${rows||'<div class="dim small">No GCs, owners or contractors added yet.</div>'}</div>
-    ${work?`<div class="adders"><select class="field" data-act="add-client"><option value="">+ Add a GC, owner or contractor…</option>${clientsSorted.filter(c=>!b.client_ids.includes(c.id)).map(c=>`<option value="${c.id}">${esc(c.company)}${c.type?' ('+esc(c.type)+')':''}</option>`).join('')}</select></div>
+    ${work?`<div class="adders">${clientPickHtml(b)}</div>
     <p class="hint">${S.clients.length?'Add everyone you’re sending a number to. They all get the base bid; to give one GC a different number, type it in their box. Set each proposal’s status by hand, and when the job is awarded click <b>Mark awarded</b> on the winning GC (the others are marked lost).':'No clients on file yet. Add them in the Clients & GCs tab.'}</p>`:''}
   </fieldset>`;
 }
@@ -1389,14 +1425,14 @@ async function uploadAddendum(i,file){
 }
 function awardClient(id){
   const d=M.draft;d.client_proposals=d.client_proposals||{};
-  d.client_ids.forEach(c=>{const p=d.client_proposals[c]=Object.assign({},d.client_proposals[c]);
+  propIds(d).forEach(c=>{const p=d.client_proposals[c]=Object.assign({},d.client_proposals[c]);
     if(c===id){p.status='Awarded';if(!p.sent_date)p.sent_date=d.submitted_date||todayStr()}else if(p.status!=='Lost')p.status='Lost'});
   d.status='Awarded';d.awarded_client_id=id;if(!d.awarded_date)d.awarded_date=todayStr();
   d.awarded_amount=clientAmount(d,id)||null;d.proposal_status='Sent';
   renderModal();toast(`Marked awarded by ${clientName(id)}.`);
 }
 function unaward(){
-  const d=M.draft;d.client_ids.forEach(c=>{const p=d.client_proposals[c];if(p&&(p.status==='Awarded'||p.status==='Lost'))p.status='Sent'});
+  const d=M.draft;propIds(d).forEach(c=>{const p=d.client_proposals[c];if(p&&(p.status==='Awarded'||p.status==='Lost'))p.status='Sent'});
   d.status='Submitted';d.proposal_status='Sent';d.awarded_client_id='';d.awarded_amount=null;d.awarded_date='';renderModal();
 }
 function scopeSection(b,work){
@@ -1610,7 +1646,7 @@ async function saveBid(opt={},m=M){
   if(PRE_SUBMIT.includes(d.status)&&(d.proposal_status==='Sent'||sent.length))d.status='Submitted';
   if(d.status==='Submitted'&&d.proposal_status!=='Sent')d.proposal_status='Sent';
   if(!d.submitted_date){const ds=sent.map(p=>p.sent_date).filter(Boolean).sort();if(ds.length)d.submitted_date=ds[0]}
-  if(d.status==='Awarded'&&!d.awarded_client_id&&d.client_ids.length===1)d.awarded_client_id=d.client_ids[0];
+  if(d.status==='Awarded'&&!d.awarded_client_id&&propIds(d).length===1)d.awarded_client_id=propIds(d)[0];
   if(isSent(d)&&!d.submitted_date)d.submitted_date=todayStr();
   const addsKeep=addenda(d).filter(a=>a.number!=null||a.description||a.date);if(!opt.auto)d.addenda=addsKeep;d.revisions=revClean(revisions(d));
   // Log a proposal revision automatically once the proposal has gone out and its numbers change
@@ -1634,7 +1670,7 @@ async function saveBid(opt={},m=M){
     if(!S.rfqMissing){try{const {error}=await sb.from('bids').update({rfq:d.rfq}).eq('id',row.id);if(error)S.rfqMissing=true}catch(e){S.rfqMissing=true}}}
   // final review: its own column (update-42). Sign-offs are written the moment they happen, so keep whatever is on the server
   if(d.review&&typeof d.review==='object'&&!S.reviewMissing&&JSON.stringify(d.review)!==JSON.stringify((byId(S.bids,row.id)||{}).review||{})){try{const {data:cur,error:e1}=await sb.from('bids').select('review').eq('id',row.id).maybeSingle();if(e1)throw e1;const rv={...d.review,sign:(cur&&cur.review&&cur.review.sign)||{}};const {error}=await sb.from('bids').update({review:rv}).eq('id',row.id);if(error)throw error;d.review=rv}catch(e){if(/review/i.test(errMsg(e))&&/column|schema/i.test(errMsg(e)))S.reviewMissing=true;else throw e}}
-  if(wasNew&&(row.client_ids||[]).length&&!S.trackMissing)setTimeout(()=>{if(!M)trackOpen(row.client_ids,row.id)},400);
+  if(wasNew&&propIds(d).length&&!S.trackMissing)setTimeout(()=>{if(!M)trackOpen(propIds(d),row.id)},400);
   if(isAdmin()){const gone=(m.origQuoteIds||[]).filter(id=>!d.quotes.some(q=>q.id===id));if(gone.length)await run(sb.from('quotes').delete().in('id',gone))}
   if(d.quotes.length)await run(sb.from('quotes').upsert(d.quotes.map(quoteRowData)));
   m.origQuoteIds=d.quotes.map(q=>q.id);
@@ -2540,7 +2576,7 @@ async function deleteJobModal(){
 }
 async function createJobFromBid(b){
   const ex=S.jobs.find(j=>j.bid_id===b.id);if(ex){closeModal();S.view='job';S.jobId=ex.id;render();return}
-  const row={id:newId(),name:b.name,bid_id:b.id,client_id:b.awarded_client_id||(b.client_ids||[])[0]||null,location:b.location||'',status:'Not Started',structure:'bid_items',contract_amount:b.status==='Awarded'?(wonValue(b)||null):null,notes:'',job_number:'',updated_by:S.session.user.id};
+  const row={id:newId(),name:b.name,bid_id:b.id,client_id:b.awarded_client_id||propIds(b)[0]||null,location:b.location||'',status:'Not Started',structure:'bid_items',contract_amount:b.status==='Awarded'?(wonValue(b)||null):null,notes:'',job_number:'',updated_by:S.session.user.id};
   try{await run(sb.from('jobs').insert(row));await loadTable('jobs');let n=0;try{if((S.estIndex||[]).some(e=>e.bid_id===b.id))n=await loadBudgetFromEstimate(jobOf(row.id),false)}catch(e){console.warn(e)}
     closeModal();S.view='job';S.jobId=row.id;render();toast(n?`Job created with ${n} budget line${n===1?'':'s'} from the estimate`:'Job created — import or add the budget next')}catch(e){toast(errMsg(e))}
 }
@@ -4171,7 +4207,7 @@ document.addEventListener('click',e=>{
     case 'bid-archive':case 'bid-restore':{const on=a==='bid-archive';const id=M.draft.id;setArchived([id],on).then(()=>{closeModal();render()});break}
     case 'new-est':M={kind:'est',isNew:true,draft:{id:newId(),name:'',title:'',email:'',phone:'',active:true}};showModal();break;
     case 'open-est':M={kind:'est',draft:clone(byId(S.estimators,t.dataset.id))};showModal();break;
-    case 'new-client':M={kind:'client',isNew:true,draft:{id:newId(),company:'',type:S.view==='clients'&&S.q.clKind==='eng'?'Engineer':'General contractor',phone:'',email:'',address:'',notes:'',contacts:[{name:'',title:'',phone:'',email:''}]}};showModal();break;
+    case 'new-client':M={kind:'client',isNew:true,draft:{id:newId(),company:'',type:S.view==='clients'&&S.q.clKind==='eng'?'Engineer':S.view==='clients'&&S.q.clKind==='own'?'Developer':'General contractor',phone:'',email:'',address:'',notes:'',contacts:[{name:'',title:'',phone:'',email:''}]}};showModal();break;
     case 'open-client':M={kind:'client',draft:clone(byId(S.clients,t.dataset.id))};showModal();break;
     case 'new-vendor':M={kind:'vendor',isNew:true,draft:{id:newId(),company:'',vendor_type:S.q.vtype||'',scopes:S.q.vscope?[S.q.vscope]:[],trade:S.q.trade||TRADES[0],contact_name:'',phone:'',email:'',area:'',preferred:false,notes:''}};showModal();break;
     case 'open-vendor':{const vd=clone(byId(S.vendors,t.dataset.id));vd.scopes=vendorScopes(vd);vd.vendor_type=vd.vendor_type||'';M={kind:'vendor',draft:vd};showModal();break}
@@ -4399,7 +4435,7 @@ document.addEventListener('change',e=>{
     case 'vtypeF':S.q.vtype=t.value;render();break;
     case 'sup-addclient':if(t.value&&M.sup){M.sup.draft.client_ids.push(t.value);renderModal()}break;
     case 'add-support':if(t.value==='__all'){const d=M.draft;S.estimators.filter(e=>e.active!==false&&e.id!==d.lead_estimator_id&&!d.support_estimator_ids.includes(e.id)).sort((a,c)=>a.name.localeCompare(c.name)).forEach(e=>d.support_estimator_ids.push(e.id));renderModal()}else if(t.value){M.draft.support_estimator_ids.push(t.value);renderModal()}break;
-    case 'add-client':if(t.value){M.draft.client_ids.push(t.value);const first=byId(S.clients,t.value)?.contacts?.[0]?.name;if(first)M.draft.client_contacts[t.value]=first;renderModal()}break;
+    case 'add-client':if(t.value){M.draft.client_ids.push(t.value);{const own=isOwnerCo(byId(S.clients,t.value));M.draft.client_proposals={...(M.draft.client_proposals||{}),[t.value]:{...((M.draft.client_proposals||{})[t.value]||{}),role:{gc:!own,own}}}}const first=byId(S.clients,t.value)?.contacts?.[0]?.name;if(first)M.draft.client_contacts[t.value]=first;renderModal()}break;
     case 'add-quote':if(t.value){addQuote(t.value);renderModal()}break;
     case 'add-quote-scope':if(t.value){const had=M.draft.quotes.some(q=>q.vendor_id===t.value&&qOpen(q));addQuote(t.value,t.dataset.scope);if(had&&M.draft.quotes.some(q=>q.vendor_id===t.value&&qHas(q,t.dataset.scope)&&qScopes(q).length>1))toast(`Added ${t.dataset.scope} to ${vendorOf(t.value)?.company||'their'} quote, so they send one price for all of it.`);renderModal()}break;
     case 'q-addscope':if(t.value){const q=M.draft.quotes[+t.dataset.i];if(q){qSetScopes(q,[...qScopes(q),t.value]);renderModal()}}break;
@@ -5360,7 +5396,7 @@ const PROP_DEFAULT_LIB={
 const propLib=()=>{const L=S.settings.prop_library;return L&&Array.isArray(L.incl)?{...PROP_DEFAULT_LIB,...L}:PROP_DEFAULT_LIB};
 function propData(){const E=S.est,d=E.data,b=byId(S.bids,E.bidId)||{};const L=propLib();
   if(!d.prop||typeof d.prop!=='object'){const ad=addenda(b).map(a=>a.number).filter(x=>x!=null&&x!=='');
-    d.prop={date:todayStr(),to:(b.client_ids||[]).slice(),format:'unit',subtotals:true,showQty:true,valid:30,
+    d.prop={date:todayStr(),to:propIds(b).slice(),format:'unit',subtotals:true,showQty:true,valid:30,
       intro:`${S.settings.general?.companyName||CFG.companyName||'We'} ${S.settings.general?.companyName||CFG.companyName?'is':'are'} pleased to provide pricing for the site work on the above project.`,
       basis:ad.length?`Plans and specifications as issued, including Addend${ad.length===1?'um':'a'} ${ad.join(', ')}.`:'Plans and specifications as issued.',
       incl:L.incl.slice(0,4),excl:L.excl.slice(),clar:L.clar.slice(0,2),inclX:'',exclX:'',clarX:'',terms:L.terms||'',sign:myName(),title:myEst()?.title||''};
@@ -5402,12 +5438,12 @@ function estPropView(d,R,b,ro){const P=propData();const L=propLib();const dis=ro
   const chk=(k,arr)=>`<div class="pr-chks">${[...new Set([...arr,...P[k].filter(x=>!arr.includes(x))])].map(x=>`<label class="check small"><input type="checkbox" data-prl="${k}" value="${esc(x)}"${P[k].includes(x)?' checked':''}${dis}> ${esc(x)}</label>`).join('')}</div>`;
   const pin=(k,o={})=>`<input class="field" id="pr-${k}" data-pr="${k}"${o.n?' type="number"':o.date?' type="date"':''} value="${esc(P[k]??'')}"${o.ph?` placeholder="${esc(o.ph)}"`:''}${dis}>`;
   const ptx=(k,ph,rows=2)=>`<textarea class="field" id="pr-${k}" data-pr="${k}" rows="${rows}" placeholder="${esc(ph)}"${dis}>${esc(P[k]||'')}</textarea>`;
-  const sentTo=(b.client_ids||[]).filter(id=>propOf(b,id).status==='Sent');
+  const sentTo=propIds(b).filter(id=>propOf(b,id).status==='Sent');
   return `<div class="pr-grid"><div class="pr-form">
     <div class="panel pad"><div class="pr-actions"><button class="btn primary" data-act="pr-print">Print / save as PDF</button>${ro?'':`<button class="btn" data-act="pr-sent"${P.to.length?'':' disabled title="Pick who it goes to first"'}>Mark sent${P.to.length?` to ${P.to.length} GC${P.to.length===1?'':'s'}`:''}</button>`}${can('codebook','edit')?'<button class="btn" data-act="pr-lib">Edit library</button>':''}</div>
       ${sentTo.length?`<p class="hint">Sent to ${sentTo.map(id=>esc(clientName(id))+(propOf(b,id).sent_date?' ('+fmtShort(propOf(b,id).sent_date)+')':'')).join(', ')}.</p>`:''}</div>
     ${ptPanel(ro)}
-    <div class="panel pad"><h3 class="pr-h">To</h3>${(b.client_ids||[]).length?`<div class="pr-chks">${b.client_ids.map(id=>`<label class="check small"><input type="checkbox" data-prto value="${id}"${P.to.includes(id)?' checked':''}${dis}> ${esc(clientName(id))}${(b.client_contacts||{})[id]?` <span class="dim">· ${esc(b.client_contacts[id])}</span>`:''}</label>`).join('')}</div>`:'<p class="dim small">Add GCs to the bid first.</p>'}
+    <div class="panel pad"><h3 class="pr-h">To</h3>${propIds(b).length?`<div class="pr-chks">${propIds(b).map(id=>`<label class="check small"><input type="checkbox" data-prto value="${id}"${P.to.includes(id)?' checked':''}${dis}> ${esc(clientName(id))}${(b.client_contacts||{})[id]?` <span class="dim">· ${esc(b.client_contacts[id])}</span>`:''}</label>`).join('')}</div>`:'<p class="dim small">Add GCs to the bid first.</p>'}
       <div class="fg pr-fg"><label class="f">Date${pin('date',{date:1})}</label><label class="f">Valid for (days)${pin('valid',{n:1})}</label></div></div>
     <div class="panel pad"><h3 class="pr-h">Pricing</h3><div class="radio pr-fmt">${[['unit','Unit prices — every bid item'],['scope','Lump sum by scope'],['total','One lump sum']].map(([k,l])=>`<label><input type="radio" name="prfmt" data-prf value="${k}"${P.format===k?' checked':''}${dis}> ${l}</label>`).join('')}</div>
       ${P.format==='unit'?`<label class="check small"><input type="checkbox" data-prb="showQty"${P.showQty?' checked':''}${dis}> Show quantities and units</label><label class="check small"><input type="checkbox" data-prb="hideUnit"${P.hideUnit?' checked':''}${dis||(P.showQty?'':' disabled')}> Hide unit prices</label><label class="check small"><input type="checkbox" data-prb="hideExt"${P.hideExt?' checked':''}${dis}> Hide line amounts (extensions)</label><label class="check small"><input type="checkbox" data-prb="subtotals"${P.subtotals?' checked':''}${dis}> Subtotal by scope</label>`:''}
@@ -8039,14 +8075,14 @@ function trackModal(){const x=trkCtx();const inBid=M.kind==='bid';const c=byId(S
       <p class="hint">Paste it into Outlook or Gmail and send it yourself. The client sees stages, dates, acknowledged addenda and the lead estimator’s contact — never prices, other GCs or your notes.</p></fieldset>
     ${isAdmin()?`<button class="btn sm ghost${x.arm2?' danger':''}" data-act="trk-new">${x.arm2?'Click again — the old link stops working':'Replace this link (turns the old one off)'}</button>`:''}`}</div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="${inBid?'trk-back':'close'}">${inBid?'Back to the bid':x.bidId?'Done':'Close'}</button></div></div>`}
-function trackRow(b){if(!b||b._new||!can('bids','edit'))return '';const ids=(b.client_ids||[]).filter(id=>byId(S.clients,id));if(!ids.length)return '';
+function trackRow(b){if(!b||b._new||!can('bids','edit'))return '';const ids=propIds(b).filter(id=>byId(S.clients,id));if(!ids.length)return '';
   return `<div class="trk-row small"><span class="dim">Client tracker:</span> ${ids.map(id=>`<button class="linkbtn" data-act="trk-open" data-id="${id}" data-bid="${b.id}">${esc(byId(S.clients,id).company)}</button>`).join(' · ')}</div>`}
 FOCUS_ATTRS.push('data-trk');
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('trk-'))return;const x=trkCtx();
   const copy=(txt,msg)=>(navigator.clipboard?navigator.clipboard.writeText(txt):Promise.reject()).then(()=>toast(msg)).catch(()=>toast('Couldn’t copy — select the text and copy it by hand.'));
   const cur=()=>{const c=byId(S.clients,x.cur)||{};const b=x.bidId?byId(S.bids,x.bidId):null;const em=trackEmail(c,b,trackUrl(x.links[x.cur]));return {subject:x.subject??em.subject,body:x.body??em.body,c,b}};
   switch(a){
-    case 'trk-open':{const bid=t.dataset.bid||null;const id=t.dataset.id;if(M&&M.kind==='bid'){M.trk={ids:(M.draft.client_ids||[]).filter(c=>byId(S.clients,c)),bidId:M.draft.id,cur:id,links:{}};if(!M.trk.ids.includes(id))M.trk.ids=[id];renderModal();trackLoad(id);break}closeModal();M={kind:'track',ids:[id],bidId:bid,cur:id,links:{}};showModal();trackLoad(id);break}
+    case 'trk-open':{const bid=t.dataset.bid||null;const id=t.dataset.id;if(M&&M.kind==='bid'){M.trk={ids:propIds(M.draft).filter(c=>byId(S.clients,c)),bidId:M.draft.id,cur:id,links:{}};if(!M.trk.ids.includes(id))M.trk.ids=[id];renderModal();trackLoad(id);break}closeModal();M={kind:'track',ids:[id],bidId:bid,cur:id,links:{}};showModal();trackLoad(id);break}
     case 'trk-back':if(M&&M.kind==='bid'){M.trk=null;renderModal()}break;
     case 'trk-sent':if(x)trkMarkSent(x);break;
     case 'trk-pick':if(x){x.cur=t.dataset.id;x.subject=x.body=undefined;x.arm2=false;renderModal();if(!x.links[x.cur])trackLoad(x.cur)}break;
@@ -8095,7 +8131,7 @@ function fuListModal(){const x=M;const L=fuList();const q=(x.q||'').trim().toLow
   const due=L.filter(o=>!o.s.wait),soon=L.filter(o=>o.s.wait);let R=(f==='due'?due:f==='soon'?soon:L).filter(o=>!q||[o.b.name,o.b.location,(o.b.client_ids||[]).map(clientName).join(' '),estName(o.b.lead_estimator_id)].join(' ').toLowerCase().includes(q));
   if(x.sort==='name')R=R.slice().sort((a,c)=>String(a.b.name).localeCompare(String(c.b.name)));else if(x.sort==='gc')R=R.slice().sort((a,c)=>String(clientName((a.b.client_ids||[])[0])||'~').localeCompare(String(clientName((c.b.client_ids||[])[0])||'~')));
   const old=due.filter(o=>canWork(o.b)&&-daysUntil(o.s.due)>30);
-  const row=o=>{const d=daysUntil(o.s.due);const gc=(o.b.client_ids||[]).map(clientName).filter(Boolean).slice(0,2).join(', ');
+  const row=o=>{const d=daysUntil(o.s.due);const gc=propIds(o.b).map(clientName).filter(Boolean).slice(0,2).join(', ');
     return `<tr><td class="proj"><button class="linkbtn" data-act="fu-open" data-id="${o.b.id}">${esc(o.b.name)}</button>${o.b.location?`<div class="dim small">${esc(o.b.location)}</div>`:''}</td><td class="small">${esc(gc||'—')}</td><td class="small">${o.b.lead_estimator_id?esc(estName(o.b.lead_estimator_id)):'<span class="dim">—</span>'}</td><td class="small">${o.s.sent?fmtShort(o.s.sent):''}</td>
       <td class="small">${esc(o.s.label)}</td><td class="small ${o.s.wait?'dim':'warn-t'}" style="white-space:nowrap">${o.s.wait?(d===0?'today':'in '+d+' day'+(d===1?'':'s')):d===0?'due today':-d+' day'+(d===-1?'':'s')+' overdue'}</td>
       <td class="r nowrap">${canWork(o.b)?`<button class="btn sm primary" data-act="fu-open" data-id="${o.b.id}">${o.s.kind==='outcome'?'Record meeting':'Follow up…'}</button><button class="btn sm ghost" data-act="fu-off" data-id="${o.b.id}" title="Stop reminders for this bid">Pause</button>`:''}</td></tr>`};
@@ -8113,7 +8149,7 @@ function fuEmail(b,cid,type,st){const c=byId(S.clients,cid)||{};const who=String
   if(n<=1)return {subject:`${b.name} — following up on our proposal`,body:`${hi},\n\nI wanted to follow up on the proposal we sent for ${b.name}${when}. Has your team had a chance to review it?\n\nIf you have questions on scope, quantities or anything we excluded, I’m glad to walk through it. I can also set up a quick Teams or Zoom call if that’s easier.${sign}`};
   if(n===2)return {subject:`${b.name} — checking in`,body:`${hi},\n\nChecking back in on ${b.name}. Is there an update on where the project stands or when you expect a decision?\n\nIf our number needs another look, or the scope has changed since we priced it, send over what you have and we’ll turn it around quickly.${sign}`};
   return {subject:`${b.name} — still interested`,body:`${hi},\n\nI know these decisions take time, so I’ll keep this short. We’re still very interested in ${b.name} and have the crews to start when you need us.\n\nCould you let me know where things stand, even if nothing has been decided yet? It helps us hold room in our schedule.${sign}`}}
-function fuOpen(bidId){const b=byId(S.bids,bidId);if(!b)return;const st=fuState(b);const P=st.P;M={kind:'fu',bidId,cid:(b.client_ids||[])[0]||'',type:st.kind==='nudge'||!st.kind?'nudge':'meeting',days:P.custom.days??'',rounds:P.custom.rounds??'',mt:{date:P.meeting?.date||'',time:P.meeting?.time||'',link:P.meeting?.link||''},out:{standing:FU_STANDING[0],decision:'',comp:'',notes:'',prob:b.probability??50}};showModal()}
+function fuOpen(bidId){const b=byId(S.bids,bidId);if(!b)return;const st=fuState(b);const P=st.P;M={kind:'fu',bidId,cid:propIds(b)[0]||'',type:st.kind==='nudge'||!st.kind?'nudge':'meeting',days:P.custom.days??'',rounds:P.custom.rounds??'',mt:{date:P.meeting?.date||'',time:P.meeting?.time||'',link:P.meeting?.link||''},out:{standing:FU_STANDING[0],decision:'',comp:'',notes:'',prob:b.probability??50}};showModal()}
 function fuModal(){const x=M;const b=byId(S.bids,x.bidId);if(!b)return mhead('Follow-up','')+'<div class="mbody"></div>';const st=fuState(b);const P=st.P;const work=canWork(b);const dis=work?'':' disabled';const D=fuDefaults();
   const em=x.cid?fuEmail(b,x.cid,x.type,st):null;const log=(b.follow_ups||[]).filter(f=>f.date||f.note).slice().sort((a,c)=>String(c.date).localeCompare(String(a.date))).slice(0,6);const m=P.meeting;
   const steps=[['Proposal sent',st.sent?fmtShort(st.sent):'—',1],[`Follow-ups`,`${st.n} of ${P.rounds}`,st.n>0?(st.n>=P.rounds?1:.5):0],['Meeting',m&&m.date?(m.held?'Held '+fmtShort(m.date):fmtShort(m.date)):'Not set',m&&m.held?1:m&&m.date?.5:0],['Decision',P.decision?'Expected '+fmtShort(P.decision):'Waiting',0]];
@@ -8127,7 +8163,7 @@ function fuModal(){const x=M;const b=byId(S.bids,x.bidId);if(!b)return mhead('Fo
       <label class="f s2">Who else is in it<input class="field" id="fuo-comp" data-fuo="comp" value="${esc(x.out.comp)}" placeholder="Other bidders, if they said"${dis}></label><label class="f s2">Notes<input class="field" id="fuo-notes" data-fuo="notes" value="${esc(x.out.notes)}" placeholder="Scope questions, what they want changed…"${dis}></label></div>
       <div class="adders"><button class="btn primary" data-act="fu-held"${dis}>Save meeting notes</button><button class="btn" data-act="fu-nomeet"${dis}>It didn’t happen</button></div></fieldset>`:''}
     <fieldset><legend>Email the GC</legend>
-      <div class="fg"><label class="f s2">To<select class="field" data-fu="cid"${dis}>${(b.client_ids||[]).map(id=>`<option value="${id}"${x.cid===id?' selected':''}>${esc(clientName(id))}${(b.client_contacts||{})[id]?' — '+esc(b.client_contacts[id]):''}</option>`).join('')||'<option value="">No GC on this bid</option>'}</select></label>
+      <div class="fg"><label class="f s2">To<select class="field" data-fu="cid"${dis}>${propIds(b).map(id=>`<option value="${id}"${x.cid===id?' selected':''}>${esc(clientName(id))}${(b.client_contacts||{})[id]?' — '+esc(b.client_contacts[id]):''}</option>`).join('')||'<option value="">No GC on this bid</option>'}</select></label>
       <label class="f s2">Kind<select class="field" data-fu="type"${dis}><option value="nudge"${x.type==='nudge'?' selected':''}>Follow-up ${Math.min(st.n+1,Math.max(P.rounds,1))}</option><option value="meeting"${x.type==='meeting'?' selected':''}>Ask for a Teams / Zoom review</option>${m&&m.date&&!m.held?`<option value="confirm"${x.type==='confirm'?' selected':''}>Confirm the meeting</option>`:''}</select></label></div>
       ${em?`<label class="f">Subject<input class="field" id="fu-subj" data-fu="subject" value="${esc(x.subject??em.subject)}"${dis}></label><label class="f">Message<textarea class="field" id="fu-body" data-fu="body" rows="9"${dis}>${esc(x.body??em.body)}</textarea></label>
       <div class="adders"><button class="btn" data-act="fu-copy">Copy email</button><button class="btn" data-act="fu-mail">Open in my email</button>${work?`<button class="btn primary" data-act="fu-sent">I sent it — log it</button>`:''}</div><p class="hint">Send it from your own email, then click <b>I sent it</b>. That logs the follow-up and starts the clock for the next one.</p>`:''}</fieldset>
@@ -11315,7 +11351,7 @@ const vEmail=v=>(/[^\s<>(),;]+@[^\s<>(),;]+/.exec(String(v&&v.email||''))||[''])
 function rfqScopes(b,qs){const ord=n=>{const i=b.scope_items.findIndex(x=>x.name.toLowerCase()===String(n).toLowerCase());return i<0?999:i};const names=[...new Set(qs.flatMap(qScopes))].sort((x,y)=>ord(x)-ord(y));return names.map(n=>{const it=b.scope_items.find(x=>x.name.toLowerCase()===String(n).toLowerCase());const P=partsOf(it);return {n:n+(P.length?` (${P.join(', ')})`:''),mat:it&&performOf(it)==='Self perform'}})}
 function rfqMap(b,qs){const r=rfqOf(b);const lead=byId(S.estimators,b.lead_estimator_id)||{};const co=S.settings.general?.companyName||CFG.companyName||'Dogwood Site Contractors';const sc=rfqScopes(b,qs);
   return {project:b.name||'',location:b.location||'',quotes_due:rfqD(rfqDue(b)),quotes_due_time:r.time||'5PM',note:r.note||'',note_short:r.note?' '+r.note.replace(/^\W+|\W+$/g,'').replace(/^(pricing and quotes needed are for )?only /i,''):'',start_date:r.start||'TBD',plans_link:'\u0001plans\u0001',details_table:'\u0001table\u0001',
-    scopes:sc.map(x=>x.n+(x.mat?' (material)':'')).join(', '),plan_date:r.planDate?rfqD(r.planDate):'',engineer:r.engineer||'',gc:b.client_ids.map(clientName).join(', '),bid_due:rfqD(b.due_date),walk_date:b.walk_date?rfqD(b.walk_date):'',rfi_date:b.rfi_date?rfqD(b.rfi_date):'',estimator:lead.name||myName(),company:co,
+    scopes:sc.map(x=>x.n+(x.mat?' (material)':'')).join(', '),plan_date:r.planDate?rfqD(r.planDate):'',engineer:r.engineer||'',gc:propIds(b).map(clientName).join(', '),bid_due:rfqD(b.due_date),walk_date:b.walk_date?rfqD(b.walk_date):'',rfi_date:b.rfi_date?rfqD(b.rfi_date):'',estimator:lead.name||myName(),company:co,
     _sc:sc,_desc:r.desc||`This is a ${String(b.project_type||'Commercial')} Development which includes the following:`,_plans:r.plans||'',_plansLabel:r.plansLabel||(r.planDate?`${r.planDate.replace(/-/g,'')} - ${b.name||'Plans'} Civil Set.pdf`:'')}}
 // fill the template: drop a line when its fields came out empty and nothing else is on it
 function rfqLines(str,map){return String(str||'').split('\n').flatMap(line=>{let empty=false,any=false;const out=line.replace(/\{(\w+)\}/g,(m,k)=>{if(!(k in map))return m;any=true;const v=map[k];if(v===''||v==null)empty=true;return v??''});
@@ -11497,7 +11533,7 @@ async function trkSendsLoad(force){if(S.trkSends&&!force)return;if(trkSendsLoad.
 const trkLast=cid=>(S.trkSends||[]).filter(r=>r.client_id===cid&&r.sent_at).sort((x,y)=>String(y.sent_at).localeCompare(String(x.sent_at)))[0]||null;
 const trkAgo=at=>{const d=Math.floor((Date.now()-new Date(at).getTime())/864e5);return d<=0?'today':d===1?'yesterday':d+' days ago'};
 function trkState(cid){const r=trkLast(cid);if(!r)return {k:'none'};const days=Math.floor((Date.now()-new Date(r.sent_at).getTime())/864e5);const next=new Date(new Date(r.sent_at).getTime()+TRK_DAYS*864e5);return {k:days<TRK_DAYS?'ok':'due',r,days,next}}
-function trkStrip(b){if(!b||b._new||b._sample||!can('bids','edit'))return '';const ids=(b.client_ids||[]).filter(id=>byId(S.clients,id));if(!ids.length)return '';
+function trkStrip(b){if(!b||b._new||b._sample||!can('bids','edit'))return '';const ids=propIds(b).filter(id=>byId(S.clients,id));if(!ids.length)return '';
   if(!S.trkSends&&!S.trkMissing){trkSendsLoad();return ''}
   const rows=ids.map(id=>{const c=byId(S.clients,id);const st=trkState(id);
     const msg=st.k==='none'?'<b>Tracker link not sent yet</b>':st.k==='ok'?`Tracker link sent ${fmtShort(String(st.r.sent_at).slice(0,10))} (${trkAgo(st.r.sent_at)})${st.r.sent_by_name?' by '+esc(st.r.sent_by_name):''} · no need to resend until ${st.next.toLocaleDateString('en-US',{month:'short',day:'numeric'})}`:`Last sent ${fmtShort(String(st.r.sent_at).slice(0,10))}, ${st.days} days ago · time to send it again`;
@@ -11786,7 +11822,7 @@ function opHtml(b,sec){const on=k=>!!sec[k];const P=on('prices');const d=x=>x?fm
   const h=t=>`<h2>${esc(t)}</h2>`;let o='';
   o+=`<header class="op-h">${logo?`<img src="${esc(logo)}" alt="">`:`<b>${esc(co)}</b>`}<div><div class="op-k">Bid summary</div><h1>${esc(b.name||'Untitled bid')}</h1><div class="op-sub">${esc([b.location,normProjectType(b.project_type),b.bid_type].filter(Boolean).join(' · '))}</div></div></header>`;
   if(on('proj'))o+=`<section>${h('Project & dates')}<table class="op-kv">${row('Stage',esc(stLabelB(b)))}${row('Bid due',d(b.due_date)+(b.due_time?' at '+esc(fmtTime(b.due_time)):''))}${row('Site walk',b.walk_date?d(b.walk_date):'')}${row('RFI deadline',b.rfi_date?d(b.rfi_date):'')}${row('Quotes due',rfqDue(b)?d(rfqDue(b)):'')}${row('Plan date',r.planDate?d(r.planDate):'')}${row('Proposal expected',b.proposal_eta?d(b.proposal_eta):'')}${row('Size',esc(b.size||''))}${row('Units',b.units?esc(String(b.units)):'')}${row('Plans',r.plans?esc(r.plansLabel||r.plans):'')}</table></section>`;
-  if(on('gcs'))o+=`<section>${h('GCs & contacts')}${b.client_ids.length?`<table class="op-t"><thead><tr><th>Company</th><th>Contact</th><th>Phone</th><th>Email</th>${on('numbers')&&P?'<th class="r">Our number</th>':''}</tr></thead><tbody>${b.client_ids.map(id=>{const c=byId(S.clients,id)||{};const nm=(b.client_contacts||{})[id]||'';const ct=(c.contacts||[]).find(x=>x.name===nm)||{};return `<tr><td><b>${esc(clientName(id))}</b></td><td>${esc(nm)}</td><td>${esc(ct.phone||c.phone||'')}</td><td>${esc(ct.email||'')}</td>${on('numbers')&&P?`<td class="r">${clientAmount(b,id)?money(clientAmount(b,id)):'—'}</td>`:''}</tr>`}).join('')}</tbody></table>`:'<p class="op-dim">No GCs yet.</p>'}</section>`;
+  if(on('gcs'))o+=`<section>${h('Companies & contacts')}${b.client_ids.length?`<table class="op-t"><thead><tr><th>Company</th><th>Contact</th><th>Phone</th><th>Email</th>${on('numbers')&&P?'<th class="r">Our number</th>':''}</tr></thead><tbody>${b.client_ids.map(id=>{const c=byId(S.clients,id)||{};const nm=(b.client_contacts||{})[id]||'';const ct=(c.contacts||[]).find(x=>x.name===nm)||{};const R=cRole(b,id);return `<tr><td><b>${esc(clientName(id))}</b> <span class="op-dim">${[R.gc?'GC / client':'',R.own?'Developer / owner':''].filter(Boolean).join(' · ')}</span></td><td>${esc(nm)}</td><td>${esc(ct.phone||c.phone||'')}</td><td>${esc(ct.email||'')}</td>${on('numbers')&&P?`<td class="r">${propIds(b).includes(id)&&clientAmount(b,id)?money(clientAmount(b,id)):'—'}</td>`:''}</tr>`}).join('')}</tbody></table>`:'<p class="op-dim">No GCs yet.</p>'}</section>`;
   if(on('team')){const ests=[b.lead_estimator_id,...(b.support_estimator_ids||[])].filter(Boolean).map(id=>byId(S.estimators,id)).filter(Boolean);
     o+=`<section>${h('Team')}${ests.length?`<table class="op-t"><tbody>${ests.map((e,i)=>`<tr><td><b>${esc(e.name)}</b> <span class="op-dim">${i===0&&e.id===b.lead_estimator_id?'Lead':'Helping'}</span></td><td>${esc(e.title||'')}</td><td>${esc(e.phone||'')}</td><td>${esc(e.email||'')}</td></tr>`).join('')}</tbody></table>`:'<p class="op-dim">No one assigned yet.</p>'}</section>`}
   if(on('scopes')||on('vendors')){const Q=b.quotes||[];
@@ -12117,7 +12153,7 @@ const FR_DEF_BUDGET=['Allowances and assumptions stated on the proposal','Exclus
 const frSet=()=>{const v=S.settings.review||{};return {mode:v.mode==='stop'?'stop':'warn',who:['both','lead','mgr','either'].includes(v.who)?v.who:'both',items:Array.isArray(v.items)&&v.items.length?v.items:FR_DEF_ITEMS,budget:Array.isArray(v.budget)?v.budget:FR_DEF_BUDGET}};
 const frSlug=t=>'m_'+String(t).toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'').slice(0,48);
 function frOf(b){if(!b.review||typeof b.review!=='object')b.review={};const R=b.review;if(!R.items||typeof R.items!=='object')R.items={};if(!R.sign||typeof R.sign!=='object')R.sign={};if(!Array.isArray(R.back))R.back=[];return R}
-const frNumSig=b=>JSON.stringify([bidValue(b)||0,...(b.client_ids||[]).map(id=>clientAmount(b,id)||0)]);
+const frNumSig=b=>JSON.stringify([bidValue(b)||0,...propIds(b).map(id=>clientAmount(b,id)||0)]);
 // the automatic checks: [id, label, ok, detail when not ok]
 function frAuto(b){const its=scopeItems(b)||[];const Q=Array.isArray(b.quotes)?b.quotes:quotesFor(b.id);const ad=addenda(b).filter(a=>a.number!=null&&a.number!=='');
   const open=its.filter(x=>x.status!=='Complete'&&x.status!=='N/A');const out=Q.filter(q=>q.status==='Requested');
@@ -12125,7 +12161,7 @@ function frAuto(b){const its=scopeItems(b)||[];const Q=Array.isArray(b.quotes)?b
   // say why each scope has no price: nobody answered, still out, or nobody asked
   const why=it=>{const qs=Q.filter(q=>qHas(q,it.name));if(!qs.length)return `${it.name} (no vendor)`;if(qs.some(q=>q.status==='Requested'))return `${it.name} (quote still out)`;
     if(qs.every(q=>['Declined','No response'].includes(q.status)))return `${it.name} (${qs.length===1?(vendorOf(qs[0].vendor_id)?.company||'vendor')+' '+(qs[0].status==='Declined'?'declined':'didn’t respond'):'no one responded'})`;return `${it.name} (not requested)`};
-  const noNum=(b.client_ids||[]).filter(id=>!clientAmount(b,id));const unack=ad.filter(a=>!a.acknowledged);const nm=(L,f)=>L.slice(0,3).map(f).join(', ')+(L.length>3?'…':'');
+  const noNum=propIds(b).filter(id=>!clientAmount(b,id));const unack=ad.filter(a=>!a.acknowledged);const nm=(L,f)=>L.slice(0,3).map(f).join(', ')+(L.length>3?'…':'');
   return [
     ['a_scopes','Every scope’s takeoff signed off',its.length&&!open.length,its.length?`${open.length} not signed off: ${nm(open,x=>x.name)}`:'No scopes on this bid'],
     ['a_addenda','Every addendum acknowledged and priced',!unack.length,`Not acknowledged: ${nm(unack,a=>'#'+a.number)}`],
@@ -12293,7 +12329,7 @@ function bmDraw(fit){const m=BM.map,L=window.L;if(!m||!BM.layer||!m.getContainer
 function bmPop(b){const g=bmGeo(b)||{};const v=bidValue(b);const d=g.drive;const due=b.due_date?`Due ${fmtShort(b.due_date)}`:'No due date';
   return `<div class="bm-pop"><b>${esc(b.name)}</b><div class="small"><span class="bm-dot" style="background:${bmColor(b)}"></span>${esc(bmLabel(b))}</div>
     <div class="small dim">${esc(b.location||'')}${g.src==='pin'?' · pin placed by hand':g.rough?' · only the town was found, use Move pin to fix':g.src==='lookup'||g.src==='cache'?' · approximate':''}</div>
-    <div class="small">${esc((b.client_ids||[]).map(clientName).join(', ')||'No GC')}</div><div class="small">${due}${v?' · '+esc(money(v)):''}${b.lead_estimator_id?' · '+esc(estName(b.lead_estimator_id)||''):''}</div>
+    <div class="small">${partyLine(b,{none:'No GC'})}</div><div class="small">${due}${v?' · '+esc(money(v)):''}${b.lead_estimator_id?' · '+esc(estName(b.lead_estimator_id)||''):''}</div>
     <div class="small bm-drive" id="bm-drive-${b.id}">${d?`${bmDur(d.min)} from the yard · ${d.mi} mi`:'Working out the drive…'}</div>
     <div class="bm-pa"><button class="btn sm primary" data-act="open-bid" data-id="${b.id}">Open bid</button>${canWork(b)?`<button class="btn sm" data-act="bm-move" data-id="${b.id}">Move pin</button>`:''}</div></div>`}
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('bm-'))return;
@@ -12613,3 +12649,14 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   if(a==='peqe-go'&&M&&M.kind==='peqest'){const b=byId(S.bids,S.est.bidId);const d=S.est.data;const r=peqFill(d,b);estOpenSave&&estOpenSave();estTouch();closeModal();S.est.tab='build';
     S.est.tkoNote=r.changed.length||r.gone.length?{moved:r.changed,gone:r.gone}:null;render();
     toast(`${r.added?`${r.added} bid item${r.added===1?'':'s'} added (${r.linked} with codebook activities)`:''}${r.added&&r.changed.length?', ':''}${r.changed.length?`${r.changed.length} quantit${r.changed.length===1?'y':'ies'} updated`:''}${!r.added&&!r.changed.length?'Nothing changed':''}${r.gone.length?` · ${r.gone.length} earlier item${r.gone.length===1?' is':'s are'} no longer on the sheet`:''}`)}});
+
+// tick / untick GC / client and Developer / owner on a company (one of them always stays ticked)
+document.addEventListener('change',e=>{const t=e.target;if(!t.dataset||t.dataset.crole==null||!M||M.kind!=='bid'||!canWork(M.draft))return;const [id,k]=t.dataset.crole.split('.');const b=M.draft;
+  const R={...cRole(b,id),[k]:t.checked};if(!R.gc&&!R.own){R[k==='gc'?'own':'gc']=true;toast('A company needs at least one role. Remove it with × if it’s not on this job.')}
+  b.client_proposals={...(b.client_proposals||{}),[id]:{...((b.client_proposals||{})[id]||{}),role:R}};renderModal()});
+
+document.addEventListener('change',e=>{const t=e.target;if(!t.dataset||t.dataset.fold==null||!M||M.kind!=='bid'||!canWork(M.draft))return;const v=t.value.trim();rfqOf(M.draft).folder=v;if(folderOk(v))M.fEdit=false;renderModal();if(folderOk(v))toast('Project folder linked.')});
+document.addEventListener('paste',e=>{const t=e.target;if(!t.dataset||t.dataset.fold==null)return;setTimeout(()=>t.dispatchEvent(new Event('change',{bubbles:true})),0)});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='bid')return;
+  if(t.dataset.act==='fold-ed'){M.fEdit=true;renderModal();setTimeout(()=>{const i=document.getElementById('fold-in');if(i){i.focus();i.select()}},20)}
+  if(t.dataset.act==='fold-x'){M.fEdit=false;renderModal()}});
