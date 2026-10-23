@@ -1171,13 +1171,13 @@ function bpProject(b,work,admin){
     <label class="f">Number of units<input type="number" min="0" step="1" class="field" ${bf('units','n')} placeholder="e.g. 240"></label>
   </div></fieldset>
   <fieldset><legend>Key dates</legend><div class="fg">
+    <label class="f" title="The day the invitation came in. Blank = the day the bid was entered.">Intake date<input type="date" class="field" data-bprfq="intake" value="${esc(rfqOf(b).intake||(b._new?todayStr():intakeOf(b)))}"${work?'':' disabled'}></label>
     <label class="f">Bid due date<input type="date" class="field" ${bf('due_date')}></label>
     <label class="f">Due time<input type="time" class="field" ${bf('due_time')}></label>
-    <label class="f">Site walk / pre-bid<input type="date" class="field" ${bf('walk_date')}></label>
-    <label class="f">RFI deadline<input type="date" class="field" ${bf('rfi_date')}></label>
     <label class="f" title="Shown to the client on their tracker. Blank = the bid due date.">Proposal expected by<input type="date" class="field" ${bf('proposal_eta')}></label>
-    <label class="f" title="The day the invitation came in. Blank = the day the bid was entered.">Intake date<input type="date" class="field" data-bprfq="intake" value="${esc(rfqOf(b).intake||(b._new?todayStr():intakeOf(b)))}"${work?'':' disabled'}></label>
     <label class="f" title="The date on the plan set you're bidding from">Plan date<input type="date" class="field" data-bprfq="planDate" value="${esc(rfqOf(b).planDate||'')}"${work?'':' disabled'}></label>
+    <label class="f">RFI deadline<input type="date" class="field" ${bf('rfi_date')}></label>
+    <label class="f">Site walk / pre-bid<input type="date" class="field" ${bf('walk_date')}></label>
   </div></fieldset>
   <fieldset><legend>Bidding to</legend>
     <div class="bp-gcs">${b.client_ids.map(id=>{const c=byId(S.clients,id);const cs=c?.contacts||[];const R=cRole(b,id);const dis=work?'':' disabled';return `<div class="bp-gc"><div><b>${esc(clientName(id))}</b><div class="dim small">${esc(c?.type||'')}</div></div>
