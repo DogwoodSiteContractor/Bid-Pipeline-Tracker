@@ -7303,6 +7303,9 @@ const TROPHIES=[
  {id:'clean',shape:'star',icon:'☎️',names:['Call Before You Dig'],tiers:[1],what:'Dirt Mover game with no utility strikes',secret:true,v:(s,f,d)=>d('dirt').clean?1:0},
  {id:'stack',shape:'cup',icon:'🏗️',names:['Foreman','Superintendent','Developer'],tiers:[20000,100000,400000],what:'best Build It Up score',v:(s,f)=>f('stack')},
  {id:'pipe',shape:'medal',icon:'🌧️',names:['Pipe Layer','Storm Chaser','Rainmaker'],tiers:[2,4,7],what:'Pipe Dream levels cleared in one run',v:(s,f,d)=>num(d('pipe').level)||0},
+ {id:'hole',shape:'medal',icon:'🕳️',names:['Pothole','Deep End','Hit Bedrock'],tiers:[30,100,200],what:'deepest Pothole dig (ft)',v:(s,f)=>f('pothole')},
+ {id:'dino',shape:'star',icon:'🦴',names:['Found the Dinosaur'],tiers:[1],what:'dinosaur bone hauled up in Pothole',v:(s,f,d)=>d('pothole').dino?1:0},
+ {id:'dry',shape:'star',icon:'☔',names:['Never Got Flooded'],tiers:[1],what:'Pothole site dug to bedrock without getting flooded out',v:(s,f,d)=>d('pothole').dry?1:0},
  {id:'guess',shape:'shield',icon:'👁️',names:['Good Eye','Eagle Eye','Human AGTEK'],tiers:[300,400,470],what:'best Guess the quantity score (out of 500)',v:(s,f)=>f('guess')},
  {id:'trivia',shape:'plaque',icon:'🎓',names:['Quick Study','Know-It-All','Professor'],tiers:[5,25,100],what:'trivia questions right',v:(s,f)=>f('trivia')},
  {id:'streak',shape:'star',icon:'🔥',names:['On a Roll','Hot Streak','Unstoppable'],tiers:[3,10,30],what:'trivia days in a row',v:(s,f,d)=>num(d('trivia').best)||0},
@@ -7570,12 +7573,13 @@ document.addEventListener('keyup',e=>{const g=S.fun.dirt;if(!g)return;if(e.key==
 ['pointerdown','pointerup','pointerleave','pointercancel'].forEach(ev=>document.addEventListener(ev,e=>{const b=e.target.closest&&e.target.closest('[data-dirt]');const g=S.fun.dirt;if(!b||!g)return;const k=b.dataset.dirt;if(k==='act'){if(ev==='pointerdown')dirtAct(g)}else g.keys[k]=ev==='pointerdown'}));
 
 /* ---------- the page ---------- */
-function funGames(){const F=S.fun;if(F.game==='pipe')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funPipe();if(F.game==='guess')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funGuess();if(F.game==='trivia')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funTrivia();if(F.game==='stack')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funBuild();
+function funGames(){const F=S.fun;if(F.game==='pipe')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funPipe();if(F.game==='guess')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funGuess();if(F.game==='trivia')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funTrivia();if(F.game==='stack')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funBuild();if(F.game==='pothole')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funPothole();
   const me=myId();const found=!!funStat(me,'dirt')||(()=>{try{return localStorage.getItem('bp-dig-found')==='1'}catch(e){return false}})();const tv=funStat(me,'trivia')?.data||{};
   const card=(k,icon,name,blurb,best,cta)=>`<div class="panel pad gcard"><div class="gcard-i">${icon}</div><h2>${name}</h2><p class="small">${blurb}</p><div class="small dim">${best}</div><button class="btn primary" data-act="${k==='dirt'?'fun-dig':'fun-game'}" data-v="${k}">${cta}</button></div>`;
   return `<div class="gcards">${card('trivia','🎓','Daily trivia','One site-work question a day. Keep the streak alive.',tv.last===todayStr()?`Done for today · 🔥 ${num(tv.streak)||0}`:'Today’s question is waiting',tv.last===todayStr()?'See today’s answer':'Answer today’s question')}
     ${card('guess','👁️','Guess the quantity','Five sketches, 30 seconds each, no calculator. How good is your eye?',`Your best: ${num(funStat(me,'guess')?.value)||0} / 500`,'Play')}
     ${card('stack','🏗️','Build It Up','Three stakes make a cone, three cones a barricade… all the way up to a tower. Keep the gophers boxed in.',`Your best: ${Number(num(funStat(me,'stack')?.value)||0).toLocaleString()}`,(()=>{try{return localStorage.getItem('bp-bu')?'Keep building':'Play'}catch(e){return 'Play'}})())}
+    ${card('pothole','🕳️','Pothole','Dig down, find what’s buried and get it back to the super before your lamp dies. Watch for gas, fiber and spring lines.',`Deepest: ${num(funStat(me,'pothole')?.value)||0} ft`,funStat(me,'pothole')?'Keep digging':'Play')}
     ${card('pipe','🌧️','Pipe Dream','Turn the pieces to connect the manhole to the outfall before the storm.',`Your best: ${Number(num(funStat(me,'pipe')?.value)||0).toLocaleString()}`,'Play')}
     ${found?card('dirt','🚜','Dirt Mover','The secret one. Load trucks, don’t hit the line.',`Your best: ${num(funStat(me,'dirt')?.value)||0}`,'Play'):`<div class="panel pad gcard locked"><div class="gcard-i">🔒</div><h2>???</h2><p class="small">There’s a fourth game hidden somewhere in this app. Site-work folks know the first thing you do on any job.</p><div class="small dim">No hints at the trophy room either.</div></div>`}
     ${funStat(me,'push')||(()=>{try{return localStorage.getItem('bp-push-found')==='1'}catch(e){return false}})()?`<div class="panel pad gcard"><div class="gcard-i">🚧</div><h2>Push Crew</h2><p class="small">The other secret one. Trucks dump, you push. Fill the lot before the shift ends.</p><div class="small dim">Your best: ${num(funStat(me,'push')?.value)||0} trucks</div><button class="btn primary" data-act="fun-push">Play</button></div>`
@@ -12686,3 +12690,198 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
     catch(err){M.busy=false;renderModal();toast(errMsg(err))}}});
 document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.biddel!=null&&M&&M.kind==='biddel'){M.typed=t.value.trim();const btn=document.querySelector('[data-act=biddel-go]');if(btn)btn.disabled=M.typed!=='DELETE'}});
 document.addEventListener('keydown',e=>{if(e.target.dataset&&e.target.dataset.biddel!=null&&e.key==='Enter'&&M&&M.typed==='DELETE'){e.preventDefault();document.querySelector('[data-act=biddel-go]')?.click()}});
+
+/* ---------- Pothole: dig down, find stuff, get it back up before the lamp dies ---------- */
+const PH_W=13,PH_H=102,PH_FT=2,PH_BED=PH_H-2;// row 0 = ground level, rows 1-100 dig, row 101 bedrock
+const PH_SOIL={top:{n:'Topsoil',h:1,c:'#6e4b2c'},clay:{n:'Red clay',h:2,c:'#9b5735'},rock:{n:'Weathered rock',h:3,c:'#7d7367'},shale:{n:'Shale',h:4,c:'#4f5764'},granite:{n:'Granite',h:5,c:'#8e8882'},
+  sand:{n:'Soft sand',h:1,c:'#c6a466',soft:true},loose:{n:'Cave-in fill',h:1,c:'#7d5c3b'},boulder:{n:'Boulder',h:6,c:'#5e5e60'},bed:{n:'Bedrock',h:99,c:'#26262b'}};
+const phBand=y=>y<=10?'top':y<=24?'clay':y<=46?'rock':y<=72?'shale':'granite';
+const PH_FINDS={
+  stake:{n:'Survey stake',i:'📍',v:3,d:[1,14],w:10},tile:{n:'Clay tile',i:'🧱',v:4,d:[1,18],w:10},bottle:{n:'Old bottle',i:'🍾',v:6,d:[2,26],w:7},tape:{n:'Lost tape measure',i:'📏',v:8,d:[1,22],w:7},
+  wrench:{n:'Lost pipe wrench',i:'🔧',v:10,d:[6,34],w:7},service:{n:'Abandoned water service',i:'🚰',v:15,d:[10,40],w:8},bolts:{n:'Anchor bolt',i:'🔩',v:12,d:[10,44],w:8},
+  meter:{n:'Old gas meter',i:'⏲️',v:20,d:[14,48],w:6},valve:{n:'Brass valve',i:'⚙️',v:25,d:[18,52],w:5},castiron:{n:'Cast iron fitting',i:'🔗',v:40,d:[26,70],w:6},
+  arrow:{n:'Arrowhead',i:'🔺',v:50,d:[30,72],w:5},capsule:{n:'Time capsule',i:'⏳',v:90,d:[36,82],w:3},fossil:{n:'Fossil',i:'🐚',v:70,d:[42,90],w:4},
+  geode:{n:'Geode',i:'💎',v:100,d:[64,100],w:3},tooth:{n:'Mammoth tooth',i:'🦷',v:120,d:[60,100],w:3},
+  ring:{n:'Gold ring',i:'💍',v:150,d:[10,100],w:.8},safe:{n:'Buried safe',i:'🗄️',v:300,d:[46,100],w:.5},dino:{n:'Dinosaur bone',i:'🦴',v:500,d:[78,100],w:.4}};
+const PH_WO=['service','bolts','wrench','meter','valve','castiron','arrow'];
+const PH_UP={
+  spd:{n:'Shovel speed',i:'⚡',cost:[40,100,220,450],lv:['Dig cost ×1','Dig cost ×0.8','Dig cost ×0.62','Dig cost ×0.48','Dig cost ×0.36'],f:[1,.8,.62,.48,.36]},
+  str:{n:'Shovel strength',i:'💪',cost:[60,150,320,650],lv:['Topsoil, clay, sand','+ weathered rock','+ shale','+ granite','+ boulders']},
+  bkt:{n:'Bucket',i:'🪣',cost:[30,80,180,380],f:[4,6,8,11,15],lv:['Carries 4','Carries 6','Carries 8','Carries 11','Carries 15']},
+  rng:{n:'Lamp range',i:'🔦',cost:[35,90,200,420],f:[2,3,4,5,6],lv:['Sees 2 around','Sees 3 around','Sees 4 around','Sees 5 around','Sees 6 around']},
+  bat:{n:'Lamp battery',i:'🔋',cost:[50,120,260,520],f:[120,170,230,300,400],lv:['120 charge','170 charge','230 charge','300 charge','400 charge']}};
+const PH_GEAR={box:{n:'Trench box',i:'🧰',cost:25,max:5,t:'Stops one cave-in in soft sand.'},pump:{n:'Pump',i:'🚿',cost:40,max:3,t:'Pumps the trench dry and plugs the leak.'},loc:{n:'Locator wand',i:'📡',cost:15,max:6,t:'Marks live lines within 5 squares.'}};
+const PH_UTIL={gas:{n:'Gas line',c:'#f2c200'},fiber:{n:'Fiber line',c:'#f28c28'},water:{n:'Water main',c:'#2f7fd8'}};
+const phI=(x,y)=>y*PH_W+x;const phPl=(n,c)=>c===1?n:/(ch|sh|s|x)$/.test(n)?n+'es':n+'s';
+function phRng(seed){let a=seed>>>0;return()=>{a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const phGenCache={};
+function phGen(seed){if(phGenCache[seed])return phGenCache[seed];const r=phRng(seed);const N=PH_W*PH_H;
+  const g={soil:new Array(N),item:new Array(N).fill(null),util:new Array(N).fill(null),spring:new Array(N).fill(false),damp:new Array(N).fill(false),tex:new Array(N)};
+  for(let y=0;y<PH_H;y++)for(let x=0;x<PH_W;x++){const i=phI(x,y);g.soil[i]=y===0?'sky':y===PH_H-1?'bed':phBand(y);g.tex[i]=r()}
+  for(let k=0;k<10;k++){const cy=5+Math.floor(r()*66),cx=Math.floor(r()*PH_W),rad=1+Math.floor(r()*2);
+    for(let y=cy-rad;y<=cy+rad;y++)for(let x=cx-rad-1;x<=cx+rad+1;x++){if(y<2||y>PH_BED||x<0||x>=PH_W)continue;if(Math.abs(x-cx)/(rad+1.5)+Math.abs(y-cy)/(rad+.5)<=1.05)g.soil[phI(x,y)]='sand'}}
+  for(let y=16;y<=PH_BED;y++)for(let x=0;x<PH_W;x++)if(r()<.016+y*.0004)g.soil[phI(x,y)]='boulder';
+  const run=(k,y0,y1,l0,l1)=>{const y=y0+Math.floor(r()*(y1-y0));const len=l0+Math.floor(r()*(l1-l0));const x0=Math.floor(r()*(PH_W-len+1));for(let x=x0;x<x0+len;x++){const i=phI(x,y);g.util[i]=k;g.soil[i]=phBand(y)}};
+  run('fiber',3,12,6,11);run('gas',5,17,5,9);run('water',13,34,6,10);run('fiber',18,40,5,10);run('gas',26,52,5,9);run('gas',55,80,4,8);
+  [[10,30],[32,56],[58,94]].forEach(([a,b])=>{const y=a+Math.floor(r()*(b-a)),x=Math.floor(r()*PH_W);const i=phI(x,y);if(g.util[i])return;g.spring[i]=true;g.soil[i]=phBand(y);
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const xx=x+dx,yy=y+dy;if(xx>=0&&xx<PH_W&&yy>0&&yy<=PH_BED)g.damp[phI(xx,yy)]=true}});
+  const keys=Object.keys(PH_FINDS);const free=i=>!g.util[i]&&!g.spring[i]&&g.soil[i]!=='boulder';
+  for(let y=1;y<=PH_BED;y++)for(let x=0;x<PH_W;x++){const i=phI(x,y);const roll=r(),pick=r();if(!free(i)||roll>.075)continue;const ok=keys.filter(k=>y>=PH_FINDS[k].d[0]&&y<=PH_FINDS[k].d[1]);
+    let p=pick*ok.reduce((s,k)=>s+PH_FINDS[k].w,0);for(const k of ok){p-=PH_FINDS[k].w;if(p<=0){g.item[i]=k;break}}}
+  const place=(k,y0,y1)=>{if(g.item.some(v=>v===k))return;for(let n=0;n<50;n++){const i=phI(Math.floor(r()*PH_W),y0+Math.floor(r()*(y1-y0)));if(free(i)){g.item[i]=k;return}}};
+  place('dino',82,PH_BED);place('safe',50,95);place('ring',12,60);
+  return phGenCache[seed]=g}
+const phPack=a=>{let s='';for(let i=0;i<a.length;i+=4)s+=((a[i]?8:0)|(a[i+1]?4:0)|(a[i+2]?2:0)|(a[i+3]?1:0)).toString(16);return s};
+const phUnpack=(s,n)=>{const a=new Array(n).fill(false);s=s||'';for(let i=0;i<n;i++){const c=parseInt(s[i>>2]||'0',16);a[i]=!!(c&(8>>(i&3)))}return a};
+const phNewSite=n=>({seed:Math.floor(Math.random()*2147483647),n,max:0,paid:0,dug:'',seen:'',taken:[],fill:[],loc:[],cut:[],sealed:[],water:null,called:false,flooded:false});
+const phNewProg=()=>({coins:0,up:{spd:0,str:0,bkt:0,rng:0,bat:0},gear:{box:1,pump:0,loc:1},best:0,found:0,trips:0,sites:0,dino:false,dry:false,wo:null,site:phNewSite(1),ts:0});
+const phKey=()=>'bp-hole-'+myId();
+const phMaxBat=H=>PH_UP.bat.f[H.p.up.bat];const phCap=H=>PH_UP.bkt.f[H.p.up.bkt];
+function phRad(H){const R=PH_UP.rng.f[H.p.up.rng];const f=H.bat/phMaxBat(H);return Math.max(1,R-(f<.08?2:f<.2?1:0))}
+function phSoil(H,i){if(H.fill.has(i))return 'loose';return H.g.soil[i]}
+function phItem(H,i){const k=H.g.item[i];return k&&!H.taken.has(i)&&!H.fill.has(i)?k:null}
+function phWater(H,i){const w=H.p.site.water;return !!(w&&H.dug[i]&&Math.floor(i/PH_W)>=w.top)}
+function phInit(){const me=myId();const st=funStat(me,'pothole');let p=st&&st.data&&st.data.site?clone(st.data):null;let lc=null;try{lc=JSON.parse(localStorage.getItem(phKey())||'null')}catch(e){}
+  let H;if(lc&&lc.p&&lc.p.site&&(!p||num(lc.p.ts)>=num(p.ts)))H={...lc};else{p=p||phNewProg();H={p,x:6,y:0,bat:0,haul:[],trip:{strikes:0,cave:0,box:0},under:0,msg:'',tone:''}}
+  H.p.gear=H.p.gear||{box:0,pump:0,loc:0};H.p.up={spd:0,str:0,bkt:0,rng:0,bat:0,...(H.p.up||{})};phLoadSite(H);if(H.y===0)H.bat=phMaxBat(H);S.fun.hole=H;phWo(H);return H}
+function phLoadSite(H){const s=H.p.site;const N=PH_W*PH_H;H.g=phGen(s.seed);H.dug=phUnpack(s.dug,N);H.seen=phUnpack(s.seen,N);for(let x=0;x<PH_W;x++){H.dug[x]=true;H.seen[x]=true}
+  H.taken=new Set(s.taken||[]);H.fill=new Set(s.fill||[]);H.loc=new Set(s.loc||[]);H.cut=new Set(s.cut||[]);H.sealed=new Set(s.sealed||[]);phLight(H)}
+function phPacked(H){const s=H.p.site;s.dug=phPack(H.dug);s.seen=phPack(H.seen);s.taken=[...H.taken];s.fill=[...H.fill];s.loc=[...H.loc];s.cut=[...H.cut];s.sealed=[...H.sealed];H.p.ts=Date.now();return H.p}
+function phLocal(H){try{phPacked(H);const {g,dug,seen,taken,fill,loc,cut,sealed,...rest}=H;localStorage.setItem(phKey(),JSON.stringify(rest))}catch(e){}}
+function phRemote(H){phLocal(H);return funSave('pothole',H.p.best,clone(H.p))}
+function phWo(H){const d=todayStr();if(H.p.wo&&H.p.wo.d===d)return;let h=0;for(const c of d+myId())h=(h*31+c.charCodeAt(0))|0;const r=phRng(h);const k=PH_WO[Math.floor(r()*PH_WO.length)];const n=2+Math.floor(r()*2);
+  H.p.wo={d,k,n,got:0,paid:false,r:Math.round((PH_FINDS[k].v*n*1.5+40)/5)*5}}
+function phLight(H){const R=H.y===0?0:phRad(H);if(H.y<=1)for(let y=0;y<=2;y++)for(let x=0;x<PH_W;x++)H.seen[phI(x,y)]=true;
+  for(let dy=-R;dy<=R;dy++)for(let dx=-R;dx<=R;dx++){const x=H.x+dx,y=H.y+dy;if(x<0||x>=PH_W||y<0||y>=PH_H)continue;if(dx*dx+dy*dy<=R*R+.5)H.seen[phI(x,y)]=true}}
+function phSay(H,msg,tone){H.msg=msg;H.tone=tone||''}
+function phDigCost(H,h){return Math.max(1,Math.round(h*2*PH_UP.spd.f[H.p.up.spd]))}
+let phLast=0;
+function phStep(dx,dy){const H=S.fun.hole;if(!H)return;const now=Date.now();if(now-phLast<65)return;phLast=now;
+  const nx=H.x+dx,ny=H.y+dy;if(nx<0||nx>=PH_W||ny<0||ny>=PH_H)return;
+  if(ny===0){const was=H.y;H.x=nx;H.y=0;if(was>0){phSurface(H);return}phSay(H,'');phLocal(H);phDraw();return}
+  const i=phI(nx,ny);let cost=1;const wasTop=H.y===0;phSay(H,'');
+  if(!H.dug[i]){const u=H.cut.has(i)?null:H.g.util[i];const sk=phSoil(H,i);const so=PH_SOIL[sk];
+    if(sk==='bed'){phSay(H,'Bedrock. You can’t dig any deeper on this site.','warn');phDraw();return}
+    if(u==='gas'){if(H.loc.has(i)){phSay(H,'That’s the gas line you marked. Dig around it.','warn');phDraw();return}phGas(H,i);return}
+    if(so.h>PH_UP.str.lv.length+1||so.h-2>H.p.up.str){phSay(H,`${so.n} is too hard. You need Shovel strength level ${so.h-2}.`,'warn');phDraw();return}
+    cost=phDigCost(H,so.h);H.dug[i]=true;
+    if(u==='fiber'){const fine=Math.min(40,H.p.coins);H.p.coins-=fine;H.cut.add(i);H.loc.add(i);H.trip.strikes++;phSay(H,`✂️ You cut a fiber line. The phone company bills you ${fine} coins.`,'bad')}
+    else if(u==='water'){H.cut.add(i);H.loc.add(i);H.trip.strikes++;phFlood(H,ny,1);phSay(H,'💥 You hit a live water main! Water is pouring in. Get up, or use a pump.','bad')}
+    else if(H.g.spring[i]&&!H.sealed.has(i)){phFlood(H,ny,2);phSay(H,'💦 Spring line! Groundwater is seeping in and the trench is filling up.','bad')}
+    if(so.soft&&Math.random()<.4){if(H.p.gear.box>0){H.p.gear.box--;H.trip.box++;phSay(H,'🧰 The sand let go, but the trench box held. The inspector will like that.','good')}
+      else{let n=0;for(let yy=ny-1;yy<=ny+1;yy++)for(let xx=nx-1;xx<=nx+1;xx++){const j=phI(xx,yy);if(xx<0||xx>=PH_W||yy<1||yy>PH_BED||(xx===nx&&yy===ny)||!H.dug[j])continue;H.dug[j]=false;H.fill.add(j);n++}
+        H.trip.cave++;cost+=12;phSay(H,`🪨 Cave-in! The sand slid back in around you${n?' and filled '+n+' square'+(n===1?'':'s'):''}. It cost you 12 charge to dig out. A trench box would have stopped it.`,'bad')}}}
+  if(phWater(H,i))cost++;
+  H.bat-=cost;H.x=nx;H.y=ny;
+  const k=phItem(H,i);if(k){if(H.haul.length<phCap(H)){H.haul.push(k);H.taken.add(i);if(!H.msg||H.tone==='good')phSay(H,`${PH_FINDS[k].i} Found: ${PH_FINDS[k].n} (${PH_FINDS[k].v} coins)`,'good')}else if(!H.msg)phSay(H,`Your bucket’s full. The ${PH_FINDS[k].n.toLowerCase()} stays here for next trip.`,'warn')}
+  if(ny>H.p.site.max)H.p.site.max=ny;
+  const w=H.p.site.water;if(w){w.acc=(w.acc||0)+1;if(w.acc>=w.rate&&w.top>w.src){w.top--;w.acc=0}}
+  if(phWater(H,phI(H.x,H.y))){H.under++;if(H.under>=5){phOut(H,'flood');return}if(!H.msg)phSay(H,`🌊 You’re in the water (${5-H.under} more move${5-H.under===1?'':'s'} before you have to bail). Climb!`,'bad')}else H.under=0;
+  if(!H.msg){for(const [ax,ay] of [[1,0],[-1,0],[0,1],[0,-1]]){const xx=H.x+ax,yy=H.y+ay;if(xx<0||xx>=PH_W||yy<1||yy>PH_BED)continue;const j=phI(xx,yy);if(H.g.util[j]==='gas'&&!H.loc.has(j)){phSay(H,'🐍 Psssst… you hear a hiss. A gas line is right next to you.','warn');break}}}
+  if(H.bat<=0){phOut(H,'lamp');return}
+  if(!H.msg&&H.bat/phMaxBat(H)<.2)phSay(H,'🔦 Your lamp is getting dim. Head up soon.','warn');
+  phLight(H);phLocal(H);if(wasTop)render();else phDraw()}
+function phFlood(H,row,rate){const s=H.p.site;let bottom=row;for(let i=0;i<H.dug.length;i++)if(H.dug[i])bottom=Math.max(bottom,Math.floor(i/PH_W));const src=Math.max(1,row-2);
+  if(s.water){s.water.src=Math.min(s.water.src,src);s.water.rate=Math.min(s.water.rate,rate)}else s.water={top:bottom+1,src,rate,acc:0}}
+function phGas(H,i){H.loc.add(i);const fine=Math.min(25,H.p.coins);H.p.coins-=fine;phOut(H,'gas',fine)}
+function phOut(H,why,fine){const lost=H.haul.length;H.haul=[];H.x=6;H.y=0;H.under=0;H.bat=phMaxBat(H);if(why==='flood')H.p.site.flooded=true;
+  const txt={gas:`🔥 You hit a live gas line! Everybody out. You dropped your bucket${lost?' ('+lost+' find'+(lost===1?'':'s')+')':''}${fine?` and the gas company fined you ${fine} coins`:''}. The line is marked now.`,
+    flood:`🌊 The trench flooded and you had to bail out. You lost your bucket${lost?' ('+lost+' find'+(lost===1?'':'s')+')':''}. A pump would clear it.`,
+    lamp:`🔦 Your lamp died. The crew hauled you up on a rope, and your bucket${lost?' ('+lost+' find'+(lost===1?'':'s')+')':''} stayed down there for good.`}[why];
+  H.trip={strikes:0,cave:0,box:0};H.report={bad:txt,lines:[],total:0};phPay(H);phSay(H,txt,'bad');phLight(H);phRemote(H).then(()=>render());render()}
+function phPay(H){const s=H.p.site;const rows=Math.max(0,s.max-s.paid);if(rows){const c=rows*2;H.p.coins+=c;s.paid=s.max;(H.report=H.report||{lines:[],total:0}).lines.push(`New trench: ${rows*PH_FT} ft deeper (+${c})`);H.report.total+=c}
+  const ft=s.max*PH_FT;if(ft>H.p.best)H.p.best=ft}
+function phSurface(H){const R={lines:[],total:0};H.report=R;let sale=0;const cnt={};H.haul.forEach(k=>{cnt[k]=(cnt[k]||0)+1;sale+=PH_FINDS[k].v});
+  Object.keys(cnt).forEach(k=>R.lines.push(`${PH_FINDS[k].i} ${PH_FINDS[k].n}${cnt[k]>1?' ×'+cnt[k]:''} (+${PH_FINDS[k].v*cnt[k]})`));
+  const wo=H.p.wo;if(wo&&!wo.paid&&cnt[wo.k]){wo.got=Math.min(wo.n,wo.got+cnt[wo.k]);if(wo.got>=wo.n){wo.paid=true;sale+=wo.r;R.lines.push(`👷 Super’s work order done (+${wo.r})`)}else R.lines.push(`👷 Work order: ${wo.got} of ${wo.n} delivered`)}
+  let bonus=0;if(H.haul.length&&!H.trip.strikes&&!H.trip.cave){bonus=Math.ceil(sale*.1);R.lines.push(`📋 Inspector: clean trip, safety bonus (+${bonus})`)}else if(H.trip.strikes||H.trip.cave)R.lines.push('📋 Inspector wrote you up. No safety bonus this trip.');
+  if(H.trip.box){bonus+=10*H.trip.box;R.lines.push(`📋 Inspector: trench box did its job (+${10*H.trip.box})`)}
+  R.total=sale+bonus;H.p.coins+=R.total;H.p.found+=H.haul.length;if(H.haul.includes('dino'))H.p.dino=true;if(H.haul.length)H.p.trips++;H.haul=[];phPay(H);
+  if(H.p.site.max>=PH_BED&&!H.p.site.flooded)H.p.dry=true;
+  H.bat=phMaxBat(H);H.under=0;H.trip={strikes:0,cave:0,box:0};phSay(H,R.lines.length?`Back on top. You made ${R.total} coins.`:'Back on top. Lamp charged.','good');phLight(H);phRemote(H).then(()=>render());render()}
+function phUse(k){const H=S.fun.hole;if(!H)return;
+  if(k==='pump'){if(!H.p.site.water){phSay(H,'The trench is dry. Save the pump.','');phDraw();return}if(H.p.gear.pump<1){phSay(H,'You don’t have a pump. Buy one up top.','warn');phDraw();return}
+    H.p.gear.pump--;H.p.site.water=null;H.under=0;H.dug.forEach((d,i)=>{if(d&&(H.g.spring[i]||H.g.util[i]==='water'))H.sealed.add(i)});phSay(H,'🚿 Pumped dry and the leak is plugged.','good')}
+  if(k==='loc'){if(H.p.gear.loc<1){phSay(H,'No locator charges left. Buy more up top.','warn');phDraw();return}H.p.gear.loc--;let n=0;
+    for(let dy=-5;dy<=5;dy++)for(let dx=-5;dx<=5;dx++){const x=H.x+dx,y=H.y+dy;if(x<0||x>=PH_W||y<1||y>PH_BED)continue;const j=phI(x,y);if(H.g.util[j]&&!H.loc.has(j)&&!H.cut.has(j)){H.loc.add(j);H.seen[j]=true;n++}}
+    phSay(H,n?`📡 Beep beep. Marked ${n} square${n===1?'':'s'} of live line nearby.`:'📡 The locator is quiet. No live lines within 5 squares.',n?'warn':'good')}
+  if(k==='811'){const s=H.p.site;if(s.called){phSay(H,'811 already came out to this site.','');phDraw();return}s.called=true;let n=0;
+    H.g.util.forEach((u,j)=>{if(u&&Math.floor(j/PH_W)<=14&&!H.loc.has(j)){H.loc.add(j);H.seen[j]=true;n++}});phSay(H,`☎️ You called 811. They painted the shallow lines (${n} squares). Anything deeper than ${14*PH_FT} ft, you’re on your own.`,'good');phRemote(H).then(()=>render());render();return}
+  phLocal(H);render()}
+function phBuy(kind,k){const H=S.fun.hole;if(!H||H.y!==0)return;const p=H.p;
+  if(kind==='up'){const lv=p.up[k];const c=PH_UP[k].cost[lv];if(c==null||p.coins<c)return;p.coins-=c;p.up[k]++;if(k==='bat')H.bat=phMaxBat(H);phSay(H,`${PH_UP[k].i} ${PH_UP[k].n} is now level ${p.up[k]}.`,'good')}
+  else{const g=PH_GEAR[k];if(p.coins<g.cost||p.gear[k]>=g.max)return;p.coins-=g.cost;p.gear[k]++;phSay(H,`${g.i} Bought a ${g.n.toLowerCase()}.`,'good')}
+  phRemote(H).then(()=>render());render()}
+function phNewSiteGo(abandon){const H=S.fun.hole;if(!H)return;const p=H.p;const done=p.site.max>=PH_BED;if(!done&&!abandon)return;
+  if(done){p.coins+=250;p.sites++;if(!p.site.flooded)p.dry=true}p.site=phNewSite((p.site.n||1)+1);H.x=6;H.y=0;H.haul=[];H.bat=phMaxBat(H);H.report=null;phLoadSite(H);
+  phSay(H,done?'New site! The super paid you 250 coins for hitting bedrock on the last one.':'Fresh site. Same gear, new dirt.','good');phRemote(H).then(()=>render());render()}
+function phHud(H){const mb=phMaxBat(H),f=Math.max(0,H.bat)/mb;const ft=H.y*PH_FT;
+  return `<div class="ph-stat"><span class="small dim">Depth</span><b>${ft} ft</b></div>
+  <div class="ph-stat ph-batt"><span class="small dim">Lamp</span><span class="ph-bar"><i style="width:${Math.round(f*100)}%;background:${f<.2?'var(--red,#d33)':f<.45?'#e0a100':'#3bb36b'}"></i></span><span class="small">${Math.max(0,H.bat)}/${mb}</span></div>
+  <div class="ph-stat"><span class="small dim">Bucket ${H.haul.length}/${phCap(H)}</span><span class="ph-haul">${H.haul.map(k=>`<span title="${esc(PH_FINDS[k].n)}">${PH_FINDS[k].i}</span>`).join('')||'<span class="dim small">empty</span>'}</span></div>
+  <div class="ph-stat"><span class="small dim">Coins</span><b>🪙 ${H.p.coins.toLocaleString()}</b></div>`}
+function phActs(H){const g=H.p.gear;return `<button class="btn sm" data-act="ph-use" data-v="pump"${g.pump?'':' disabled'} title="Pump (P)">🚿 Pump ×${g.pump}</button><button class="btn sm" data-act="ph-use" data-v="loc"${g.loc?'':' disabled'} title="Locator (L)">📡 Locate ×${g.loc}</button><span class="small dim">🧰 Trench box ×${g.box}</span>${H.p.site.water?'<span class="ph-tag bad">🌊 Flooding</span>':''}`}
+function phDraw(){const H=S.fun.hole;const cv=document.getElementById('ph-cv');if(!H||!cv)return;
+  const hud=document.getElementById('ph-hud');if(hud)hud.innerHTML=phHud(H);const ac=document.getElementById('ph-act');if(ac)ac.innerHTML=phActs(H);
+  const ms=document.getElementById('ph-msg');if(ms){ms.className='ph-msg'+(H.tone?' '+H.tone:'');ms.textContent=H.msg||(H.y===0?(H.p.site.called?'You’re up top. Dig down with ↓ and spend coins in the tool trailer.':'You’re up top. Call 811 before you dig, then dig down with ↓.'):'')}
+  const wrap=cv.parentElement;const cs=Math.max(18,Math.min(30,Math.floor((wrap.clientWidth||400)/PH_W)));const VR=13;const dpr=window.devicePixelRatio||1;
+  cv.width=cs*PH_W*dpr;cv.height=cs*VR*dpr;cv.style.width=cs*PH_W+'px';cv.style.height=cs*VR+'px';const c=cv.getContext('2d');c.setTransform(dpr,0,0,dpr,0,0);
+  const top=Math.max(-2,Math.min(PH_H-VR,H.y-5));const R=phRad(H);const W=H.p.site.water;
+  const sky=c.createLinearGradient(0,0,0,cs*Math.max(1,1-top));sky.addColorStop(0,'#7ec3f0');sky.addColorStop(1,'#cfe9f7');
+  const em=s=>`${Math.round(cs*s)}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;c.textAlign='center';c.textBaseline='middle';
+  for(let r=0;r<VR;r++){const y=top+r;const py=r*cs;
+    if(y<=0){c.fillStyle=sky;c.fillRect(0,py,cs*PH_W,cs);if(y===0){c.fillStyle='#4f9a3a';c.fillRect(0,py+cs-4,cs*PH_W,4)}continue}
+    for(let x=0;x<PH_W;x++){const i=phI(x,y);const px=x*cs;
+      if(!H.seen[i]){c.fillStyle='#0c0a08';c.fillRect(px,py,cs,cs);continue}
+      const sk=phSoil(H,i);const so=PH_SOIL[sk];const t=H.g.tex[i];
+      if(H.dug[i]){c.fillStyle='#2a1e15';c.fillRect(px,py,cs,cs);c.fillStyle='rgba(255,255,255,.04)';c.fillRect(px,py+cs-2,cs,2);
+        if(W&&y>=W.top){c.fillStyle=y===W.top?'rgba(64,140,210,.7)':'rgba(40,110,190,.82)';c.fillRect(px,py+(y===W.top?cs*.35:0),cs,y===W.top?cs*.65:cs)}}
+      else{c.fillStyle=so.c;c.fillRect(px,py,cs,cs);c.fillStyle='rgba(0,0,0,.18)';c.fillRect(px+t*cs*.7,py+((t*7)%1)*cs*.7,cs*.18,cs*.14);c.fillStyle='rgba(255,255,255,.08)';c.fillRect(px+((t*3)%1)*cs*.7,py+((t*5)%1)*cs*.7,cs*.14,cs*.1);
+        if(sk==='sand'){c.fillStyle='rgba(255,240,200,.35)';for(let n=0;n<4;n++)c.fillRect(px+((t*(n+2)*13)%1)*cs,py+((t*(n+3)*7)%1)*cs,2,2)}
+        if(sk==='boulder'){c.fillStyle='#8c8c90';c.beginPath();c.ellipse(px+cs/2,py+cs/2,cs*.44,cs*.38,0,0,7);c.fill();c.fillStyle='rgba(255,255,255,.18)';c.beginPath();c.ellipse(px+cs*.4,py+cs*.38,cs*.16,cs*.1,0,0,7);c.fill()}
+        if(sk==='bed'){c.strokeStyle='rgba(255,255,255,.08)';c.beginPath();for(let n=-cs;n<cs;n+=6){c.moveTo(px+n,py+cs);c.lineTo(px+n+cs,py)}c.stroke()}
+        if(H.g.damp[i]&&!H.sealed.has(i)){c.fillStyle='rgba(120,190,255,.38)';c.beginPath();c.arc(px+cs*(.25+t*.5),py+cs*.6,cs*.09,0,7);c.arc(px+cs*(.7-t*.3),py+cs*.3,cs*.07,0,7);c.fill()}}
+      const u=H.g.util[i];if(u&&(H.loc.has(i)||H.cut.has(i))){c.strokeStyle=PH_UTIL[u].c;c.lineWidth=Math.max(3,cs*.18);c.beginPath();const cut=H.cut.has(i);if(cut){c.moveTo(px,py+cs/2);c.lineTo(px+cs*.38,py+cs/2);c.moveTo(px+cs*.62,py+cs/2);c.lineTo(px+cs,py+cs/2)}else{c.moveTo(px,py+cs/2);c.lineTo(px+cs,py+cs/2)}c.stroke();
+        if(!H.dug[i]&&!cut){c.fillStyle=PH_UTIL[u].c;c.font=`bold ${Math.round(cs*.32)}px sans-serif`;c.fillText(u==='gas'?'G':u==='fiber'?'F':'W',px+cs/2,py+cs*.22)}}
+      const k=phItem(H,i);if(k){if(!H.dug[i]){c.fillStyle='rgba(255,226,140,.28)';c.beginPath();c.arc(px+cs/2,py+cs/2,cs*.36,0,7);c.fill()}c.globalAlpha=H.dug[i]?1:.85;c.font=em(H.dug[i]?.62:.5);c.fillText(PH_FINDS[k].i,px+cs/2,py+cs/2+1);c.globalAlpha=1}
+      const dx=x-H.x,dy=y-H.y,d2=dx*dx+dy*dy;const lit=H.y>0&&d2<=R*R+.5;const day=y<=2&&H.y<=1;
+      if(!lit&&!day){c.fillStyle='rgba(0,0,0,.62)';c.fillRect(px,py,cs,cs)}else if(lit&&!day){const a=Math.min(.5,Math.sqrt(d2)/(R+.5)*.5);if(a>0){c.fillStyle=`rgba(0,0,0,${a})`;c.fillRect(px,py,cs,cs)}}}}
+  const sy=(0-top)*cs;if(sy>-cs&&sy<VR*cs){c.font=em(.72);[[1,'🧑‍💼'],[3,'🕵️'],[11,'🚚']].forEach(([x,e])=>{if(!(H.y===0&&H.x===x))c.fillText(e,x*cs+cs/2,sy+cs/2)});
+    if(sy-cs>=0){c.font=`bold ${Math.round(cs*.3)}px sans-serif`;c.fillStyle='#24506f';c.fillText('SUPER',1*cs+cs/2,sy-cs*.25);c.fillText('INSPECTOR',3*cs+cs/2,sy-cs*.25)}}
+  const ppx=H.x*cs,ppy=(H.y-top)*cs;if(H.y>0){const gl=c.createRadialGradient(ppx+cs/2,ppy+cs/2,1,ppx+cs/2,ppy+cs/2,cs*(R+.5));gl.addColorStop(0,'rgba(255,220,140,.22)');gl.addColorStop(1,'rgba(255,220,140,0)');c.fillStyle=gl;c.fillRect(0,0,cs*PH_W,cs*VR)}
+  c.font=em(.78);c.fillText('👷',ppx+cs/2,ppy+cs/2+1);
+  if(H.y>0){c.font=`bold ${Math.round(cs*.36)}px sans-serif`;c.fillStyle='rgba(255,255,255,.55)';c.textAlign='left';for(let r=0;r<VR;r++){const y=top+r;if(y>0&&y%5===0)c.fillText(y*PH_FT+'′',3,r*cs+cs*.5)}c.textAlign='center'}}
+function funPothole(){const F=S.fun;const H=F.hole||phInit();const p=H.p;const up=H.y===0;const s=p.site;const wo=p.wo;
+  const upRow=k=>{const u=PH_UP[k],lv=p.up[k],c=u.cost[lv];return `<div class="ph-up"><div class="ph-up-n"><b>${u.i} ${u.n}</b><span class="ph-pips">${[0,1,2,3].map(n=>`<i class="${n<lv?'on':''}"></i>`).join('')}</span><span class="small dim">${esc(u.lv[lv])}${c!=null?' → '+esc(u.lv[lv+1]):''}</span></div>${c!=null?`<button class="btn sm${p.coins>=c&&up?' primary':''}" data-act="ph-buy" data-kind="up" data-k="${k}"${p.coins>=c&&up?'':' disabled'}>🪙 ${c}</button>`:'<span class="small dim">Maxed</span>'}</div>`};
+  const gearRow=k=>{const g=PH_GEAR[k];return `<div class="ph-up"><div class="ph-up-n"><b>${g.i} ${g.n} <span class="small dim">×${p.gear[k]}</span></b><span class="small dim">${esc(g.t)}</span></div><button class="btn sm" data-act="ph-buy" data-kind="gear" data-k="${k}"${p.coins>=g.cost&&up&&p.gear[k]<g.max?'':' disabled'}>🪙 ${g.cost}</button></div>`};
+  const R=H.report;
+  const side=`<div class="ph-side">
+    ${R&&up&&(R.lines.length||R.bad)?`<div class="panel pad ph-rep"><b>Trip report</b>${R.bad?`<p class="small ph-bad">${esc(R.bad)}</p>`:''}${R.lines.length?`<ul class="small">${R.lines.map(l=>`<li>${esc(l)}</li>`).join('')}</ul>`:''}${R.total?`<div><b>+${R.total} coins</b></div>`:''}</div>`:''}
+    ${s.max>=PH_BED&&up?`<div class="panel pad ph-bedrock"><b>⛰️ You hit bedrock!</b><p class="small">This site is dug out. Start a new one and the super pays 250 coins. You keep all your upgrades.</p><button class="btn primary" data-act="ph-newsite">Start a new site (+250)</button></div>`:''}
+    <div class="panel pad"><div class="ph-shop-h"><b>Tool trailer</b><span>🪙 ${p.coins.toLocaleString()}</span></div>${up?'':'<p class="small dim" style="margin:4px 0 8px">You can only shop up top. Climb out to spend coins.</p>'}
+      <div class="small dim ph-sec">Shovel</div>${['spd','str','bkt'].map(upRow).join('')}<div class="small dim ph-sec">Lamp</div>${['rng','bat'].map(upRow).join('')}<div class="small dim ph-sec">Gear</div>${['box','pump','loc'].map(gearRow).join('')}
+      ${up&&!s.called?`<button class="btn sm" style="margin-top:8px" data-act="ph-use" data-v="811">☎️ Call 811 first (free, once per site)</button>`:''}</div>
+    <div class="panel pad"><b>🧑‍💼 Super’s work order</b>${wo?`<p class="small" style="margin:6px 0">Bring me <b>${wo.n} ${esc(phPl(PH_FINDS[wo.k].n.toLowerCase(),wo.n))}</b> ${PH_FINDS[wo.k].i} today. Usually around ${PH_FINDS[wo.k].d[0]*PH_FT}–${PH_FINDS[wo.k].d[1]*PH_FT} ft.</p><div class="small">${wo.paid?`✅ Done. You got the ${wo.r} coin bonus. New order tomorrow.`:`${wo.got} of ${wo.n} delivered · Bonus 🪙 ${wo.r}`}</div>`:''}</div>
+    <div class="panel pad"><b>Deepest digs</b>${funBoard('pothole',{fmt:v=>`${v} ft`,empty:'Nobody’s dug yet. Grab a shovel.'})}<div class="small dim" style="margin-top:6px">Site #${s.n} · deepest here ${s.max*PH_FT} ft · ${p.found} finds hauled up</div></div>
+    <details class="panel pad ph-help"><summary><b>How it works</b></summary><div class="small">
+      <p>Dig with the arrow keys (or WASD, or the pad). Every move uses lamp charge, and digging uses more. Get back to the top before the lamp dies, or you lose what’s in your bucket. Your trench stays dug between trips.</p>
+      <p>Bring finds to the top to get paid. The super also pays 2 coins for every new 2 ft of trench, and the inspector adds a safety bonus for a clean trip.</p>
+      <p><b>Watch out for:</b> 🟡 gas lines (you’ll hear a hiss next to one; hitting it ends the trip), 🟠 fiber lines (cutting one costs coins), 🔵 water mains and 💧 damp spots near spring lines (they flood the trench), and soft sand (caves in unless you have a trench box). Harder ground deeper down needs a stronger shovel.</p>
+      <p>Keys: P = pump, L = locator.</p></div></details>
+    ${s.max>0&&up?`<button class="btn sm ghost" data-act="ph-abandon">Walk away from this site and start fresh</button>`:''}</div>`;
+  setTimeout(phDraw,0);
+  return `<div class="ph">
+    <div class="panel pad ph-main"><div id="ph-hud" class="ph-hud">${phHud(H)}</div><div class="ph-wrap"><canvas id="ph-cv" aria-label="Pothole dig site"></canvas></div><div id="ph-msg" class="ph-msg"></div>
+      <div class="ph-bottom"><div class="ph-pad">${[['u','▲',0,-1],['l','◀',-1,0],['d','▼',0,1],['r','▶',1,0]].map(([k,l,dx,dy])=>`<button class="ph-k ph-${k}" data-phmv="${dx},${dy}" aria-label="${{u:'Up',l:'Left',d:'Down',r:'Right'}[k]}">${l}</button>`).join('')}</div><div id="ph-act" class="ph-act">${phActs(H)}</div></div></div>
+    ${side}</div>`}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||S.view!=='fun')return;const a=t.dataset.act;if(!/^ph-/.test(a))return;
+  if(a==='ph-use')phUse(t.dataset.v);else if(a==='ph-buy')phBuy(t.dataset.kind,t.dataset.k);else if(a==='ph-newsite')phNewSiteGo(false);
+  else if(a==='ph-abandon'){if(!t.classList.contains('arm')){t.classList.add('arm');t.textContent='Click again to walk away (your coins and upgrades stay)';setTimeout(()=>{t.classList.remove('arm');t.textContent='Walk away from this site and start fresh'},3500);return}phNewSiteGo(true)}});
+let phHold=null;const phStop=()=>{clearTimeout(phHold);clearInterval(phHold);phHold=null};
+document.addEventListener('pointerdown',e=>{const b=e.target.closest&&e.target.closest('[data-phmv]');if(!b)return;e.preventDefault();const [dx,dy]=b.dataset.phmv.split(',').map(Number);phStop();phLast=0;phStep(dx,dy);
+  phHold=setTimeout(()=>{phHold=setInterval(()=>{if(S.view!=='fun'||S.fun.game!=='pothole'){phStop();return}phStep(dx,dy)},150)},320)});
+['pointerup','pointercancel'].forEach(n=>document.addEventListener(n,()=>{if(phHold)phStop()}));document.addEventListener('pointerout',e=>{if(phHold&&e.target.closest&&e.target.closest('[data-phmv]'))phStop()});
+document.addEventListener('keydown',e=>{if(S.view!=='fun'||!S.fun||S.fun.tab!=='games'||S.fun.game!=='pothole'||M)return;const t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'||t.isContentEditable))return;if(e.ctrlKey||e.metaKey||e.altKey)return;
+  const mv={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0],w:[0,-1],s:[0,1],a:[-1,0],d:[1,0],W:[0,-1],S:[0,1],A:[-1,0],D:[1,0]}[e.key];
+  if(mv){e.preventDefault();phStep(mv[0],mv[1]);return}if(e.key==='p'||e.key==='P'){e.preventDefault();phUse('pump')}else if(e.key==='l'||e.key==='L'){e.preventDefault();phUse('loc')}});
+window.addEventListener('resize',()=>{if(S.view==='fun'&&S.fun&&S.fun.game==='pothole')phDraw()});
