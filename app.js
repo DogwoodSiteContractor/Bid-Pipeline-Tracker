@@ -186,6 +186,14 @@ const revisions=b=>Array.isArray(b.revisions)?b.revisions:[];
 const openAddenda=b=>addenda(b).filter(a=>!a.priced||!a.acknowledged);
 function revSnap(b){const gcs={};(b.client_ids||[]).forEach(id=>{const p=propOf(b,id);gcs[id]={w:num(p.amount_with)??num(b.amount_with),o:num(p.amount_without)??num(b.amount_without)}});return{w:num(b.amount_with),o:num(b.amount_without),gcs}}
 function snapValue(b,sn){if(!sn)return null;const base=pick(b,sn.w,sn.o);if(base!=null)return base;const a=Object.values(sn.gcs||{}).map(g=>pick(b,g.w,g.o)).filter(v=>v!=null);return a.length?Math.max(...a):null}
+// revisions are about dollar amounts: the base numbers, and the number for each GC that's on both versions
+function revSame(a,b){if(!a||!b)return false;const eq=(x,y)=>(num(x)??null)===(num(y)??null);if(!eq(a.w,b.w)||!eq(a.o,b.o))return false;
+  const ga=a.gcs||{},gb=b.gcs||{};return Object.keys(ga).filter(k=>k in gb).every(k=>eq(ga[k].w,gb[k].w)&&eq(ga[k].o,gb[k].o))}
+// drop automatic entries that didn't change a number (and that nobody added a reason or addendum to), then number them 0, 1, 2…
+function revClean(list){const out=[];(Array.isArray(list)?list:[]).forEach(r=>{const prev=out[out.length-1];
+  if(prev&&r.auto&&(!r.reason||r.reason==='Numbers updated')&&!r.addendum&&revSame(prev.snapshot,r.snapshot))return;out.push(r)});
+  return out.map((r,i)=>r.rev===i?r:{...r,rev:i})}
+const revShown=b=>revClean(revisions(b));
 function addRevision(d,reason,auto){const r=revisions(d);d.revisions=r;r.push({id:newId(),rev:r.length?Math.max(...r.map(x=>+x.rev||0))+1:0,date:todayStr(),reason,addendum:'',snapshot:revSnap(d),by:myName(),auto:!!auto})}
 // addenda issued after the latest revision on a bid that has gone out
 function staleAddenda(b){const r=revisions(b);if(!r.length)return [];const last=r[r.length-1].date||'';const used=new Set(r.map(x=>String(x.addendum)));return addenda(b).filter(a=>a.date&&a.date>last&&!used.has(String(a.number)))}
@@ -564,7 +572,7 @@ function overviewTable(all){
     <td>${(b.client_ids||[]).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}</div>`).join('')||'<span class="dim">—</span>'}</td>
     <td>${dueCell(b)}</td>
     ${groups.map(([,g])=>`<td>${groupStatus(b,g)}</td>`).join('')}
-    <td>${pill(b.proposal_status||'Not Started',PROP_CLS[b.proposal_status])}${revisions(b).length>1||lastTouch(b)?`<div class="dim small" style="margin-top:3px">${[revisions(b).length>1?'Rev '+esc(revisions(b)[revisions(b).length-1].rev):'',lastTouch(b)?'GC contact '+fmtShort(lastTouch(b)):''].filter(Boolean).join(' · ')}</div>`:''}${openAddenda(b).length?`<div class="small" style="margin-top:3px;color:var(--warn);font-weight:600;white-space:nowrap">${openAddenda(b).length} addend${openAddenda(b).length===1?'um':'a'} open</div>`:''}</td>
+    <td>${pill(b.proposal_status||'Not Started',PROP_CLS[b.proposal_status])}${revShown(b).length>1||lastTouch(b)?`<div class="dim small" style="margin-top:3px">${[revShown(b).length>1?'Rev '+esc(revShown(b)[revShown(b).length-1].rev):'',lastTouch(b)?'GC contact '+fmtShort(lastTouch(b)):''].filter(Boolean).join(' · ')}</div>`:''}${openAddenda(b).length?`<div class="small" style="margin-top:3px;color:var(--warn);font-weight:600;white-space:nowrap">${openAddenda(b).length} addend${openAddenda(b).length===1?'um':'a'} open</div>`:''}</td>
     <td class="r num">${ovNumber(b)}</td>
     <td>${stPill(b.status,b)}${(()=>{const n=stageInfo(b).qOut;return n?`<div class="small" style="color:var(--warn);font-weight:600;margin-top:3px;white-space:nowrap">⏳ ${n} quote${n===1?'':'s'} out</div>`:''})()}</td></tr>`).join('');
   return `${all.length?ovBar(all,list.length):''}<div class="panel scroll"><table class="ov"><thead><tr>${th('name','Project')}${th('client','GC / client')}${th('due','Due date')}${groups.map(([l])=>th('g:'+l,l)).join('')}${th('proposal','Proposal')}${th('value','Our number','r')}${th('status','Status')}</tr></thead>
@@ -1009,7 +1017,7 @@ function newBid(){return{id:newId(),name:'',location:'',project_type:'Commercial
 function openBid(id){
   const b=byId(S.bids,id);if(!b)return;
   const d=Object.assign(newBid(),clone(b));d._new=false;
-  d.scope_items=clone(scopeItems(b));d.project_type=normProjectType(d.project_type)||'Commercial';d.client_proposals=d.client_proposals||{};d.client_contacts=d.client_contacts||{};d.awarded_client_id=d.awarded_client_id||'';d.addenda=Array.isArray(d.addenda)?d.addenda:[];d.revisions=Array.isArray(d.revisions)?d.revisions:[];d.due_time=d.due_time?String(d.due_time).slice(0,5):'';
+  d.scope_items=clone(scopeItems(b));d.project_type=normProjectType(d.project_type)||'Commercial';d.client_proposals=d.client_proposals||{};d.client_contacts=d.client_contacts||{};d.awarded_client_id=d.awarded_client_id||'';d.addenda=Array.isArray(d.addenda)?d.addenda:[];d.revisions=revClean(d.revisions);d.due_time=d.due_time?String(d.due_time).slice(0,5):'';
   ['due_date','walk_date','rfi_date','submitted_date','awarded_date'].forEach(k=>d[k]=d[k]||'');
   d.lead_estimator_id=d.lead_estimator_id||'';d.quotes=clone(quotesFor(id));d.quotes.forEach(q=>{['requested_date','due_date','received_date'].forEach(k=>q[k]=q[k]||'')});
   const claim=d.status==='Proposal Review'&&!d._sample&&frIsMgr()&&canWork(d)&&epMgrFlow()&&epClaim(d);
@@ -1369,7 +1377,7 @@ function revisionSection(b,work){
       ${work&&isAdmin()?`<button class="rm" data-act="rm-rev" data-i="${i}" aria-label="Remove">×</button>`:'<span></span>'}</div>`}).join('');
   return `<fieldset><legend>Proposal revision log</legend>
     <div class="rows">${rows||'<div class="dim small">No revisions yet. Rev 0 is recorded automatically when the proposal goes out.</div>'}</div>
-    ${work?`<div class="adders"><button class="btn sm" data-act="add-rev">+ Record revision</button></div><p class="hint">Records the current proposal numbers. A revision is also logged automatically whenever the numbers change after the proposal has been sent — add the reason here.</p>`:''}
+    ${work?`<div class="adders"><button class="btn sm" data-act="add-rev">+ Record revision</button></div><p class="hint">Rev 0 is the proposal as sent. After that, a revision is logged only when a dollar amount changes (add the reason here), or when you record one yourself.</p>`:''}
   </fieldset>`;
 }
 async function uploadAddendum(i,file){
@@ -1604,12 +1612,12 @@ async function saveBid(opt={},m=M){
   if(!d.submitted_date){const ds=sent.map(p=>p.sent_date).filter(Boolean).sort();if(ds.length)d.submitted_date=ds[0]}
   if(d.status==='Awarded'&&!d.awarded_client_id&&d.client_ids.length===1)d.awarded_client_id=d.client_ids[0];
   if(isSent(d)&&!d.submitted_date)d.submitted_date=todayStr();
-  const addsKeep=addenda(d).filter(a=>a.number!=null||a.description||a.date);if(!opt.auto)d.addenda=addsKeep;d.revisions=revisions(d);
+  const addsKeep=addenda(d).filter(a=>a.number!=null||a.description||a.date);if(!opt.auto)d.addenda=addsKeep;d.revisions=revClean(revisions(d));
   // Log a proposal revision automatically once the proposal has gone out and its numbers change
   const out=isSent(d);
   if(out&&bidValue(d)){const last=d.revisions[d.revisions.length-1];
     if(!last)addRevision(d,'Original proposal',true);
-    else if(JSON.stringify(last.snapshot)!==JSON.stringify(revSnap(d)))addRevision(d,'Numbers updated',true);}
+    else if(!revSame(last.snapshot,revSnap(d)))addRevision(d,'Numbers updated',true);}
   if(d.status==='Awarded'&&!d.awarded_date)d.awarded_date=todayStr();
   const row={};BID_COLS.forEach(k=>row[k]=d[k]);if('addenda' in row)row.addenda=addsKeep;
   ['due_date','due_time','walk_date','rfi_date','submitted_date','awarded_date','lead_estimator_id','awarded_client_id'].forEach(k=>row[k]=nullIfEmpty(row[k]));
@@ -1727,7 +1735,7 @@ async function download(path,name){
 function exportCsv(){
   const cols=['Project','Location','Status','Clients','Lead estimator','Due date','Bid type','Project type','Units','With site impr.','Without site impr.','Dashboard value',...(SHOW_ODDS?['Win %']:[]),'Submitted','Awarded date','Awarded by','Awarded amount','Lost reason','Scopes signed off','Addenda','Addenda open','Latest revision','Quotes received','Quotes requested'];
   const q=v=>'"'+String(v??'').replace(/"/g,'""')+'"';
-  const rows=S.bids.map(b=>{const qs=quotesFor(b.id);return [b.name,b.location,b.status,(b.client_ids||[]).map(clientName).join('; '),estName(b.lead_estimator_id),b.due_date,b.bid_type,normProjectType(b.project_type),b.units??'',b.amount_with,b.amount_without,bidValue(b),...(SHOW_ODDS?[b.probability]:[]),b.submitted_date,b.awarded_date,b.awarded_client_id?clientName(b.awarded_client_id):'',b.awarded_amount,b.lost_reason,scopeItems(b).filter(x=>x.status==='Complete').length+'/'+scopeItems(b).length,addenda(b).length,openAddenda(b).length,revisions(b).length?'Rev '+revisions(b)[revisions(b).length-1].rev:'',qs.filter(x=>x.status==='Received').length,qs.length].map(q).join(',')});
+  const rows=S.bids.map(b=>{const qs=quotesFor(b.id);return [b.name,b.location,b.status,(b.client_ids||[]).map(clientName).join('; '),estName(b.lead_estimator_id),b.due_date,b.bid_type,normProjectType(b.project_type),b.units??'',b.amount_with,b.amount_without,bidValue(b),...(SHOW_ODDS?[b.probability]:[]),b.submitted_date,b.awarded_date,b.awarded_client_id?clientName(b.awarded_client_id):'',b.awarded_amount,b.lost_reason,scopeItems(b).filter(x=>x.status==='Complete').length+'/'+scopeItems(b).length,addenda(b).length,openAddenda(b).length,revShown(b).length>1?'Rev '+revShown(b)[revShown(b).length-1].rev:'',qs.filter(x=>x.status==='Received').length,qs.length].map(q).join(',')});
   const blob=new Blob([[cols.map(q).join(','),...rows].join('\n')],{type:'text/csv'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='bid-pipeline-'+todayStr()+'.csv';a.click();
 }
 
