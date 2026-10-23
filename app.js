@@ -1163,7 +1163,7 @@ function bpProject(b,work,admin){
   const ests=S.estimators.filter(e=>e.active!==false||e.id===b.lead_estimator_id||b.support_estimator_ids.includes(e.id));
   const clientsSorted=S.clients.slice().sort((a,c)=>a.company.localeCompare(c.company));
   return btplBar(b,work)+`<fieldset><legend>Project</legend><div class="fg">
-    <label class="f s2">Project name ${work?'<span class="req">required</span>':''}<input class="field" ${bf('name')} placeholder="e.g. Riverside Commerce Park"></label>
+    <label class="f s2"><span class="f-lab">Project name${work?' <span class="req">required</span>':''}</span><input class="field" ${bf('name')} placeholder="e.g. Riverside Commerce Park"></label>
     <label class="f s2">Location<input class="field" ${bf('location')} placeholder="City, county or address"></label>
     <label class="f">Project type${sel('project_type',PROJECT_TYPES)}</label>
     <label class="f">Bid type${sel('bid_type',BID_TYPES)}</label>
@@ -1590,7 +1590,7 @@ function clientModal(){const c=M.draft,isNew=M.isNew;const admin=can('contacts',
    ${isNew||!bidsAll()?'':`<div class="statline"><div><b>${bs.length}</b>Bids</div><div><b>${moneyK(bs.reduce((s,b)=>s+clientAmount(b,c.id),0))}</b>Total bid</div><div><b>${w.length}</b>Won</div><div><b>${w.length+l.length?Math.round(w.length/(w.length+l.length)*100)+'%':'—'}</b>Win rate</div><div><b>${moneyK(w.reduce((s,b)=>s+wonValue(b),0))}</b>Awarded</div></div>`}
    ${isNew||!can('bids','edit')?'':`<div class="trk-row small"><button class="btn sm" data-act="trk-open" data-id="${c.id}">Client tracker link…</button> <span class="dim">A private page showing this client where each of their bids stands.</span></div>`}
    <fieldset><legend>Company</legend><div class="fg">
-   <label class="f s2">Company name ${admin?'<span class="req">required</span>':''}${ef('company','e.g. Summit Builders')}</label><label class="f s2">Type${efSel('type',CLIENT_TYPES)}</label>
+   <label class="f s2"><span class="f-lab">Company name${admin?' <span class="req">required</span>':''}</span>${ef('company','e.g. Summit Builders')}</label><label class="f s2">Type${efSel('type',CLIENT_TYPES)}</label>
    <label class="f s2">Main phone${ef('phone','(000) 000-0000','tel')}</label><label class="f s2">Website or email${ef('email','')}</label>
    <label class="f s4">Address${ef('address','Office address')}</label>
    <label class="f s4">Notes<textarea class="field" data-ef="notes" placeholder="Prequal status, bonding requirements, payment history…"${DIS()}>${esc(c.notes||'')}</textarea></label></div></fieldset>
@@ -1609,7 +1609,7 @@ function vendorModal(){const v=M.draft,isNew=M.isNew;const s=vendorStats(v.id);
   return mhead(isNew?'New vendor':v.company||'Vendor',v.trade||'')+`<div class="mbody">${!isNew&&S.view!=='vendor'?`<div class="adders" style="margin:0 0 10px"><button class="btn sm" data-act="vx-open" data-id="${v.id}">Open the vendor page: ranking, price list, ratings →</button></div>`:''}
    ${isNew?'':`<div class="statline"><div><b>${s.asked}</b>Quotes asked</div><div><b>${s.rec}</b>Received</div><div><b>${s.rate==null?'—':s.rate+'%'}</b>Response rate</div><div><b>${s.open}</b>Open now</div></div>`}
    <fieldset><legend>Vendor</legend><div class="fg">
-   <label class="f s2">Company ${isAdmin()?'<span class="req">required</span>':''}${ef('company','e.g. Metro Pipe Supply')}</label><label class="f">Vendor type<select class="field" data-ef="vendor_type"${DIS()}><option value="">Pick one…</option>${VENDOR_TYPES.map(o=>`<option${v.vendor_type===o?' selected':''}>${esc(o)}</option>`).join('')}</select></label><label class="f">Trade${efSel('trade',TRADES)}</label>
+   <label class="f s2"><span class="f-lab">Company${isAdmin()?' <span class="req">required</span>':''}</span>${ef('company','e.g. Metro Pipe Supply')}</label><label class="f">Vendor type<select class="field" data-ef="vendor_type"${DIS()}><option value="">Pick one…</option>${VENDOR_TYPES.map(o=>`<option${v.vendor_type===o?' selected':''}>${esc(o)}</option>`).join('')}</select></label><label class="f">Trade${efSel('trade',TRADES)}</label>
    <label class="f s2">Contact name${ef('contact_name','Estimator or rep')}</label><label class="f">Phone${ef('phone','(000) 000-0000','tel')}</label><label class="f">Email${ef('email','quotes@vendor.com','email')}</label>
    ${S.vx&&S.vx.loaded&&!S.vx.missing?`<label class="f s2">Service regions<input class="field" data-vxregs list="vx-reglist" value="${esc(vxRegions(v).join(', '))}" placeholder="e.g. Metro Atlanta, North GA, Gwinnett"${DIS()}><datalist id="vx-reglist">${[...new Set(S.vendors.flatMap(vxRegions))].sort().map(r=>`<option value="${esc(r)}">`).join('')}</datalist></label><label class="f">Home base${ef('base','City, ST')}</label>`:''}<label class="f s2">Area served notes${ef('area','e.g. 60 mi around Atlanta, no work east of I-75')}</label><label class="check s2" style="align-self:end;padding-bottom:10px"><input type="checkbox" data-ef="preferred" ${v.preferred?'checked':''}${DIS()}> Preferred vendor</label>
    <label class="f s4">Notes<textarea class="field" data-ef="notes" placeholder="Pricing terms, lead times, insurance on file…"${DIS()}>${esc(v.notes||'')}</textarea></label></div></fieldset>
