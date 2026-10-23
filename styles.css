@@ -2688,3 +2688,19 @@ div.tw-pgh{cursor:default}
 .f-lab .req{font-size:11.5px;font-weight:600;margin-left:4px}
 .bml-r{display:flex;align-items:center;gap:10px}.bml-del{font-size:15px;opacity:.55}.bml-del:hover{opacity:1}
 .notice.bad{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 12%,transparent);color:var(--ink)}.notice.bad b{color:var(--bad)}
+/* pipe dream: manhole and outfall sit in the board's own grid, so they line up exactly with their row */
+.pipe-board{--pipe-end:64px;position:relative;display:grid;gap:3px;padding:6px 0}
+.pipe-bed{background:#5A4029;border-radius:10px;margin:-6px;z-index:0}
+.pipe-board .pipe-c{position:relative;z-index:1}
+.pipe-end{position:relative;z-index:1;display:flex;align-items:center;min-height:0}
+.pipe-end.in{justify-content:flex-start}.pipe-end.out{justify-content:flex-end}
+.pe-ico{position:relative;z-index:2;display:flex;flex-direction:column;align-items:center;font-size:24px;line-height:1;width:44px;flex:none}
+.pe-ico small{font-size:10px;color:var(--ink-3);margin-top:2px}
+/* the stub of pipe running from the icon into the board, sized like the pipes on the tiles */
+.pe-stub{flex:1;align-self:stretch;position:relative;margin:0 -9px}
+.pe-stub::before,.pe-stub::after{content:"";position:absolute;left:0;right:0;top:50%;transform:translateY(-50%)}
+.pe-stub::before{height:37.5%;background:#5E666D}.pe-stub::after{height:25%;background:#8A939B}
+.pipe-end.wet .pe-stub::before{background:#2A6FA8}.pipe-end.wet .pe-stub::after{background:#3D8FD1}
+.pipe-end.in .pe-stub{margin-left:-4px}.pipe-end.out .pe-stub{margin-right:-4px}
+@media (max-width:720px){.pipe-board{--pipe-end:44px}.pe-ico{width:30px;font-size:18px}.pe-ico small{display:none}}
+.pipe-board .pipe-end{flex-direction:row;font-size:inherit;justify-content:flex-start}.pipe-board .pipe-end.out{justify-content:flex-end}
