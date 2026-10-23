@@ -1224,7 +1224,7 @@ function bpTakeoff(b,work){return `${peqPanel(b,work)}${scopeSection(b,work)}${l
 function bpQuotes(b,work,admin){
   const asked=b.quotes.filter(qAsked);
   return `<fieldset><legend>Quotes back</legend>
-    <p class="hint" style="margin:0 0 10px">${asked.length?`${asked.filter(q=>q.status==='Received').length} received · ${asked.filter(q=>q.status==='Requested').length} still out · ${asked.filter(q=>['Declined','No response'].includes(q.status)).length} declined or no answer.`:'No quotes requested yet. Add vendors on the <b>Scopes & RFQs</b> tab.'} Upload a quote and it’s marked Received. The low number in each scope is marked.</p>
+    <p class="hint" style="margin:0 0 10px">${asked.length?`${asked.filter(q=>q.status==='Received').length} received · ${asked.filter(q=>q.status==='Requested').length} still out · ${asked.filter(q=>['Declined','No response'].includes(q.status)).length} declined or no answer.`:'No quotes requested yet. Add vendors on the <b>Scopes & RFQs</b> tab.'} Enter each amount as quotes come in (that marks it Received). The low number in each scope is marked.</p>
     <div class="qgs">${quoteGroupsHtml(b,work,admin,'quotes')}</div></fieldset>`}
 // where the estimate & proposal stands: not started → in progress → ready for review → sent
 function epState(b){return isSent(b)||DECIDED.includes(b.status)?'sent':b.status==='Proposal Review'?'rr':b.status==='Estimating'?'ip':'ns'}
@@ -1517,7 +1517,7 @@ function quoteRow(q,i,work,admin){
   const v=vendorOf(q.vendor_id);const d=work?'':' disabled';
   const file=q._uploading?'<span class="dim small">Uploading…</span>'
     :q.file_path?`<span class="file"><button class="linkbtn" style="font-size:13px;font-weight:600;text-align:left;word-break:break-all" data-act="dl" data-path="${esc(q.file_path)}" data-name="${esc(q.file_name||'quote')}">${esc(q.file_name||'Download quote')}</button>${work?` <button class="rm" data-act="clear-file" data-i="${i}" title="Detach file">×</button>`:''}</span>`
-    :work?`<span class="file"><label>Upload quote<input type="file" data-upload="${i}"></label></span>`:'<span class="dim small">No file</span>';
+    :'';   // quotes are kept in the project folder now; files uploaded here before still show above
   return `<div class="quote q2"><div class="vn">${esc(v?.company||'Removed vendor')}<small>${esc(v?.trade||'')}${v?.phone?' · '+esc(v.phone):''}${q.requested_date?' · asked '+fmtShort(q.requested_date):''}${q.received_date?' · in '+fmtShort(q.received_date):''}</small>${q.status===BUD?`<span class="q-budtag">Budget · no RFQ</span>${work?`<button class="linkbtn small" data-act="q-toreq" data-i="${i}">Request a quote now</button>`:''}`:''}${qCovHtml(q,i,work)}</div>
    <select class="field" data-qf="${i}.status"${d}>${QUOTE_ST.map(s=>`<option${q.status===s?' selected':''}>${s}</option>`).join('')}</select>
    ${q.status===BUD?'<span class="q-rcv"><span>Budget number</span><span class="dim small">no quote asked for</span></span>':`<label class="q-rcv" title="Date the quote came back"><span>Received</span><input type="date" class="field" data-qf="${i}.received_date" value="${esc(q.received_date||'')}"${d}></label>`}
@@ -12659,3 +12659,6 @@ document.addEventListener('paste',e=>{const t=e.target;if(!t.dataset||t.dataset.
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='bid')return;
   if(t.dataset.act==='fold-ed'){M.fEdit=true;renderModal();setTimeout(()=>{const i=document.getElementById('fold-in');if(i){i.focus();i.select()}},20)}
   if(t.dataset.act==='fold-x'){M.fEdit=false;renderModal()}});
+// typing an amount on a requested quote marks it Received (what uploading the quote used to do); budget numbers stay as they are
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid'||!t.dataset||!t.dataset.qf||!t.dataset.qf.endsWith('.amount'))return;const q=M.draft.quotes[+t.dataset.qf.split('.')[0]];
+  if(!q||num(t.value)==null||!['Requested','Not requested','No response'].includes(q.status||'Not requested'))return;q.status='Received';if(!q.received_date)q.received_date=todayStr();renderModal()});
