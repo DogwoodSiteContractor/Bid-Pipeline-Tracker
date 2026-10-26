@@ -13116,7 +13116,7 @@ const RP_SRC={
     list:['name','pm','status','contract','profit']}};
 const RP_FN={count:'Count',sum:'Total',avg:'Average',min:'Lowest',max:'Highest',winrate:'Win rate',hitrate:'Dollar hit rate'};
 const RP_RANGES=[['page','Page dates'],['all','All time'],['ytd','This year to date'],['thisyear','This year'],['lastyear','Last year'],['12m','Last 12 months'],['q','This quarter'],['90d','Last 90 days'],['30d','Last 30 days'],['next30','Next 30 days']];
-const RP_VIZ=[['kpi','Number'],['bar','Columns'],['hbar','Bars'],['line','Line'],['table','Table'],['list','Record list']];
+const RP_VIZ=[['kpi','Number'],['bar','Columns'],['hbar','Bars'],['line','Line'],['table','Table'],['list','Record list'],['wir','Week in review']];
 const rpSrcs=()=>Object.entries(RP_SRC).filter(([,s])=>s.need());
 const rpD=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 function rpRange(code,pageCode){if(code==='page')code=pageCode||'all';const t=new Date();const Y=t.getFullYear();const back=n=>{const d=new Date(t);d.setDate(d.getDate()-n);return rpD(d)};
@@ -13147,7 +13147,7 @@ function rpRows(c,pageRange,range){const src=RP_SRC[c.src];if(!src||!src.need())
     if(f.op==='in')return (f.v||[]).includes(v);if(f.op==='out')return !(f.v||[]).includes(v);if(f.op==='gte')return v!=null&&v!==''&&Number(v)>=Number(f.v);if(f.op==='lte')return v!=null&&v!==''&&Number(v)<=Number(f.v);
     if(f.op==='has')return v!=null&&v!=='';if(f.op==='text')return String(v||'').toLowerCase().includes(String(f.v||'').toLowerCase());return true})});return rows}
 // the full computation for one card
-function rpRun(c,pageRange){const src=RP_SRC[c.src];if(!src||!src.need())return {err:'You don’t have access to this data.'};const F=src.f;
+function rpRun(c,pageRange){if(c.viz==='wir')return {rows:[],ms:[],kinds:[]};const src=RP_SRC[c.src];if(!src||!src.need())return {err:'You don’t have access to this data.'};const F=src.f;
   const ms=(c.measures&&c.measures.length?c.measures:[c.measure||{fn:'count'}]);const rows=rpRows(c,pageRange);const out={rows,ms,kinds:ms.map(m=>rpKind(c.src,m))};
   if(c.viz==='kpi'){out.v=rpAgg(c.src,rows,ms[0]);if(c.compare){const r=rpRange(c.range||'page',pageRange);const pr=rpPrev(r);if(pr){out.pv=rpAgg(c.src,rpRows(c,pageRange,pr),ms[0]);out.prevLabel=pr[0].slice(5)==='01-01'&&pr[1].slice(5)==='12-31'&&pr[0].slice(0,4)===pr[1].slice(0,4)?pr[0].slice(0,4):'the same dates last year'}}return out}
   if(c.viz==='list'){const sf=F[c.sortBy]||F[(src.list||[])[3]];out.list=[...rows].sort((a,b)=>{const x=sf?sf[2](a):0,y=sf?sf[2](b):0;const r=(y>x?1:y<x?-1:0);return c.asc?-r:r}).slice(0,c.limit||50);return out}
@@ -13172,7 +13172,7 @@ const RP_COL=n=>`var(--s${(n%8)+1})`;
 const RP_FIXED={Won:'var(--good)',Lost:'var(--bad)','Waiting on decision':'var(--s1)','In progress':'var(--s4)','No bid':'var(--ink-3)'};
 // ---------- renderers (HTML + a little SVG; drill-down on click) ----------
 function rpDrillAttr(ci,k,s){return ` data-act="rp-drill" data-ci="${ci}" data-k="${esc(k)}"${s!=null?` data-s="${esc(s)}"`:''}`}
-function rpViz(c,R,ci){if(R.err)return `<div class="empty">${esc(R.err)}</div>`;const kind=R.kinds[0];
+function rpViz(c,R,ci){if(c.viz==='wir')return RP_SRC.bids.need()?wirHtml(ci):'<div class="empty">You don’t have access to bids.</div>';if(R.err)return `<div class="empty">${esc(R.err)}</div>`;const kind=R.kinds[0];
   if(c.viz==='kpi'){const d=R.pv!=null&&R.v!=null?R.v-R.pv:null;const pct=d!=null&&R.pv?d/Math.abs(R.pv):null;
     const lowGood=kind==='days';return `<button class="rp-kpi" ${rpDrillAttr(ci,'__all')} title="See the ${R.rows.length} record${R.rows.length===1?'':'s'}"><b class="num">${rpFmt(R.v,kind,true)}</b>${c.compare?`<span class="rp-delta ${d>0?(lowGood?'dn':'up'):d<0?(lowGood?'up':'dn'):''}">${d==null?'No earlier period to compare':`${d>0?'▲':d<0?'▼':'■'} ${kind==='pct'?Math.abs(Math.round(d*100))+' pts':rpFmt(Math.abs(d),kind,true)}${pct!=null&&kind!=='pct'?` (${Math.abs(Math.round(pct*100))}%)`:''} vs ${esc(R.prevLabel||'last year')}`}</span>`:''}<span class="small dim">${R.rows.length} record${R.rows.length===1?'':'s'}</span></button>`}
   if(c.viz==='list'){const src=RP_SRC[c.src];const cols=(c.cols&&c.cols.length?c.cols:src.list).filter(k=>src.f[k]);
@@ -13200,7 +13200,7 @@ function rpViz(c,R,ci){if(R.err)return `<div class="empty">${esc(R.err)}</div>`;
       <span></span><div class="rp-xax">${G.map((g,i)=>i%labEvery?'':`<span class="${(i/labEvery)%2?'o':''}" style="left:${x(i)}%">${esc(g.l)}</span>`).join('')}</div></div>${last.length===1&&n>1?`<div class="small dim">Latest: ${esc(G[G.length-1].l)} ${rpFmt(last[0].v,kind)}</div>`:''}`}
   // columns
   return legend+`<div class="rp-cols${thin?' thin':''}" style="--n:${n}">${G.map((g,i)=>`<button class="rp-col" ${rpDrillAttr(ci,g.k)} title="${esc(ser.map(s=>tip(g,s)).join(' · '))}"><span class="rp-bars">${ser.map(s=>{const v=s.get(g)||0;return `<i style="height:${Math.max(0,v/mx*100)}%;background:${s.c}">${!thin&&ser.length===1&&v?`<b>${rpFmt(v,kind,true)}</b>`:''}</i>`}).join('')}</span><span class="rp-cl${(i/labEvery)%2?' o':''}">${i%labEvery?'':esc(g.l)}</span></button>`).join('')}</div>`}
-function rpCardHtml(c,ci,o){const R=rpRun(c,o.range);const sub=[c.viz!=='list'&&c.viz!=='kpi'&&!(c.measures&&c.measures.length>1)?rpMName(c.src,(c.measures&&c.measures[0])||c.measure||{fn:'count'}):'',rpRangeLabel(c.range||'page',o.range)].filter(Boolean).join(' · ');
+function rpCardHtml(c,ci,o){const R=rpRun(c,o.range);const sub=c.viz==='wir'?['Same layout as the weekly sheet · click a project to open it']:[c.viz!=='list'&&c.viz!=='kpi'&&!(c.measures&&c.measures.length>1)?rpMName(c.src,(c.measures&&c.measures[0])||c.measure||{fn:'count'}):'',rpRangeLabel(c.range||'page',o.range)].filter(Boolean).join(' · ');
   return `<div class="panel pad rp-card s${c.size||1}${c.viz==='kpi'?' kpic':''}" data-ci="${ci}"><div class="rp-ch"><div><h3>${esc(c.title||'Untitled')}</h3>${sub?`<div class="small dim">${esc(sub)}</div>`:''}</div>
     ${o.edit?`<div class="rp-tools"><button class="btn sm ghost" data-act="rp-card-edit" data-ci="${ci}" title="Edit">✎</button><button class="btn sm ghost" data-act="rp-card-mv" data-ci="${ci}" data-d="-1" title="Move earlier">↑</button><button class="btn sm ghost" data-act="rp-card-mv" data-ci="${ci}" data-d="1" title="Move later">↓</button><button class="btn sm ghost" data-act="rp-card-size" data-ci="${ci}" title="Width">${['','▢','▭','▬'][c.size||1]}</button><button class="btn sm ghost" data-act="rp-card-dup" data-ci="${ci}" title="Duplicate">⧉</button><button class="btn sm ghost" data-act="rp-card-del" data-ci="${ci}" title="Remove">×</button></div>`:''}</div>${rpViz(c,R,ci)}</div>`}
 // ---------- drill-down ----------
@@ -13254,12 +13254,12 @@ function rpCardModal(){const x=M;const c=x.card;const src=RP_SRC[c.src];const F=
   const fRow=(f,i)=>{const t=F[f.f]?F[f.f][1]:'cat';const ops=t==='cat'?[['in','is any of'],['out','is not'],['has','has a value']]:t==='text'?[['text','contains']]:t==='date'?[['has','has a date']]:[['gte','at least'],['lte','at most'],['has','has a value']];
     return `<div class="rp-frow"><div class="rp-frow-h"><select class="field" data-rpff="${i}|f">${rpOpts(Object.entries(F).map(([k,ff])=>[k,ff[0]]),f.f)}</select><select class="field" data-rpff="${i}|op">${rpOpts(ops,f.op)}</select>${['gte','lte','text'].includes(f.op)?`<input class="field" data-rpff="${i}|v" value="${esc(f.v??'')}"${f.op==='text'?'':' type="number" step="any"'}>`:''}<button class="btn sm ghost" data-act="rp-f-del" data-i="${i}">×</button></div>
       ${['in','out'].includes(f.op)?`<div class="rp-vals">${vals(f.f).slice(0,60).map(v=>`<label class="fchip${(f.v||[]).includes(v)?' on':''}"><input type="checkbox" data-rpfv="${i}" value="${esc(v)}"${(f.v||[]).includes(v)?' checked':''}>${esc(v)}</label>`).join('')||'<span class="small dim">No values yet</span>'}</div>`:''}</div>`};
-  const v=c.viz;const grouped=!['kpi','list'].includes(v);
+  const v=c.viz;const grouped=!['kpi','list','wir'].includes(v);
   const form=`<label class="f"><span class="f-lab">Title</span><input class="field" data-rpf="title" value="${esc(c.title||'')}" placeholder="${esc(rpAutoTitle(c))}"></label>
     <div class="rp-row2"><label class="f"><span class="f-lab">Data</span><select class="field" data-rpf="src">${rpOpts(rpSrcs().map(([k,s])=>[k,s.l]),c.src)}</select></label>
       <label class="f"><span class="f-lab">Width</span><select class="field" data-rpf="size" data-t="n">${rpOpts([[1,'One column'],[2,'Two columns'],[3,'Full width']],c.size||1)}</select></label></div>
-    <div class="f"><span class="f-lab">Show as</span><div class="seg rp-vizseg">${RP_VIZ.map(([k,l])=>`<button class="${v===k?'on':''}" data-act="rp-viz" data-v="${k}">${l}</button>`).join('')}</div></div>
-    ${v==='list'?`<div class="f"><span class="f-lab">Columns</span><div class="rp-vals">${Object.entries(F).map(([k,f])=>`<label class="fchip${(c.cols||src.list).includes(k)?' on':''}"><input type="checkbox" data-rpcol value="${k}"${(c.cols||src.list).includes(k)?' checked':''}>${esc(f[0])}</label>`).join('')}</div></div>
+    <div class="f"><span class="f-lab">Show as</span><div class="seg rp-vizseg">${RP_VIZ.filter(([k])=>k!=='wir'||c.src==='bids').map(([k,l])=>`<button class="${v===k?'on':''}" data-act="rp-viz" data-v="${k}">${l}</button>`).join('')}</div></div>
+    ${v==='wir'?'<p class="small dim">New bids, revisions and budgets sent, bid invites accepted and what’s planned to send, for one week at a time, with an Excel export laid out like the weekly sheet. Use the arrows on the card to change weeks.</p>':v==='list'?`<div class="f"><span class="f-lab">Columns</span><div class="rp-vals">${Object.entries(F).map(([k,f])=>`<label class="fchip${(c.cols||src.list).includes(k)?' on':''}"><input type="checkbox" data-rpcol value="${k}"${(c.cols||src.list).includes(k)?' checked':''}>${esc(f[0])}</label>`).join('')}</div></div>
       <div class="rp-row2"><label class="f"><span class="f-lab">Sort by (highest first)</span><select class="field" data-rpf="sortBy">${rpOpts(Object.entries(F).filter(([,f])=>f[1]!=='text').map(([k,f])=>[k,f[0]]),c.sortBy||src.list[3])}</select></label><label class="f"><span class="f-lab">Show up to</span><input class="field" type="number" data-rpf="limit" data-t="n" value="${c.limit||50}"></label></div>`
      :`<div class="f"><span class="f-lab">${grouped&&v!=='kpi'?'Measure':'Number to show'}</span>${c.measures.map(mRow).join('')}${grouped&&!c.split&&c.measures.length<4?'<button class="btn sm ghost" data-act="rp-m-add">+ Compare another measure</button>':''}</div>`}
     ${grouped?`<div class="rp-row2"><label class="f"><span class="f-lab">Group by</span><select class="field" data-rpf="group">${rpOpts(grpF,c.group,'Nothing (one total)')}</select></label>
@@ -13267,8 +13267,8 @@ function rpCardModal(){const x=M;const c=x.card;const src=RP_SRC[c.src];const F=
       ${c.measures.length===1&&c.group?`<div class="rp-row2"><label class="f"><span class="f-lab">Split each into</span><select class="field" data-rpf="split">${rpOpts(catF.filter(([k])=>k!==c.group),c.split,'No split')}</select></label>${!isDate&&c.group?`<label class="f"><span class="f-lab">Top</span><input class="field" type="number" min="1" data-rpf="limit" data-t="n" value="${c.limit||''}" placeholder="All"></label>`:''}</div>`:''}
       ${c.measures.some(m=>['winrate','hitrate','avg'].includes(m.fn))&&c.group&&!isDate?`<label class="f"><span class="f-lab">Leave out groups with fewer than</span><input class="field" type="number" min="0" data-rpf="minN" data-t="n" value="${c.minN||''}" placeholder="0 records"></label>`:''}`:''}
     ${v==='kpi'?`<label class="check"><input type="checkbox" data-rpf="compare"${c.compare?' checked':''}> Compare with the same dates a year earlier</label>`:''}
-    <div class="rp-row2"><label class="f"><span class="f-lab">Dates use</span><select class="field" data-rpf="dateField">${rpOpts(dateF,c.dateField||src.date)}</select></label><label class="f"><span class="f-lab">Date range</span><select class="field" data-rpf="range">${rpOpts(RP_RANGES,c.range||'page')}</select></label></div>
-    <div class="f"><span class="f-lab">Filters</span>${(c.filters||[]).map(fRow).join('')}<button class="btn sm ghost" data-act="rp-f-add">+ Add a filter</button></div>`;
+    ${v==='wir'?'':`<div class="rp-row2"><label class="f"><span class="f-lab">Dates use</span><select class="field" data-rpf="dateField">${rpOpts(dateF,c.dateField||src.date)}</select></label><label class="f"><span class="f-lab">Date range</span><select class="field" data-rpf="range">${rpOpts(RP_RANGES,c.range||'page')}</select></label></div>
+    <div class="f"><span class="f-lab">Filters</span>${(c.filters||[]).map(fRow).join('')}<button class="btn sm ghost" data-act="rp-f-add">+ Add a filter</button></div>`}`;
   const prev=rpCardHtml({...c,title:c.title||rpAutoTitle(c)},'prev',{range:x.range});
   return mhead(x.ci<0?'Add a card':'Edit card','')+`<div class="mbody rp-ed"><div class="rp-form">${form}</div><div class="rp-prev"><div class="small dim" style="margin-bottom:6px">Preview · click it to check the records</div><div class="rp-grid one">${prev}</div></div></div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="rp-card-save">${x.ci<0?'Add to page':'Save card'}</button></div></div>`}
@@ -13339,6 +13339,8 @@ const BOARD_CARDS=()=>[
   {w:'clients',id:'b-clients',title:'Top GCs & clients',src:'bids',viz:'table',measures:[{fn:'count'},{fn:'sum',field:'value'},{fn:'sum',field:'won'},{fn:'winrate'}],group:'client',dateField:'sent',range:'page',limit:10,size:3},
   {w:'upcoming',id:'b-up',title:'Bids due in the next 30 days',src:'bids',viz:'list',cols:['name','client','estimator','status','value','due'],sortBy:'due',asc:true,dateField:'due',range:'next30',filters:[{f:'outcome',op:'in',v:['In progress']}],limit:15,size:3}];
 const RP_TPL={
+  week:{name:'Week in review',blurb:'Last week’s sends, invites and what’s planned, exportable to Excel',range:'ytd',need:()=>can('bids'),cards:()=>[{id:newId(),title:'Week in review',src:'bids',viz:'wir',measures:[{fn:'count'}],range:'page',size:3},
+    {id:newId(),title:'Bids in by week',src:'bids',viz:'bar',measures:[{fn:'count'}],group:'intake',bucket:'week',dateField:'intake',range:'90d',size:2},{id:newId(),title:'Sent by week, by bid type',src:'bids',viz:'bar',measures:[{fn:'count'}],group:'sent',bucket:'week',split:'btype',dateField:'sent',range:'90d',size:1}]},
   board:{name:'Board dashboard',blurb:'Results and trends: win rates, dollars, turnaround, backlog',range:'ytd',need:()=>can('bids'),cards:()=>BOARD_CARDS().filter(c=>!c.special).map(({w,...c})=>({...c,id:newId()}))},
   est:{name:'Estimating scorecard',blurb:'Intake, output, turnaround and win rate by estimator',range:'ytd',need:()=>can('bids'),cards:()=>[
     {id:newId(),...rpK('New bids in',{fn:'count'},{dateField:'intake'})},{id:newId(),...rpK('Proposals sent',{fn:'count'},{dateField:'sent'})},{id:newId(),...rpK('Avg turnaround',{fn:'avg',field:'turn'},{dateField:'sent'})},
@@ -13358,3 +13360,34 @@ const RP_TPL={
     {id:newId(),title:'Contract value by status',src:'awards',viz:'hbar',measures:[{fn:'sum',field:'contract'}],group:'status',range:'page',size:2},
     {id:newId(),title:'Buyout by project',src:'awards',viz:'hbar',measures:[{fn:'avg',field:'bopct'}],group:'name',range:'page',size:2},
     {id:newId(),title:'Projects',src:'awards',viz:'list',cols:['name','client','status','pm','contract','bopct','subOpen','rfiOpen'],sortBy:'contract',range:'page',size:3}]}};
+
+/* ---------- Week in review (report card + Excel export in the same layout as the weekly sheet) ---------- */
+const WIR_COLS=[['sent','New Bids'],['rev','Revisions'],['bud','Budgets'],['in','Bid Invites Accepted'],['plan','Planned to Send']];
+S.wirOff=S.wirOff||0;
+const wirAdd=(ds,n)=>{const d=parseD(ds);d.setDate(d.getDate()+n);return rpD(d)};
+// off 0 = the last full week (Mon–Sun) before this one; the sheet is dated the Monday after it
+function wirData(off){const thisMon=wkMon(todayStr());const a=wirAdd(thisMon,-7*(1+off)),b=wirAdd(a,6),rd=wirAdd(a,7),pe=wirAdd(rd,6);const inW=d=>d&&d>=a&&d<=b;
+  const bids=S.bids.filter(x=>!x._new&&statOk(x));const L={sent:[],rev:[],bud:[],in:[],plan:[]};
+  bids.forEach(x=>{const s=sentOn(x);if(inW(s))L[isBudget(x)?'bud':'sent'].push({b:x,d:s,t:x.name});
+    revShown(x).forEach(r=>{const d=String(r.date||'').slice(0,10);if(+r.rev>0&&inW(d))L.rev.push({b:x,d,t:x.name+(revShown(x).filter(q=>+q.rev>0).length>1?` (Rev ${r.rev})`:''),r})});
+    const i=intakeOf(x);if(inW(i))L.in.push({b:x,d:i,t:x.name+(isBudget(x)?' (Budget)':'')});
+    if(live(x)&&!isSent(x)&&!DECIDED.includes(x.status)&&x.status!=='On Hold'&&x.due_date&&x.due_date>=rd&&x.due_date<=pe)L.plan.push({b:x,d:x.due_date,t:x.name+(isBudget(x)?' (Budget)':'')})});
+  Object.values(L).forEach(l=>l.sort((p,q)=>String(p.d).localeCompare(String(q.d))||p.t.localeCompare(q.t)));return {a,b,rd,pe,L}}
+const wirName=rd=>{const d=parseD(rd);return `${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')}.${String(d.getFullYear()).slice(2)}`};
+function wirHtml(ci){const W=wirData(S.wirOff||0);const L=W.L;const max=Math.max(1,...WIR_COLS.map(([k])=>L[k].length));const sent=L.sent.length+L.rev.length+L.bud.length;
+  const cell=(k,i)=>{const e=L[k][i];if(!e)return '<td></td>';const gc=clientName(e.b.awarded_client_id||propIds(e.b)[0]);return `<td><button class="linkish wir-i" data-act="open-bid" data-id="${e.b.id}" title="${esc(fmtShort(e.d))}${gc?' · '+esc(gc):''}">${esc(e.t)}</button>${gc?`<div class="small dim">${esc(gc)}</div>`:''}</td>`};
+  return `<div class="wir-top"><div class="wir-nav"><button class="btn sm" data-act="wir-wk" data-d="1" title="Week before">‹</button><div><b>${wirName(W.rd)}</b><div class="small dim">Activity ${fmtShort(W.a)}–${fmtShort(W.b)} · planned to send ${fmtShort(W.rd)}–${fmtShort(W.pe)}</div></div><button class="btn sm" data-act="wir-wk" data-d="-1"${(S.wirOff||0)<=-1?' disabled':''} title="Week after">›</button>${S.wirOff?'<button class="btn sm ghost" data-act="wir-wk" data-d="0">Last week</button>':''}</div>
+    <button class="btn sm" data-act="wir-xlsx">⬇ Export to Excel</button></div>
+  <div class="scroll"><table class="rp-tbl wir-tbl"><thead><tr>${WIR_COLS.map(([,l])=>`<th>${esc(l)}</th>`).join('')}</tr></thead><tbody>${Array.from({length:max},(_,i)=>`<tr>${WIR_COLS.map(([k])=>cell(k,i)).join('')}</tr>`).join('')}</tbody>
+    <tfoot><tr>${WIR_COLS.map(([k])=>`<td><b class="num">${L[k].length}</b></td>`).join('')}</tr></tfoot></table></div>
+  <div class="wir-sum"><span>Total sent: <b class="num">${sent}</b></span><span class="small dim">New bids + revisions + budgets</span></div>`}
+async function wirExport(){const W=wirData(S.wirOff||0);const L=W.L;const X=await loadXLSX();const n=Math.max(9,...WIR_COLS.map(([k])=>L[k].length));const last=3+n;// rows 3..last-1 hold names
+  const aoa=[[],[parseD(W.rd),null,...WIR_COLS.map(([,l])=>l)]];for(let i=0;i<n;i++)aoa.push([null,null,...WIR_COLS.map(([k])=>L[k][i]?L[k][i].t:null)]);aoa.push([]);aoa.push([]);
+  const ws=X.utils.aoa_to_sheet(aoa,{cellDates:true});const cr=last+2;// counts row
+  const cols=['C','D','E','F','G'];ws['B'+cr]={t:'s',v:'Counts:'};cols.forEach((c,i)=>{ws[c+cr]={t:'n',v:L[WIR_COLS[i][0]].length,f:`COUNTA(${c}3:${c}${last})`}});
+  ws['D'+(cr+2)]={t:'s',v:'Total Sent: '};ws['E'+(cr+2)]={t:'n',v:L.sent.length+L.rev.length+L.bud.length,f:`SUM(C${cr}:E${cr})`};
+  if(ws.A2){ws.A2.t='d';ws.A2.z='m/d/yyyy'}ws['!ref']=`A1:G${cr+2}`;ws['!cols']=[{wch:11},{wch:9},{wch:34},{wch:28},{wch:28},{wch:38},{wch:34}];
+  const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Sheet1');X.writeFile(wb,`${wirName(W.rd)}_Week_In_Review.xlsx`)}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
+  if(a==='wir-wk'){const d=+t.dataset.d;S.wirOff=d===0?0:Math.max(-1,(S.wirOff||0)+d);render();if(M&&M.kind==='rpcard')renderModal();return}
+  if(a==='wir-xlsx'){wirExport().catch(err=>toast('Export failed: '+errMsg(err)));return}});

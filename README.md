@@ -917,3 +917,15 @@ The Board view is now built from the same report cards:
 - **Headline numbers** with the change from the same dates last year: bids submitted, dollars bid, awarded, win rate, dollar hit rate, average turnaround. Green is better; for turnaround, lower is better.
 - **Dollars bid by month by outcome**, **win rate by quarter**, **weekly bid activity**, **open pipeline by stage**, **win rate by GC / project type / job size**, **turnaround by month**, **why we lose**, **estimator scorecard**, **backlog of awarded work** (with the Awarded tab), **top GCs & clients** and **bids due in the next 30 days**.
 - Everything is clickable down to the bids. **Customize view** still turns sections on and off, and **Copy to Reports** puts the board's charts on a page of your own to change.
+
+## Week in review
+
+A built-in report page (Dashboard → Reports → **Week in review**) that fills in the weekly sheet for you. It shows the last full week (Monday to Sunday) and is dated the Monday after, like the sheet:
+
+- **New Bids:** proposals that first went out that week (not budgets).
+- **Revisions:** revisions in a bid's revision log dated that week.
+- **Budgets:** budgets that went out that week.
+- **Bid Invites Accepted:** bids whose intake date is in that week. Budgets are marked “(Budget)”.
+- **Planned to Send:** open bids due in the week the sheet is dated (not sent yet, not on hold).
+
+The counts and **Total Sent** (new bids + revisions + budgets) are underneath. Use ‹ › to step through weeks. **Export to Excel** downloads `MM.DD.YY_Week_In_Review.xlsx` in the same layout with the COUNTA and SUM formulas. You can also add a Week in review card to any of your own report pages (Show as → Week in review).
