@@ -894,3 +894,26 @@ Needs `supabase/update-43-awarded.sql`. Every bid marked **Awarded** shows up on
 - A bid marked Awarded has an **Open on the Awarded tab** button at the bottom of its page.
 
 Access: a new **Awarded** area on Team → access. Estimators and PMs edit, accounting and executives view, board members don't see it by default. Admins can switch the tab off for everyone in Settings.
+
+## Reports
+
+Needs `supabase/update-44-reports.sql` to save your own pages (the built-in pages work without it). The **Reports** tab sits next to Dashboard and everyone has it. You only ever see numbers from data your access already lets you see, including on pages someone else shared.
+
+- **Pages:** click **+ New report page** to start blank or from a built-in page: Board dashboard, Estimating scorecard, Vendor quotes, Awarded work. Your pages are private until you tick **Share with the team** in Page settings. Shared pages can be viewed and copied by anyone; only the owner (or an admin) can change them. **Make a copy** works on any page.
+- **Page dates:** the dropdown at the top sets the dates for every card that uses "Page dates" (this year to date, last year, last 12 months, a calendar year and so on).
+- **Cards:** **✎ Edit page → + Add a card.** Pick:
+  - **Data:** bids, vendor quotes, awarded projects, jobs (only the ones you can see).
+  - **Show as:** number, columns, bars, line, table or record list.
+  - **Measure:** count, total, average, lowest, highest, win rate or dollar hit rate. Tables, bars and lines can compare several measures.
+  - **Group by** any field (GC, estimator, project type, job size, stage, outcome, trade, vendor…) or by a date per week, month, quarter or year, and optionally **split** each group by a second field (for example GC split by outcome).
+  - **Dates use** which date and **Date range**, **Filters** (is any of / is not / at least / at most / contains), top N, and width.
+  - A number card can compare with the same dates a year earlier.
+  The preview updates as you go. In edit mode each card has ✎ edit, ↑ ↓ move, width, ⧉ duplicate and × remove.
+- **Drill down:** click any number, bar, dot or table row to see the records behind it, and click a record to open the bid or job.
+
+## Board dashboard (rebuilt)
+
+The Board view is now built from the same report cards:
+- **Headline numbers** with the change from the same dates last year: bids submitted, dollars bid, awarded, win rate, dollar hit rate, average turnaround. Green is better; for turnaround, lower is better.
+- **Dollars bid by month by outcome**, **win rate by quarter**, **weekly bid activity**, **open pipeline by stage**, **win rate by GC / project type / job size**, **turnaround by month**, **why we lose**, **estimator scorecard**, **backlog of awarded work** (with the Awarded tab), **top GCs & clients** and **bids due in the next 30 days**.
+- Everything is clickable down to the bids. **Customize view** still turns sections on and off, and **Copy to Reports** puts the board's charts on a page of your own to change.

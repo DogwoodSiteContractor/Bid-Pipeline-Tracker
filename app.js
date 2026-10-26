@@ -87,7 +87,7 @@ const BID_TYPES=['Hard bid','Negotiated','Budget / pricing','Design-assist'];
 const LOST_REASONS=['','Price','Schedule','Relationship / incumbent','Project cancelled','Scope','Unknown'];
 const ROLES=[['admin','Admin'],['executive','Executive / owner'],['estimator','Estimator'],['pm','Project manager'],['accounting','Accounting / bookkeeper'],['board','Board member'],['pending','No access yet']];
 const ROLE_LABEL={admin:'Admin',executive:'Executive',estimator:'Estimator',pm:'Project manager',accounting:'Accounting',board:'Board',pending:'Waiting for access'};
-const WIDGETS=[['kpis','Headline numbers'],['monthly','Bid and award volume by month'],['funnel','Pipeline by stage'],['clients','Top clients & GCs'],['estimators','Estimator performance'],['types','Project type mix'],['weekly','Weekly bid activity (intake, submitted, budgets, revisions)'],['upcoming','Bids due in the next 30 days'],['lost','Why we lose']];
+const WIDGETS=[['kpis','Headline numbers (with last year)'],['monthly','Dollars bid by month, by outcome'],['trend','Win rate by quarter'],['weekly','Weekly bid activity (intake, submitted, budgets, revisions)'],['funnel','Open pipeline by stage'],['gcwin','Win rate by GC'],['types','Win rate by project type'],['size','Win rate by job size'],['turn','Turnaround by month'],['backlog','Backlog: awarded work not complete'],['estimators','Estimator scorecard'],['lost','Why we lose'],['clients','Top GCs & clients'],['upcoming','Bids due in the next 30 days']];
 const AV_COLORS=['#2C5E99','#2C7A4C','#8B5E34','#7A3E8E','#B24A2A','#2F7C83','#5A6B1E','#9C3D5C'];
 const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const BUCKET='bid-files';
@@ -345,7 +345,7 @@ function renderNow(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;if(S.settings.company!==coApply.last){coApply.last=S.settings.company;coApply(S.settings.company)}renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
-  const views={awards:vAwards,award:vAward,admin:vAdmin,btpl:vBtpl,workload:vWorkload,positions:vPositions,grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const views={reports:vReports,awards:vAwards,award:vAward,admin:vAdmin,btpl:vBtpl,workload:vWorkload,positions:vPositions,grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
@@ -444,7 +444,7 @@ function vDashboard(){
   if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}</div></div>`+bidReqPanel()+fuPanel()+precon();
   if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}</div></div>`+board();
   return `<div class="head"><div><h1>${S.dash==='precon'?'Bid pipeline dashboard':'Board dashboard'}</h1><p>${d}${S.lastLoaded?` · <span class="dim">Last updated ${S.lastLoaded.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>`:''}</p></div>
-  <div class="tools">${S.dash==='board'?yearSelect()+(S.bids.some(b=>b.archived_at)?`<label class="check small" title="Archived bids are left out of the numbers unless this is on"><input type="checkbox" data-inclarch${S.inclArch?' checked':''}> Include archived</label>`:'')+'<button class="btn" data-act="board-custom">Customize view</button>':'<button class="btn" data-act="refresh">↻ Refresh</button>'}
+  <div class="tools">${S.dash==='board'?yearSelect()+(S.bids.some(b=>b.archived_at)?`<label class="check small" title="Archived bids are left out of the numbers unless this is on"><input type="checkbox" data-inclarch${S.inclArch?' checked':''}> Include archived</label>`:'')+'<button class="btn" data-act="board-custom">Customize view</button><button class="btn" data-act="rp-board-copy" title="Copy these charts to a page in Reports you can change">Copy to Reports</button>':'<button class="btn" data-act="refresh">↻ Refresh</button>'}
   <div class="seg" role="tablist"><button class="${S.dash==='precon'?'on':''}" data-act="dash" data-v="precon">Precon<small>Daily work</small></button><button class="${S.dash==='board'?'on':''}" data-act="dash" data-v="board">Board<small>Results & trends</small></button></div></div></div>`
   +(S.dash==='precon'?vxUpkeepHtml():'')+bidReqPanel()+reviewPanel()+fuPanel()+(S.dash==='precon'?precon():board());
 }
@@ -643,67 +643,10 @@ function mine(){
 function boardCfg(){const d={};WIDGETS.forEach(([k])=>d[k]=true);return Object.assign(d,S.settings.board?.widgets||{})}
 function panel(t,sub,body){return `<div class="sec" style="margin:0"><div class="sec-h"><h2>${esc(t)}</h2><span>${sub}</span></div><div class="panel pad">${body}</div></div>`}
 function hbars(items){return `<div class="hbars">${items.map(x=>`<div class="hb"><span class="lab">${esc(x.l)}</span><div class="track"><div class="fill ${x.c||''}" style="width:${Math.max(0,x.w*100)}%"></div></div><span class="v">${esc(x.v)}</span></div>`).join('')}</div>`}
-function board(){
-  const Y=S.year,cfg=boardCfg();
-  const yb=S.bids.filter(b=>yearOf(b)===Y&&statOk(b));
-  const sub=yb.filter(isSent);
-  const won=yb.filter(b=>b.status==='Awarded'),lost=yb.filter(b=>b.status==='Not Awarded');
-  const subVal=sub.reduce((s,b)=>s+bidValue(b),0),wonVal=won.reduce((s,b)=>s+wonValue(b),0);
-  const decided=won.length+lost.length;const winRate=decided?Math.round(won.length/decided*100):null;
-  const decVal=[...won,...lost].reduce((s,b)=>s+bidValue(b),0);
-  const dollarRate=decVal?Math.round(won.reduce((s,b)=>s+bidValue(b),0)/decVal*100):null;
-  const act=S.bids.filter(b=>live(b)&&ACTIVE.includes(b.status));
-  const weighted=act.reduce((s,b)=>s+bidValue(b)*(num(b.probability)??50)/100,0);
-  const waiting=S.bids.filter(b=>live(b)&&isSent(b)&&!DECIDED.includes(b.status));
-  const out=[];
-  if(cfg.kpis)out.push(`<div class="wide"><div class="kpis" style="margin:0">
-    ${kpi('Bids submitted',sub.length,moneyK(subVal)+' total in '+Y)}
-    ${kpi('Awarded',moneyK(wonVal),won.length+' project'+(won.length===1?'':'s')+' won','good')}
-    ${kpi('Win rate',winRate==null?'—':winRate+'%',decided?`${won.length} of ${decided} decided`:'No decisions yet')}
-    ${kpi('Dollar hit rate',dollarRate==null?'—':dollarRate+'%','Won $ ÷ decided $')}
-    ${kpi('Open pipeline',moneyK(act.reduce((s,b)=>s+bidValue(b),0)),act.length+' active bids')}
-    ${(()=>{const T=yb.map(inHouse).filter(t=>t&&t.sent);const avg=T.length?Math.round(T.reduce((x,t)=>x+t.n,0)/T.length):null;return kpi('Avg turnaround',avg==null?'—':avg+' day'+(avg===1?'':'s'),T.length?`Intake to sent, ${T.length} proposal${T.length===1?'':'s'} in ${Y}`:'No proposals sent yet')})()}
-    ${SHOW_ODDS?kpi('Weighted pipeline',moneyK(weighted),'Value × win probability','hot'):kpi('Sent, waiting on a decision',moneyK(waiting.reduce((s,b)=>s+bidValue(b),0)),waiting.length+' proposal'+(waiting.length===1?'':'s')+' out','hot')}</div></div>`);
-  if(cfg.monthly){
-    const m=MONTHS.map((l,i)=>({l,s:sub.filter(b=>parseD(b.due_date||b.submitted_date)?.getMonth()===i).reduce((a,b)=>a+bidValue(b),0),
-      w:won.filter(b=>parseD(b.awarded_date||b.due_date)?.getMonth()===i).reduce((a,b)=>a+wonValue(b),0)}));
-    const mx=Math.max(1,...m.flatMap(x=>[x.s,x.w]));const any=m.some(x=>x.s||x.w);
-    out.push(`<div class="wide">${panel('Bid and award volume by month',`<span class="legend"><span><i style="background:var(--bar);opacity:.8"></i>Bid</span><span><i style="background:var(--accent)"></i>Awarded</span></span>`,
-      any?`<div class="mchart">${m.map(x=>`<div class="mcol" title="${x.l}: bid ${money(x.s)}, awarded ${money(x.w)}"><div class="mbars"><i class="b1" style="height:${x.s/mx*100}%"></i><i class="b2" style="height:${x.w/mx*100}%"></i></div><span>${x.l}</span></div>`).join('')}</div>`:`<div class="empty">No submitted or awarded bids in ${Y} yet.</div>`)}</div>`);
-  }
-  if(cfg.weekly)out.push(weeklyPanel('board'));
-  if(cfg.funnel){
-    const st=BID_ST.map(s=>{const bs=yb.filter(b=>b.status===s);return{l:s,n:bs.length,v:bs.reduce((a,b)=>a+(s==='Awarded'?wonValue(b):bidValue(b)),0)}});
-    const mx=Math.max(1,...st.map(x=>x.v));const cls={Estimating:'acc',Submitted:'info',Awarded:'good','Not Awarded':'bad'};
-    out.push(panel('Pipeline by stage',Y+'',hbars(st.map(x=>({l:x.l,w:x.v/mx,v:`${moneyK(x.v)} · ${x.n}`,c:cls[x.l]||''})))));
-  }
-  if(cfg.clients){
-    const g={};yb.forEach(b=>propIds(b).forEach(id=>{g[id]=g[id]||{n:0,v:0,w:0,d:0};g[id].n++;g[id].v+=clientAmount(b,id);if(clientWon(b,id)){g[id].w++;g[id].d++}else if(clientLost(b,id))g[id].d++}));
-    const rows=Object.entries(g).sort((a,b)=>b[1].v-a[1].v).slice(0,8);
-    out.push(panel('Top clients & GCs','By dollars bid',rows.length?`<div class="scroll"><table><thead><tr><th>Client</th><th class="r">Bids</th><th class="r">$ bid</th><th class="r">Won</th><th class="r">Win rate</th></tr></thead><tbody>${rows.map(([id,x])=>`<tr><td>${esc(clientName(id))}</td><td class="r num">${x.n}</td><td class="r num">${moneyK(x.v)}</td><td class="r num">${x.w}</td><td class="r num">${x.d?Math.round(x.w/x.d*100)+'%':'—'}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No client data for this year.</div>'));
-  }
-  if(cfg.estimators){
-    const rows=S.estimators.map(e=>{const bs=yb.filter(b=>b.lead_estimator_id===e.id);const w=bs.filter(b=>b.status==='Awarded').length,l=bs.filter(b=>b.status==='Not Awarded').length;
-      return{e,n:bs.length,v:bs.reduce((a,b)=>a+bidValue(b),0),w,r:w+l?Math.round(w/(w+l)*100)+'%':'—'}}).filter(x=>x.n).sort((a,b)=>b.v-a.v);
-    out.push(panel('Estimator performance','As lead estimator',rows.length?`<div class="scroll"><table><thead><tr><th>Estimator</th><th class="r">Bids</th><th class="r">$ bid</th><th class="r">Won</th><th class="r">Win rate</th></tr></thead><tbody>${rows.map(x=>`<tr><td><span class="who">${avatar(x.e.id,22)}${esc(x.e.name)}</span></td><td class="r num">${x.n}</td><td class="r num">${moneyK(x.v)}</td><td class="r num">${x.w}</td><td class="r num">${x.r}</td></tr>`).join('')}</tbody></table></div>`:'<div class="empty">No estimator data for this year.</div>'));
-  }
-  if(cfg.types){
-    const g={};yb.forEach(b=>{const k=normProjectType(b.project_type)||'Other';g[k]=(g[k]||0)+bidValue(b)});
-    const e=Object.entries(g).sort((a,b)=>b[1]-a[1]);const mx=Math.max(1,...e.map(x=>x[1]));
-    out.push(panel('Project type mix','Dollars bid',e.length?hbars(e.map(([l,v])=>({l,w:v/mx,v:moneyK(v)}))):'<div class="empty">No bids this year.</div>'));
-  }
-  if(cfg.upcoming){
-    const up=S.bids.filter(b=>live(b)&&isWorking(b)&&b.due_date&&daysUntil(b.due_date)>=0&&daysUntil(b.due_date)<=30).sort((a,b)=>a.due_date.localeCompare(b.due_date));
-    out.push(panel('Bids due in the next 30 days',up.length+' bids · '+moneyK(up.reduce((s,b)=>s+bidValue(b),0)),up.length?`<div class="list">${up.map(b=>`<div class="li"><div><b style="font-weight:600">${esc(b.name)}</b><div class="dim small">${(b.client_ids||[]).map(clientName).map(esc).join(', ')||esc(b.project_type||'')}</div></div><div style="text-align:right"><div class="num" style="font-weight:600">${bidValue(b)?money(bidValue(b)):'Pricing'}</div><div class="dim small">${fmtShort(b.due_date)}</div></div></div>`).join('')}</div>`:'<div class="empty">Nothing due in the next 30 days.</div>'));
-  }
-  if(cfg.lost){
-    const g={};lost.forEach(b=>{const k=b.lost_reason||'Not recorded';g[k]=(g[k]||0)+1});
-    const e=Object.entries(g).sort((a,b)=>b[1]-a[1]);const mx=Math.max(1,...e.map(x=>x[1]));
-    out.push(panel('Why we lose',lost.length+' lost in '+Y,e.length?hbars(e.map(([l,v])=>({l,w:v/mx,v:v+'',c:'bad'}))):'<div class="empty">No lost bids recorded this year.</div>'));
-  }
-  if(!out.length)return `<div class="panel"><div class="empty"><b>No sections selected</b>${isAdmin()?'<button class="btn sm" data-act="board-custom">Choose what to show</button>':'Ask your precon manager to choose what this view shows.'}</div></div>`;
-  return `<div class="widgets">${out.join('')}</div>`;
-}
+function board(){const Y=S.year||new Date().getFullYear(),cfg=boardCfg();const range=Y===new Date().getFullYear()?'ytd':'y:'+Y;
+  const cards=BOARD_CARDS().filter(c=>cfg[c.w]!==false);const real=cards.filter(c=>!c.special);S.rpCtx={cards:real,range};
+  const note=`<div class="small dim rp-bnote">${Y===new Date().getFullYear()?`${Y} to date, compared with the same dates last year`:`${Y}, compared with ${Y-1}`} · click any number, bar or row to see the bids behind it</div>`;
+  return note+`<div class="rp-grid board">${cards.map(c=>c.special==='weekly'?`<div class="rp-span3">${weeklyPanel('board')}</div>`:rpCardHtml(c,real.indexOf(c),{range})).join('')}</div>`}
 
 /* ----- pipeline ----- */
 const ARCHIVED_FILTER=['archived','Archived',b=>!!b.archived_at];
@@ -1021,8 +964,8 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal}[M.kind]();
-  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='bid'?' bidpage':''}${['import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
+  const html={tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal}[M.kind]();
+  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='bid'?' bidpage':''}${['rpcard','rpdrill','import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();
@@ -6762,7 +6705,7 @@ const LVL_LABEL={none:'No access',view:'View',edit:'Edit'};
 function rolePerm(r,a){const o=ROLE_ACCESS[r]||ROLE_ACCESS.pending;return o[a]||(a==='bids_scope'?'all':'none')}
 function permOf(p,a){if(!p)return rolePerm('pending',a);if(p.role==='admin'||p.role==='pending')return rolePerm(p.role,a);const o=p.perms&&p.perms[a];return o||rolePerm(p.role,a)}
 // Tabs an admin has switched off for the whole company. Display only: it hides the tab and everything that leads to it.
-const TAB_SWITCH=[['dash','Dashboard'],['bids','Pipeline'],['estimates','Estimates','Estimates, codebooks, bid settings and templates'],['awards','Awarded'],['jobs','Jobs'],['acct','Accounting'],['contacts','Contacts'],['calc','Calculators'],['fun','Break room'],['help','Help']];
+const TAB_SWITCH=[['dash','Dashboard'],['bids','Pipeline'],['estimates','Estimates','Estimates, codebooks, bid settings and templates'],['awards','Awarded'],['jobs','Jobs'],['acct','Accounting'],['contacts','Contacts'],['calc','Calculators'],['reports','Reports'],['fun','Break room'],['help','Help']];
 const tabsOff=()=>{const v=S.settings&&S.settings.general&&S.settings.general.tabsOff;return Array.isArray(v)?v:[]};
 const tabOff=a=>{const o=tabsOff();return o.includes(a)||(a==='codebook'&&o.includes('estimates'))};
 const perm=a=>a!=='bids_scope'&&tabOff(a)?'none':permOf(S.profile,a);
@@ -6814,6 +6757,7 @@ const pAv=p=>`<span class="av" style="background:${avColor(p.id)}" title="${esc(
 /* ----- top bar: tabs come from what each person can open ----- */
 function navGroups(){const g=[];
   if(can('dash'))g.push(['dashboard',onlyMine()?'My dashboard':scopeView()?'Dashboard':role()==='board'?'Board dashboard':'Dashboard',['dashboard']]);
+  if(!tabOff('reports'))g.push(['reports','Reports',['reports']]);
   if(can('bids')){const n=typeof grabCount==='function'?grabCount():0;SUBNAV_LABEL.pipeline=onlyMine()?'My bids':'Pipeline';SUBNAV_LABEL.grabs='Up for grabs'+(n?` (${n})`:'');SUBNAV_LABEL.workload='Workload';SUBNAV_LABEL.btpl='Bid templates';g.push(['pipeline',(onlyMine()?'My bids':'Pipeline')+(n?` <span class="nav-badge" title="${n} up for grabs">${n}</span>`:''),['pipeline','grabs','workload',...(btplCan()||btplList().length?['btpl']:[])]])}
   const twFree=!!(S.twBid&&!byId(S.bids,S.twBid));const est=[...(can('estimates')?['estimates','estimate',...(twFree?[]:['tw'])]:[]),...(can('codebook')?['cb']:[]),...(can('codebook','edit')?['settings','scopes']:[])];
   if(est.length)g.push([est[0],'Estimates',est.includes('cb')&&!est.includes('estimates')?[...est]:est]);
@@ -7014,7 +6958,7 @@ const FB_STATUS=['New','Reviewing','Planned','In progress','Done','Won’t do','
 const FB_OPEN=new Set(['New','Reviewing','Planned','In progress']);
 const FB_ST_CLS={New:'hot',Reviewing:'warn',Planned:'',['In progress']:'warn',Done:'good'};
 const fbStatusDb=s=>s==='Won’t do'?"Won't do":s;const fbStatusUi=s=>s==="Won't do"?'Won’t do':s;
-const VIEW_AREA={awards:'Awarded',award:'Awarded',lists:'Contacts',vendor:'Contacts',vboard:'Contacts',plan:'Planner',dashboard:'Dashboard',pipeline:'Bids & pipeline',estimates:'Estimates',estimate:'Estimates',cb:'Codebooks & bid settings',settings:'Codebooks & bid settings',scopes:'Codebooks & bid settings',jobs:'Jobs',job:'Jobs',acct:'Accounting',clients:'Contacts',vendors:'Contacts',calc:'Calculators',team:'Team & logins',estimators:'Team & logins',teampm:'Team & logins',teamoffice:'Team & logins',access:'Team & logins',help:'Help'};
+const VIEW_AREA={reports:'Reports',awards:'Awarded',award:'Awarded',lists:'Contacts',vendor:'Contacts',vboard:'Contacts',plan:'Planner',dashboard:'Dashboard',pipeline:'Bids & pipeline',estimates:'Estimates',estimate:'Estimates',cb:'Codebooks & bid settings',settings:'Codebooks & bid settings',scopes:'Codebooks & bid settings',jobs:'Jobs',job:'Jobs',acct:'Accounting',clients:'Contacts',vendors:'Contacts',calc:'Calculators',team:'Team & logins',estimators:'Team & logins',teampm:'Team & logins',teamoffice:'Team & logins',access:'Team & logins',help:'Help'};
 async function loadMyFb(){try{const {data,error}=await sb.rpc('my_feedback');if(error)throw error;S.myFb=(data||[]).map(f=>({...f,status:fbStatusUi(f.status)}));S.fbMissing=false}catch(e){S.myFb=[];S.fbMissing=true}schedule()}
 function fbOpen(kind){const from=S.prevView&&S.prevView!=='help'?S.prevView:S.view;M={kind:'fb',draft:{kind:kind||'bug',area:VIEW_AREA[from]||'Something else',title:'',body:'',importance:'normal'},from};showModal();setTimeout(()=>$('#fb-title')?.focus(),0)}
 function fbModal(){const d=M.draft;const ph={bug:'What were you doing? What happened? What did you expect to happen?',feature:'What would you like it to do? What problem would it solve for you?',question:'What are you trying to do?',other:'Tell us what’s on your mind.'}[d.kind];
@@ -7110,7 +7054,7 @@ function devTestList(){const tbl=(t,file)=>({g:'Database tables',n:`Table “${t
    {g:'Connection',n:'File storage',run:async()=>{try{const r=await sb.storage.from('bid-files').list('',{limit:1});return r.error?T_FAIL(r.error.message,'The bid-files bucket is created by schema.sql.'):T_OK('bid-files bucket answers')}catch(e){return T_FAIL(errMsg(e))}}},
    {g:'Connection',n:'Excel library loads',run:async()=>{try{await loadXLSX();return T_OK('Loaded')}catch(e){return T_FAIL(errMsg(e),'Imports and exports need this. Check the internet connection or content blockers.')}}},
    {g:'Connection',n:'Save and delete a test record',run:async()=>{const k='dev_selftest';const a=await sb.from('settings').upsert({key:k,value:{at:new Date().toISOString()}});if(a.error)return T_FAIL(a.error.message,'Admins should be able to write settings. Check the security rules ran.');const b=await sb.from('settings').delete().eq('key',k);return b.error?T_WARN('Saved, but couldn’t delete the test row: '+b.error.message):T_OK('Wrote and removed a test row')}},
-   ...[['bids','schema.sql'],['quotes','schema.sql'],['bid_files','schema.sql'],['estimators','schema.sql'],['clients','schema.sql'],['vendors','schema.sql'],['settings','schema.sql'],['profiles','schema.sql'],['jobs','update-9-jobs.sql'],['job_items','update-9-jobs.sql'],['job_costs','update-9-jobs.sql'],['bid_log','update-11-estimator-log.sql'],['codebook','update-13-codebooks.sql'],['estimates','update-14-estimates.sql'],['pay_apps','update-17-accounting.sql'],['feedback','update-19-help-developer.sql'],['fun_stats','update-21-break-room.sql'],['awards','update-43-awarded.sql']].map(([t,f])=>tbl(t,f)),
+   ...[['bids','schema.sql'],['quotes','schema.sql'],['bid_files','schema.sql'],['estimators','schema.sql'],['clients','schema.sql'],['vendors','schema.sql'],['settings','schema.sql'],['profiles','schema.sql'],['jobs','update-9-jobs.sql'],['job_items','update-9-jobs.sql'],['job_costs','update-9-jobs.sql'],['bid_log','update-11-estimator-log.sql'],['codebook','update-13-codebooks.sql'],['estimates','update-14-estimates.sql'],['pay_apps','update-17-accounting.sql'],['feedback','update-19-help-developer.sql'],['fun_stats','update-21-break-room.sql'],['awards','update-43-awarded.sql'],['reports','update-44-reports.sql']].map(([t,f])=>tbl(t,f)),
    col('quotes','lines,meta','update-15-quote-lines.sql'),col('clients','acct_id','update-17-accounting.sql'),col('job_items','bid_price,change_order','update-17-accounting.sql'),col('job_costs','import_key','update-17-accounting.sql'),col('profiles','title,phone,perms','update-18-team-access.sql'),col('profiles','is_dev','update-19-help-developer.sql'),col('profiles','profile','update-21-break-room.sql'),
    {g:'Security functions',n:'Access levels (perm)',run:async()=>{const {data,error}=await sb.rpc('perm',{a:'bids'});return error?T_FAIL(error.message,'Run supabase/update-18-team-access.sql.'):data==='edit'?T_OK('Admin has Edit on bids'):T_WARN(`perm('bids') returned “${data}”`,'Expected “edit” for an admin login.')}},
    {g:'Security functions',n:'PM directory',run:async()=>{const {data,error}=await sb.rpc('pm_directory');return error?T_FAIL(error.message,'Run supabase/update-9-jobs.sql and later updates.'):T_OK(`${(data||[]).length} people`)}},
@@ -13127,3 +13071,285 @@ let awPtr=false,awQ=false;document.addEventListener('pointerdown',()=>{awPtr=tru
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&(t.dataset.aw!=null||t.dataset.awl!=null)){if(awInput(t,true)){const plain=t.tagName==='TEXTAREA'||(t.tagName==='INPUT'&&!['number','date','checkbox'].includes(t.type));if(plain)return;if(awPtr&&t.type!=='checkbox'&&t.tagName!=='SELECT')awQ=true;else render()}}});
 document.addEventListener('keydown',e=>{const tr=e.target.closest&&e.target.closest('tr.click[data-act=aw-open]');if(tr&&(e.key==='Enter'||e.key===' ')&&e.target===tr){e.preventDefault();tr.click()}});
 FOCUS_ATTRS.push('data-aw','data-awl');
+
+/* =====================================================================
+   Reports: a small report engine (sources → filter → group → measure → chart)
+   used by the Reports tab (pages anyone can build) and the Board dashboard.
+   Pages are saved in `reports` (supabase/update-44-reports.sql).
+   ===================================================================== */
+const RP_SIZE=[[0,250e3,'Under $250K'],[250e3,1e6,'$250K–1M'],[1e6,3e6,'$1M–3M'],[3e6,10e6,'$3M–10M'],[10e6,Infinity,'$10M+']];
+const rpSize=v=>{if(!(v>0))return 'No number';const x=RP_SIZE.find(([a,b])=>v>=a&&v<b);return x?x[2]:'No number'};
+const RP_ORDER={size:[...RP_SIZE.map(x=>x[2]),'No number'],outcome:['Won','Lost','Waiting on decision','In progress','No bid'],awst:AW_ST};
+function rpOutcome(b){return b.status==='Awarded'?'Won':b.status==='Not Awarded'?'Lost':b.status==='No Bid'?'No bid':isSent(b)?'Waiting on decision':'In progress'}
+const rpState=loc=>{const m=String(loc||'').match(/,\s*([A-Z]{2})\b/);return m?m[1]:''};
+// sources: each field is [label, type, getter, opts]; type = cat | num | money | days | date | text
+const RP_SRC={
+  bids:{l:'Bids',need:()=>can('bids'),date:'intake',rows:()=>S.bids.filter(b=>!b._new&&statOk(b)),id:b=>b.id,open:b=>b.id,
+    f:{name:['Project','text',b=>b.name],status:['Stage','cat',b=>stLabel(b.status)],outcome:['Outcome','cat',rpOutcome,{order:'outcome'}],
+      client:['GC / client','cat',b=>clientName(b.awarded_client_id||propIds(b)[0])||'No client'],estimator:['Lead estimator','cat',b=>byId(S.estimators,b.lead_estimator_id)?.name||'Unassigned'],
+      ptype:['Project type','cat',b=>normProjectType(b.project_type)||'Other'],btype:['Bid type','cat',b=>b.bid_type||'Hard bid'],size:['Size','cat',b=>rpSize(bidValue(b)),{order:'size'}],
+      state:['State','cat',b=>rpState(b.location)||'Unknown'],lost:['Why we lost','cat',b=>b.status==='Not Awarded'?(b.lost_reason||'Not recorded'):''],
+      value:['Bid value','money',b=>bidValue(b)||0],won:['Won value','money',b=>b.status==='Awarded'?(wonValue(b)||0):0],units:['Units','num',b=>num(b.units)],
+      turn:['Turnaround (days)','days',b=>{const t=inHouse(b);return t&&t.sent?t.n:null}],revs:['Revisions','num',b=>Math.max(0,revShown(b).length-1)],
+      intake:['Intake date','date',b=>intakeOf(b)],due:['Due date','date',b=>b.due_date||''],sent:['Sent date','date',b=>sentOn(b)],awarded:['Awarded date','date',b=>b.status==='Awarded'?(b.awarded_date||''):'']},
+    list:['name','client','status','value','due']},
+  quotes:{l:'Vendor quotes',need:()=>can('bids'),date:'received',rows:()=>S.quotes.filter(q=>{const b=byId(S.bids,q.bid_id);return b&&statOk(b)}),id:q=>q.id,open:q=>q.bid_id,
+    f:{bid:['Project','cat',q=>byId(S.bids,q.bid_id)?.name||'—'],vendor:['Vendor','cat',q=>vendorOf(q.vendor_id)?.company||'Unknown vendor'],trade:['Trade','cat',q=>qTrade(q)],scope:['Scope','cat',q=>q.scope||'General'],
+      status:['Status','cat',q=>q.status||'Not requested'],amount:['Amount','money',q=>num(q.amount)],resp:['Days to respond','days',q=>q.requested_date&&q.received_date?Math.max(0,dayDiff(q.requested_date,q.received_date)):null],
+      requested:['Requested date','date',q=>q.requested_date||''],received:['Received date','date',q=>q.received_date||'']},
+    list:['bid','vendor','trade','status','amount']},
+  awards:{l:'Awarded projects',need:()=>can('awards'),date:'awarded',rows:()=>awBids().map(b=>({b,a:awGet(b)})).map(x=>({...x,s:awStats(x.a)})),id:x=>x.b.id,open:x=>x.b.id,
+    f:{name:['Project','text',x=>x.b.name],status:['Status','cat',x=>x.a.status,{order:'awst'}],client:['GC / client','cat',x=>clientName(x.b.awarded_client_id||propIds(x.b)[0])||'No client'],pm:['PM','cat',x=>x.a.pm_name||'Unassigned'],
+      contract:['Contract value','money',x=>num(x.a.contract.value)??(wonValue(x.b)||0)],bopct:['Buyout %','pct',x=>x.s.boPct],bought:['Bought out $','money',x=>x.s.bought],save:['Buyout savings','money',x=>x.s.boDone?x.s.save:null],
+      subOpen:['Open submittals','num',x=>x.s.subOpen],subLate:['Late submittals','num',x=>x.s.subLate],rfiOpen:['Open RFIs','num',x=>x.s.rfiOpen],
+      awarded:['Awarded date','date',x=>x.b.awarded_date||''],executed:['Contract executed','date',x=>x.a.contract.executed||'']},
+    list:['name','client','status','contract','bopct']},
+  jobs:{l:'Jobs',need:()=>can('jobs'),date:'start',rows:()=>S.jobs.filter(j=>!j.archived_at).map(j=>({j,s:jobStats(j)})),id:x=>x.j.id,openJob:x=>x.j.id,
+    f:{name:['Job','text',x=>x.j.name],status:['Status','cat',x=>x.j.status],pm:['PM','cat',x=>pmName(x.j.pm_user_id)||'Unassigned'],client:['GC / client','cat',x=>clientName(x.j.client_id)||'No client'],
+      contract:['Contract','money',x=>x.s.contract],cost:['Cost to date','money',x=>x.s.AC],profit:['Projected profit','money',x=>x.s.BC?x.s.projProfit:null],margin:['Projected margin','pct',x=>x.s.BC?x.s.projMargin:null],
+      start:['Start date','date',x=>x.j.start_date||''],end:['End date','date',x=>x.j.end_date||'']},
+    list:['name','pm','status','contract','profit']}};
+const RP_FN={count:'Count',sum:'Total',avg:'Average',min:'Lowest',max:'Highest',winrate:'Win rate',hitrate:'Dollar hit rate'};
+const RP_RANGES=[['page','Page dates'],['all','All time'],['ytd','This year to date'],['thisyear','This year'],['lastyear','Last year'],['12m','Last 12 months'],['q','This quarter'],['90d','Last 90 days'],['30d','Last 30 days'],['next30','Next 30 days']];
+const RP_VIZ=[['kpi','Number'],['bar','Columns'],['hbar','Bars'],['line','Line'],['table','Table'],['list','Record list']];
+const rpSrcs=()=>Object.entries(RP_SRC).filter(([,s])=>s.need());
+const rpD=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+function rpRange(code,pageCode){if(code==='page')code=pageCode||'all';const t=new Date();const Y=t.getFullYear();const back=n=>{const d=new Date(t);d.setDate(d.getDate()-n);return rpD(d)};
+  if(/^y:\d{4}$/.test(code)){const y=+code.slice(2);return [`${y}-01-01`,`${y}-12-31`]}
+  return {all:null,ytd:[`${Y}-01-01`,rpD(t)],thisyear:[`${Y}-01-01`,`${Y}-12-31`],lastyear:[`${Y-1}-01-01`,`${Y-1}-12-31`],'12m':[back(365),rpD(t)],q:[`${Y}-${String(Math.floor(t.getMonth()/3)*3+1).padStart(2,'0')}-01`,rpD(t)],'90d':[back(90),rpD(t)],'30d':[back(30),rpD(t)],next30:[rpD(t),(()=>{const d=new Date(t);d.setDate(d.getDate()+30);return rpD(d)})()]}[code]||null}
+function rpPrev(r){if(!r)return null;const a=parseD(r[0]),b=parseD(r[1]);const sh=d=>{const x=new Date(d);x.setFullYear(x.getFullYear()-1);return rpD(x)};return [sh(a),sh(b)]}
+const rpRangeLabel=(code,pageCode)=>{const c=code==='page'?(pageCode||'all'):code;if(/^y:\d{4}$/.test(c))return c.slice(2);return (RP_RANGES.find(x=>x[0]===c)||[])[1]||''};
+function rpBucket(ds,bk){const d=parseD(ds);if(!d)return '';if(bk==='year')return String(d.getFullYear());if(bk==='quarter')return `${d.getFullYear()}-Q${Math.floor(d.getMonth()/3)+1}`;if(bk==='week')return wkMon(ds);return ds.slice(0,7)}
+function rpBucketLabel(k,bk){if(bk==='year')return k;if(bk==='quarter')return k.replace('-',' ');if(bk==='week'){const d=parseD(k);return `${d.getMonth()+1}/${d.getDate()}`}const [y,m]=k.split('-');return MONTHS[+m-1]+(bk==='month'?' '+y.slice(2):'')}
+function rpBucketsBetween(a,b,bk){const out=[];if(!a||!b)return out;let d=parseD(a);const e=parseD(b);let n=0;while(d<=e&&n<120){const k=rpBucket(rpD(d),bk);if(out[out.length-1]!==k)out.push(k);
+  if(bk==='year')d=new Date(d.getFullYear()+1,0,1);else if(bk==='quarter')d=new Date(d.getFullYear(),Math.floor(d.getMonth()/3)*3+3,1);else if(bk==='week')d=new Date(d.getFullYear(),d.getMonth(),d.getDate()+7);else d=new Date(d.getFullYear(),d.getMonth()+1,1);n++}return out}
+// one measure over a set of records
+function rpAgg(src,rows,m){const F=RP_SRC[src].f;const fn=m.fn||'count';
+  if(fn==='count')return rows.length;
+  if(fn==='winrate'||fn==='hitrate'){if(src!=='bids')return null;const dec=rows.filter(b=>['Awarded','Not Awarded'].includes(b.status));const w=dec.filter(b=>b.status==='Awarded');
+    if(!dec.length)return null;return fn==='winrate'?w.length/dec.length:(()=>{const t=dec.reduce((s,b)=>s+(bidValue(b)||0),0);return t?w.reduce((s,b)=>s+(bidValue(b)||0),0)/t:null})()}
+  const g=F[m.field];if(!g)return null;const vs=rows.map(r=>g[2](r)).filter(v=>v!=null&&v!==''&&!isNaN(v)).map(Number);if(!vs.length)return fn==='sum'?0:null;
+  return fn==='sum'?vs.reduce((a,b)=>a+b,0):fn==='avg'?vs.reduce((a,b)=>a+b,0)/vs.length:fn==='min'?Math.min(...vs):Math.max(...vs)}
+function rpKind(src,m){if(m.fn==='count')return 'num';if(m.fn==='winrate'||m.fn==='hitrate')return 'pct';const f=RP_SRC[src].f[m.field];return f?f[1]:'num'}
+function rpFmt(v,kind,short){if(v==null||isNaN(v))return '—';if(kind==='money')return short?moneyK(v):money(v);if(kind==='pct')return Math.round(v*100)+'%';if(kind==='days')return (Math.round(v*10)/10)+' d';
+  return Math.abs(v)>=1000?Math.round(v).toLocaleString('en-US'):String(Math.round(v*10)/10)}
+const rpMName=(src,m)=>m.label||(m.fn==='count'?`Number of ${RP_SRC[src].l.toLowerCase()}`:m.fn==='winrate'||m.fn==='hitrate'?RP_FN[m.fn]:`${RP_FN[m.fn]} ${String(RP_SRC[src].f[m.field]?.[0]||'').toLowerCase()}`);
+// filter rows by the card's date range and filters
+function rpRows(c,pageRange,range){const src=RP_SRC[c.src];if(!src||!src.need())return [];const F=src.f;let rows=src.rows();
+  const r=range!==undefined?range:rpRange(c.range||'page',pageRange);const df=F[c.dateField||src.date];
+  if(r&&df)rows=rows.filter(x=>{const d=df[2](x);return d&&d>=r[0]&&d<=r[1]});
+  (c.filters||[]).forEach(f=>{const g=F[f.f];if(!g)return;rows=rows.filter(x=>{const v=g[2](x);
+    if(f.op==='in')return (f.v||[]).includes(v);if(f.op==='out')return !(f.v||[]).includes(v);if(f.op==='gte')return v!=null&&v!==''&&Number(v)>=Number(f.v);if(f.op==='lte')return v!=null&&v!==''&&Number(v)<=Number(f.v);
+    if(f.op==='has')return v!=null&&v!=='';if(f.op==='text')return String(v||'').toLowerCase().includes(String(f.v||'').toLowerCase());return true})});return rows}
+// the full computation for one card
+function rpRun(c,pageRange){const src=RP_SRC[c.src];if(!src||!src.need())return {err:'You don’t have access to this data.'};const F=src.f;
+  const ms=(c.measures&&c.measures.length?c.measures:[c.measure||{fn:'count'}]);const rows=rpRows(c,pageRange);const out={rows,ms,kinds:ms.map(m=>rpKind(c.src,m))};
+  if(c.viz==='kpi'){out.v=rpAgg(c.src,rows,ms[0]);if(c.compare){const r=rpRange(c.range||'page',pageRange);const pr=rpPrev(r);if(pr){out.pv=rpAgg(c.src,rpRows(c,pageRange,pr),ms[0]);out.prevLabel=pr[0].slice(5)==='01-01'&&pr[1].slice(5)==='12-31'&&pr[0].slice(0,4)===pr[1].slice(0,4)?pr[0].slice(0,4):'the same dates last year'}}return out}
+  if(c.viz==='list'){const sf=F[c.sortBy]||F[(src.list||[])[3]];out.list=[...rows].sort((a,b)=>{const x=sf?sf[2](a):0,y=sf?sf[2](b):0;const r=(y>x?1:y<x?-1:0);return c.asc?-r:r}).slice(0,c.limit||50);return out}
+  const g=F[c.group];if(!g){out.groups=[{k:'All',l:'All',rows,v:ms.map(m=>rpAgg(c.src,rows,m))}];return out}
+  const isDate=g[1]==='date';const bk=c.bucket||'month';const key=x=>{const v=g[2](x);return isDate?rpBucket(v,bk):(v==null||v===''?'(blank)':String(v))};
+  const map=new Map();rows.forEach(x=>{const k=key(x);if(isDate&&!k)return;if(!map.has(k))map.set(k,[]);map.get(k).push(x)});
+  if(isDate&&(c.viz==='line'||c.viz==='bar')){const r=rpRange(c.range||'page',pageRange);const ks=[...map.keys()].sort();const a=r?r[0]:ks[0],b=r?(r[1]>todayStr()&&!/next/.test(c.range||'')?todayStr():r[1]):ks[ks.length-1];rpBucketsBetween(a,b,bk).forEach(k=>{if(!map.has(k))map.set(k,[])})}
+  if(!isDate&&g[0]&&c.group==='lost')map.delete('(blank)');
+  const sp=c.split&&F[c.split];const sKeys=sp?[...new Set(rows.map(x=>String(sp[2](x)??'(blank)')))]:null;
+  let groups=[...map.entries()].map(([k,rs])=>({k,l:isDate?rpBucketLabel(k,bk):k,rows:rs,v:ms.map(m=>rpAgg(c.src,rs,m)),n:rs.length,
+    sv:sp?Object.fromEntries(sKeys.map(s=>[s,rpAgg(c.src,rs.filter(x=>String(sp[2](x)??'(blank)')===s),ms[0])])):null}));
+  if(c.minN)groups=groups.filter(x=>x.n>=c.minN);
+  const ord=g[3]&&g[3].order&&RP_ORDER[g[3].order];
+  if(isDate)groups.sort((a,b)=>a.k.localeCompare(b.k));else if(ord&&c.sort!=='value')groups.sort((a,b)=>(ord.indexOf(a.k)+1||99)-(ord.indexOf(b.k)+1||99));
+  else if(c.sort==='label')groups.sort((a,b)=>a.l.localeCompare(b.l));else groups.sort((a,b)=>(b.v[0]??-Infinity)-(a.v[0]??-Infinity));
+  if(c.limit&&!isDate&&groups.length>c.limit){const keep=groups.slice(0,c.limit-1),rest=groups.slice(c.limit-1).flatMap(x=>x.rows);
+    if(rest.length&&ms.every(m=>!['avg','min','max','winrate','hitrate'].includes(m.fn)))keep.push({k:'__other',l:'Everything else',rows:rest,n:rest.length,v:ms.map(m=>rpAgg(c.src,rest,m)),sv:sp?Object.fromEntries(sKeys.map(s=>[s,rpAgg(c.src,rest.filter(x=>String(sp[2](x)??'(blank)')===s),ms[0])])):null});groups=keep}
+  out.groups=groups;if(sp){const so=sp[3]&&sp[3].order&&RP_ORDER[sp[3].order];out.series=so?sKeys.sort((a,b)=>(so.indexOf(a)+1||99)-(so.indexOf(b)+1||99)):sKeys.sort((a,b)=>groups.reduce((t,x)=>t+(x.sv[b]||0),0)-groups.reduce((t,x)=>t+(x.sv[a]||0),0));if(out.series.length>8){const extra=out.series.slice(7);out.series=[...out.series.slice(0,7),'Other'];groups.forEach(x=>{x.sv.Other=extra.reduce((t,s)=>t+(x.sv[s]||0),0)})}}
+  return out}
+const rpDate=v=>{if(!v)return '—';const d=parseD(v);return `${d.getMonth()+1}/${d.getDate()}/${String(d.getFullYear()).slice(2)}`};
+const RP_COL=n=>`var(--s${(n%8)+1})`;
+const RP_FIXED={Won:'var(--good)',Lost:'var(--bad)','Waiting on decision':'var(--s1)','In progress':'var(--s4)','No bid':'var(--ink-3)'};
+// ---------- renderers (HTML + a little SVG; drill-down on click) ----------
+function rpDrillAttr(ci,k,s){return ` data-act="rp-drill" data-ci="${ci}" data-k="${esc(k)}"${s!=null?` data-s="${esc(s)}"`:''}`}
+function rpViz(c,R,ci){if(R.err)return `<div class="empty">${esc(R.err)}</div>`;const kind=R.kinds[0];
+  if(c.viz==='kpi'){const d=R.pv!=null&&R.v!=null?R.v-R.pv:null;const pct=d!=null&&R.pv?d/Math.abs(R.pv):null;
+    const lowGood=kind==='days';return `<button class="rp-kpi" ${rpDrillAttr(ci,'__all')} title="See the ${R.rows.length} record${R.rows.length===1?'':'s'}"><b class="num">${rpFmt(R.v,kind,true)}</b>${c.compare?`<span class="rp-delta ${d>0?(lowGood?'dn':'up'):d<0?(lowGood?'up':'dn'):''}">${d==null?'No earlier period to compare':`${d>0?'▲':d<0?'▼':'■'} ${kind==='pct'?Math.abs(Math.round(d*100))+' pts':rpFmt(Math.abs(d),kind,true)}${pct!=null&&kind!=='pct'?` (${Math.abs(Math.round(pct*100))}%)`:''} vs ${esc(R.prevLabel||'last year')}`}</span>`:''}<span class="small dim">${R.rows.length} record${R.rows.length===1?'':'s'}</span></button>`}
+  if(c.viz==='list'){const src=RP_SRC[c.src];const cols=(c.cols&&c.cols.length?c.cols:src.list).filter(k=>src.f[k]);
+    return R.list.length?`<div class="scroll"><table class="rp-tbl"><thead><tr>${cols.map(k=>`<th class="${['money','num','days','pct'].includes(src.f[k][1])?'r':''}">${esc(src.f[k][0])}</th>`).join('')}</tr></thead><tbody>${R.list.map(x=>`<tr class="click" ${src.openJob?`data-act="open-job" data-id="${src.openJob(x)}"`:`data-act="open-bid" data-id="${src.open(x)}"`}>${cols.map(k=>{const f=src.f[k];const v=f[2](x);return `<td class="${['money','num','days','pct'].includes(f[1])?'r num':''}">${f[1]==='date'?rpDate(v):['money','num','days','pct'].includes(f[1])?rpFmt(v,f[1]==='money'?'money':f[1]):esc(v||'—')}</td>`}).join('')}</tr>`).join('')}</tbody></table></div>${R.rows.length>R.list.length?`<div class="small dim" style="margin-top:4px">Showing ${R.list.length} of ${R.rows.length}</div>`:''}`:'<div class="empty">Nothing matches.</div>'}
+  const G=R.groups;if(!G.length||!G.some(g=>g.n||g.v.some(v=>v)))return `<div class="empty">No data for these dates and filters.</div>`;
+  const multi=R.ms.length>1,split=!!R.series;
+  const ser=split?R.series.map((s,i)=>({name:s,c:RP_FIXED[s]||RP_COL(i),get:g=>g.sv[s]})):R.ms.map((m,i)=>({name:rpMName(c.src,m),c:R.ms.length===1?'var(--s1)':RP_COL(i),get:g=>g.v[i],kind:R.kinds[i]}));
+  const legend=ser.length>1?`<div class="legend rp-leg">${ser.map(s=>`<span><i style="background:${s.c}"></i>${esc(s.name)}</span>`).join('')}</div>`:'';
+  const tip=(g,s)=>`${g.l}: ${ser.length>1?s.name+' ':''}${rpFmt(s.get(g),s.kind||kind)} (${g.n} record${g.n===1?'':'s'})`;
+  if(c.viz==='table'||(multi&&c.viz!=='bar'&&c.viz!=='line'&&c.viz!=='hbar')){const tot=R.ms.map((m,i)=>['count','sum'].includes(m.fn)?G.reduce((t,g)=>t+(g.v[i]||0),0):rpAgg(c.src,R.rows,m));
+    const colsH=split?R.series:R.ms.map(m=>rpMName(c.src,m));
+    return `<div class="scroll"><table class="rp-tbl"><thead><tr><th>${esc(RP_SRC[c.src].f[c.group]?.[0]||'')}</th>${colsH.map(h=>`<th class="r">${esc(h)}</th>`).join('')}${split?'':'<th class="r">Records</th>'}</tr></thead><tbody>${G.map(g=>`<tr class="click" ${rpDrillAttr(ci,g.k)}><td>${esc(g.l)}</td>${split?R.series.map(s=>`<td class="r num">${rpFmt(g.sv[s],kind,false)}</td>`).join(''):g.v.map((v,i)=>`<td class="r num">${rpFmt(v,R.kinds[i],false)}</td>`).join('')}${split?'':`<td class="r num dim">${g.n}</td>`}</tr>`).join('')}</tbody>
+      ${split?'':`<tfoot><tr><td><b>All</b></td>${tot.map((v,i)=>`<td class="r num"><b>${rpFmt(v,R.kinds[i],false)}</b></td>`).join('')}<td class="r num dim">${R.rows.length}</td></tr></tfoot>`}</table></div>`}
+  const vals=G.flatMap(g=>ser.map(s=>s.get(g)||0));const mx=Math.max(1e-9,...vals),mn=Math.min(0,...vals);const span=mx-mn||1;
+  if(c.viz==='hbar'&&split){const tot=g=>ser.reduce((t,s)=>t+(s.get(g)||0),0);const mt=Math.max(1e-9,...G.map(tot));
+    return legend+`<div class="rp-hb">${G.map(g=>`<button class="rp-hr" ${rpDrillAttr(ci,g.k)} title="${esc(ser.filter(s=>s.get(g)).map(s=>tip(g,s)).join(' · '))}"><span class="lab">${esc(g.l)}</span><span class="rp-track rp-stack">${ser.map(s=>{const v=s.get(g)||0;return v>0?`<i style="width:${v/mt*100}%;background:${s.c}"></i>`:''}).join('')}</span><span class="v num">${rpFmt(tot(g),kind,true)}</span></button>`).join('')}</div>`}
+  if(c.viz==='hbar'){return legend+`<div class="rp-hb${ser.length>1?' multi':''}">${G.map(g=>`<button class="rp-hr" ${rpDrillAttr(ci,g.k)} title="${esc(ser.map(s=>tip(g,s)).join(' · '))}"><span class="lab">${esc(g.l)}</span><span class="rp-tracks">${ser.map(s=>`<span class="rp-track"><i style="width:${Math.max(0,(s.get(g)||0)/mx*100)}%;background:${s.c}"></i></span>`).join('')}</span><span class="v num">${ser.map(s=>rpFmt(s.get(g),s.kind||kind,true)).join(' · ')}${['winrate','hitrate'].includes(R.ms[0].fn)?`<em class="dim"> of ${g.rows.filter(b=>['Awarded','Not Awarded'].includes(b.status)).length}</em>`:''}</span></button>`).join('')}</div>`}
+  const n=G.length;const thin=n>18;const wide=(c.size||1)>1;const labEvery=n>26?Math.ceil(n/13):!wide&&n>7?Math.ceil(n/6):1;
+  if(c.viz==='line'){const W=100,H=100;const x=i=>n===1?50:i/(n-1)*W;const y=v=>H-((v-mn)/span)*H;
+    const paths=ser.map(s=>{let d='',pen=false;G.forEach((g,i)=>{const v=s.get(g);if(v==null){pen=false;return}d+=(pen?'L':'M')+x(i).toFixed(2)+','+y(v).toFixed(2);pen=true});return `<path d="${d}" stroke="${s.c}" />`}).join('');
+    const grid=[0,.5,1].map(f=>`<line x1="0" x2="100" y1="${f*100}" y2="${f*100}" />`).join('');
+    const dots=G.map((g,i)=>ser.map(s=>{const v=s.get(g);return v==null?'':`<button class="rp-dot" style="left:${x(i)}%;top:${y(v)}%;--c:${s.c}" ${rpDrillAttr(ci,g.k,split?s.name:null)} title="${esc(tip(g,s))}"></button>`}).join('')).join('');
+    const last=G.length?ser.map(s=>({s,v:s.get(G[G.length-1])})).filter(o=>o.v!=null):[];
+    return legend+`<div class="rp-line"><div class="rp-yax"><span>${rpFmt(mx,kind,true)}</span><span>${rpFmt((mx+mn)/2,kind,true)}</span><span>${rpFmt(mn,kind,true)}</span></div><div class="rp-plot"><svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><g class="rp-gl">${grid}</g><g class="rp-paths">${paths}</g></svg>${dots}</div>
+      <span></span><div class="rp-xax">${G.map((g,i)=>i%labEvery?'':`<span class="${(i/labEvery)%2?'o':''}" style="left:${x(i)}%">${esc(g.l)}</span>`).join('')}</div></div>${last.length===1&&n>1?`<div class="small dim">Latest: ${esc(G[G.length-1].l)} ${rpFmt(last[0].v,kind)}</div>`:''}`}
+  // columns
+  return legend+`<div class="rp-cols${thin?' thin':''}" style="--n:${n}">${G.map((g,i)=>`<button class="rp-col" ${rpDrillAttr(ci,g.k)} title="${esc(ser.map(s=>tip(g,s)).join(' · '))}"><span class="rp-bars">${ser.map(s=>{const v=s.get(g)||0;return `<i style="height:${Math.max(0,v/mx*100)}%;background:${s.c}">${!thin&&ser.length===1&&v?`<b>${rpFmt(v,kind,true)}</b>`:''}</i>`}).join('')}</span><span class="rp-cl${(i/labEvery)%2?' o':''}">${i%labEvery?'':esc(g.l)}</span></button>`).join('')}</div>`}
+function rpCardHtml(c,ci,o){const R=rpRun(c,o.range);const sub=[c.viz!=='list'&&c.viz!=='kpi'&&!(c.measures&&c.measures.length>1)?rpMName(c.src,(c.measures&&c.measures[0])||c.measure||{fn:'count'}):'',rpRangeLabel(c.range||'page',o.range)].filter(Boolean).join(' · ');
+  return `<div class="panel pad rp-card s${c.size||1}${c.viz==='kpi'?' kpic':''}" data-ci="${ci}"><div class="rp-ch"><div><h3>${esc(c.title||'Untitled')}</h3>${sub?`<div class="small dim">${esc(sub)}</div>`:''}</div>
+    ${o.edit?`<div class="rp-tools"><button class="btn sm ghost" data-act="rp-card-edit" data-ci="${ci}" title="Edit">✎</button><button class="btn sm ghost" data-act="rp-card-mv" data-ci="${ci}" data-d="-1" title="Move earlier">↑</button><button class="btn sm ghost" data-act="rp-card-mv" data-ci="${ci}" data-d="1" title="Move later">↓</button><button class="btn sm ghost" data-act="rp-card-size" data-ci="${ci}" title="Width">${['','▢','▭','▬'][c.size||1]}</button><button class="btn sm ghost" data-act="rp-card-dup" data-ci="${ci}" title="Duplicate">⧉</button><button class="btn sm ghost" data-act="rp-card-del" data-ci="${ci}" title="Remove">×</button></div>`:''}</div>${rpViz(c,R,ci)}</div>`}
+// ---------- drill-down ----------
+function rpCtxCard(ci){if(ci==='prev')return M&&M.card?{c:M.card,range:M.range}:null;const X=S.rpCtx;return X&&X.cards[+ci]?{c:X.cards[+ci],range:X.range}:null}
+function rpDrill(ci,k,s){const x=rpCtxCard(ci);if(!x)return;const c=x.c;const R=rpRun({...c,viz:c.viz==='kpi'||c.viz==='list'?c.viz:'table',limit:c.viz==='kpi'?0:c.limit},x.range);let rows=R.rows;let lab='All records';
+  if(k!=='__all'&&R.groups){const g=R.groups.find(g=>g.k===k);if(g){rows=g.rows;lab=g.l}}
+  if(s!=null&&c.split){const f=RP_SRC[c.src].f[c.split];rows=rows.filter(r=>String(f[2](r)??'(blank)')===s);lab+=' · '+s}
+  const prev=M&&M.kind==='rpcard'?M:null;M={kind:'rpdrill',title:c.title||'Records',lab,src:c.src,rows,back:prev,cols:c.viz==='list'&&c.cols&&c.cols.length?c.cols:null};showModal()}
+function rpDrillModal(){const x=M;const src=RP_SRC[x.src];const cols=(x.cols||src.list).filter(k=>src.f[k]);const sk=cols.find(k=>src.f[k][1]==='money')||cols[cols.length-1];
+  const rows=[...x.rows].sort((a,b)=>(Number(src.f[sk][2](b))||0)-(Number(src.f[sk][2](a))||0));
+  return mhead(x.title,`${x.lab} · ${rows.length} record${rows.length===1?'':'s'}`)+`<div class="mbody">${rows.length?`<div class="scroll"><table class="rp-tbl"><thead><tr>${cols.map(k=>`<th class="${['money','num','days','pct'].includes(src.f[k][1])?'r':''}">${esc(src.f[k][0])}</th>`).join('')}</tr></thead><tbody>
+    ${rows.slice(0,300).map(r=>`<tr class="click" ${src.openJob?`data-act="rp-open-job" data-id="${src.openJob(r)}"`:`data-act="rp-open-bid" data-id="${src.open(r)}"`}>${cols.map(k=>{const f=src.f[k];const v=f[2](r);return `<td class="${['money','num','days','pct'].includes(f[1])?'r num':''}">${f[1]==='date'?rpDate(v):['money','num','days','pct'].includes(f[1])?rpFmt(v,f[1]):esc(v||'—')}</td>`}).join('')}</tr>`).join('')}</tbody></table></div>${rows.length>300?'<p class="small dim">Showing the first 300.</p>':''}`:'<div class="empty">No records.</div>'}</div>
+    <div class="mfoot"><div></div><div class="r">${x.back?'<button class="btn" data-act="rp-drill-back">← Back to the card</button>':''}<button class="btn primary" data-act="close">Done</button></div></div>`}
+
+// ---------- pages ----------
+S.reports=S.reports||[];S.rp=S.rp||{page:null,edit:false};
+if(!TABLES.includes('reports'))TABLES.push('reports');
+const rpMine=p=>p&&p.owner===myId();
+const rpCanEdit=p=>p&&!p._tpl&&(rpMine(p)||isAdmin());
+function rpPages(){const me=myId();const mine=S.reports.filter(p=>p.owner===me),shared=S.reports.filter(p=>p.owner!==me&&(p.shared||isAdmin()));return {mine,shared}}
+function rpTplPages(){return Object.entries(RP_TPL).filter(([k,t])=>!t.need||t.need()).map(([k,t])=>({id:'tpl:'+k,_tpl:true,name:t.name,shared:true,data:{range:t.range||'ytd',cards:t.cards()}}))}
+function rpPageOf(id){if(!id)return null;if(String(id).startsWith('tpl:'))return rpTplPages().find(p=>p.id===id)||null;return S.reports.find(p=>p.id===id)||null}
+function rpData(p){p.data=p.data&&typeof p.data==='object'?p.data:{};if(!Array.isArray(p.data.cards))p.data.cards=[];p.data.range=p.data.range||'ytd';return p.data}
+let rpT=null;function rpSave(p,now){if(!rpCanEdit(p))return;clearTimeout(rpT);const go=async()=>{try{const r=await sb.from('reports').update({name:p.name,shared:!!p.shared,data:p.data,owner_name:p.owner_name||myName()}).eq('id',p.id);if(r.error)throw r.error}catch(e){toast('Couldn’t save the report: '+errMsg(e))}};if(now)return go();rpT=setTimeout(go,500)}
+async function rpCreate(name,data){const row={id:newId(),owner:myId(),owner_name:myName(),name:name||'My report',shared:false,data:data||{range:'ytd',cards:[]}};
+  try{const r=await sb.from('reports').insert(row);if(r.error)throw r.error;S.reports.push(row);S.rp.page=row.id;S.rp.edit=true;render();return row}catch(e){if(/reports|relation|schema cache/i.test(errMsg(e))){S.tableErr=S.tableErr||{};S.tableErr.reports=true}toast('Couldn’t make the page: '+errMsg(e));render()}}
+function vReports(){const {mine,shared}=rpPages();const tpls=rpTplPages();let p=rpPageOf(S.rp.page);if(!p){p=mine[0]||tpls[0];S.rp.page=p?p.id:null}
+  const d=p?rpData(p):null;const ed=S.rp.edit&&rpCanEdit(p);S.rpCtx=d?{cards:d.cards,range:d.range}:null;
+  const chip=x=>`<button class="chip ${p&&x.id===p.id?'on':''}" data-act="rp-page" data-v="${esc(x.id)}">${esc(x.name)}${x._tpl?' <span class="dim small">built in</span>':x.shared&&x.owner===myId()?' <span class="dim small">shared</span>':''}</button>`;
+  const yrs=(()=>{const ys=new Set([new Date().getFullYear()]);S.bids.forEach(b=>{const y=+String(intakeOf(b)||'').slice(0,4);if(y)ys.add(y)});return [...ys].sort((a,b)=>b-a)})();
+  const rangeSel=d?`<select class="field" data-rprange style="width:auto" title="Dates for every card set to “Page dates”">${[...RP_RANGES.filter(r=>r[0]!=='page'),...yrs.map(y=>['y:'+y,String(y)])].map(([k,l])=>`<option value="${k}"${d.range===k?' selected':''}>${esc(l)}</option>`).join('')}</select>`:'';
+  return `<div class="head"><div><h1>Reports</h1><p>Build your own pages from anything in the app. Click any bar, row or number to see the records behind it.</p></div><div class="tools"><button class="btn primary" data-act="rp-new">+ New report page</button></div></div>
+  ${S.tableErr&&S.tableErr.reports?'<div class="notice bad">Saving report pages needs a database update: run <b>supabase/update-44-reports.sql</b> in Supabase. The built-in pages work without it.</div>':''}
+  <div class="rp-pages">${mine.length?`<div class="rp-pg"><span class="small dim">My pages</span>${mine.map(chip).join('')}</div>`:''}${shared.length?`<div class="rp-pg"><span class="small dim">Shared with the team</span>${shared.map(chip).join('')}</div>`:''}<div class="rp-pg"><span class="small dim">Built in</span>${tpls.map(chip).join('')}</div></div>
+  ${p?`<div class="rp-head"><div><h2>${esc(p.name)}</h2><div class="small dim">${p._tpl?'Built in. Make a copy to change it.':rpMine(p)?(p.shared?'Yours · shared with the team':'Yours · only you can see it'):`By ${esc(p.owner_name||'someone')} · shared`}</div></div>
+    <div class="tools">${rangeSel}${ed?`<button class="btn" data-act="rp-add">+ Add a card</button><button class="btn" data-act="rp-settings">Page settings</button><button class="btn primary" data-act="rp-edit" data-v="0">Done editing</button>`:`${rpCanEdit(p)?'<button class="btn" data-act="rp-edit" data-v="1">✎ Edit page</button>':''}<button class="btn" data-act="rp-copy">Make a copy</button>`}</div></div>
+    ${d.cards.length?`<div class="rp-grid">${d.cards.map((c,i)=>rpCardHtml(c,i,{range:d.range,edit:ed})).join('')}</div>`:`<div class="panel"><div class="empty"><b>No cards yet</b>${ed?'Click <strong>+ Add a card</strong> to build your first chart, number or table.':'This page is empty.'}</div></div>`}`:'<div class="panel"><div class="empty">No pages yet.</div></div>'}`}
+function rpNewCard(src){src=src||rpSrcs()[0]?.[0]||'bids';return {id:newId(),title:'',src,viz:'bar',measures:[{fn:'count'}],group:RP_SRC[src].date,bucket:'month',split:'',range:'page',filters:[],size:1,limit:10,sort:'value'}}
+function rpPageModal(){const x=M;return mhead(x.isNew?'New report page':'Page settings','')+`<div class="mbody"><label class="f"><span class="f-lab">Name</span><input class="field" data-rpp="name" value="${esc(x.name||'')}" placeholder="e.g. Estimating scorecard"></label>
+  ${x.isNew?`<div class="f" style="margin-top:10px"><span class="f-lab">Start from</span><div class="rp-starts">${[['blank','Blank page','Add your own cards'],...Object.entries(RP_TPL).filter(([,t])=>!t.need||t.need()).map(([k,t])=>[k,t.name,t.blurb||''])].map(([k,l,s])=>`<label class="rp-start${x.from===k?' on':''}"><input type="radio" name="rpfrom" data-rpp="from" value="${k}"${x.from===k?' checked':''}><b>${esc(l)}</b><span class="small dim">${esc(s)}</span></label>`).join('')}</div></div>`
+   :`<label class="check" style="margin-top:12px"><input type="checkbox" data-rpp="shared"${x.shared?' checked':''}> Share with the team <span class="small dim">(everyone can view it and make a copy; only you can change it)</span></label>
+     <div style="margin-top:16px"><button class="btn sm ghost" data-act="rp-del-page" style="color:var(--bad)">${x.arm?'Click again to delete this page':'Delete this page'}</button></div>`}</div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="rp-page-save">${x.isNew?'Create page':'Save'}</button></div></div>`}
+// ---------- card editor ----------
+function rpOpts(list,v,blank){return (blank?`<option value="">${esc(blank)}</option>`:'')+list.map(([k,l])=>`<option value="${esc(k)}"${String(v)===String(k)?' selected':''}>${esc(l)}</option>`).join('')}
+function rpCardModal(){const x=M;const c=x.card;const src=RP_SRC[c.src];const F=src.f;const fl=t=>Object.entries(F).filter(([,f])=>t.includes(f[1])).map(([k,f])=>[k,f[0]]);
+  const numF=fl(['money','num','days','pct']),catF=fl(['cat']),dateF=fl(['date']),grpF=[...catF,...dateF];const isDate=F[c.group]&&F[c.group][1]==='date';
+  const fns=Object.entries(RP_FN).filter(([k])=>c.src==='bids'||!['winrate','hitrate'].includes(k));
+  const mRow=(m,i)=>`<div class="rp-mrow"><select class="field" data-rpf="measures.${i}.fn">${rpOpts(fns,m.fn)}</select>${['count','winrate','hitrate'].includes(m.fn)?'':`<span class="small dim">of</span><select class="field" data-rpf="measures.${i}.field">${rpOpts(numF,m.field)}</select>`}${c.measures.length>1?`<button class="btn sm ghost" data-act="rp-m-del" data-i="${i}">×</button>`:''}</div>`;
+  const vals=k=>{const f=F[k];const s=new Map();src.rows().forEach(r=>{const v=f[2](r);if(v!=null&&v!=='')s.set(String(v),(s.get(String(v))||0)+1)});return [...s.entries()].sort((a,b)=>b[1]-a[1]).map(e=>e[0])};
+  const fRow=(f,i)=>{const t=F[f.f]?F[f.f][1]:'cat';const ops=t==='cat'?[['in','is any of'],['out','is not'],['has','has a value']]:t==='text'?[['text','contains']]:t==='date'?[['has','has a date']]:[['gte','at least'],['lte','at most'],['has','has a value']];
+    return `<div class="rp-frow"><div class="rp-frow-h"><select class="field" data-rpff="${i}|f">${rpOpts(Object.entries(F).map(([k,ff])=>[k,ff[0]]),f.f)}</select><select class="field" data-rpff="${i}|op">${rpOpts(ops,f.op)}</select>${['gte','lte','text'].includes(f.op)?`<input class="field" data-rpff="${i}|v" value="${esc(f.v??'')}"${f.op==='text'?'':' type="number" step="any"'}>`:''}<button class="btn sm ghost" data-act="rp-f-del" data-i="${i}">×</button></div>
+      ${['in','out'].includes(f.op)?`<div class="rp-vals">${vals(f.f).slice(0,60).map(v=>`<label class="fchip${(f.v||[]).includes(v)?' on':''}"><input type="checkbox" data-rpfv="${i}" value="${esc(v)}"${(f.v||[]).includes(v)?' checked':''}>${esc(v)}</label>`).join('')||'<span class="small dim">No values yet</span>'}</div>`:''}</div>`};
+  const v=c.viz;const grouped=!['kpi','list'].includes(v);
+  const form=`<label class="f"><span class="f-lab">Title</span><input class="field" data-rpf="title" value="${esc(c.title||'')}" placeholder="${esc(rpAutoTitle(c))}"></label>
+    <div class="rp-row2"><label class="f"><span class="f-lab">Data</span><select class="field" data-rpf="src">${rpOpts(rpSrcs().map(([k,s])=>[k,s.l]),c.src)}</select></label>
+      <label class="f"><span class="f-lab">Width</span><select class="field" data-rpf="size" data-t="n">${rpOpts([[1,'One column'],[2,'Two columns'],[3,'Full width']],c.size||1)}</select></label></div>
+    <div class="f"><span class="f-lab">Show as</span><div class="seg rp-vizseg">${RP_VIZ.map(([k,l])=>`<button class="${v===k?'on':''}" data-act="rp-viz" data-v="${k}">${l}</button>`).join('')}</div></div>
+    ${v==='list'?`<div class="f"><span class="f-lab">Columns</span><div class="rp-vals">${Object.entries(F).map(([k,f])=>`<label class="fchip${(c.cols||src.list).includes(k)?' on':''}"><input type="checkbox" data-rpcol value="${k}"${(c.cols||src.list).includes(k)?' checked':''}>${esc(f[0])}</label>`).join('')}</div></div>
+      <div class="rp-row2"><label class="f"><span class="f-lab">Sort by (highest first)</span><select class="field" data-rpf="sortBy">${rpOpts(Object.entries(F).filter(([,f])=>f[1]!=='text').map(([k,f])=>[k,f[0]]),c.sortBy||src.list[3])}</select></label><label class="f"><span class="f-lab">Show up to</span><input class="field" type="number" data-rpf="limit" data-t="n" value="${c.limit||50}"></label></div>`
+     :`<div class="f"><span class="f-lab">${grouped&&v!=='kpi'?'Measure':'Number to show'}</span>${c.measures.map(mRow).join('')}${grouped&&!c.split&&c.measures.length<4?'<button class="btn sm ghost" data-act="rp-m-add">+ Compare another measure</button>':''}</div>`}
+    ${grouped?`<div class="rp-row2"><label class="f"><span class="f-lab">Group by</span><select class="field" data-rpf="group">${rpOpts(grpF,c.group,'Nothing (one total)')}</select></label>
+      ${isDate?`<label class="f"><span class="f-lab">By</span><select class="field" data-rpf="bucket">${rpOpts([['week','Week'],['month','Month'],['quarter','Quarter'],['year','Year']],c.bucket||'month')}</select></label>`:c.group?`<label class="f"><span class="f-lab">Order</span><select class="field" data-rpf="sort">${rpOpts([['value','Biggest first'],['label','A to Z']],c.sort||'value')}</select></label>`:''}</div>
+      ${c.measures.length===1&&c.group?`<div class="rp-row2"><label class="f"><span class="f-lab">Split each into</span><select class="field" data-rpf="split">${rpOpts(catF.filter(([k])=>k!==c.group),c.split,'No split')}</select></label>${!isDate&&c.group?`<label class="f"><span class="f-lab">Top</span><input class="field" type="number" min="1" data-rpf="limit" data-t="n" value="${c.limit||''}" placeholder="All"></label>`:''}</div>`:''}
+      ${c.measures.some(m=>['winrate','hitrate','avg'].includes(m.fn))&&c.group&&!isDate?`<label class="f"><span class="f-lab">Leave out groups with fewer than</span><input class="field" type="number" min="0" data-rpf="minN" data-t="n" value="${c.minN||''}" placeholder="0 records"></label>`:''}`:''}
+    ${v==='kpi'?`<label class="check"><input type="checkbox" data-rpf="compare"${c.compare?' checked':''}> Compare with the same dates a year earlier</label>`:''}
+    <div class="rp-row2"><label class="f"><span class="f-lab">Dates use</span><select class="field" data-rpf="dateField">${rpOpts(dateF,c.dateField||src.date)}</select></label><label class="f"><span class="f-lab">Date range</span><select class="field" data-rpf="range">${rpOpts(RP_RANGES,c.range||'page')}</select></label></div>
+    <div class="f"><span class="f-lab">Filters</span>${(c.filters||[]).map(fRow).join('')}<button class="btn sm ghost" data-act="rp-f-add">+ Add a filter</button></div>`;
+  const prev=rpCardHtml({...c,title:c.title||rpAutoTitle(c)},'prev',{range:x.range});
+  return mhead(x.ci<0?'Add a card':'Edit card','')+`<div class="mbody rp-ed"><div class="rp-form">${form}</div><div class="rp-prev"><div class="small dim" style="margin-bottom:6px">Preview · click it to check the records</div><div class="rp-grid one">${prev}</div></div></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="rp-card-save">${x.ci<0?'Add to page':'Save card'}</button></div></div>`}
+function rpAutoTitle(c){const src=RP_SRC[c.src];if(!src)return 'Card';const m=(c.measures||[])[0]||{fn:'count'};if(c.viz==='list')return src.l;const g=src.f[c.group];
+  return `${rpMName(c.src,m)}${c.measures&&c.measures.length>1?' and more':''}${g&&!['kpi','list'].includes(c.viz)?(g[1]==='date'?` by ${c.bucket||'month'}`:` by ${/^[A-Z]{2}/.test(g[0])?g[0]:g[0].toLowerCase()}`):''}${c.split&&src.f[c.split]?`, split by ${/^[A-Z]{2}/.test(src.f[c.split][0])?src.f[c.split][0]:src.f[c.split][0].toLowerCase()}`:''}`}
+function rpOpenEditor(ci){const p=rpPageOf(S.rp.page);if(!rpCanEdit(p))return;const d=rpData(p);const card=ci>=0?clone(d.cards[ci]):rpNewCard();if(!Array.isArray(card.measures)||!card.measures.length)card.measures=[card.measure||{fn:'count'}];
+  M={kind:'rpcard',card,ci,range:d.range};showModal()}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!/^rp-/.test(a))return;
+  if(a==='rp-board-copy'){const Y=S.year||new Date().getFullYear();rpCreate('Board dashboard ('+Y+')',{range:Y===new Date().getFullYear()?'ytd':'y:'+Y,cards:BOARD_CARDS().filter(c=>!c.special&&boardCfg()[c.w]!==false).map(({w,...c})=>({...c,id:newId()}))}).then(r=>{if(r){S.view='reports';render();toast('Copied to Reports. It’s yours to change.')}});return}
+  if(a==='rp-drill'){rpDrill(t.dataset.ci,t.dataset.k,t.dataset.s);return}
+  if(a==='rp-drill-back'){M=M.back;renderModal();return}
+  if(a==='rp-open-bid'){const id=t.dataset.id;closeModal();openBid(id);return}
+  if(a==='rp-open-job'){const id=t.dataset.id;closeModal();S.view='job';S.jobId=id;render();return}
+  if(a==='rp-page'){S.rp.page=t.dataset.v;S.rp.edit=false;render();return}
+  if(a==='rp-new'){M={kind:'rppage',isNew:true,name:'',from:'blank'};showModal();return}
+  if(a==='rp-edit'){S.rp.edit=t.dataset.v==='1';render();return}
+  if(a==='rp-copy'){const p=rpPageOf(S.rp.page);if(!p)return;rpCreate(p.name+' (copy)',clone(rpData(p))).then(r=>{if(r)toast('Copied to your pages. Edit away.')});return}
+  if(a==='rp-settings'){const p=rpPageOf(S.rp.page);if(!rpCanEdit(p))return;M={kind:'rppage',name:p.name,shared:!!p.shared};showModal();return}
+  if(a==='rp-page-save'){const x=M;const nm=String(x.name||'').trim();if(x.isNew){const t=RP_TPL[x.from];closeModal();rpCreate(nm||(t?t.name:'My report'),t?{range:t.range||'ytd',cards:t.cards()}:{range:'ytd',cards:[]});return}
+    const p=rpPageOf(S.rp.page);if(!p)return;p.name=nm||p.name;p.shared=!!x.shared;rpSave(p,true);closeModal();render();return}
+  if(a==='rp-del-page'){if(!M.arm){M.arm=true;renderModal();return}const p=rpPageOf(S.rp.page);if(!p)return;closeModal();
+    run(sb.from('reports').delete().eq('id',p.id)).then(()=>{S.reports=S.reports.filter(x=>x.id!==p.id);S.rp.page=null;S.rp.edit=false;render();toast('Page deleted')}).catch(err=>toast(errMsg(err)));return}
+  if(a==='rp-add'){rpOpenEditor(-1);return}
+  if(a==='rp-viz'){const c=M.card;c.viz=t.dataset.v;if(c.viz==='line'&&(RP_SRC[c.src].f[c.group]||[])[1]!=='date')c.group=RP_SRC[c.src].date;if(c.viz==='kpi')c.compare=c.compare??true;renderModal();return}
+  if(a==='rp-m-add'){M.card.measures.push({fn:'sum',field:Object.entries(RP_SRC[M.card.src].f).find(([,f])=>f[1]==='money')?.[0]});M.card.split='';renderModal();return}
+  if(a==='rp-m-del'){M.card.measures.splice(+t.dataset.i,1);renderModal();return}
+  if(a==='rp-f-add'){const F=RP_SRC[M.card.src].f;const k=Object.keys(F).find(k=>F[k][1]==='cat');(M.card.filters=M.card.filters||[]).push({f:k,op:'in',v:[]});renderModal();return}
+  if(a==='rp-f-del'){M.card.filters.splice(+t.dataset.i,1);renderModal();return}
+  if(a==='rp-card-save'){const p=rpPageOf(S.rp.page);if(!rpCanEdit(p))return;const d=rpData(p);const c=M.card;if(!String(c.title||'').trim())c.title=rpAutoTitle(c);if(M.ci>=0)d.cards[M.ci]=c;else d.cards.push(c);rpSave(p);closeModal();render();return}
+  const p=rpPageOf(S.rp.page);if(!rpCanEdit(p))return;const d=rpData(p);const ci=+t.dataset.ci;
+  if(a==='rp-card-edit'){rpOpenEditor(ci);return}
+  if(a==='rp-card-mv'){const j=ci+(+t.dataset.d);if(j<0||j>=d.cards.length)return;[d.cards[ci],d.cards[j]]=[d.cards[j],d.cards[ci]];rpSave(p);render();return}
+  if(a==='rp-card-size'){d.cards[ci].size=((d.cards[ci].size||1)%3)+1;rpSave(p);render();return}
+  if(a==='rp-card-dup'){const c=clone(d.cards[ci]);c.id=newId();c.title=(c.title||'')+' (copy)';d.cards.splice(ci+1,0,c);rpSave(p);render();return}
+  if(a==='rp-card-del'){if(!t.classList.contains('arm')){t.classList.add('arm');t.textContent='Remove?';setTimeout(()=>{t.classList.remove('arm');t.textContent='×'},2500);return}d.cards.splice(ci,1);rpSave(p);render();return}});
+function rpSetPath(o,p,v){const ks=p.split('.');let x=o;ks.slice(0,-1).forEach(k=>{x=x[k]});x[ks[ks.length-1]]=v}
+document.addEventListener('change',e=>{const t=e.target;if(!t.dataset)return;
+  if(t.dataset.rprange!=null){const p=rpPageOf(S.rp.page);if(!p)return;rpData(p).range=t.value;if(rpCanEdit(p))rpSave(p);render();return}
+  if(!M)return;
+  if(M.kind==='rppage'&&t.dataset.rpp){const k=t.dataset.rpp;M[k]=t.type==='checkbox'?t.checked:t.value;if(k==='from'){const tp=RP_TPL[t.value];if(tp&&!String(M.name||'').trim())M.name=tp.name;renderModal()}return}
+  if(M.kind!=='rpcard')return;const c=M.card;
+  if(t.dataset.rpf){const k=t.dataset.rpf;let v=t.type==='checkbox'?t.checked:t.dataset.t==='n'?(t.value===''?null:Number(t.value)):t.value;rpSetPath(c,k,v);
+    if(k==='src'){const n=rpNewCard(v);Object.assign(c,{measures:n.measures,group:n.group,split:'',filters:[],dateField:'',cols:null,sortBy:''})}
+    if(k==='group'){c.split=c.split===v?'':c.split;if(v&&RP_SRC[c.src].f[v]&&RP_SRC[c.src].f[v][1]!=='date'&&c.viz==='line')c.viz='bar'}
+    if(/^measures\.\d+\.fn$/.test(k)){const i=+k.split('.')[1];const m=c.measures[i];if(!['count','winrate','hitrate'].includes(v)&&!m.field)m.field=Object.entries(RP_SRC[c.src].f).find(([,f])=>['money','num','days','pct'].includes(f[1]))?.[0]}
+    renderModal();return}
+  if(t.dataset.rpff){const [i,k]=t.dataset.rpff.split('|');const f=c.filters[+i];f[k]=t.value;if(k==='f'){const ty=RP_SRC[c.src].f[t.value][1];f.op=ty==='cat'?'in':ty==='text'?'text':ty==='date'?'has':'gte';f.v=ty==='cat'?[]:''}if(k==='op'&&['in','out'].includes(t.value)&&!Array.isArray(f.v))f.v=[];renderModal();return}
+  if(t.dataset.rpfv!=null){const f=c.filters[+t.dataset.rpfv];f.v=Array.isArray(f.v)?f.v:[];if(t.checked)f.v.push(t.value);else f.v=f.v.filter(x=>x!==t.value);renderModal();return}
+  if(t.dataset.rpcol!=null){const src=RP_SRC[c.src];let cols=c.cols||[...src.list];if(t.checked)cols.push(t.value);else cols=cols.filter(x=>x!==t.value);c.cols=Object.keys(src.f).filter(k=>cols.includes(k));renderModal();return}});
+document.addEventListener('input',e=>{const t=e.target;if(!M||!t.dataset)return;if(M.kind==='rppage'&&t.dataset.rpp==='name'){M.name=t.value;return}if(M.kind==='rpcard'&&t.dataset.rpf==='title'){M.card.title=t.value}});
+FOCUS_ATTRS.push('data-rpf','data-rpff','data-rpp');
+// ---------- built-in pages ----------
+const rpK=(title,m,o)=>({id:'k-'+title,title,src:'bids',viz:'kpi',measures:[m],compare:true,range:'page',size:1,...o});
+const BOARD_CARDS=()=>[
+  {w:'kpis',...rpK('Bids submitted',{fn:'count'},{dateField:'sent'})},{w:'kpis',...rpK('Dollars bid',{fn:'sum',field:'value'},{dateField:'sent'})},{w:'kpis',...rpK('Awarded',{fn:'sum',field:'won'},{dateField:'awarded'})},
+  {w:'kpis',...rpK('Win rate',{fn:'winrate'},{dateField:'sent'})},{w:'kpis',...rpK('Dollar hit rate',{fn:'hitrate'},{dateField:'sent'})},{w:'kpis',...rpK('Avg turnaround',{fn:'avg',field:'turn'},{dateField:'sent'})},
+  {w:'monthly',id:'b-month',title:'Dollars bid by month, by outcome',src:'bids',viz:'bar',measures:[{fn:'sum',field:'value'}],group:'sent',bucket:'month',split:'outcome',dateField:'sent',range:'page',size:2},
+  {w:'trend',id:'b-trend',title:'Win rate by quarter (all time)',src:'bids',viz:'line',measures:[{fn:'winrate'}],group:'sent',bucket:'quarter',dateField:'sent',range:'all',size:1},
+  {w:'weekly',special:'weekly',size:3},
+  {w:'funnel',id:'b-funnel',title:'Open pipeline by stage',src:'bids',viz:'hbar',measures:[{fn:'sum',field:'value'}],group:'status',range:'all',filters:[{f:'outcome',op:'in',v:['In progress','Waiting on decision']}],size:1},
+  {w:'gcwin',id:'b-gcwin',title:'Win rate by GC',src:'bids',viz:'hbar',measures:[{fn:'winrate'}],group:'client',dateField:'sent',range:'page',limit:10,minN:2,size:1},
+  {w:'types',id:'b-types',title:'Win rate by project type',src:'bids',viz:'hbar',measures:[{fn:'winrate'}],group:'ptype',dateField:'sent',range:'page',size:1},
+  {w:'size',id:'b-size',title:'Win rate by job size',src:'bids',viz:'bar',measures:[{fn:'winrate'}],group:'size',dateField:'sent',range:'page',size:1},
+  {w:'turn',id:'b-turn',title:'Turnaround by month',src:'bids',viz:'line',measures:[{fn:'avg',field:'turn'}],group:'sent',bucket:'month',dateField:'sent',range:'12m',size:1},
+  {w:'lost',id:'b-lost',title:'Why we lose',src:'bids',viz:'hbar',measures:[{fn:'count'}],group:'lost',dateField:'sent',range:'page',filters:[{f:'outcome',op:'in',v:['Lost']}],size:1},
+  {w:'estimators',id:'b-est',title:'Estimator scorecard',src:'bids',viz:'table',measures:[{fn:'count'},{fn:'sum',field:'value'},{fn:'winrate'},{fn:'avg',field:'turn'}],group:'estimator',dateField:'sent',range:'page',size:2},
+  ...(can('awards')?[{w:'backlog',id:'b-backlog',title:'Backlog: awarded work not complete',src:'awards',viz:'hbar',measures:[{fn:'sum',field:'contract'}],group:'status',range:'all',filters:[{f:'status',op:'out',v:['Complete']}],size:1}]:[]),
+  {w:'clients',id:'b-clients',title:'Top GCs & clients',src:'bids',viz:'table',measures:[{fn:'count'},{fn:'sum',field:'value'},{fn:'sum',field:'won'},{fn:'winrate'}],group:'client',dateField:'sent',range:'page',limit:10,size:3},
+  {w:'upcoming',id:'b-up',title:'Bids due in the next 30 days',src:'bids',viz:'list',cols:['name','client','estimator','status','value','due'],sortBy:'due',asc:true,dateField:'due',range:'next30',filters:[{f:'outcome',op:'in',v:['In progress']}],limit:15,size:3}];
+const RP_TPL={
+  board:{name:'Board dashboard',blurb:'Results and trends: win rates, dollars, turnaround, backlog',range:'ytd',need:()=>can('bids'),cards:()=>BOARD_CARDS().filter(c=>!c.special).map(({w,...c})=>({...c,id:newId()}))},
+  est:{name:'Estimating scorecard',blurb:'Intake, output, turnaround and win rate by estimator',range:'ytd',need:()=>can('bids'),cards:()=>[
+    {id:newId(),...rpK('New bids in',{fn:'count'},{dateField:'intake'})},{id:newId(),...rpK('Proposals sent',{fn:'count'},{dateField:'sent'})},{id:newId(),...rpK('Avg turnaround',{fn:'avg',field:'turn'},{dateField:'sent'})},
+    {id:newId(),...rpK('Revisions',{fn:'sum',field:'revs'},{dateField:'sent'})},{id:newId(),...rpK('Win rate',{fn:'winrate'},{dateField:'sent'})},{id:newId(),...rpK('Dollars bid',{fn:'sum',field:'value'},{dateField:'sent'})},
+    {id:newId(),title:'Bids in by week',src:'bids',viz:'bar',measures:[{fn:'count'}],group:'intake',bucket:'week',dateField:'intake',range:'90d',size:2},
+    {id:newId(),title:'Proposals sent by estimator',src:'bids',viz:'hbar',measures:[{fn:'count'}],group:'estimator',dateField:'sent',range:'page',size:1},
+    {id:newId(),title:'Estimator scorecard',src:'bids',viz:'table',measures:[{fn:'count'},{fn:'sum',field:'value'},{fn:'winrate'},{fn:'avg',field:'turn'},{fn:'sum',field:'revs'}],group:'estimator',dateField:'sent',range:'page',size:3}]},
+  quotes:{name:'Vendor quotes',blurb:'Who prices our work, how fast, and how often',range:'12m',need:()=>can('bids'),cards:()=>[
+    {id:newId(),...rpK('Quotes received',{fn:'count'},{src:'quotes',dateField:'received'})},{id:newId(),...rpK('Avg days to respond',{fn:'avg',field:'resp'},{src:'quotes',dateField:'received'})},
+    {id:newId(),title:'Quotes received by trade',src:'quotes',viz:'hbar',measures:[{fn:'count'}],group:'trade',dateField:'received',range:'page',limit:12,size:2},
+    {id:newId(),title:'Fastest vendors (avg days to respond)',src:'quotes',viz:'hbar',measures:[{fn:'avg',field:'resp'}],group:'vendor',sort:'label',dateField:'received',range:'page',minN:2,limit:15,size:2},
+    {id:newId(),title:'Quote requests by status',src:'quotes',viz:'hbar',measures:[{fn:'count'}],group:'status',dateField:'requested',range:'page',size:1},
+    {id:newId(),title:'Latest quotes in',src:'quotes',viz:'list',cols:['bid','vendor','trade','amount','received'],sortBy:'received',dateField:'received',range:'page',limit:20,size:3}]},
+  awarded:{name:'Awarded work',blurb:'Contracts, buyout, submittals and RFIs across jobs',range:'all',need:()=>can('awards'),cards:()=>[
+    {id:newId(),title:'Contract value',src:'awards',viz:'kpi',measures:[{fn:'sum',field:'contract'}],range:'page',size:1},{id:newId(),title:'Buyout savings',src:'awards',viz:'kpi',measures:[{fn:'sum',field:'save'}],range:'page',size:1},
+    {id:newId(),title:'Open RFIs',src:'awards',viz:'kpi',measures:[{fn:'sum',field:'rfiOpen'}],range:'page',size:1},{id:newId(),title:'Late submittals',src:'awards',viz:'kpi',measures:[{fn:'sum',field:'subLate'}],range:'page',size:1},
+    {id:newId(),title:'Contract value by status',src:'awards',viz:'hbar',measures:[{fn:'sum',field:'contract'}],group:'status',range:'page',size:2},
+    {id:newId(),title:'Buyout by project',src:'awards',viz:'hbar',measures:[{fn:'avg',field:'bopct'}],group:'name',range:'page',size:2},
+    {id:newId(),title:'Projects',src:'awards',viz:'list',cols:['name','client','status','pm','contract','bopct','subOpen','rfiOpen'],sortBy:'contract',range:'page',size:3}]}};
