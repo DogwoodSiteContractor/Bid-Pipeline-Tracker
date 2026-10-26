@@ -7258,6 +7258,9 @@ const TROPHIES=[
  {id:'clean',shape:'star',icon:'☎️',names:['Call Before You Dig'],tiers:[1],what:'Dirt Mover game with no utility strikes',secret:true,v:(s,f,d)=>d('dirt').clean?1:0},
  {id:'stack',shape:'cup',icon:'🏗️',names:['Foreman','Superintendent','Developer'],tiers:[20000,100000,400000],what:'best Build It Up score',v:(s,f)=>f('stack')},
  {id:'pipe',shape:'medal',icon:'🌧️',names:['Pipe Layer','Storm Chaser','Rainmaker'],tiers:[2,4,7],what:'Pipe Dream levels cleared in one run',v:(s,f,d)=>num(d('pipe').level)||0},
+ {id:'grade',shape:'cup',icon:'🚜',names:['Blade Hand','Finish Operator','Blue Tops'],tiers:[2000,6000,15000],what:'best Fine Grade score',v:(s,f)=>f('grade')},
+ {id:'curb',shape:'star',icon:'🧱',names:['Curb to Curb'],tiers:[1],what:'Fine Grade run of 2,000 ft without touching a curb',v:(s,f,d)=>d('grade').curb?1:0},
+ {id:'nostake',shape:'star',icon:'📍',names:['Never Hit a Stake'],tiers:[1],what:'Fine Grade run of 1,500 ft without taking out a survey stake',v:(s,f,d)=>d('grade').stake?1:0},
  {id:'hole',shape:'medal',icon:'🕳️',names:['Pothole','Deep End','Hit Bedrock'],tiers:[30,100,200],what:'deepest Pothole dig (ft)',v:(s,f)=>f('pothole')},
  {id:'dino',shape:'star',icon:'🦴',names:['Found the Dinosaur'],tiers:[1],what:'dinosaur bone hauled up in Pothole',v:(s,f,d)=>d('pothole').dino?1:0},
  {id:'dry',shape:'star',icon:'☔',names:['Never Got Flooded'],tiers:[1],what:'Pothole site dug to bedrock without getting flooded out',v:(s,f,d)=>d('pothole').dry?1:0},
@@ -7528,12 +7531,13 @@ document.addEventListener('keyup',e=>{const g=S.fun.dirt;if(!g)return;if(e.key==
 ['pointerdown','pointerup','pointerleave','pointercancel'].forEach(ev=>document.addEventListener(ev,e=>{const b=e.target.closest&&e.target.closest('[data-dirt]');const g=S.fun.dirt;if(!b||!g)return;const k=b.dataset.dirt;if(k==='act'){if(ev==='pointerdown')dirtAct(g)}else g.keys[k]=ev==='pointerdown'}));
 
 /* ---------- the page ---------- */
-function funGames(){const F=S.fun;if(F.game==='pipe')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funPipe();if(F.game==='guess')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funGuess();if(F.game==='trivia')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funTrivia();if(F.game==='stack')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funBuild();if(F.game==='pothole')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funPothole();
+function funGames(){const F=S.fun;if(F.game==='pipe')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funPipe();if(F.game==='guess')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funGuess();if(F.game==='trivia')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funTrivia();if(F.game==='stack')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funBuild();if(F.game==='pothole')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funPothole();if(F.game==='grade')return `<button class="btn sm ghost" data-act="fun-game" data-v="">← All games</button>`+funGrade();
   const me=myId();const found=!!funStat(me,'dirt')||(()=>{try{return localStorage.getItem('bp-dig-found')==='1'}catch(e){return false}})();const tv=funStat(me,'trivia')?.data||{};
   const card=(k,icon,name,blurb,best,cta)=>`<div class="panel pad gcard"><div class="gcard-i">${icon}</div><h2>${name}</h2><p class="small">${blurb}</p><div class="small dim">${best}</div><button class="btn primary" data-act="${k==='dirt'?'fun-dig':'fun-game'}" data-v="${k}">${cta}</button></div>`;
   return `<div class="gcards">${card('trivia','🎓','Daily trivia','One site-work question a day. Keep the streak alive.',tv.last===todayStr()?`Done for today · 🔥 ${num(tv.streak)||0}`:'Today’s question is waiting',tv.last===todayStr()?'See today’s answer':'Answer today’s question')}
     ${card('guess','👁️','Guess the quantity','Five sketches, 30 seconds each, no calculator. How good is your eye?',`Your best: ${num(funStat(me,'guess')?.value)||0} / 500`,'Play')}
     ${card('stack','🏗️','Build It Up','Three stakes make a cone, three cones a barricade… all the way up to a tower. Keep the gophers boxed in.',`Your best: ${Number(num(funStat(me,'stack')?.value)||0).toLocaleString()}`,(()=>{try{return localStorage.getItem('bp-bu')?'Keep building':'Play'}catch(e){return 'Play'}})())}
+    ${card('grade','🚜','Fine Grade','Top-down motor grader. Grade curb line to curb line, lift over the castings, and don’t hit the super’s truck.',`Your best: ${Number(num(funStat(me,'grade')?.value)||0).toLocaleString()}`,'Play')}
     ${card('pothole','🕳️','Pothole','Dig down, find what’s buried and get it back to the super before your lamp dies. Watch for gas, fiber and spring lines.',`Deepest: ${num(funStat(me,'pothole')?.value)||0} ft`,funStat(me,'pothole')?'Keep digging':'Play')}
     ${card('pipe','🌧️','Pipe Dream','Turn the pieces to connect the manhole to the outfall before the storm.',`Your best: ${Number(num(funStat(me,'pipe')?.value)||0).toLocaleString()}`,'Play')}
     ${found?card('dirt','🚜','Dirt Mover','The secret one. Load trucks, don’t hit the line.',`Your best: ${num(funStat(me,'dirt')?.value)||0}`,'Play'):`<div class="panel pad gcard locked"><div class="gcard-i">🔒</div><h2>???</h2><p class="small">There’s a fourth game hidden somewhere in this app. Site-work folks know the first thing you do on any job.</p><div class="small dim">No hints at the trophy room either.</div></div>`}
@@ -7555,7 +7559,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'fun-refresh':funLoad(true).then(()=>loadTable('fun_stats')).then(()=>toast('Shelves dusted'));break;
     case 'fun-trophy':F.pick=t.dataset.id;render();break;
     case 'fun-shelf':F.who=t.dataset.id;F.tab='trophy';F.pick=null;render();window.scrollTo(0,0);break;
-    case 'fun-game':clearInterval(F.pt);clearInterval(F.gt);F.game=t.dataset.v||null;F.pipe=null;F.guess=null;render();break;
+    case 'fun-game':clearInterval(F.pt);clearInterval(F.gt);if(F.gr&&!F.gr.over){F.gr.paused=true;cancelAnimationFrame(F.gr.raf);F.gr.raf=null}F.game=t.dataset.v||null;F.pipe=null;F.guess=null;render();break;
     case 'fun-dig':dirtOpen();break;
     case 'pf-set':F.draft.profile[t.dataset.k]=t.dataset.v;render();break;
     case 'pf-save':pfSave();break;
@@ -13393,3 +13397,150 @@ async function wirExport(){const W=wirData(S.wirOff||0);const L=W.L;const X=awai
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
   if(a==='wir-wk'){const d=+t.dataset.d;S.wirOff=d===0?0:Math.max(-1,(S.wirOff||0)+d);render();if(M&&M.kind==='rpcard')renderModal();return}
   if(a==='wir-xlsx'){wirExport().catch(err=>toast('Export failed: '+errMsg(err)));return}});
+
+/* ---------- Fine Grade: top-down motor grader, curb line to curb line ---------- */
+const GR_W=360,GR_H=600,GR_PX_FT=10;
+const GR_LV=[{n:'Subdivision street',ft:0,road:260,v:120,isl:false},{n:'Commercial parking lot',ft:1500,road:300,v:150,isl:true},{n:'Highway shoulder',ft:3500,road:210,v:190,isl:false}];
+const GR_T={// w,h, solid (crash no matter what), cast (crash if blade down), stake, mound, soft, wet, pick
+  manhole:{w:30,h:30,cast:1},valve:{w:16,h:16,cast:1},stake:{w:10,h:10,stake:1},pickup:{w:40,h:72,solid:1},porta:{w:30,h:30,solid:1},barrow:{w:24,h:34,solid:1},
+  mound:{w:58,h:34,mound:1},soft:{w:70,h:60,soft:1},wet:{w:0,h:50,wet:1},dump:{w:46,h:84,solid:1},roller:{w:58,h:46,solid:1},island:{w:70,h:120,solid:1},
+  fuel:{w:22,h:22,pick:'fuel'},laser:{w:24,h:24,pick:'laser'},coffee:{w:22,h:22,pick:'coffee'}};
+function grLevel(ft){let L=GR_LV[0];GR_LV.forEach(l=>{if(ft>=l.ft)L=l});return L}
+function grRoad(G){const L=grLevel(G.d/GR_PX_FT);const w=L.road;G.rw+=(w-G.rw)*0.02;const l=(GR_W-G.rw)/2;return [l,l+G.rw]}
+function grNew(){return {d:0,x:GR_W/2,vx:0,rw:GR_LV[0].road,lives:3,fuel:100,score:0,mult:1,hug:0,cut:0,miss:0,stakes:0,curbHits:0,objs:[],trail:[],next:120,inv:0,slow:0,laser:0,slick:0,soft:0,lift:false,keys:{},msg:'',msgT:0,over:false,paused:false,t:0,lv:0,shake:0,started:false}}
+function grSay(G,m){G.msg=m;G.msgT=2.2}
+function grSpawn(G){const ft=G.d/GR_PX_FT;const [l,r]=grRoad(G);const lvI=GR_LV.indexOf(grLevel(ft));const k=Math.min(1,ft/5000);
+  const pick=(arr)=>{let t=arr.reduce((s,a)=>s+a[1],0)*Math.random();for(const a of arr){t-=a[1];if(t<=0)return a[0]}return arr[0][0]};
+  const type=pick([['mound',30],['manhole',10+6*k],['valve',8],['stake',12],['pickup',4+3*k],['porta',3],['barrow',3],['soft',5],['wet',3],['dump',2+4*k],['roller',2+2*k],['fuel',G.fuel<55?7:3],['laser',1.2],['coffee',1.6],...(GR_LV[lvI].isl?[['island',5]]:[])]);
+  const T=GR_T[type];const o={type,y:-T.h-10,w:T.w,h:T.h,x:0,hit:false};
+  if(type==='wet'){o.x=l;o.w=r-l}
+  else if(type==='island'){o.x=(l+r)/2-T.w/2+(Math.random()-.5)*40}
+  else if(type==='dump'){const side=Math.random()<.5?-1:1;o.side=side;o.x=side<0?l-T.w:r;o.tx=side<0?l+4:r-T.w-4;o.warn=1.3;o.y=GR_H*0.08}
+  else o.x=l+6+Math.random()*(r-l-12-T.w);
+  if(type==='roller'){o.vy=-40;o.vx=(Math.random()<.5?-1:1)*20}
+  if(type==='stake'){const n=1+Math.floor(Math.random()*3);for(let i=1;i<n;i++)G.objs.push({...o,x:Math.min(r-12,o.x+i*24)})}
+  G.objs.push(o);
+  // keep a way through: never two solids side by side in the same band
+  G.next=Math.max(65,165-100*k-(lvI===2?25:0))*(0.6+Math.random()*0.8)}
+const grBox=G=>({x:G.x-17,y:GR_H-150,w:34,h:78});
+const grBlade=G=>({x:G.x-27,y:GR_H-112,w:54,h:10});
+const grHit=(a,b)=>a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y;
+function grCrash(G,why,kind){if(G.inv>0||G.laser>0&&kind==='cast')return;G.lives--;G.mult=1;G.hug=0;G.inv=1.6;G.shake=.4;grSay(G,why);if(G.lives<=0)grEnd(G)}
+function grStep(G,dt){if(G.over||G.paused||!G.started)return;G.t+=dt;const L=grLevel(G.d/GR_PX_FT);const lvI=GR_LV.indexOf(L);if(lvI!==G.lv){G.lv=lvI;grSay(G,'Next up: '+L.n)}
+  const ft=G.d/GR_PX_FT;let v=L.v+Math.min(90,ft/40);if(G.soft>0)v*=.6;if(G.slow>0)v*=.55;const dy=v*dt;G.d+=dy;
+  ['inv','soft','slow','laser','slick','msgT','shake'].forEach(k=>G[k]=Math.max(0,G[k]-dt));
+  G.fuel-=dt*2.2;if(G.fuel<=0){G.fuel=0;grEnd(G,'Out of fuel. The grader is parked where it sits.');return}
+  const dir=(G.keys.r?1:0)-(G.keys.l?1:0);const acc=G.slick>0?260:900,fr=G.slick>0?0.6:6;G.vx+=dir*acc*dt;G.vx-=G.vx*Math.min(1,fr*dt);if(G.soft>0)G.vx+=Math.sin(G.t*18)*40*dt;G.vx=Math.max(-260,Math.min(260,G.vx));G.x+=G.vx*dt;
+  const [l,r]=grRoad(G);const lift=G.lift&&G.laser<=0;const box=grBox(G);
+  if(G.x-17<l||G.x+17>r){G.curbHits++;grCrash(G,'🧱 Curb hit! Stay off the curb line.');G.x=Math.max(l+22,Math.min(r-22,G.x));G.vx=-G.vx*.3}
+  const gap=Math.min(G.x-17-l,r-(G.x+17));if(gap<16&&G.inv<=0){G.hug+=dt;if(G.hug>1.2&&G.mult<3){G.mult=Math.min(3,+(G.mult+.5).toFixed(1));G.hug=0;grSay(G,`Tight to the curb! ×${G.mult}`)}}else G.hug=Math.max(0,G.hug-dt*.5);
+  G.next-=dy;if(G.next<=0)grSpawn(G);
+  const blade=grBlade(G);
+  G.objs.forEach(o=>{if(o.type==='dump'){if(o.warn>0){o.warn-=dt;return}o.x+=(o.tx-o.x)*Math.min(1,dt*2.2)}o.y+=dy+(o.vy||0)*dt;if(o.vx){o.x+=o.vx*dt;if(o.x<l+4||o.x+o.w>r-4)o.vx=-o.vx}
+    if(o.hit)return;const T=GR_T[o.type];
+    if(T.mound){if(grHit(blade,o)&&(!lift)){o.hit=true;G.cut++;G.score+=Math.round(25*G.mult);o.done=1}return}
+    if(T.pick){if(grHit(box,o)){o.hit=true;if(T.pick==='fuel'){G.fuel=Math.min(100,G.fuel+35);grSay(G,'⛽ Fuel topped off')}if(T.pick==='laser'){G.laser=10;grSay(G,'📡 Laser on: blade runs itself for 10 seconds')}if(T.pick==='coffee'){G.slow=4;grSay(G,'☕ Coffee. Everything slows down for a bit.')}}return}
+    if(T.soft){if(grHit(box,o)){G.soft=1.2}return}
+    if(T.wet){if(grHit(box,o)&&!o.hit){o.hit=true;G.slick=2;grSay(G,'💦 Water truck spray. It’s slick!')}return}
+    if(T.stake){if(grHit(box,o)||grHit(blade,o)){o.hit=true;G.stakes++;G.score=Math.max(0,G.score-50);grSay(G,'📍 You took out a stake. The surveyor has to come back (−50).')}return}
+    if(T.cast){if(grHit(blade,o)&&!lift&&G.laser<=0){o.hit=true;grCrash(G,'💥 Blade caught a '+(o.type==='manhole'?'manhole':'valve box')+'. Lift the blade over castings!','cast')}return}
+    if(T.solid){if(grHit(box,o)){o.hit=true;grCrash(G,{pickup:'🛻 You hit the super’s truck. He is not happy.',porta:'🚽 You flattened the porta-john. Everyone saw.',barrow:'Wheelbarrow down.',dump:'🚚 The dump truck got you. Watch for the backup alarm!',roller:'The roller doesn’t move for anybody.',island:'🌳 You drove into the island.'}[o.type],'solid')}}});
+  G.objs=G.objs.filter(o=>{if(o.y>GR_H+20){if(GR_T[o.type].mound&&!o.hit)G.miss++;return false}return true});
+  // graded strip behind the blade
+  G.trail.forEach(p=>p.y+=dy);if(!lift||G.laser>0)G.trail.push({x:G.x,y:GR_H-107});else G.trail.push({x:G.x,y:GR_H-107,gap:1});G.trail=G.trail.filter(p=>p.y<GR_H+20);
+  G.score+=dy/GR_PX_FT*G.mult*(lift&&G.laser<=0?0:1)}
+let grTile=null;function grTex(){if(grTile)return grTile;const c=document.createElement('canvas');c.width=GR_W;c.height=300;const x=c.getContext('2d');let s=11;const R=()=>{s=(s*16807)%2147483647;return s/2147483647};
+  x.fillStyle='#8a6a45';x.fillRect(0,0,GR_W,300);for(let i=0;i<900;i++){x.fillStyle=R()<.5?'rgba(60,40,20,.35)':'rgba(190,150,100,.25)';x.fillRect(R()*GR_W,R()*300,1+R()*4,1+R()*3)}
+  for(let i=0;i<35;i++){x.fillStyle='rgba(120,120,110,.6)';x.beginPath();x.arc(R()*GR_W,R()*300,1.5+R()*2.5,0,7);x.fill()}grTile=c;return c}
+function grDraw(G){const cv=document.getElementById('gr-cv');if(!cv)return;const c=cv.getContext('2d');const [l,r]=grRoad(G);c.save();if(G.shake)c.translate((Math.random()-.5)*8*G.shake,(Math.random()-.5)*8*G.shake);
+  c.fillStyle='#4f8a3c';c.fillRect(0,0,GR_W,GR_H);const off=G.d%300;
+  // grass texture
+  c.fillStyle='rgba(0,0,0,.08)';for(let y=-30+(G.d%30);y<GR_H;y+=30){c.fillRect(0,y,l-14,2);c.fillRect(r+14,y+12,GR_W,2)}
+  const tile=grTex();c.save();c.beginPath();c.rect(l,0,r-l,GR_H);c.clip();for(let y=-300+off;y<GR_H;y+=300)c.drawImage(tile,0,y);c.restore();
+  // graded strip
+  c.lineCap='round';c.lineJoin='round';c.strokeStyle='#c9a877';c.lineWidth=52;c.beginPath();let pen=false;G.trail.forEach(p=>{if(p.gap){pen=false;return}if(!pen){c.moveTo(p.x,p.y);pen=true}else c.lineTo(p.x,p.y)});c.stroke();
+  c.strokeStyle='rgba(255,255,255,.12)';c.lineWidth=1;for(let k=-20;k<=20;k+=8){c.beginPath();pen=false;G.trail.forEach(p=>{if(p.gap){pen=false;return}if(!pen){c.moveTo(p.x+k,p.y);pen=true}else c.lineTo(p.x+k,p.y)});c.stroke()}
+  // curbs and gutters
+  [[l-14,l],[r,r+14]].forEach(([a])=>{c.fillStyle='#bdbdb5';c.fillRect(a,0,14,GR_H);c.fillStyle='#9a9a92';for(let y=-40+(G.d%40);y<GR_H;y+=40)c.fillRect(a,y,14,2)});
+  c.fillStyle='rgba(255,255,255,.35)';c.fillRect(l,0,2,GR_H);c.fillRect(r-2,0,2,GR_H);
+  // objects
+  G.objs.forEach(o=>grObj(c,o,l,r));
+  // grader
+  grGrader(c,G);
+  c.restore();
+  // HUD
+  c.fillStyle='rgba(0,0,0,.5)';c.fillRect(0,0,GR_W,44);c.fillStyle='#fff';c.font='bold 15px system-ui,sans-serif';c.textAlign='left';c.textBaseline='middle';
+  c.fillText(Math.floor(G.score).toLocaleString(),10,15);c.font='11px system-ui,sans-serif';c.fillText(`${Math.floor(G.d/GR_PX_FT).toLocaleString()} ft · ${grAcc(G)}% on grade`,10,33);
+  c.textAlign='right';c.font='bold 15px system-ui,sans-serif';c.fillText(G.mult>1?`×${G.mult}`:'',GR_W-82,15);c.font='15px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';c.fillText('⛑️'.repeat(Math.max(0,G.lives)),GR_W-8,15);
+  c.fillStyle='rgba(255,255,255,.25)';c.fillRect(GR_W-110,28,100,7);c.fillStyle=G.fuel<25?'#e34948':'#eda100';c.fillRect(GR_W-110,28,G.fuel,7);c.fillStyle='#fff';c.font='10px system-ui,sans-serif';c.fillText('FUEL',GR_W-114,32);
+  if(G.laser>0){c.fillStyle='rgba(42,120,214,.85)';c.fillRect(0,44,GR_W,18);c.fillStyle='#fff';c.textAlign='center';c.fillText(`LASER ON · ${Math.ceil(G.laser)}s`,GR_W/2,53)}
+  if(G.msgT>0){c.globalAlpha=Math.min(1,G.msgT);c.fillStyle='rgba(0,0,0,.65)';c.fillRect(10,GR_H-46,GR_W-20,34);c.fillStyle='#fff';c.textAlign='center';c.font='13px system-ui,sans-serif';c.fillText(G.msg,GR_W/2,GR_H-29,GR_W-30);c.globalAlpha=1}
+  if(G.paused&&!G.over){c.fillStyle='rgba(0,0,0,.5)';c.fillRect(0,0,GR_W,GR_H);c.fillStyle='#fff';c.textAlign='center';c.font='bold 22px system-ui,sans-serif';c.fillText('Paused',GR_W/2,GR_H/2);c.font='13px system-ui,sans-serif';c.fillText('Press P or tap Resume',GR_W/2,GR_H/2+26)}}
+function grObj(c,o,l,r){const x=o.x,y=o.y,w=o.w,h=o.h;const em=(e,s)=>{c.font=`${s}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;c.textAlign='center';c.textBaseline='middle';c.fillText(e,x+w/2,y+h/2)};
+  switch(o.type){
+  case 'mound':if(o.done){c.fillStyle='rgba(201,168,119,.0)';return}c.fillStyle='#6b4a28';c.beginPath();c.ellipse(x+w/2,y+h/2,w/2,h/2,0,0,7);c.fill();c.fillStyle='#7d5832';c.beginPath();c.ellipse(x+w/2-4,y+h/2-4,w/3,h/3,0,0,7);c.fill();c.fillStyle='rgba(255,255,255,.15)';c.beginPath();c.ellipse(x+w/2-8,y+h/2-7,w/6,h/7,0,0,7);c.fill();break;
+  case 'manhole':c.fillStyle='#3a3a3c';c.beginPath();c.arc(x+15,y+15,15,0,7);c.fill();c.strokeStyle='#6d6d70';c.lineWidth=2;c.beginPath();c.arc(x+15,y+15,11,0,7);c.stroke();for(let i=-8;i<=8;i+=4){c.beginPath();c.moveTo(x+15+i,y+6);c.lineTo(x+15+i,y+24);c.stroke()}break;
+  case 'valve':c.fillStyle='#2e2e30';c.fillRect(x,y,16,16);c.fillStyle='#5a5a5e';c.fillRect(x+3,y+3,10,10);c.fillStyle='#2f7fd8';c.font='bold 8px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText('W',x+8,y+8);break;
+  case 'stake':c.fillStyle='#c8a46a';c.fillRect(x+3,y+2,4,8);c.fillStyle='#ff4fa3';c.fillRect(x,y,10,4);c.fillStyle='#2a78d6';c.fillRect(x+3,y-2,4,3);break;
+  case 'soft':c.fillStyle='rgba(40,28,15,.55)';c.beginPath();c.ellipse(x+w/2,y+h/2,w/2,h/2,0,0,7);c.fill();c.fillStyle='rgba(120,160,190,.35)';c.beginPath();c.ellipse(x+w/2+6,y+h/2+4,w/4,h/6,0,0,7);c.fill();break;
+  case 'wet':c.fillStyle='rgba(80,150,220,.35)';c.fillRect(x,y,w,h);c.fillStyle='rgba(255,255,255,.25)';for(let i=0;i<12;i++)c.fillRect(x+((i*53)%w),y+((i*17)%h),10,2);c.font='26px "Apple Color Emoji","Noto Color Emoji",sans-serif';c.textAlign='left';c.textBaseline='middle';c.fillText('🚛',r+2,y+h/2);break;
+  case 'pickup':c.fillStyle='#e8e8ea';c.fillRect(x,y,w,h);c.fillStyle='#9fb4c8';c.fillRect(x+4,y+12,w-8,14);c.fillStyle='#cfcfd2';c.fillRect(x+4,y+34,w-8,h-40);c.fillStyle='#222';[[x-3,y+8],[x+w-2,y+8],[x-3,y+h-20],[x+w-2,y+h-20]].forEach(([a,b])=>c.fillRect(a,b,5,12));break;
+  case 'porta':c.fillStyle='#2a78d6';c.fillRect(x,y,w,h);c.fillStyle='#1c5cab';c.fillRect(x+4,y+4,w-8,h-8);c.fillStyle='#fff';c.font='bold 9px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText('WC',x+w/2,y+h/2);break;
+  case 'barrow':c.fillStyle='#e34948';c.beginPath();c.moveTo(x+2,y+6);c.lineTo(x+w-2,y+6);c.lineTo(x+w-6,y+24);c.lineTo(x+6,y+24);c.closePath();c.fill();c.fillStyle='#222';c.fillRect(x+w/2-3,y,6,6);c.strokeStyle='#555';c.lineWidth=2;c.beginPath();c.moveTo(x+6,y+24);c.lineTo(x+2,y+h);c.moveTo(x+w-6,y+24);c.lineTo(x+w-2,y+h);c.stroke();break;
+  case 'dump':if(o.warn>0){const sx=o.side<0?l+6:r-60;c.fillStyle='rgba(227,73,72,.9)';c.fillRect(sx,y+20,54,22);c.fillStyle='#fff';c.font='bold 10px sans-serif';c.textAlign='center';c.textBaseline='middle';c.fillText('BEEP BEEP',sx+27,y+31);return}
+    c.fillStyle='#eda100';c.fillRect(x,y,w,h);c.fillStyle='#7a5a20';c.fillRect(x+4,y+4,w-8,h-30);c.fillStyle='#d58a00';c.fillRect(x+3,y+h-24,w-6,22);c.fillStyle='#9fb4c8';c.fillRect(x+8,y+h-20,w-16,8);c.fillStyle='#222';[[x-3,y+8],[x+w-2,y+8],[x-3,y+h-26],[x+w-2,y+h-26]].forEach(([a,b])=>c.fillRect(a,b,5,14));break;
+  case 'roller':c.fillStyle='#eda100';c.fillRect(x+6,y+10,w-12,h-12);c.fillStyle='#5a5a5e';c.fillRect(x,y,w,12);c.fillStyle='#7a7a80';c.fillRect(x+2,y+2,w-4,4);c.fillStyle='#333';c.fillRect(x+12,y+h-10,w-24,10);break;
+  case 'island':c.fillStyle='#bdbdb5';c.fillRect(x-4,y-4,w+8,h+8);c.fillStyle='#4f8a3c';c.fillRect(x,y,w,h);em('🌳',26);break;
+  case 'fuel':if(o.hit)return;c.fillStyle='rgba(255,255,255,.7)';c.beginPath();c.arc(x+w/2,y+h/2,14,0,7);c.fill();em('⛽',17);break;
+  case 'laser':if(o.hit)return;c.fillStyle='rgba(42,120,214,.6)';c.beginPath();c.arc(x+w/2,y+h/2,15,0,7);c.fill();em('📡',17);break;
+  case 'coffee':if(o.hit)return;c.fillStyle='rgba(255,255,255,.7)';c.beginPath();c.arc(x+w/2,y+h/2,14,0,7);c.fill();em('☕',16);break}}
+function grGrader(c,G){const x=G.x,y=GR_H-150;const lift=G.lift&&G.laser<=0;if(G.inv>0&&Math.floor(G.inv*10)%2)c.globalAlpha=.45;
+  c.fillStyle='#222';[[x-19,y+2],[x+13,y+2],[x-21,y+56],[x+15,y+56],[x-21,y+68],[x+15,y+68]].forEach(([a,b])=>c.fillRect(a,b,6,12));
+  c.fillStyle='#e8a800';c.fillRect(x-5,y,10,46);c.fillRect(x-13,y-6,26,10);c.fillStyle='#f2b600';c.fillRect(x-15,y+48,30,32);c.fillStyle='#3b3b3b';c.fillRect(x-11,y+52,22,14);c.fillStyle='#9fd0f0';c.fillRect(x-9,y+54,18,6);
+  // circle + moldboard
+  c.strokeStyle='#555';c.lineWidth=2;c.beginPath();c.arc(x,y+38,9,0,7);c.stroke();
+  c.save();c.translate(x,y+38);c.rotate(-.22);c.fillStyle=lift?'#9a9a9a':'#4a4a4a';const bw=lift?44:54;c.fillRect(-bw/2,-3,bw,lift?4:6);c.fillStyle=lift?'#bbb':'#d9d9d9';c.fillRect(-bw/2,lift?-4:-5,bw,2);c.restore();
+  if(!lift){c.fillStyle='rgba(160,120,70,.35)';for(let i=0;i<5;i++){c.beginPath();c.arc(x+30+Math.random()*8,y+40+Math.random()*10,2+Math.random()*3,0,7);c.fill()}}
+  if(G.laser>0){c.strokeStyle='rgba(80,160,255,.9)';c.lineWidth=1;c.beginPath();c.moveTo(x,y+58);c.lineTo(x,y+30);c.stroke();c.fillStyle='#2a78d6';c.fillRect(x-3,y+28,6,4)}
+  c.globalAlpha=1}
+const grAcc=G=>G.cut+G.miss?Math.round(G.cut/(G.cut+G.miss)*100):100;
+function grEnd(G,why){if(G.over)return;G.over=true;cancelAnimationFrame(G.raf);const ft=Math.floor(G.d/GR_PX_FT),acc=grAcc(G);const sc=Math.floor(G.score);
+  G.report={why:why||'Three strikes. The super pulled you off the machine.',ft,acc,sc,grade:acc>=90?['Blue tops! Inspector passed it.','good']:acc>=75?['Needs some touch-up.','warn']:['Regrade it.','bad']};
+  const st=funStat(myId(),'grade');const dd=(st&&st.data)||{};G.report.best=sc>(num(st?.value)||0);
+  funSave('grade',sc,{ft:Math.max(num(dd.ft)||0,ft),acc:Math.max(num(dd.acc)||0,ft>=500?acc:0),plays:(num(dd.plays)||0)+1,curb:dd.curb||(ft>=2000&&G.curbHits===0),stake:dd.stake||(ft>=1500&&G.stakes===0)}).then(()=>render());render()}
+function grLoop(ts){const G=S.fun.gr;if(!G||G.over)return;if(S.view!=='fun'||S.fun.game!=='grade'||!document.getElementById('gr-cv')){G.paused=true;G.raf=null;return}
+  const dt=Math.min(.05,(ts-(G.last||ts))/1000);G.last=ts;grStep(G,dt);grDraw(G);if(!G.over)G.raf=requestAnimationFrame(grLoop)}
+function grStart(){const G=grNew();G.started=true;S.fun.gr=G;render();setTimeout(()=>{const g=S.fun.gr;if(g){g.last=0;g.raf=requestAnimationFrame(grLoop)}},0)}
+function grResume(){const G=S.fun.gr;if(!G||G.over)return;G.paused=false;G.last=0;if(!G.raf)G.raf=requestAnimationFrame(grLoop)}
+function funGrade(){const F=S.fun;const G=F.gr;const st=funStat(myId(),'grade');const dd=(st&&st.data)||{};
+  const side=`<div class="panel pad"><b>Fine Grade high scores</b>${funBoard('grade',{fmt:(v,x)=>`${Number(v).toLocaleString()}${x.data&&x.data.ft?` · ${Number(x.data.ft).toLocaleString()} ft`:''}`})}</div>
+    <div class="panel pad gr-help small"><b>How to run it</b><p>Steer with ← → (or A / D). Your blade is down and grading. <b>Hold Space</b> (or the Lift button) to lift it over manholes and valve boxes. Lift it only when you need to: anything you drive past with the blade up isn’t graded.</p>
+    <p>Cut the dirt mounds to stay on grade. Run tight to the curb (without touching it) to build your multiplier up to ×3. Steer around trucks, porta-johns, rollers and survey stakes. Watch for dump trucks backing in (BEEP BEEP), soft spots and water truck spray.</p>
+    <p>⛽ fuel keeps you running · 📡 laser runs the blade for you · ☕ coffee slows things down. Three hits and the super pulls you off the machine. P pauses.</p>
+    <p class="dim">Your best: ${(num(st?.value)||0).toLocaleString()} · longest run ${(num(dd.ft)||0).toLocaleString()} ft</p></div>`;
+  const R=G&&G.over?G.report:null;
+  const stage=!G?`<div class="gr-start"><div class="gr-logo">🚜</div><h2>Fine Grade</h2><p class="small">Curb line to curb line. Keep it on grade and don’t hit anything.</p><button class="btn primary" data-act="gr-start">Start grading</button></div>`
+    :R?`<div class="gr-start"><h2>Inspector’s report</h2><p class="small">${esc(R.why)}</p><div class="gr-rep"><div><b class="num">${R.sc.toLocaleString()}</b><span class="small dim">points${R.best?' · new best!':''}</span></div><div><b class="num">${R.ft.toLocaleString()} ft</b><span class="small dim">graded</span></div><div><b class="num">${R.acc}%</b><span class="small dim">on grade</span></div></div>
+      <p>${pill(R.grade[0],R.grade[1])}</p><div class="adders"><button class="btn primary" data-act="gr-start">Run it again</button></div></div>`:'';
+  setTimeout(grPaint,0);
+  return `<div class="gr"><div class="panel pad gr-main"><div class="gr-wrap"><canvas id="gr-cv" width="${GR_W}" height="${GR_H}" aria-label="Fine Grade"></canvas>${stage?`<div class="gr-over">${stage}</div>`:''}</div>
+    <div class="gr-ctl"><button class="gr-k" data-grk="l" aria-label="Steer left">◀</button><button class="gr-k gr-lift" data-grk="lift">Lift blade</button><button class="gr-k" data-grk="r" aria-label="Steer right">▶</button></div>
+    ${G&&!G.over?`<div class="adders" style="justify-content:center"><button class="btn sm" data-act="gr-pause">${G.paused?'Resume':'Pause'}</button><button class="btn sm ghost" data-act="gr-quit">Quit run</button></div>`:''}</div><div class="gr-side">${side}</div></div>`}
+// draw a still frame after each page render (start screen or paused game)
+function grPaint(){const G=S.fun.gr;if(S.view!=='fun'||S.fun.game!=='grade')return;if(G){grDraw(G);if(!G.over&&!G.paused&&!G.raf){G.last=0;G.raf=requestAnimationFrame(grLoop)}}else{const d=grNew();d.objs=[{type:'mound',x:110,y:180,w:58,h:34},{type:'manhole',x:220,y:300,w:30,h:30},{type:'stake',x:90,y:380,w:10,h:10},{type:'pickup',x:240,y:60,w:40,h:72}];grDraw(d)}}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||S.view!=='fun')return;const a=t.dataset.act;if(!/^gr-/.test(a))return;const G=S.fun.gr;
+  if(a==='gr-start'){grStart();return}
+  if(a==='gr-pause'){if(!G)return;if(G.paused)grResume();else G.paused=true;render();return}
+  if(a==='gr-quit'){if(!G)return;cancelAnimationFrame(G.raf);grEnd(G,'You called it a day.');return}});
+const grKey=(e,down)=>{if(S.view!=='fun'||!S.fun||S.fun.game!=='grade'||M)return;const G=S.fun.gr;const t=e.target;if(t&&(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.tagName==='SELECT'))return;
+  const k={ArrowLeft:'l',a:'l',A:'l',ArrowRight:'r',d:'r',D:'r'}[e.key];
+  if(k){e.preventDefault();if(G)G.keys[k]=down;return}
+  if(e.key===' '||e.key==='Shift'||e.key==='ArrowUp'){e.preventDefault();if(G)G.lift=down;return}
+  if(down&&(e.key==='p'||e.key==='P')&&G&&!G.over){G.paused?grResume():G.paused=true;render();return}
+  if(down&&e.key==='Enter'&&(!G||G.over)){e.preventDefault();grStart()}};
+document.addEventListener('keydown',e=>grKey(e,true));document.addEventListener('keyup',e=>grKey(e,false));
+document.addEventListener('pointerdown',e=>{const b=e.target.closest&&e.target.closest('[data-grk]');const G=S.fun&&S.fun.gr;
+  if(b){e.preventDefault();if(!G)return;const k=b.dataset.grk;if(k==='lift')G.lift=true;else G.keys[k]=true;b.classList.add('on');return}
+  const cv=e.target.id==='gr-cv'?e.target:null;if(cv&&G&&!G.over){e.preventDefault();const r=cv.getBoundingClientRect();const k=(e.clientX-r.left)<r.width/2?'l':'r';G.keys[k]=true;G._tp=k}});
+['pointerup','pointercancel'].forEach(n=>document.addEventListener(n,()=>{const G=S.fun&&S.fun.gr;if(!G)return;G.keys.l=false;G.keys.r=false;G.lift=false;document.querySelectorAll('.gr-k.on').forEach(x=>x.classList.remove('on'))}));
+document.addEventListener('visibilitychange',()=>{const G=S.fun&&S.fun.gr;if(document.hidden&&G&&!G.over&&G.started){G.paused=true}});
