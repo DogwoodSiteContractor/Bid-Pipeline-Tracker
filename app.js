@@ -5549,7 +5549,7 @@ function estSelResolve(d){let s=S.est.sel;if(typeof s==='string')s=S.est.sel={t:
   if(s.t==='item'){const i=d.items.findIndex(x=>x.id===s.id);return i<0?null:{t:'item',i,o:d.items[i],p:`items.${i}`}}
   for(let i=0;i<d.items.length;i++){const j=d.items[i].acts.findIndex(a=>a.id===s.id);if(j>=0)return {t:'act',i,j,o:d.items[i].acts[j],it:d.items[i],p:`items.${i}.acts.${j}`}}return null}
 function estLevel(lv){const E=S.est,d=E.data;E.open=new Set(lv==='sec'?[]:lv==='items'?d.sections.map(s=>s.id):[...d.sections.map(s=>s.id),...d.items.map(i=>i.id)]);estOpenSave();render()}
-function estBuildView(d,R,ro){const E=S.est;const open=estOpenSet();const sel=E.sel||{};const g=(p,v,col,o={})=>epIn(p,v,{...o,attrs:` data-grid="eo" data-col="${col}"`});
+function estBuildView(d,R,ro){const E=S.est;if(!E.tpl&&!S.ch.rows&&can('estimates'))chLoad();const open=estOpenSet();const sel=E.sel||{};const g=(p,v,col,o={})=>epIn(p,v,{...o,attrs:` data-grid="eo" data-col="${col}"`});
   const secTot=new Map();d.items.forEach((it,i)=>{const x=R.items[i];const t=secTot.get(it.sec)||{cost:0,price:0,alt:0,mh:0};if(it.alt)t.alt+=x.price;else{t.cost+=x.total;t.price+=x.price;t.mh+=x.mh}secTot.set(it.sec,t)});
   const dots=(t,id)=>ro?'':`<button class="eo-dots" data-act="eo-menu" data-t="${t}" data-id="${id}" aria-label="More">⋯</button>`;
   let rows='';
@@ -5559,7 +5559,7 @@ function estBuildView(d,R,ro){const E=S.est;const open=estOpenSet();const sel=E.
     if(!op)return;
     its.forEach(({it,i})=>{const x=R.items[i];const ip=`items.${i}`;const io=open.has(it.id);const blank=it.qty==null||it.qty==='';
       rows+=`<tr class="eo-item${sel.id===it.id?' sel':''}${it.alt?' alt':''}${E.qtyMode&&blank?' need':''}" data-act="eo-sel" data-t="item" data-id="${it.id}"><td class="eo-code"><button class="eo-tg" data-act="eo-tg" data-id="${it.id}" aria-label="${io?'Collapse':'Expand'}">${it.acts.length?(io?'▾':'▸'):'<span class="eo-dot">·</span>'}</button>${g(ip+'.code',it.code,'code',{cls:'eo-c',aria:'Item number'})}</td>
-        <td class="eo-dc">${g(ip+'.desc',it.desc,'desc',{cls:'eo-d',ph:'Bid item',aria:'Bid item description'})}${it.alt?'<span class="pill info">Alt</span>':''}${x.ov?'<span class="pill warn">Override</span>':''}</td>
+        <td class="eo-dc">${g(ip+'.desc',it.desc,'desc',{cls:'eo-d',ph:'Bid item',aria:'Bid item description'})}${it.alt?'<span class="pill info">Alt</span>':''}${x.ov?'<span class="pill warn">Override</span>':''}${S.est.tpl?'':chFlag(it,x)}</td>
         <td>${g(ip+'.qty',it.qty,'qty',{n:1,cls:'eo-q'+(blank?' est-need':''),ph:blank?'Qty':'',aria:'Quantity'})}</td><td>${g(ip+'.unit',it.unit,'unit',{cls:'eo-u',list:'cb-units',aria:'Unit'})}</td>
         <td class="r num">${money(x.total)}</td><td class="r num">${x.q?money2(x.unitPrice):''}</td><td class="r num"><b>${money(x.price)}</b></td><td class="eo-more">${dots('item',it.id)}</td></tr>`;
       if(!io)return;
@@ -5598,6 +5598,7 @@ function estRight(d,R,ro){const s=estSelResolve(d);if(!s)return `<div class="pan
         <label class="f s4">Notes${epIn(s.p+'.notes',it.notes,{ph:'Assumptions, inclusions, exclusions for this item'})}</label></div>
         <label class="check small"><input type="checkbox" data-ep="${s.p}.alt" data-ept="b"${it.alt?' checked':''}${ro?' disabled':''}> Alternate — priced, but not in the base bid</label>
         <div class="est-isum"><div><span>Cost</span><b>${money(x.total)}</b></div><div><span>Unit cost</span><b>${x.q?money2(x.unit):'—'}</b></div><div><span>Unit price</span><b>${x.q?money2(x.unitPrice):'—'}</b>${x.ov?`<small>calc. ${money2(x.calcUnit)}</small>`:''}</div><div><span>Total</span><b>${money(x.price)}</b></div><div><span>Man-hours</span><b>${fmtN(x.mh,1)}</b></div></div>${estMix(x.c)}`,`${ro?'':'<button class="btn sm ef-cb" data-act="cbpick-open" data-v="biditem" data-mode="fill" title="Fill this bid item from the codebook">📖 From codebook</button>'}`)}
+      ${S.est.tpl?'':estFold('ich','Cost history',chCard(it,x))}
       ${estFold('ia',`Activities (${it.acts.length})`,`<table class="eb-list"><tbody>${it.acts.map((a,j)=>{const ar=x.acts[j];return `<tr class="click" data-act="eo-pick" data-t="act" data-id="${a.id}"><td class="num">${esc(a.code)}</td><td>${esc(a.desc)||'<span class="dim">Untitled</span>'}${a.crew?` <span class="dim small">· ${esc(a.crew.name)}</span>`:''}</td><td class="r num small">${ar.hrs?fmtN(ar.hrs,1)+' hr':''}</td><td class="r num"><b>${money(ar.total)}</b></td></tr>`}).join('')||'<tr><td class="dim small">No activities yet — add one to price this item.</td></tr>'}</tbody></table>
         ${ro?'':`<div class="est-addact"><button class="btn primary sm" data-act="eo-add" data-t="act" data-id="${it.id}">+ Activity</button><button class="btn sm" data-act="cbpick-open" data-v="activity">🔍 Search activity codebook</button>${cbEditable()&&!S.est.tpl?`<button class="btn sm" data-act="ep-tocb" data-p="${s.p}" data-k="biditem">Save to bid item codebook</button>`:''}</div>`}`)}</div>`}
   const a=s.o,x=R.items[s.i];
@@ -5686,12 +5687,13 @@ async function estTplSave(){const x=M;const E=S.est,d=E.data;if(!String(x.name||
 
 /* ---------- Estimates page ---------- */
 // Estimates page tabs: the list, master templates, and (admins) the bid-building settings
-function estsTabs(on){return `<div class="subnav">${[...(can('estimates')?[['list','Estimates'],['tw','Takeoff']]:[]),...(can('estimates')||can('codebook')?[['tpl','Master templates']]:[]),...(can('codebook')?[['cb','Codebooks']]:[]),...(can('codebook','edit')?[['scopes','Scopes & templates'],['set','Bid settings']]:[])].map(([k,l])=>`<button class="${on===k?'on':''}" data-act="ests-tab" data-v="${k}">${l}</button>`).join('')}</div>`}
-const estsTabFor=()=>({estimates:S.estsTab==='tpl'?'tpl':'list',settings:'set',cb:'cb',scopes:'scopes',tw:S.twBid&&!byId(S.bids,S.twBid)?undefined:'tw'})[S.view];
+function estsTabs(on){return `<div class="subnav">${[...(can('estimates')?[['list','Estimates'],['tw','Takeoff']]:[]),...(can('estimates')||can('codebook')?[['tpl','Master templates']]:[]),...(can('estimates')?[['hist','Cost history']]:[]),...(can('codebook')?[['cb','Codebooks']]:[]),...(can('codebook','edit')?[['scopes','Scopes & templates'],['set','Bid settings']]:[])].map(([k,l])=>`<button class="${on===k?'on':''}" data-act="ests-tab" data-v="${k}">${l}</button>`).join('')}</div>`}
+const estsTabFor=()=>({estimates:S.estsTab==='tpl'?'tpl':S.estsTab==='hist'?'hist':'list',settings:'set',cb:'cb',scopes:'scopes',tw:S.twBid&&!byId(S.bids,S.twBid)?undefined:'tw'})[S.view];
 function vEstimates(){const tab=S.estsTab||'list';const canNew=can('bids','edit')&&can('estimates','edit');
   const tabs='';
   const head=`<div class="head"><div><h1>Estimates</h1><p>${S.estIndex.length} estimate${S.estIndex.length===1?'':'s'} · ${cbList('estimate').length} master template${cbList('estimate').length===1?'':'s'}</p></div><div class="tools">${canNew?'<button class="btn primary" data-act="ests-new">+ New estimate</button>':''}</div></div>`;
   if(S.estMissing)return head+`<div class="notice"><b>One setup step:</b> run <b>update-14-estimates.sql</b> in Supabase, then refresh.</div>`;
+  if(tab==='hist')return head+chPage();
   if(tab==='tpl'){const ts=['estimate','section'].flatMap(bk=>cbList(bk)).sort((a,b)=>a.book.localeCompare(b.book)||String(a.description).localeCompare(b.description));const admin=cbEditable();
     return head+tabs+`<div class="adders" style="margin:0 0 12px">${admin?'<button class="btn sm" data-act="ests-newtpl" data-v="estimate">+ Blank master template</button><button class="btn sm" data-act="ests-newtpl" data-v="section">+ Blank section template</button>':''}</div>
     <div class="panel scroll"><table><thead><tr><th>Template</th><th>Type</th><th>Category</th><th>Settings it carries</th><th class="r">Sections</th><th class="r">Bid items</th><th class="r">Cost at today’s rates</th><th>Updated</th></tr></thead><tbody>
@@ -13600,4 +13602,123 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   if(a==='pee-open'){peeOpen();return}
   if(a==='pee-go'&&M&&M.kind==='peeimp'&&M.P){const d=S.est.data;const x=M;peeBuild(d,x.P,{mode:x.mode,keep:x.keep,names:x.names,file:x.file});const R=estCalc(d);
     S.est.open=new Set(d.sections.map(s=>s.id));estOpenSave&&estOpenSave();S.est.sel=d.sections[0]?{t:'sec',id:d.sections[0].id}:null;estTouch();closeModal();S.est.tab='build';render();
-    const diff=Math.abs(R.total-(x.mode==='replace'?x.P.bid:R.total));toast(`Imported ${x.P.items.length} pay items and ${x.P.acts} activities.${x.mode==='replace'&&x.P.bid?(diff<1?' Bid total matches ProEstimate.':` Bid total is ${money(R.total)} vs ${money(x.P.bid)} in ProEstimate.`):''}`);return}});
+    const diff=Math.abs(R.total-(x.mode==='replace'?x.P.bid:R.total));if(S.est.bidId)chSaveImport(x.P,byId(S.bids,S.est.bidId),x.file,x.mode==='replace').then(()=>render());toast(`Imported ${x.P.items.length} pay items and ${x.P.acts} activities.${x.mode==='replace'&&x.P.bid?(diff<1?' Bid total matches ProEstimate.':` Bid total is ${money(R.total)} vs ${money(x.P.bid)} in ProEstimate.`):''}`);return}});
+
+/* =====================================================================
+   Cost history: the app learns from every ProEstimate estimate imported.
+   Each pay item's unit cost is matched across jobs (by pay item number and
+   unit, or by description) and turned into a price check on the estimate:
+   typical cost, range, trend, a quantity-aware suggestion, and an
+   informational flag when an item is far off history.
+   Stored in cost_history (supabase/update-45-cost-history.sql).
+   ===================================================================== */
+S.ch=S.ch||{rows:null,loading:false,ver:0,stage:null,q:''};
+async function chLoad(force){const C=S.ch;if(C.loading||(C.rows&&!force)||!can('estimates'))return;C.loading=true;
+  try{let all=[];for(let from=0;;from+=500){const r=await sb.from('cost_history').select('*').order('est_date',{ascending:false}).range(from,from+499);if(r.error)throw r.error;all=all.concat(r.data||[]);if((r.data||[]).length<500)break}
+    C.rows=all;C.missing=false}catch(e){C.rows=C.rows||[];if(/cost_history|relation|schema cache/i.test(errMsg(e)))C.missing=true;else toast('Couldn’t load cost history: '+errMsg(e))}
+  C.loading=false;C.ver++;C.idx=null;schedule()}
+const chCode=c=>{const s=String(c||'').trim();if(!/^\d{2,5}(\.\d+)?$/.test(s))return '';return (num(s)).toFixed(3)};
+const chKeyP=(code,unit)=>{const c=chCode(code);return c?'p:'+c+'|'+peeUnit(unit):''};
+const chKeyD=(desc,unit)=>{const d=normH(desc);return d?'d:'+d+'|'+peeUnit(unit):''};
+// every observation, keyed both ways; built once per load
+function chIndex(){const C=S.ch;if(C.idx&&C.idxVer===C.ver)return C.idx;const P=new Map(),D=new Map();
+  (C.rows||[]).forEach(r=>{if(r.excluded||r.budget)return;(Array.isArray(r.items)?r.items:[]).forEach(x=>{const v=num(x.c);if(v==null||!(v>0)||!(num(x.q)>0))return;
+    const o={v,b:num(x.b),q:num(x.q),date:r.est_date||String(r.created_at||'').slice(0,10),name:r.name,id:r.id,bid:r.bid_id,t:x.t||{},desc:x.d,ptype:r.project_type};
+    const kp=chKeyP(x.p,x.u),kd=chKeyD(x.d,x.u);if(kp){if(!P.has(kp))P.set(kp,[]);P.get(kp).push(o)}if(kd){if(!D.has(kd))D.set(kd,[]);D.get(kd).push(o)}})});
+  C.idx={P,D};C.idxVer=C.ver;return C.idx}
+function chObs(code,desc,unit,skipBid){const I=chIndex();const f=a=>(a||[]).filter(o=>!skipBid||o.bid!==skipBid);let o=f(I.P.get(chKeyP(code,unit)));let by='pay item number';
+  // some exports reuse one pay item number for several items (e.g. a run of storm fittings): then the description has to match too
+  if(new Set(o.map(x=>normH(x.desc))).size>1){const k=normH(desc);const m=o.filter(x=>normH(x.desc)===k);o=m;by='pay item number and description'}
+  if(o.length<1){o=f(I.D.get(chKeyD(desc,unit)));by='description'}return {o,by}}
+// weighted quantile
+function chWq(xs,p){const s=[...xs].sort((a,b)=>a.v-b.v);const W=s.reduce((t,x)=>t+x.w,0);let acc=0;for(const x of s){acc+=x.w;if(acc>=p*W)return x.v}return s.length?s[s.length-1].v:null}
+// solve small least squares (weighted) for ln v = X·β
+function chFit(rows,cols){const k=cols.length;const A=Array.from({length:k},()=>new Array(k).fill(0)),y=new Array(k).fill(0);
+  rows.forEach(r=>{const x=cols.map(f=>f(r));for(let i=0;i<k;i++){y[i]+=r.w*x[i]*Math.log(r.v);for(let j=0;j<k;j++)A[i][j]+=r.w*x[i]*x[j]}});
+  for(let i=0;i<k;i++){let p=i;for(let r=i+1;r<k;r++)if(Math.abs(A[r][i])>Math.abs(A[p][i]))p=r;if(Math.abs(A[p][i])<1e-9)return null;[A[i],A[p]]=[A[p],A[i]];[y[i],y[p]]=[y[p],y[i]];
+    for(let r=0;r<k;r++)if(r!==i){const f=A[r][i]/A[i][i];for(let c=i;c<k;c++)A[r][c]-=f*A[i][c];y[r]-=f*y[i]}}return y.map((v,i)=>v/A[i][i])}
+function chStats(obs,qty){if(!obs.length)return null;const now=Date.now();
+  const xs=obs.map(o=>{const age=Math.max(0,(now-(parseD(o.date)||new Date()).getTime())/3.156e10);return {...o,age,w:Math.pow(.5,age/1.5)}});
+  const med=chWq(xs,.5),p25=chWq(xs,.25),p75=chWq(xs,.75);const vs=xs.map(x=>x.v);const min=Math.min(...vs),max=Math.max(...vs);
+  const qs=xs.map(x=>x.q);const qSpread=Math.max(...qs)/Math.max(1e-9,Math.min(...qs));const ages=xs.map(x=>x.age);const tSpread=Math.max(...ages)-Math.min(...ages);
+  let pred=med,basis='typical',trend=null,slope=null;
+  const useQ=xs.length>=5&&qSpread>=3&&qty>0,useT=xs.length>=4&&tSpread>=.5;
+  const cols=[()=>1];if(useQ)cols.push(r=>Math.log(r.q));if(useT)cols.push(r=>-r.age);
+  if(cols.length>1){const b=chFit(xs,cols);if(b&&b.every(isFinite)){let i=1;let lp=b[0];if(useQ){slope=Math.max(-.6,Math.min(.3,b[i]));lp+=slope*Math.log(qty);i++}if(useT){const c=Math.max(-.3,Math.min(.3,b[i]));trend=Math.exp(c)-1}
+      // fitted at today's date (age 0) for this quantity, kept inside what we've actually seen
+      if(useQ){pred=Math.exp(lp);basis=useT?'quantity and date':'quantity'}else if(useT){pred=med*Math.pow(1+trend,xs.reduce((t,x)=>t+x.w*x.age,0)/xs.reduce((t,x)=>t+x.w,0));basis='date'}
+      pred=Math.max(min*.75,Math.min(max*1.25,pred))}}
+  const bids=xs.filter(x=>x.b>0);const mk=bids.length?chWq(bids.map(x=>({v:x.b/x.v-1,w:x.w})),.5):null;
+  const last=xs.reduce((a,x)=>!a||String(x.date)>String(a.date)?x:a,null);
+  return {n:xs.length,jobs:new Set(xs.map(x=>x.id)).size,med,p25,p75,min,max,pred,basis,trend,slope,mk,last,xs:xs.sort((a,b)=>String(b.date).localeCompare(String(a.date)))}}
+// the check for one bid item of the open estimate
+function chCheck(it,x){if(!S.ch.rows||!it||!(num(it.qty)>0)||!x||!x.q)return null;const {o,by}=chObs(it.code,it.desc,it.unit,S.est&&S.est.bidId);const st=chStats(o,num(it.qty));if(!st)return null;
+  const cur=x.unit;const diff=st.pred>0&&cur>0?cur/st.pred-1:null;return {...st,by,cur,diff}}
+const chFlagOn=k=>k&&k.n>=3&&k.diff!=null&&Math.abs(k.diff)>=.25;
+function chFlag(it,x){const k=chCheck(it,x);if(!chFlagOn(k))return '';const up=k.diff>0;return `<span class="ch-flag ${up?'up':'dn'}" title="Unit cost ${money2(k.cur)} vs about ${money2(k.pred)} from ${k.jobs} past job${k.jobs===1?'':'s'}. Just a heads-up.">${up?'▲':'▼'}${Math.round(Math.abs(k.diff)*100)}%</span>`}
+function chSpark(st,cur){const xs=st.xs.slice(0,40);if(xs.length<2)return '';const ds=xs.map(x=>parseD(x.date).getTime());const d0=Math.min(...ds),d1=Math.max(...ds)||d0+1;const vs=[...xs.map(x=>x.v),cur||st.med,st.pred];const lo=Math.min(...vs)*.9,hi=Math.max(...vs)*1.1;
+  const X=t=>6+(d1===d0?.5:(t-d0)/(d1-d0))*288,Y=v=>70-(v-lo)/(hi-lo||1)*62;const qm=Math.max(...xs.map(x=>x.q));
+  return `<svg class="ch-spark" viewBox="0 0 300 76" role="img" aria-label="Past unit costs over time"><line x1="0" x2="300" y1="${Y(st.pred).toFixed(1)}" y2="${Y(st.pred).toFixed(1)}" class="ch-pl"/>${cur?`<line x1="0" x2="300" y1="${Y(cur).toFixed(1)}" y2="${Y(cur).toFixed(1)}" class="ch-cl"/>`:''}
+    ${xs.map((x,i)=>`<circle cx="${X(ds[i]).toFixed(1)}" cy="${Y(x.v).toFixed(1)}" r="${(3+4*Math.sqrt(x.q/qm)).toFixed(1)}"><title>${esc(x.name)} · ${fmtShort(x.date)} ${String(x.date).slice(0,4)} · ${qtyFmt(x.q)} @ ${money2(x.v)}</title></circle>`).join('')}</svg>
+    <div class="ch-leg small dim"><span><i class="ch-dot"></i>past jobs (bigger = more quantity)</span><span><i class="ch-ln p"></i>suggested</span>${cur?'<span><i class="ch-ln c"></i>this estimate</span>':''}</div>`}
+function chCard(it,x){if(!can('estimates'))return '';if(!S.ch.rows){chLoad();return '<p class="small dim">Loading cost history…</p>'}
+  if(S.ch.missing)return '<p class="small dim">Cost history needs a database update: run <b>supabase/update-45-cost-history.sql</b>.</p>';
+  if(!(num(it.qty)>0))return '<p class="small dim">Enter a quantity to check this item against past jobs.</p>';
+  const k=chCheck(it,x);if(!k)return `<p class="small dim">No history for this item yet. The app learns from every ProEstimate estimate you import, and from old exports added on Estimates → Cost history.</p>`;
+  const tone=k.diff==null?'':Math.abs(k.diff)<.15?'good':Math.abs(k.diff)<.25?'warn':'bad';
+  return `<div class="ch-card"><div class="ch-top"><div><span class="small dim">Suggested unit cost for ${qtyFmt(num(it.qty))} ${esc(it.unit||'')}</span><b class="num">${money2(k.pred)}</b><span class="small dim">from ${k.jobs} past job${k.jobs===1?'':'s'} · by ${k.basis}</span></div>
+      <div><span class="small dim">This estimate</span><b class="num">${money2(k.cur)}</b>${k.diff!=null?pill(`${k.diff>0?'+':''}${Math.round(k.diff*100)}% vs history`,tone):''}</div></div>
+    ${chSpark(k,k.cur)}
+    <div class="ch-facts small"><span>Typical <b>${money2(k.med)}</b></span><span>Middle half <b>${money2(k.p25)}–${money2(k.p75)}</b></span><span>Lowest–highest <b>${money2(k.min)}–${money2(k.max)}</b></span>${k.trend!=null?`<span>Trend <b>${k.trend>=0?'▲':'▼'} ${Math.abs(Math.round(k.trend*100))}%/yr</b></span>`:''}${k.slope!=null?`<span>Bigger jobs <b>${k.slope<-.02?'cheaper per unit':k.slope>.02?'cost more per unit':'about the same'}</b></span>`:''}${k.mk!=null?`<span>Usual markup <b>${Math.round(k.mk*100)}%</b></span>`:''}</div>
+    <table class="eb-list ch-past"><tbody>${k.xs.slice(0,6).map(o=>`<tr><td>${esc(o.name)}</td><td class="small dim">${fmtShort(o.date)} ${String(o.date).slice(2,4)}</td><td class="r num small">${qtyFmt(o.q)}</td><td class="r num">${money2(o.v)}</td></tr>`).join('')}</tbody></table>
+    <p class="small dim" style="margin:6px 0 0">Matched by ${k.by}${k.jobs<3?'. Only a few jobs so far, so take it with a grain of salt':''}. Just information; nothing changes on its own.</p></div>`}
+// ---------- adding estimates to history ----------
+function chItemsFromPE(P){return P.items.map(x=>{const q=num(x.qty)||0;const t={};PEE_TYPES.forEach(([k])=>{if(x.costs[k])t[k]=+x.costs[k].toFixed(4)});
+  return {p:String(x.pay),d:x.desc,u:peeUnit(x.unit),q,c:q?+(x.ecost/q).toFixed(4):null,b:x.ubid?+x.ubid.toFixed(4):null,t}})}
+async function chSaveImport(P,b,file,replace){if(!can('estimates','edit'))return;const row={bid_id:b?b.id:null,name:b?b.name:String(file||'').replace(/\.[^.]+$/,''),est_date:(b&&(b.due_date||sentOn(b)))||todayStr(),project_type:b?(normProjectType(b.project_type)||''):'',location:b?(b.location||''):'',budget:b?isBudget(b):false,
+  source:'proestimate',file:file||'',total_cost:r2(P.cost),total_bid:r2(P.bid),items:chItemsFromPE(P),created_by_name:myName()};
+  try{if(b&&replace!==false){const r=await sb.from('cost_history').delete().eq('bid_id',b.id);if(r.error)throw r.error}const r2_=await sb.from('cost_history').insert(row);if(r2_.error)throw r2_.error;await chLoad(true)}
+  catch(e){if(/cost_history|relation|schema cache/i.test(errMsg(e))){S.ch.missing=true}else toast('Saved the estimate, but couldn’t add it to cost history: '+errMsg(e))}}
+// ---------- Estimates → Cost history ----------
+const chName=f=>String(f||'').replace(/\.[^.]+$/,'').replace(/[_]+/g,' ').replace(/\s+-\s+/g,' – ').trim();
+function chBidGuess(name){const k=normH(name);if(!k)return '';const b=S.bids.find(b=>{const n=normH(b.name);return n&&n.length>3&&(k.includes(n)||n.includes(k))});return b?b.id:''}
+function chPage(){const C=S.ch;if(!C.rows){chLoad();return dozerLoader('Loading cost history')}
+  if(C.missing)return '<div class="notice">Cost history needs a database update: run <b>supabase/update-45-cost-history.sql</b> in Supabase (SQL Editor → New query → paste → Run), then refresh.</div>';
+  const ed=can('estimates','edit');const rows=C.rows;const used=rows.filter(r=>!r.excluded&&!r.budget);const I=chIndex();const items=used.reduce((s,r)=>s+(r.items||[]).length,0);
+  const dates=used.map(r=>r.est_date).filter(Boolean).sort();
+  const stage=C.stage;
+  const stageHtml=stage&&stage.length?`<div class="panel pad" style="margin-bottom:14px"><h3 style="margin:0 0 4px">Ready to add (${stage.filter(s=>s.P).length})</h3><p class="small dim" style="margin:0 0 8px">Check the name, date and project type. Older jobs count for less, so the date matters. Link a bid if the job is in the app.</p>
+    <div class="scroll"><table class="rp-tbl ch-stage"><thead><tr><th>File</th><th>Project</th><th>Date</th><th>Project type</th><th>Bid in the app</th><th>Budget</th><th class="r">Items</th><th class="r">Cost</th><th></th></tr></thead><tbody>
+    ${stage.map((s,i)=>s.err?`<tr><td class="small">${esc(s.file)}</td><td colspan="8" class="small" style="color:var(--bad)">${esc(s.err)}</td></tr>`:`<tr><td class="small dim">${esc(s.file)}</td><td><input class="field" data-chs="${i}|name" value="${esc(s.name)}"></td><td><input class="field" type="date" data-chs="${i}|date" value="${esc(s.date)}"></td>
+      <td><select class="field" data-chs="${i}|ptype"><option value="">—</option>${PROJECT_TYPES.map(t=>`<option${s.ptype===t?' selected':''}>${esc(t)}</option>`).join('')}</select></td>
+      <td><select class="field" data-chs="${i}|bid"><option value="">Not in the app</option>${S.bids.filter(b=>!b._new).sort((a,b)=>a.name.localeCompare(b.name)).map(b=>`<option value="${b.id}"${s.bid===b.id?' selected':''}>${esc(b.name)}</option>`).join('')}</select></td>
+      <td><input type="checkbox" data-chs="${i}|budget"${s.budget?' checked':''}></td><td class="r num">${s.P.items.length}</td><td class="r num">${moneyK(s.P.cost)}</td><td><button class="btn sm ghost" data-act="ch-unstage" data-i="${i}">×</button></td></tr>`).join('')}</tbody></table></div>
+    <div class="adders" style="margin-top:10px"><button class="btn primary" data-act="ch-add"${stage.some(s=>s.P)&&!C.busy?'':' disabled'}>${C.busy?'Adding…':`Add ${stage.filter(s=>s.P).length} to cost history`}</button><button class="btn" data-act="ch-clear">Cancel</button></div></div>`:'';
+  const q=normH(C.q||'');const lib=[...I.P.entries()].flatMap(([k,o])=>{const g=new Map();o.forEach(x=>{const dk=normH(x.desc);if(!g.has(dk))g.set(dk,[]);g.get(dk).push(x)});return [...g.values()].map(oo=>{const st=chStats(oo,0);const last=oo.reduce((a,x)=>!a||String(x.date)>String(a.date)?x:a,null);return {k,code:k.slice(2).split('|')[0],unit:k.split('|')[1],desc:last.desc,st}})}).filter(x=>!q||normH(x.code+x.desc).includes(q)).sort((a,b)=>num(a.code)-num(b.code));
+  return `<div class="kpis">${kpi('Estimates learned from',used.length,rows.length>used.length?`${rows.length-used.length} left out (budgets or excluded)`:'All counted')}${kpi('Pay item prices',items.toLocaleString(),`${I.P.size} different pay items`)}${kpi('Covers',dates.length?`${dates[0].slice(0,4)}–${dates[dates.length-1].slice(0,4)}`:'—',dates.length?`${fmtShort(dates[0])} ${dates[0].slice(0,4)} to ${fmtShort(dates[dates.length-1])} ${dates[dates.length-1].slice(0,4)}`:'Nothing yet')}</div>
+    ${ed?`<div class="panel pad ch-up"><div><b>Add old ProEstimate estimates</b><p class="small dim" style="margin:2px 0 0">Pick one or many estimate exports (.xls or .xlsx). The more jobs it sees, the better the price checks get. Estimates you import into a bid are added on their own.</p></div><label class="btn primary">Choose files<input type="file" multiple accept=".xls,.xlsx" data-chfiles hidden></label></div>`:''}
+    ${stageHtml}
+    <div class="grid2 ch-grid"><div class="sec" style="margin:0"><div class="sec-h"><h2>Estimates in the history</h2><span>${rows.length}</span></div><div class="panel scroll">${rows.length?`<table class="rp-tbl"><thead><tr><th>Project</th><th>Date</th><th>Type</th><th class="r">Items</th><th class="r">Cost</th><th>Counted</th><th></th></tr></thead><tbody>
+      ${rows.map(r=>`<tr class="${r.excluded||r.budget?'ch-off':''}"><td>${esc(r.name)}${r.bid_id&&byId(S.bids,r.bid_id)?' <span class="small dim">· in the app</span>':''}</td><td class="small">${r.est_date?fmtShort(r.est_date)+' '+r.est_date.slice(2,4):'—'}</td><td class="small">${esc(r.project_type||'—')}${r.budget?' · budget':''}</td><td class="r num">${(r.items||[]).length}</td><td class="r num">${moneyK(r.total_cost)}</td>
+        <td><label class="check small"><input type="checkbox" data-chinc="${r.id}"${!r.excluded?' checked':''}${ed?'':' disabled'}> ${r.budget?'(budget)':''}</label></td><td>${ed?`<button class="btn sm ghost" data-act="ch-del" data-id="${r.id}" title="Remove from history">×</button>`:''}</td></tr>`).join('')}</tbody></table>`:'<div class="empty"><b>Nothing yet</b>Import a ProEstimate estimate into a bid, or add old exports above.</div>'}</div></div>
+    <div class="sec" style="margin:0"><div class="sec-h"><h2>What it knows</h2><span>Typical unit cost per pay item</span></div><div class="panel pad"><input class="field" data-chq placeholder="Search pay item number or description" value="${esc(C.q||'')}" style="margin-bottom:8px">
+      ${lib.length?`<div class="scroll ch-lib"><table class="rp-tbl"><thead><tr><th>Pay item</th><th>Description</th><th class="r">Jobs</th><th class="r">Typical</th><th class="r">Range</th><th class="r">Trend</th></tr></thead><tbody>${lib.slice(0,300).map(x=>`<tr><td class="num">${esc(String(+x.code))}</td><td>${esc(x.desc)} <span class="dim small">${esc(x.unit)}</span></td><td class="r num">${x.st.jobs}</td><td class="r num">${money2(x.st.med)}</td><td class="r num small dim">${money2(x.st.p25)}–${money2(x.st.p75)}</td><td class="r small">${x.st.trend!=null?`${x.st.trend>=0?'▲':'▼'}${Math.abs(Math.round(x.st.trend*100))}%/yr`:'—'}</td></tr>`).join('')}</tbody></table></div>${lib.length>300?'<p class="small dim">Showing 300. Search to narrow it down.</p>':''}`:'<div class="empty">No pay items yet.</div>'}</div></div></div>`}
+document.addEventListener('change',async e=>{const t=e.target;if(!t.dataset)return;const C=S.ch;
+  if(t.dataset.chfiles!=null&&t.files.length){const files=[...t.files];C.stage=C.stage||[];toast(`Reading ${files.length} file${files.length===1?'':'s'}…`);
+    try{const X=await loadXLSX();for(const f of files){try{const wb=X.read(await f.arrayBuffer(),{type:'array'});const P=peeParse(X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1,raw:true,defval:''}));const name=chName(f.name);const bid=chBidGuess(name);const b=bid?byId(S.bids,bid):null;
+        const dup=(C.rows||[]).some(r=>normH(r.name)===normH(name)&&Math.abs((num(r.total_cost)||0)-P.cost)<1);
+        C.stage.push({file:f.name,P,name,date:(b&&b.due_date)||rpD(new Date(f.lastModified||Date.now())),ptype:b?(normProjectType(b.project_type)||''):'',bid,budget:b?isBudget(b):false,err:dup?'Already in the history (same name and cost).':''});if(dup)C.stage[C.stage.length-1].P=null}
+      catch(err){C.stage.push({file:f.name,err:errMsg(err)})}}}catch(err){toast(errMsg(err))}t.value='';render();return}
+  if(t.dataset.chs!=null&&C.stage){const [i,k]=t.dataset.chs.split('|');const s=C.stage[+i];if(!s)return;s[k]=t.type==='checkbox'?t.checked:t.value;if(k==='bid'&&t.value){const b=byId(S.bids,t.value);if(b){s.ptype=normProjectType(b.project_type)||s.ptype;s.budget=isBudget(b);if(b.due_date)s.date=b.due_date}render()}return}
+  if(t.dataset.chinc!=null){const r=(C.rows||[]).find(x=>x.id===t.dataset.chinc);if(!r)return;r.excluded=!t.checked;C.ver++;render();run(sb.from('cost_history').update({excluded:r.excluded}).eq('id',r.id)).catch(err=>toast(errMsg(err)));return}});
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.chq!=null){S.ch.q=t.value;render()}});
+FOCUS_ATTRS.push('data-chq');
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!/^ch-/.test(a))return;const C=S.ch;
+  if(a==='ch-unstage'){C.stage.splice(+t.dataset.i,1);render();return}
+  if(a==='ch-clear'){C.stage=null;render();return}
+  if(a==='ch-del'){if(!t.classList.contains('arm')){t.classList.add('arm');t.textContent='Remove?';setTimeout(()=>{t.classList.remove('arm');t.textContent='×'},2500);return}
+    try{await run(sb.from('cost_history').delete().eq('id',t.dataset.id));C.rows=C.rows.filter(r=>r.id!==t.dataset.id);C.ver++;render();toast('Removed from cost history')}catch(err){toast(errMsg(err))}return}
+  if(a==='ch-add'){const go=C.stage.filter(s=>s.P);if(!go.length)return;C.busy=true;render();
+    const rows=go.map(s=>({bid_id:s.bid||null,name:s.name||chName(s.file),est_date:s.date||null,project_type:s.ptype||'',location:s.bid?(byId(S.bids,s.bid)?.location||''):'',budget:!!s.budget,source:'proestimate',file:s.file,total_cost:r2(s.P.cost),total_bid:r2(s.P.bid),items:chItemsFromPE(s.P),created_by_name:myName()}));
+    try{for(let i=0;i<rows.length;i+=20){const r=await sb.from('cost_history').insert(rows.slice(i,i+20));if(r.error)throw r.error}C.stage=null;C.busy=false;await chLoad(true);toast(`Added ${rows.length} estimate${rows.length===1?'':'s'} to cost history`)}
+    catch(err){C.busy=false;if(/cost_history|relation|schema cache/i.test(errMsg(err)))C.missing=true;toast(errMsg(err));render()}return}});

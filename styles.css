@@ -2867,3 +2867,21 @@ div.tw-pgh{cursor:default}
 .pee-sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}.pee-sum div{display:flex;flex-direction:column;background:var(--surface-2);border-radius:8px;padding:8px 10px}.pee-sum b{font-size:18px}
 .pee-secs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.pee-sec{display:grid;grid-template-columns:44px 1fr 28px;gap:6px;align-items:center}.pee-sec .field{padding:6px 8px}
 @media (max-width:640px){.pee-sum,.pee-secs{grid-template-columns:repeat(2,minmax(0,1fr))}.pee-secs{grid-template-columns:1fr}}
+/* Cost history */
+.ch-flag{display:inline-block;margin-left:6px;font-size:11px;font-weight:700;padding:1px 6px;border-radius:10px;white-space:nowrap;vertical-align:middle}
+.ch-flag.up{background:var(--bad-soft);color:var(--bad)}.ch-flag.dn{background:var(--info-soft);color:var(--info)}
+.ch-card{display:flex;flex-direction:column;gap:10px}
+.ch-top{display:grid;grid-template-columns:1fr 1fr;gap:12px}.ch-top>div{display:flex;flex-direction:column;gap:2px;align-items:flex-start}.ch-top b{font-size:22px;line-height:1.15}
+.ch-spark{width:100%;height:auto;display:block;background:var(--surface-2);border-radius:8px}
+.ch-spark circle{fill:var(--s1);fill-opacity:.55;stroke:var(--surface);stroke-width:1.5}
+.ch-spark .ch-pl{stroke:var(--good);stroke-width:2;stroke-dasharray:5 4}.ch-spark .ch-cl{stroke:var(--s2);stroke-width:2}
+.ch-leg{display:flex;gap:14px;flex-wrap:wrap}.ch-leg i{display:inline-block;margin-right:5px;vertical-align:middle}
+.ch-dot{width:9px;height:9px;border-radius:50%;background:var(--s1);opacity:.6}.ch-ln{width:16px;height:0;border-top:2px solid}.ch-ln.p{border-color:var(--good);border-top-style:dashed}.ch-ln.c{border-color:var(--s2)}
+.ch-facts{display:flex;flex-wrap:wrap;gap:6px 16px;color:var(--ink-2)}.ch-facts b{color:var(--ink)}
+.ch-past td{padding:5px 6px}
+.ch-up{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.ch-stage .field{padding:5px 7px;font-size:13px;min-width:110px}
+.ch-off td{color:var(--ink-3)}
+.ch-lib{max-height:560px;overflow:auto}
+.ch-grid{align-items:start}
+@media (max-width:640px){.ch-top{grid-template-columns:1fr}}

@@ -942,3 +942,14 @@ Open a bid's estimate and either pick **From a ProEstimate export** when startin
 - If the estimate already has bid items you can replace everything (the estimate's own indirects are cleared, since ProEstimate already spreads project indirects into each pay item) or add the import to what's there.
 - The direct cost can be off from ProEstimate's by a few dollars, because ProEstimate rounds each pay item's unit cost to the cent before extending it.
 - The export doesn't include crews or production rates, so activities come in as unit costs.
+
+## Cost history (the estimate learns from past jobs)
+
+Needs `supabase/update-45-cost-history.sql`. Every ProEstimate estimate imported into a bid's estimate is added to the cost history automatically (re-importing replaces that bid's earlier copy). Old exports can be added in bulk on **Estimates → Cost history → Choose files**: check the project name, date and project type for each file, link the bid if it's in the app, tick Budget for budgets (they're left out of the numbers), and click Add.
+
+On an estimate, select a bid item to see its **Cost history** card:
+- **Suggested unit cost** for this quantity, from past jobs with the same pay item number and unit (or the same description). With 5+ jobs over a range of quantities it accounts for bigger jobs costing less per unit; with jobs spread over time it accounts for the price trend. Recent jobs count more (a job's weight halves every 18 months).
+- This estimate's unit cost and how far off it is, the typical cost, the middle half and the full range, the trend per year, the usual markup, a chart of past jobs over time, and the last few jobs.
+- Bid items 25% or more off history (with at least 3 past jobs) get a small ▲/▼ % tag in the list. It's information only; nothing changes on its own.
+
+The Cost history page lists every estimate it learned from (untick one to leave it out, or × to remove it) and what it knows: the typical unit cost, range and trend for each pay item.
