@@ -953,3 +953,7 @@ On an estimate, select a bid item to see its **Cost history** card:
 - Bid items 25% or more off history (with at least 3 past jobs) get a small ▲/▼ % tag in the list. It's information only; nothing changes on its own.
 
 The Cost history page lists every estimate it learned from (untick one to leave it out, or × to remove it) and what it knows: the typical unit cost, range and trend for each pay item.
+
+## Developer: my tabs
+
+Admins switch tabs off for everyone on Team → Access chart. The developer can also turn any tab **on or off just for themselves** on **Developer → My tabs** (Same as team / On / Off), for example to keep testing Jobs while the team has it switched off. It's saved on the developer's own profile, so it follows them to any device, and nobody else is affected. Tabs that only the developer can see are marked 🔧 in the top bar. **Put all back to the team setting** clears it.

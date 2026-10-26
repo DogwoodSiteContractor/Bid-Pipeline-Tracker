@@ -2885,3 +2885,4 @@ div.tw-pgh{cursor:default}
 .ch-lib{max-height:560px;overflow:auto}
 .ch-grid{align-items:start}
 @media (max-width:640px){.ch-top{grid-template-columns:1fr}}
+.dtab td{vertical-align:middle}.dtab-seg{padding:3px;gap:2px}.dtab-seg button{padding:5px 11px;font-size:12.5px}

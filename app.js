@@ -441,9 +441,10 @@ document.addEventListener('submit',async e=>{
 function dashSeg(){const cur=S.dash==='reports'?'reports':(onlyMine()||scopeView())?'mine':role()==='board'?'board':S.dash;
   const b=(v,l,sm)=>`<button class="${cur===v?'on':''}" data-act="dash" data-v="${v==='mine'?'precon':v}">${l}${sm?`<small>${sm}</small>`:''}</button>`;
   const items=onlyMine()||scopeView()?[b('mine',onlyMine()?'My dashboard':'Dashboard','Daily work')]:role()==='board'?[b('board','Board','Results & trends')]:[b('precon','Precon','Daily work'),b('board','Board','Results & trends')];
-  return `<div class="seg" role="tablist">${items.join('')}${b('reports','Reports','Build your own')}</div>`}
+  return `<div class="seg" role="tablist">${items.join('')}${tabOff('reports')?'':b('reports','Reports'+(devOnly('reports')?' 🔧':''),'Build your own')}</div>`}
 function vDashboard(){
   const d=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
+  if(S.dash==='reports'&&tabOff('reports'))S.dash=role()==='board'?'board':'precon';
   if(S.dash==='reports')return vReports(true);
   if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+bidReqPanel()+reviewPanel()+fuPanel()+mine();
   if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+bidReqPanel()+fuPanel()+precon();
@@ -6717,7 +6718,11 @@ function permOf(p,a){if(!p)return rolePerm('pending',a);if(p.role==='admin'||p.r
 // Tabs an admin has switched off for the whole company. Display only: it hides the tab and everything that leads to it.
 const TAB_SWITCH=[['dash','Dashboard'],['bids','Pipeline'],['estimates','Estimates','Estimates, codebooks, bid settings and templates'],['awards','Awarded'],['jobs','Jobs'],['acct','Accounting'],['contacts','Contacts'],['calc','Calculators'],['reports','Reports'],['fun','Break room'],['help','Help']];
 const tabsOff=()=>{const v=S.settings&&S.settings.general&&S.settings.general.tabsOff;return Array.isArray(v)?v:[]};
-const tabOff=a=>{const o=tabsOff();return o.includes(a)||(a==='codebook'&&o.includes('estimates'))};
+// the developer can turn tabs on or off just for themselves (kept on their own profile), whatever the company setting is
+const devTabs=()=>isDev()&&S.profile&&S.profile.profile&&S.profile.profile.devTabs||{};
+const tabOffTeam=a=>{const o=tabsOff();return o.includes(a)||(a==='codebook'&&o.includes('estimates'))};
+const tabOff=a=>{const k=a==='codebook'?'estimates':a;const v=devTabs()[k];if(v==='on')return false;if(v==='off')return true;return tabOffTeam(a)};
+const devOnly=a=>devTabs()[a]==='on'&&tabOffTeam(a);
 const perm=a=>a!=='bids_scope'&&tabOff(a)?'none':permOf(S.profile,a);
 const can=(a,l)=>{const v=perm(a);return l==='edit'?v==='edit':v==='view'||v==='edit'};
 const bidsAll=()=>perm('bids_scope')==='all';
@@ -6782,7 +6787,8 @@ function navGroups(){const g=[];
   if(!tabOff('fun'))g.push(['fun','Break room',['fun']]);
   if(!tabOff('help'))g.push(['help','Help',['help']]);
   if(isDev()){const n=(S.feedback||[]).filter(f=>f.status==='New').length;g.push(['dev','Developer'+(n?` (${n})`:''),['dev']])}
-  return g}
+  const AR={dashboard:'dash',pipeline:'bids',estimates:'estimates',cb:'estimates',awards:'awards',jobs:'jobs',acct:'acct',clients:'contacts',calc:'calc',fun:'fun',help:'help',reports:'reports'};
+  return isDev()?g.map(x=>AR[x[0]]&&devOnly(AR[x[0]])?[x[0],x[1]+' 🔧',x[2]]:x):g}
 
 /* ----- Team: People & access ----- */
 function teamHead(title,sub,tools){return `<div class="head"><div><h1>${title}</h1><p>${sub}</p></div><div class="tools">${tools||''}<button class="btn" data-act="reload-team">Refresh</button></div></div>`}
@@ -6809,7 +6815,7 @@ function vTeamOffice(){const roles=['executive','accounting','board','admin'];co
 
 /* ----- Team: access chart ----- */
 function tabSwitchPanel(){if(!isAdmin())return '';const off=tabsOff();
-  return `<div class="panel pad tabsw"><b>Tabs in use</b><p class="small dim" style="margin:2px 0 10px">Untick a tab to hide it for everyone, admins included. Nothing is deleted; tick it again and it’s back as it was. Team always stays on.</p>
+  return `<div class="panel pad tabsw"><b>Tabs in use</b><p class="small dim" style="margin:2px 0 10px">Untick a tab to hide it for everyone, admins included. Nothing is deleted; tick it again and it’s back as it was. Team always stays on.${isDev()?' As the developer you can also turn tabs on or off just for yourself: Developer → My tabs.':''}</p>
     <div class="tabsw-g">${TAB_SWITCH.map(([k,l,sub])=>`<label class="check"><input type="checkbox" data-tabsw="${k}"${off.includes(k)?'':' checked'}> <span><b>${l}</b>${sub?`<small>${sub}</small>`:''}${k==='bids'?'<small>Turning this off hides every bid</small>':''}</span></label>`).join('')}</div></div>`}
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset.tabsw==null||!isAdmin())return;const k=t.dataset.tabsw;const off=tabsOff().filter(x=>x!==k);if(!t.checked)off.push(k);
   const g={...(S.settings.general||{}),tabsOff:off};S.settings.general=g;render();run(sb.from('settings').upsert({key:'general',value:g})).then(()=>loadTable('settings')).then(()=>{render();toast(`${(TAB_SWITCH.find(x=>x[0]===k)||[])[1]} ${t.checked?'is back on':'is hidden for everyone'}`)}).catch(er=>toast(errMsg(er)))});
@@ -7016,8 +7022,8 @@ function helpFb(){const L=S.myFb||[];
 function vDev(){if(!isDev())return '<div class="empty">This page is for the developer.</div>';const D=S.dev;const F=(S.feedback||[]).map(f=>({...f,status:fbStatusUi(f.status)}));const nNew=F.filter(f=>f.status==='New').length;
   return `<div class="head"><div><h1>Developer</h1><p>Only you can see this tab. Build ${APP_BUILD}.</p></div><div class="tools"><button class="btn primary" data-act="dev-run">▶ Run tests</button></div></div>
   ${S.tableErr&&S.tableErr.feedback?'<div class="notice">The feedback table isn’t there yet. Run <b>supabase/update-19-help-developer.sql</b> in Supabase.</div>':''}
-  <div class="seg acct-tabs">${[['inbox',`Feedback inbox${nNew?` <small>${nNew} new</small>`:''}`],['tests','System tests'],['reviews',`User reports${(S.reviews||[]).length?` <small>${(S.reviews||[]).length}</small>`:''}`],['usage','Storage & capacity'],['info','App info']].map(([k,l])=>`<button class="${D.tab===k?'on':''}" data-act="dev-tab" data-v="${k}">${l}</button>`).join('')}</div>
-  ${D.tab==='reviews'?devReviews():D.tab==='tests'?devTests():D.tab==='usage'?devUsage():D.tab==='info'?devInfo():devInbox(F)}`}
+  <div class="seg acct-tabs">${[['inbox',`Feedback inbox${nNew?` <small>${nNew} new</small>`:''}`],['tests','System tests'],['reviews',`User reports${(S.reviews||[]).length?` <small>${(S.reviews||[]).length}</small>`:''}`],['usage','Storage & capacity'],['tabs','My tabs'],['info','App info']].map(([k,l])=>`<button class="${D.tab===k?'on':''}" data-act="dev-tab" data-v="${k}">${l}</button>`).join('')}</div>
+  ${D.tab==='tabs'?devTabsPanel():D.tab==='reviews'?devReviews():D.tab==='tests'?devTests():D.tab==='usage'?devUsage():D.tab==='info'?devInfo():devInbox(F)}`}
 const PRI_ORDER={P1:0,P2:1,P3:2,'':3},IMP_ORDER={high:0,normal:1,low:2};
 function devInbox(F){const D=S.dev;const q=(D.q||'').trim().toLowerCase();
   let L=F.filter(f=>(D.status==='open'?FB_OPEN.has(f.status):D.status==='all'?true:f.status===D.status)&&(!D.kind||f.kind===D.kind)&&(!D.area||f.area===D.area)&&(!q||[f.title,f.body,f.created_by_name,f.area,f.dev_notes].join(' ').toLowerCase().includes(q)));
@@ -13753,3 +13759,15 @@ async function chBackfill(){if(chBackfilled||!can('estimates','edit'))return;chB
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-act="tpl-del"]');if(!t)return;e.stopPropagation();if(!cbEditable())return;const id=t.dataset.id;const tp=cbById(id);if(!tp)return;
   if(!t.classList.contains('arm')){document.querySelectorAll('.tpl-del.arm').forEach(x=>{x.classList.remove('arm');x.textContent=x.dataset.lbl||'Delete'});t.dataset.lbl=t.textContent;t.classList.add('arm');t.textContent='Click again to delete';setTimeout(()=>{if(t.isConnected&&t.classList.contains('arm')){t.classList.remove('arm');t.textContent=t.dataset.lbl}},3500);return}
   try{await run(sb.from('codebook').delete().eq('id',id));await loadTable('codebook');if(S.est&&S.est.tpl===id){S.est=null;S.view='estimates';S.estsTab='tpl'}render();toast(`Deleted “${tp.description}”. Estimates started from it keep their own copy.`)}catch(err){toast(typeof cbErr==='function'?cbErr(err):errMsg(err))}},true);
+
+function devTabsPanel(){const me=devTabs();const off=tabsOff();
+  return `<div class="panel pad tabsw"><b>My tabs</b><p class="small dim" style="margin:2px 0 10px">Turn tabs on or off just for you, so you can keep testing a tab the team has switched off (or hide one you don’t need). Everyone else keeps the company setting from Team → Access chart. Tabs only you can see are marked 🔧 in the top bar.</p>
+    <table class="rp-tbl dtab"><thead><tr><th>Tab</th><th>For the team</th><th>For me</th></tr></thead><tbody>${TAB_SWITCH.map(([k,l])=>{const v=me[k]||'';const team=!off.includes(k);
+      return `<tr><td><b>${esc(l)}</b></td><td>${team?pill('On','good'):pill('Off')}</td><td><div class="seg dtab-seg">${[['','Same as team'],['on','On'],['off','Off']].map(([x,lb])=>`<button class="${v===x?'on':''}" data-act="devtab" data-k="${k}" data-v="${x}">${lb}</button>`).join('')}</div></td></tr>`}).join('')}</tbody></table>
+    ${Object.keys(me).length?'<div class="adders" style="margin-top:10px"><button class="btn sm ghost" data-act="devtab-reset">Put all back to the team setting</button></div>':''}</div>`}
+async function devTabsSave(next){const pf={...(S.profile.profile||{}),devTabs:next};if(!Object.keys(next).length)delete pf.devTabs;const old=S.profile.profile;S.profile.profile=pf;render();
+  try{const {error}=await sb.rpc('update_my_profile',{p_name:String(S.profile.full_name||'').trim(),p_title:String(S.profile.title||'').trim(),p_phone:String(S.profile.phone||'').trim(),p_profile:pf});if(error)throw error}
+  catch(e){S.profile.profile=old;render();toast('Couldn’t save: '+errMsg(e))}}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!isDev())return;const a=t.dataset.act;
+  if(a==='devtab'){const next={...devTabs()};const k=t.dataset.k;if(t.dataset.v)next[k]=t.dataset.v;else delete next[k];devTabsSave(next);toast(`${(TAB_SWITCH.find(x=>x[0]===k)||[])[1]}: ${t.dataset.v==='on'?'on for you':t.dataset.v==='off'?'off for you':'back to the team setting'}`);return}
+  if(a==='devtab-reset'){devTabsSave({});toast('All tabs follow the team setting again');return}});
