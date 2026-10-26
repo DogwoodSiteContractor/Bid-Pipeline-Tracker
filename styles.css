@@ -2863,3 +2863,7 @@ div.tw-pgh{cursor:default}
 .gr-side{display:flex;flex-direction:column;gap:12px}.gr-help p{margin:6px 0}
 @media (max-width:900px){.gr{grid-template-columns:1fr}}
 @media (hover:hover) and (pointer:fine){.gr-ctl{display:none}}
+/* ProEstimate estimate import */
+.pee-sum{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0}.pee-sum div{display:flex;flex-direction:column;background:var(--surface-2);border-radius:8px;padding:8px 10px}.pee-sum b{font-size:18px}
+.pee-secs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}.pee-sec{display:grid;grid-template-columns:44px 1fr 28px;gap:6px;align-items:center}.pee-sec .field{padding:6px 8px}
+@media (max-width:640px){.pee-sum,.pee-secs{grid-template-columns:repeat(2,minmax(0,1fr))}.pee-secs{grid-template-columns:1fr}}

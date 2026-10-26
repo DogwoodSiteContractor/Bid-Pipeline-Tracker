@@ -930,3 +930,15 @@ A built-in report page (Dashboard → Reports → **Week in review**) that fills
 - **Planned to Send:** open bids due in the week the sheet is dated (not sent yet, not on hold).
 
 The counts and **Total Sent** (new bids + revisions + budgets) are underneath. Use ‹ › to step through weeks. **Export to Excel** downloads `MM.DD.YY_Week_In_Review.xlsx` in the same layout with the COUNTA and SUM formulas. You can also add a Week in review card to any of your own report pages (Show as → Week in review).
+
+## Import a ProEstimate estimate
+
+Open a bid's estimate and either pick **From a ProEstimate export** when starting it, or click **⬇ ProEstimate estimate** on the Build tab. Choose the estimate export from ProEstimate (.xls or .xlsx: Pay Item, Sort Code, Pay Item Description, Quantity, Unit, Labor … Hauling, Unit Cost, Mark-Up, Unit Bid).
+
+- Each **pay item** becomes a bid item (pay item number, description, quantity, unit), in ProEstimate's sort order.
+- The rows under it become its **activities**, each carrying ProEstimate's unit costs as resources: labor, equipment, material, supplies, sub, other, project indirects and hauling.
+- **Sections** come from the pay item series (100 General conditions, 200 Erosion control, 350 Demolition, 400 Earthwork, 500 Storm drainage, 600 Sanitary sewer, 700 Water…). You can rename them before importing.
+- **Keep ProEstimate's unit bid prices** (on by default) sets each bid item's unit price override to ProEstimate's unit bid, so the bid total matches ProEstimate exactly. Untick it to price everything with one markup (the overall % from the file) instead.
+- If the estimate already has bid items you can replace everything (the estimate's own indirects are cleared, since ProEstimate already spreads project indirects into each pay item) or add the import to what's there.
+- The direct cost can be off from ProEstimate's by a few dollars, because ProEstimate rounds each pay item's unit cost to the cent before extending it.
+- The export doesn't include crews or production rates, so activities come in as unit costs.
