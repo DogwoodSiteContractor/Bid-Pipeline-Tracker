@@ -12898,7 +12898,7 @@ const wkMon=ds=>{const d=parseD(ds);if(!d)return '';const x=new Date(d.getFullYe
 // the day a bid first went out: the submitted date, or the earliest "sent on" date for any GC
 function sentOn(b){if(!isSent(b))return '';const ds=[b.submitted_date,...Object.values(b.client_proposals||{}).map(p=>p&&p.sent_date)].filter(Boolean).map(x=>String(x).slice(0,10)).sort();return ds[0]||''}
 function wkEvents(){const ev=[];S.bids.filter(b=>!b._new&&statOk(b)).forEach(b=>{const i=intakeOf(b);if(i)ev.push({k:'in',d:i,b});
-  const s=sentOn(b);if(s)ev.push({k:isBudget(b)?'bud':'sub',d:s,b});
+  const s=sentOn(b);if(s)ev.push({k:isBudget(b)?'bud':'sub',d:s,b,ta:i?Math.max(0,dayDiff(i,s)):null});
   revShown(b).forEach(r=>{if(+r.rev>0&&r.date)ev.push({k:'rev',d:String(r.date).slice(0,10),b,r})})});return ev}
 function wkRange(endDs,n){const out=[];const e=parseD(wkMon(endDs));for(let i=n-1;i>=0;i--){const d=new Date(e);d.setDate(d.getDate()-7*i);out.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`)}return out}
 function weeklyPanel(where){const n=S.wkN||8;const Y=S.year||new Date().getFullYear();const cur=new Date().getFullYear();
@@ -12907,14 +12907,19 @@ function weeklyPanel(where){const n=S.wkN||8;const Y=S.year||new Date().getFullY
   const tot={in:0,sub:0,bud:0,rev:0};weeks.forEach(w=>WK_SER.forEach(([k])=>tot[k]+=by[w][k].length));
   const mx=Math.max(1,...weeks.flatMap(w=>WK_SER.map(([k])=>by[w][k].length)));const thisW=wkMon(todayStr());
   const lab=w=>{const d=parseD(w);return `${d.getMonth()+1}/${d.getDate()}`};
+  const taOf=list=>{const v=list.map(x=>x.ta).filter(x=>x!=null);return v.length?Math.round(v.reduce((a,b)=>a+b,0)/v.length*10)/10:null};
   const pick=S.wkPick&&by[S.wkPick]?S.wkPick:null;
   const seg=`<span class="seg sm wk-seg">${[[8,'8 wks'],[13,'13 wks'],[26,'26 wks'],[52,'Year']].map(([v,l])=>`<button class="${n===v?'on':''}" data-act="wk-n" data-v="${v}">${l}</button>`).join('')}</span>`;
   const legend=`<span class="legend">${WK_SER.map(([k,l,c])=>`<span><i style="background:${c}"></i>${l}</span>`).join('')}</span>`;
   const avg=k=>(tot[k]/Math.max(1,weeks.length)).toFixed(1);
   const chart=`<div class="wk-chart" style="--n:${weeks.length}">${weeks.map(w=>{const x=by[w];const t=WK_SER.map(([k,l])=>`${l}: ${x[k].length}`).join(', ');
-    return `<button class="wk-col${w===thisW?' now':''}${w===pick?' on':''}" data-act="wk-pick" data-v="${w}" title="Week of ${fmtShort(w)}: ${t}"><div class="wk-bars">${WK_SER.map(([k,,c])=>`<i style="height:${x[k].length/mx*100}%;background:${c}">${x[k].length&&weeks.length<=13?`<b>${x[k].length}</b>`:''}</i>`).join('')}</div><span>${weeks.length>26&&weeks.indexOf(w)%4?'':lab(w)}</span></button>`}).join('')}</div>`;
-  const sums=`<div class="wk-sums">${WK_SER.map(([k,l,c])=>`<div><i style="background:${c}"></i><b class="num">${tot[k]}</b><span class="small dim">${l.toLowerCase()} · ${avg(k)}/wk</span></div>`).join('')}</div>`;
-  let detail='';if(pick){const x=by[pick];const row=(e)=>`<li><button class="linkish" data-act="open-bid" data-id="${e.b.id}">${esc(e.b.name)}</button> <span class="dim small">${fmtShort(e.d)}${e.r?` · Rev ${e.r.rev}${e.r.reason?' · '+esc(e.r.reason):''}`:''}</span></li>`;
+    return `<button class="wk-col${w===thisW?' now':''}${w===pick?' on':''}" data-act="wk-pick" data-v="${w}" title="Week of ${fmtShort(w)}: ${t}"><div class="wk-bars">${WK_SER.map(([k,,c])=>`<i style="height:${x[k].length/mx*100}%;background:${c}">${x[k].length&&weeks.length<=13?`<b>${x[k].length}</b>`:''}</i>`).join('')}</div><span>${weeks.length>26&&weeks.indexOf(w)%4?'':lab(w)}</span>${weeks.length<=26?(()=>{const v=taOf([...x.sub,...x.bud]);return `<em class="wk-tad" title="Avg turnaround for proposals sent this week">${v==null?'&nbsp;':'⏱ '+Math.round(v)+'d'}</em>`})():''}</button>`}).join('')}</div>`;
+  const allSent=k=>weeks.flatMap(w=>by[w][k]);
+  const taAll=taOf([...allSent('sub'),...allSent('bud')]),taSub=taOf(allSent('sub')),taBud=taOf(allSent('bud'));const dd=v=>v==null?'—':`${v} day${v===1?'':'s'}`;
+  const open=S.bids.filter(b=>live(b)&&!b._new&&!isSent(b)&&!DECIDED.includes(b.status)).map(inHouse).filter(Boolean);const taOpen=open.length?Math.round(open.reduce((a,x)=>a+x.n,0)/open.length):null;
+  const sums=`<div class="wk-sums">${WK_SER.map(([k,l,c])=>`<div><i style="background:${c}"></i><b class="num">${tot[k]}</b><span class="small dim">${l.toLowerCase()} · ${avg(k)}/wk</span></div>`).join('')}
+    <div class="wk-ta" title="Days from intake to the day the proposal first went out, for proposals sent in these weeks"><i></i><b class="num">${dd(taAll)}</b><span class="small dim">avg turnaround, intake to sent</span><span class="small dim">Bids ${dd(taSub)} · Budgets ${dd(taBud)}${taOpen!=null?` · ${open.length} open, avg ${taOpen}d in house so far`:''}</span></div></div>`;
+  let detail='';if(pick){const x=by[pick];const row=(e)=>`<li><button class="linkish" data-act="open-bid" data-id="${e.b.id}">${esc(e.b.name)}</button> <span class="dim small">${fmtShort(e.d)}${e.r?` · Rev ${e.r.rev}${e.r.reason?' · '+esc(e.r.reason):''}`:''}${e.ta!=null?` · ${e.ta}d turnaround`:''}</span></li>`;
     detail=`<div class="wk-detail"><div class="wk-dh"><b>Week of ${fmtShort(pick)}</b><button class="btn sm ghost" data-act="wk-pick" data-v="">Close</button></div><div class="wk-dg">${WK_SER.map(([k,l,c])=>`<div><div class="small"><i class="wk-dot" style="background:${c}"></i><b>${l}</b> (${x[k].length})</div>${x[k].length?`<ul>${x[k].map(row).join('')}</ul>`:'<div class="small dim">None</div>'}</div>`).join('')}</div></div>`}
   const sub=where==='board'&&Y!==cur?`${Y}, by week`:'By week, newest on the right · click a week to see the bids';
   return `<div class="sec wide"${where==='board'?' style="margin:0"':''}><div class="sec-h"><h2>Weekly bid activity</h2><span>${sub}</span></div><div class="panel pad"><div class="wk-top">${legend}${seg}</div>${chart}${sums}${detail}</div></div>`}

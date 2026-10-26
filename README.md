@@ -875,4 +875,6 @@ On the Precon dashboard (under Projects overview) and on the Board dashboard (tu
 - **Budgets sent:** the same, for bids set as Budget / pricing.
 - **Revisions sent:** revisions in a bid's revision log dated that week (Rev 1 and up; the original proposal isn't a revision).
 
+**Average turnaround** is the days from intake to the day a proposal first went out, averaged over proposals sent in the weeks shown, with bids and budgets split out and how long open bids have been in house so far. Each week also shows its own average under the date (⏱).
+
 Pick 8, 13 or 26 weeks, or a year. Totals and per-week averages are under the chart. Click a week to list the bids behind each count. On the Board dashboard it follows the year picker.
