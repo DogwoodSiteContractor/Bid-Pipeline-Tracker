@@ -897,7 +897,7 @@ Access: a new **Awarded** area on Team → access. Estimators and PMs edit, acco
 
 ## Reports
 
-Needs `supabase/update-44-reports.sql` to save your own pages (the built-in pages work without it). The **Reports** tab sits next to Dashboard and everyone has it. You only ever see numbers from data your access already lets you see, including on pages someone else shared.
+Needs `supabase/update-44-reports.sql` to save your own pages (the built-in pages work without it). Reports lives on the **Dashboard**: use the switch at the top right (Precon · Board · **Reports**, or My dashboard · **Reports** for estimators). People without the dashboard (PMs, accounting) get it as its own **Reports** tab. You only ever see numbers from data your access already lets you see, including on pages someone else shared.
 
 - **Pages:** click **+ New report page** to start blank or from a built-in page: Board dashboard, Estimating scorecard, Vendor quotes, Awarded work. Your pages are private until you tick **Share with the team** in Page settings. Shared pages can be viewed and copied by anyone; only the owner (or an admin) can change them. **Make a copy** works on any page.
 - **Page dates:** the dropdown at the top sets the dates for every card that uses "Page dates" (this year to date, last year, last 12 months, a calendar year and so on).

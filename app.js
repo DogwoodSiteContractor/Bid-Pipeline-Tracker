@@ -438,14 +438,19 @@ document.addEventListener('submit',async e=>{
 });
 
 /* ---------- dashboard ---------- */
+function dashSeg(){const cur=S.dash==='reports'?'reports':(onlyMine()||scopeView())?'mine':role()==='board'?'board':S.dash;
+  const b=(v,l,sm)=>`<button class="${cur===v?'on':''}" data-act="dash" data-v="${v==='mine'?'precon':v}">${l}${sm?`<small>${sm}</small>`:''}</button>`;
+  const items=onlyMine()||scopeView()?[b('mine',onlyMine()?'My dashboard':'Dashboard','Daily work')]:role()==='board'?[b('board','Board','Results & trends')]:[b('precon','Precon','Daily work'),b('board','Board','Results & trends')];
+  return `<div class="seg" role="tablist">${items.join('')}${b('reports','Reports','Build your own')}</div>`}
 function vDashboard(){
   const d=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
-  if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}</div></div>`+bidReqPanel()+reviewPanel()+fuPanel()+mine();
-  if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}</div></div>`+bidReqPanel()+fuPanel()+precon();
-  if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}</div></div>`+board();
+  if(S.dash==='reports')return vReports(true);
+  if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+bidReqPanel()+reviewPanel()+fuPanel()+mine();
+  if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+bidReqPanel()+fuPanel()+precon();
+  if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}<button class="btn" data-act="rp-board-copy" title="Copy these charts to a report page you can change">Copy to Reports</button>${dashSeg()}</div></div>`+board();
   return `<div class="head"><div><h1>${S.dash==='precon'?'Bid pipeline dashboard':'Board dashboard'}</h1><p>${d}${S.lastLoaded?` · <span class="dim">Last updated ${S.lastLoaded.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>`:''}</p></div>
-  <div class="tools">${S.dash==='board'?yearSelect()+(S.bids.some(b=>b.archived_at)?`<label class="check small" title="Archived bids are left out of the numbers unless this is on"><input type="checkbox" data-inclarch${S.inclArch?' checked':''}> Include archived</label>`:'')+'<button class="btn" data-act="board-custom">Customize view</button><button class="btn" data-act="rp-board-copy" title="Copy these charts to a page in Reports you can change">Copy to Reports</button>':'<button class="btn" data-act="refresh">↻ Refresh</button>'}
-  <div class="seg" role="tablist"><button class="${S.dash==='precon'?'on':''}" data-act="dash" data-v="precon">Precon<small>Daily work</small></button><button class="${S.dash==='board'?'on':''}" data-act="dash" data-v="board">Board<small>Results & trends</small></button></div></div></div>`
+  <div class="tools">${S.dash==='board'?yearSelect()+(S.bids.some(b=>b.archived_at)?`<label class="check small" title="Archived bids are left out of the numbers unless this is on"><input type="checkbox" data-inclarch${S.inclArch?' checked':''}> Include archived</label>`:'')+'<button class="btn" data-act="board-custom">Customize view</button><button class="btn" data-act="rp-board-copy" title="Copy these charts to a report page you can change">Copy to Reports</button>':'<button class="btn" data-act="refresh">↻ Refresh</button>'}
+  ${dashSeg()}</div></div>`
   +(S.dash==='precon'?vxUpkeepHtml():'')+bidReqPanel()+reviewPanel()+fuPanel()+(S.dash==='precon'?precon():board());
 }
 function yearSelect(){const ys=new Set([new Date().getFullYear()]);S.bids.filter(statOk).forEach(b=>ys.add(yearOf(b)));return `<select class="field" data-act="year" style="width:auto">${[...ys].sort((a,b)=>b-a).map(y=>`<option${y===S.year?' selected':''}>${y}</option>`).join('')}</select>`}
@@ -6757,7 +6762,7 @@ const pAv=p=>`<span class="av" style="background:${avColor(p.id)}" title="${esc(
 /* ----- top bar: tabs come from what each person can open ----- */
 function navGroups(){const g=[];
   if(can('dash'))g.push(['dashboard',onlyMine()?'My dashboard':scopeView()?'Dashboard':role()==='board'?'Board dashboard':'Dashboard',['dashboard']]);
-  if(!tabOff('reports'))g.push(['reports','Reports',['reports']]);
+  if(!can('dash')&&!tabOff('reports'))g.push(['reports','Reports',['reports']]);
   if(can('bids')){const n=typeof grabCount==='function'?grabCount():0;SUBNAV_LABEL.pipeline=onlyMine()?'My bids':'Pipeline';SUBNAV_LABEL.grabs='Up for grabs'+(n?` (${n})`:'');SUBNAV_LABEL.workload='Workload';SUBNAV_LABEL.btpl='Bid templates';g.push(['pipeline',(onlyMine()?'My bids':'Pipeline')+(n?` <span class="nav-badge" title="${n} up for grabs">${n}</span>`:''),['pipeline','grabs','workload',...(btplCan()||btplList().length?['btpl']:[])]])}
   const twFree=!!(S.twBid&&!byId(S.bids,S.twBid));const est=[...(can('estimates')?['estimates','estimate',...(twFree?[]:['tw'])]:[]),...(can('codebook')?['cb']:[]),...(can('codebook','edit')?['settings','scopes']:[])];
   if(est.length)g.push([est[0],'Estimates',est.includes('cb')&&!est.includes('estimates')?[...est]:est]);
@@ -13222,12 +13227,12 @@ function rpData(p){p.data=p.data&&typeof p.data==='object'?p.data:{};if(!Array.i
 let rpT=null;function rpSave(p,now){if(!rpCanEdit(p))return;clearTimeout(rpT);const go=async()=>{try{const r=await sb.from('reports').update({name:p.name,shared:!!p.shared,data:p.data,owner_name:p.owner_name||myName()}).eq('id',p.id);if(r.error)throw r.error}catch(e){toast('Couldn’t save the report: '+errMsg(e))}};if(now)return go();rpT=setTimeout(go,500)}
 async function rpCreate(name,data){const row={id:newId(),owner:myId(),owner_name:myName(),name:name||'My report',shared:false,data:data||{range:'ytd',cards:[]}};
   try{const r=await sb.from('reports').insert(row);if(r.error)throw r.error;S.reports.push(row);S.rp.page=row.id;S.rp.edit=true;render();return row}catch(e){if(/reports|relation|schema cache/i.test(errMsg(e))){S.tableErr=S.tableErr||{};S.tableErr.reports=true}toast('Couldn’t make the page: '+errMsg(e));render()}}
-function vReports(){const {mine,shared}=rpPages();const tpls=rpTplPages();let p=rpPageOf(S.rp.page);if(!p){p=mine[0]||tpls[0];S.rp.page=p?p.id:null}
+function vReports(emb){const {mine,shared}=rpPages();const tpls=rpTplPages();let p=rpPageOf(S.rp.page);if(!p){p=mine[0]||tpls[0];S.rp.page=p?p.id:null}
   const d=p?rpData(p):null;const ed=S.rp.edit&&rpCanEdit(p);S.rpCtx=d?{cards:d.cards,range:d.range}:null;
   const chip=x=>`<button class="chip ${p&&x.id===p.id?'on':''}" data-act="rp-page" data-v="${esc(x.id)}">${esc(x.name)}${x._tpl?' <span class="dim small">built in</span>':x.shared&&x.owner===myId()?' <span class="dim small">shared</span>':''}</button>`;
   const yrs=(()=>{const ys=new Set([new Date().getFullYear()]);S.bids.forEach(b=>{const y=+String(intakeOf(b)||'').slice(0,4);if(y)ys.add(y)});return [...ys].sort((a,b)=>b-a)})();
   const rangeSel=d?`<select class="field" data-rprange style="width:auto" title="Dates for every card set to “Page dates”">${[...RP_RANGES.filter(r=>r[0]!=='page'),...yrs.map(y=>['y:'+y,String(y)])].map(([k,l])=>`<option value="${k}"${d.range===k?' selected':''}>${esc(l)}</option>`).join('')}</select>`:'';
-  return `<div class="head"><div><h1>Reports</h1><p>Build your own pages from anything in the app. Click any bar, row or number to see the records behind it.</p></div><div class="tools"><button class="btn primary" data-act="rp-new">+ New report page</button></div></div>
+  return `<div class="head"><div><h1>Reports</h1><p>Build your own pages from anything in the app. Click any bar, row or number to see the records behind it.</p></div><div class="tools"><button class="btn primary" data-act="rp-new">+ New report page</button>${emb?dashSeg():''}</div></div>
   ${S.tableErr&&S.tableErr.reports?'<div class="notice bad">Saving report pages needs a database update: run <b>supabase/update-44-reports.sql</b> in Supabase. The built-in pages work without it.</div>':''}
   <div class="rp-pages">${mine.length?`<div class="rp-pg"><span class="small dim">My pages</span>${mine.map(chip).join('')}</div>`:''}${shared.length?`<div class="rp-pg"><span class="small dim">Shared with the team</span>${shared.map(chip).join('')}</div>`:''}<div class="rp-pg"><span class="small dim">Built in</span>${tpls.map(chip).join('')}</div></div>
   ${p?`<div class="rp-head"><div><h2>${esc(p.name)}</h2><div class="small dim">${p._tpl?'Built in. Make a copy to change it.':rpMine(p)?(p.shared?'Yours · shared with the team':'Yours · only you can see it'):`By ${esc(p.owner_name||'someone')} · shared`}</div></div>
@@ -13272,7 +13277,7 @@ function rpAutoTitle(c){const src=RP_SRC[c.src];if(!src)return 'Card';const m=(c
 function rpOpenEditor(ci){const p=rpPageOf(S.rp.page);if(!rpCanEdit(p))return;const d=rpData(p);const card=ci>=0?clone(d.cards[ci]):rpNewCard();if(!Array.isArray(card.measures)||!card.measures.length)card.measures=[card.measure||{fn:'count'}];
   M={kind:'rpcard',card,ci,range:d.range};showModal()}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!/^rp-/.test(a))return;
-  if(a==='rp-board-copy'){const Y=S.year||new Date().getFullYear();rpCreate('Board dashboard ('+Y+')',{range:Y===new Date().getFullYear()?'ytd':'y:'+Y,cards:BOARD_CARDS().filter(c=>!c.special&&boardCfg()[c.w]!==false).map(({w,...c})=>({...c,id:newId()}))}).then(r=>{if(r){S.view='reports';render();toast('Copied to Reports. It’s yours to change.')}});return}
+  if(a==='rp-board-copy'){const Y=S.year||new Date().getFullYear();rpCreate('Board dashboard ('+Y+')',{range:Y===new Date().getFullYear()?'ytd':'y:'+Y,cards:BOARD_CARDS().filter(c=>!c.special&&boardCfg()[c.w]!==false).map(({w,...c})=>({...c,id:newId()}))}).then(r=>{if(r){if(can('dash')){S.view='dashboard';S.dash='reports'}else S.view='reports';render();toast('Copied to Reports. It’s yours to change.')}});return}
   if(a==='rp-drill'){rpDrill(t.dataset.ci,t.dataset.k,t.dataset.s);return}
   if(a==='rp-drill-back'){M=M.back;renderModal();return}
   if(a==='rp-open-bid'){const id=t.dataset.id;closeModal();openBid(id);return}
