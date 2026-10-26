@@ -13244,7 +13244,7 @@ function rpNewCard(src){src=src||rpSrcs()[0]?.[0]||'bids';return {id:newId(),tit
 function rpPageModal(){const x=M;return mhead(x.isNew?'New report page':'Page settings','')+`<div class="mbody"><label class="f"><span class="f-lab">Name</span><input class="field" data-rpp="name" value="${esc(x.name||'')}" placeholder="e.g. Estimating scorecard"></label>
   ${x.isNew?`<div class="f" style="margin-top:10px"><span class="f-lab">Start from</span><div class="rp-starts">${[['blank','Blank page','Add your own cards'],...Object.entries(RP_TPL).filter(([,t])=>!t.need||t.need()).map(([k,t])=>[k,t.name,t.blurb||''])].map(([k,l,s])=>`<label class="rp-start${x.from===k?' on':''}"><input type="radio" name="rpfrom" data-rpp="from" value="${k}"${x.from===k?' checked':''}><b>${esc(l)}</b><span class="small dim">${esc(s)}</span></label>`).join('')}</div></div>`
    :`<label class="check" style="margin-top:12px"><input type="checkbox" data-rpp="shared"${x.shared?' checked':''}> Share with the team <span class="small dim">(everyone can view it and make a copy; only you can change it)</span></label>
-     <div style="margin-top:16px"><button class="btn sm ghost" data-act="rp-del-page" style="color:var(--bad)">${x.arm?'Click again to delete this page':'Delete this page'}</button></div>`}</div>
+     <div style="margin-top:16px"><button class="btn sm ghost" data-act="rp-del-page" style="color:var(--bad)">${x.rpArm?'Click again to delete this page':'Delete this page'}</button></div>`}</div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="rp-page-save">${x.isNew?'Create page':'Save'}</button></div></div>`}
 // ---------- card editor ----------
 function rpOpts(list,v,blank){return (blank?`<option value="">${esc(blank)}</option>`:'')+list.map(([k,l])=>`<option value="${esc(k)}"${String(v)===String(k)?' selected':''}>${esc(l)}</option>`).join('')}
@@ -13291,7 +13291,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   if(a==='rp-settings'){const p=rpPageOf(S.rp.page);if(!rpCanEdit(p))return;M={kind:'rppage',name:p.name,shared:!!p.shared};showModal();return}
   if(a==='rp-page-save'){const x=M;const nm=String(x.name||'').trim();if(x.isNew){const t=RP_TPL[x.from];closeModal();rpCreate(nm||(t?t.name:'My report'),t?{range:t.range||'ytd',cards:t.cards()}:{range:'ytd',cards:[]});return}
     const p=rpPageOf(S.rp.page);if(!p)return;p.name=nm||p.name;p.shared=!!x.shared;rpSave(p,true);closeModal();render();return}
-  if(a==='rp-del-page'){if(!M.arm){M.arm=true;renderModal();return}const p=rpPageOf(S.rp.page);if(!p)return;closeModal();
+  if(a==='rp-del-page'){if(!M.rpArm){M.rpArm=true;renderModal();return}const p=rpPageOf(S.rp.page);if(!p)return;closeModal();
     run(sb.from('reports').delete().eq('id',p.id)).then(()=>{S.reports=S.reports.filter(x=>x.id!==p.id);S.rp.page=null;S.rp.edit=false;render();toast('Page deleted')}).catch(err=>toast(errMsg(err)));return}
   if(a==='rp-add'){rpOpenEditor(-1);return}
   if(a==='rp-viz'){const c=M.card;c.viz=t.dataset.v;if(c.viz==='line'&&(RP_SRC[c.src].f[c.group]||[])[1]!=='date')c.group=RP_SRC[c.src].date;if(c.viz==='kpi')c.compare=c.compare??true;renderModal();return}
