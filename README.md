@@ -878,3 +878,19 @@ On the Precon dashboard (under Projects overview) and on the Board dashboard (tu
 **Average turnaround** is the days from intake to the day a proposal first went out, averaged over proposals sent in the weeks shown, with bids and budgets split out and how long open bids have been in house so far. Each week also shows its own average under the date (⏱).
 
 Pick 8, 13 or 26 weeks, or a year. Totals and per-week averages are under the chart. Click a week to list the bids behind each count. On the Board dashboard it follows the year picker.
+
+## Awarded tab
+
+Needs `supabase/update-43-awarded.sql`. Every bid marked **Awarded** shows up on the **Awarded** tab (between Estimates and Jobs). It's where estimators and PMs work a job from award through contract, buyout and mobilization. It doesn't need the Jobs tab turned on.
+
+- **Status:** Awarded → Contract negotiation → Contract executed → Mobilizing → In progress → Complete (or On hold). Click a step or use the dropdown. Entering an executed date moves it to Contract executed.
+- **Contract:** contract value next to our number, received and executed dates, who's negotiating, retainage, payment terms, a link to the contract, a 9-point review checklist and a box for redlines and open items.
+- **Buyout:** starts from the low quote for each scope and trade on the bid. Scopes with no quote start as self-perform. Fill in who we bought from, for how much and the PO or sub number; savings and the % bought out add up. **Pull in new quotes from the bid** adds anything new.
+- **Submittals log:** number, spec section, item, vendor, required-by, sent and returned dates, status, ball in court and days out. Late ones turn red. Entering a sent date marks it Submitted with the GC.
+- **RFIs:** question, answer, sent and answer-needed dates, who it went to, and cost or schedule impact flags that warn it may be a change order.
+- **Pre-mobilization:** a checklist (NTP, pre-con meeting, permits, insurance, bonds, 811, erosion control, staking, long-lead materials, mobilization) with dates and notes. Rename, add or remove items per job.
+- **Turnover:** the PM, a turnover meeting date, an estimator-to-PM handoff checklist and notes for the field. **Send to Jobs** (when the Jobs tab is on) makes a job for the PMs; this page stays as the working copy.
+- The list page shows contracts left to finish, contracts executed, overall buyout %, open and late submittals, and open and past-due RFIs.
+- A bid marked Awarded has an **Open on the Awarded tab** button at the bottom of its page.
+
+Access: a new **Awarded** area on Team → access. Estimators and PMs edit, accounting and executives view, board members don't see it by default. Admins can switch the tab off for everyone in Settings.

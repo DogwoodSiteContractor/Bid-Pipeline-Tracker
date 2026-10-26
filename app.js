@@ -292,6 +292,7 @@ async function loadTable(t){
   if(S.tableErr)delete S.tableErr[t];S.lastLoaded=new Date();
   if(t==='settings'){S.settings=Object.fromEntries((data||[]).map(r=>[r.key,r.value||{}]));tradesApply()}
   else S[t]=t==='bids'?(data||[]).map(normBid):(data||[]);
+  if(t==='awards'&&typeof awMergePend==='function')awMergePend();
   if(t==='codebook'||t==='settings')rbRefreshAll();
   schedule();
 }
@@ -344,7 +345,7 @@ function renderNow(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;if(S.settings.company!==coApply.last){coApply.last=S.settings.company;coApply(S.settings.company)}renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
-  const views={admin:vAdmin,btpl:vBtpl,workload:vWorkload,positions:vPositions,grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const views={awards:vAwards,award:vAward,admin:vAdmin,btpl:vBtpl,workload:vWorkload,positions:vPositions,grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
@@ -1146,7 +1147,7 @@ function bidModal(){
       ${isNew&&work?'<button class="btn primary" data-act="save">Create bid</button>':''}</div></div>
   <div class="bp-tabs" role="tablist">${tabs}${b.status==='On Hold'?'<span class="bp-hold">'+pill('On hold','warn')+'</span>':''}</div>
   <div class="mbody bp-body"><div class="bp-grid"><div class="bp-main">${archNote}${supBanner(b)}${bidReqBanner(b)}${trkStrip(b)}${body}</div><aside class="bp-aside">${bpAside(b,work,admin,isNew)}</aside></div></div>
-  <div class="mfoot bp-foot"><div style="display:flex;gap:8px;flex-wrap:wrap">${b._sample?'<span class="pill info">Practice bid · nothing is saved</span>':''}${work&&!isNew&&!b._sample?'<button class="btn" data-act="sup-start" title="Same project, new name or details — keeps everything and records the change">↻ Supersede</button>':''}${admin&&!isNew&&!b._sample?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button><button class="btn" data-act="${b.archived_at?'bid-restore':'bid-archive'}">${b.archived_at?'Restore':'Archive'}</button>${b.status==='Awarded'?`<button class="btn" data-act="create-job">${S.jobs.some(j=>j.bid_id===b.id)?'Open job':'Create job'}</button>`:''}`:''}</div>
+  <div class="mfoot bp-foot"><div style="display:flex;gap:8px;flex-wrap:wrap">${b.status==='Awarded'&&!isNew&&!b._sample&&can('awards')?`<button class="btn" data-act="aw-frombid" data-id="${b.id}">🏗️ Open on the Awarded tab</button>`:''}${b._sample?'<span class="pill info">Practice bid · nothing is saved</span>':''}${work&&!isNew&&!b._sample?'<button class="btn" data-act="sup-start" title="Same project, new name or details — keeps everything and records the change">↻ Supersede</button>':''}${admin&&!isNew&&!b._sample?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button><button class="btn" data-act="${b.archived_at?'bid-restore':'bid-archive'}">${b.archived_at?'Restore':'Archive'}</button>${b.status==='Awarded'?`<button class="btn" data-act="create-job">${S.jobs.some(j=>j.bid_id===b.id)?'Open job':'Create job'}</button>`:''}`:''}</div>
   <div class="r">${bpAdvanceHtml(b,work,isNew)}</div></div>`;
 }
 const estOn=()=>!tabOff('estimates');
@@ -6746,14 +6747,14 @@ document.addEventListener('change',e=>{const t=e.target;const A=S.acct;
    rules — see supabase/update-18-team-access.sql, keep ROLE_ACCESS in step)
    ===================================================================== */
 const AREAS=[['dash','Dashboard','Bid pipeline dashboard and board results'],['bids','Bids & pipeline','Bids, quotes, scopes, files and the estimator log'],['estimates','Estimates','Estimate builder, quotes folder and proposals'],
-  ['codebook','Codebooks & bid settings','Codebooks, master templates, scope list, bid settings and the rate sheet'],['jobs','Jobs','Job budgets, cost logs and production'],['acct','Accounting','WIP, billing, budgets out and costs in'],
+  ['codebook','Codebooks & bid settings','Codebooks, master templates, scope list, bid settings and the rate sheet'],['awards','Awarded','Contracts, buyout, submittals, RFIs and turnover on won work'],['jobs','Jobs','Job budgets, cost logs and production'],['acct','Accounting','WIP, billing, budgets out and costs in'],
   ['contacts','Contacts','Clients, GCs, vendors and subs'],['calc','Calculators','Takeoff and field calculators']];
-const ROLE_ACCESS={admin:{dash:'edit',bids:'edit',estimates:'edit',codebook:'edit',jobs:'edit',acct:'edit',contacts:'edit',calc:'edit',bids_scope:'all'},
-  executive:{dash:'view',bids:'view',estimates:'view',codebook:'view',jobs:'view',acct:'view',contacts:'view',calc:'view',bids_scope:'all'},
+const ROLE_ACCESS={admin:{dash:'edit',bids:'edit',estimates:'edit',codebook:'edit',awards:'edit',jobs:'edit',acct:'edit',contacts:'edit',calc:'edit',bids_scope:'all'},
+  executive:{dash:'view',bids:'view',estimates:'view',codebook:'view',awards:'view',jobs:'view',acct:'view',contacts:'view',calc:'view',bids_scope:'all'},
   board:{dash:'view',bids:'view',estimates:'view',bids_scope:'all'},
-  estimator:{dash:'view',bids:'edit',estimates:'edit',codebook:'view',contacts:'view',calc:'edit',bids_scope:'view'},
-  pm:{jobs:'edit',acct:'edit',calc:'edit',bids_scope:'all'},
-  accounting:{acct:'edit',bids_scope:'all'},pending:{bids_scope:'mine'}};
+  estimator:{dash:'view',bids:'edit',estimates:'edit',codebook:'view',awards:'edit',contacts:'view',calc:'edit',bids_scope:'view'},
+  pm:{awards:'edit',jobs:'edit',acct:'edit',calc:'edit',bids_scope:'all'},
+  accounting:{awards:'view',acct:'edit',bids_scope:'all'},pending:{bids_scope:'mine'}};
 const ROLE_ORDER=['admin','executive','estimator','pm','accounting','board','pending'];
 const ROLE_ABOUT={admin:'Runs the app: everything, plus logins, roles and company settings.',executive:'Owners and leadership: sees everything, changes nothing.',estimator:'Prices work: their assigned bids and estimates, with the codebooks to build them.',
   pm:'Runs jobs: budgets, cost logs, production and billing.',accounting:'Bookkeeper: WIP, billing, cost imports and the lists accounting needs.',board:'Board members: the board dashboard and pipeline, read-only.',pending:'Signed up but not given access yet.'};
@@ -6761,7 +6762,7 @@ const LVL_LABEL={none:'No access',view:'View',edit:'Edit'};
 function rolePerm(r,a){const o=ROLE_ACCESS[r]||ROLE_ACCESS.pending;return o[a]||(a==='bids_scope'?'all':'none')}
 function permOf(p,a){if(!p)return rolePerm('pending',a);if(p.role==='admin'||p.role==='pending')return rolePerm(p.role,a);const o=p.perms&&p.perms[a];return o||rolePerm(p.role,a)}
 // Tabs an admin has switched off for the whole company. Display only: it hides the tab and everything that leads to it.
-const TAB_SWITCH=[['dash','Dashboard'],['bids','Pipeline'],['estimates','Estimates','Estimates, codebooks, bid settings and templates'],['jobs','Jobs'],['acct','Accounting'],['contacts','Contacts'],['calc','Calculators'],['fun','Break room'],['help','Help']];
+const TAB_SWITCH=[['dash','Dashboard'],['bids','Pipeline'],['estimates','Estimates','Estimates, codebooks, bid settings and templates'],['awards','Awarded'],['jobs','Jobs'],['acct','Accounting'],['contacts','Contacts'],['calc','Calculators'],['fun','Break room'],['help','Help']];
 const tabsOff=()=>{const v=S.settings&&S.settings.general&&S.settings.general.tabsOff;return Array.isArray(v)?v:[]};
 const tabOff=a=>{const o=tabsOff();return o.includes(a)||(a==='codebook'&&o.includes('estimates'))};
 const perm=a=>a!=='bids_scope'&&tabOff(a)?'none':permOf(S.profile,a);
@@ -6816,6 +6817,7 @@ function navGroups(){const g=[];
   if(can('bids')){const n=typeof grabCount==='function'?grabCount():0;SUBNAV_LABEL.pipeline=onlyMine()?'My bids':'Pipeline';SUBNAV_LABEL.grabs='Up for grabs'+(n?` (${n})`:'');SUBNAV_LABEL.workload='Workload';SUBNAV_LABEL.btpl='Bid templates';g.push(['pipeline',(onlyMine()?'My bids':'Pipeline')+(n?` <span class="nav-badge" title="${n} up for grabs">${n}</span>`:''),['pipeline','grabs','workload',...(btplCan()||btplList().length?['btpl']:[])]])}
   const twFree=!!(S.twBid&&!byId(S.bids,S.twBid));const est=[...(can('estimates')?['estimates','estimate',...(twFree?[]:['tw'])]:[]),...(can('codebook')?['cb']:[]),...(can('codebook','edit')?['settings','scopes']:[])];
   if(est.length)g.push([est[0],'Estimates',est.includes('cb')&&!est.includes('estimates')?[...est]:est]);
+  if(can('awards'))g.push(['awards','Awarded',['awards','award']]);
   if(can('jobs'))g.push(['jobs','Jobs',['jobs','job']]);
   if(can('acct'))g.push(['acct','Accounting',['acct']]);
   if(can('contacts')||isAdmin())g.push(['clients','Contacts',[...(can('contacts')?['clients','vendors','vboard','vendor']:[]),...(isAdmin()||can('codebook','edit')?['lists']:[])]]);
@@ -7012,7 +7014,7 @@ const FB_STATUS=['New','Reviewing','Planned','In progress','Done','Won’t do','
 const FB_OPEN=new Set(['New','Reviewing','Planned','In progress']);
 const FB_ST_CLS={New:'hot',Reviewing:'warn',Planned:'',['In progress']:'warn',Done:'good'};
 const fbStatusDb=s=>s==='Won’t do'?"Won't do":s;const fbStatusUi=s=>s==="Won't do"?'Won’t do':s;
-const VIEW_AREA={lists:'Contacts',vendor:'Contacts',vboard:'Contacts',plan:'Planner',dashboard:'Dashboard',pipeline:'Bids & pipeline',estimates:'Estimates',estimate:'Estimates',cb:'Codebooks & bid settings',settings:'Codebooks & bid settings',scopes:'Codebooks & bid settings',jobs:'Jobs',job:'Jobs',acct:'Accounting',clients:'Contacts',vendors:'Contacts',calc:'Calculators',team:'Team & logins',estimators:'Team & logins',teampm:'Team & logins',teamoffice:'Team & logins',access:'Team & logins',help:'Help'};
+const VIEW_AREA={awards:'Awarded',award:'Awarded',lists:'Contacts',vendor:'Contacts',vboard:'Contacts',plan:'Planner',dashboard:'Dashboard',pipeline:'Bids & pipeline',estimates:'Estimates',estimate:'Estimates',cb:'Codebooks & bid settings',settings:'Codebooks & bid settings',scopes:'Codebooks & bid settings',jobs:'Jobs',job:'Jobs',acct:'Accounting',clients:'Contacts',vendors:'Contacts',calc:'Calculators',team:'Team & logins',estimators:'Team & logins',teampm:'Team & logins',teamoffice:'Team & logins',access:'Team & logins',help:'Help'};
 async function loadMyFb(){try{const {data,error}=await sb.rpc('my_feedback');if(error)throw error;S.myFb=(data||[]).map(f=>({...f,status:fbStatusUi(f.status)}));S.fbMissing=false}catch(e){S.myFb=[];S.fbMissing=true}schedule()}
 function fbOpen(kind){const from=S.prevView&&S.prevView!=='help'?S.prevView:S.view;M={kind:'fb',draft:{kind:kind||'bug',area:VIEW_AREA[from]||'Something else',title:'',body:'',importance:'normal'},from};showModal();setTimeout(()=>$('#fb-title')?.focus(),0)}
 function fbModal(){const d=M.draft;const ph={bug:'What were you doing? What happened? What did you expect to happen?',feature:'What would you like it to do? What problem would it solve for you?',question:'What are you trying to do?',other:'Tell us what’s on your mind.'}[d.kind];
@@ -7108,7 +7110,7 @@ function devTestList(){const tbl=(t,file)=>({g:'Database tables',n:`Table “${t
    {g:'Connection',n:'File storage',run:async()=>{try{const r=await sb.storage.from('bid-files').list('',{limit:1});return r.error?T_FAIL(r.error.message,'The bid-files bucket is created by schema.sql.'):T_OK('bid-files bucket answers')}catch(e){return T_FAIL(errMsg(e))}}},
    {g:'Connection',n:'Excel library loads',run:async()=>{try{await loadXLSX();return T_OK('Loaded')}catch(e){return T_FAIL(errMsg(e),'Imports and exports need this. Check the internet connection or content blockers.')}}},
    {g:'Connection',n:'Save and delete a test record',run:async()=>{const k='dev_selftest';const a=await sb.from('settings').upsert({key:k,value:{at:new Date().toISOString()}});if(a.error)return T_FAIL(a.error.message,'Admins should be able to write settings. Check the security rules ran.');const b=await sb.from('settings').delete().eq('key',k);return b.error?T_WARN('Saved, but couldn’t delete the test row: '+b.error.message):T_OK('Wrote and removed a test row')}},
-   ...[['bids','schema.sql'],['quotes','schema.sql'],['bid_files','schema.sql'],['estimators','schema.sql'],['clients','schema.sql'],['vendors','schema.sql'],['settings','schema.sql'],['profiles','schema.sql'],['jobs','update-9-jobs.sql'],['job_items','update-9-jobs.sql'],['job_costs','update-9-jobs.sql'],['bid_log','update-11-estimator-log.sql'],['codebook','update-13-codebooks.sql'],['estimates','update-14-estimates.sql'],['pay_apps','update-17-accounting.sql'],['feedback','update-19-help-developer.sql'],['fun_stats','update-21-break-room.sql']].map(([t,f])=>tbl(t,f)),
+   ...[['bids','schema.sql'],['quotes','schema.sql'],['bid_files','schema.sql'],['estimators','schema.sql'],['clients','schema.sql'],['vendors','schema.sql'],['settings','schema.sql'],['profiles','schema.sql'],['jobs','update-9-jobs.sql'],['job_items','update-9-jobs.sql'],['job_costs','update-9-jobs.sql'],['bid_log','update-11-estimator-log.sql'],['codebook','update-13-codebooks.sql'],['estimates','update-14-estimates.sql'],['pay_apps','update-17-accounting.sql'],['feedback','update-19-help-developer.sql'],['fun_stats','update-21-break-room.sql'],['awards','update-43-awarded.sql']].map(([t,f])=>tbl(t,f)),
    col('quotes','lines,meta','update-15-quote-lines.sql'),col('clients','acct_id','update-17-accounting.sql'),col('job_items','bid_price,change_order','update-17-accounting.sql'),col('job_costs','import_key','update-17-accounting.sql'),col('profiles','title,phone,perms','update-18-team-access.sql'),col('profiles','is_dev','update-19-help-developer.sql'),col('profiles','profile','update-21-break-room.sql'),
    {g:'Security functions',n:'Access levels (perm)',run:async()=>{const {data,error}=await sb.rpc('perm',{a:'bids'});return error?T_FAIL(error.message,'Run supabase/update-18-team-access.sql.'):data==='edit'?T_OK('Admin has Edit on bids'):T_WARN(`perm('bids') returned “${data}”`,'Expected “edit” for an admin login.')}},
    {g:'Security functions',n:'PM directory',run:async()=>{const {data,error}=await sb.rpc('pm_directory');return error?T_FAIL(error.message,'Run supabase/update-9-jobs.sql and later updates.'):T_OK(`${(data||[]).length} people`)}},
@@ -12926,3 +12928,202 @@ function weeklyPanel(where){const n=S.wkN||8;const Y=S.year||new Date().getFullY
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
   if(a==='wk-n'){S.wkN=+t.dataset.v;try{localStorage.setItem('bp-wkn',t.dataset.v)}catch(err){}render()}else if(a==='wk-pick'){S.wkPick=t.dataset.v===S.wkPick?null:(t.dataset.v||null);render()}});
 try{S.wkN=+localStorage.getItem('bp-wkn')||8}catch(e){S.wkN=8}
+
+/* =====================================================================
+   Awarded tab: contract negotiation → executed → mobilizing, with buyout,
+   submittals, RFIs, pre-mobilization and the estimator → PM turnover.
+   One row per awarded bid in `awards` (supabase/update-43-awarded.sql).
+   ===================================================================== */
+const AW_ST=['Awarded','Contract negotiation','Contract executed','Mobilizing','In progress','Complete','On hold'];
+const AW_FLOW=AW_ST.slice(0,6);
+const AW_CLS={'Awarded':'info','Contract negotiation':'warn','Contract executed':'good','Mobilizing':'acc','In progress':'good','Complete':'','On hold':'bad'};
+const BO_ST=['Not started','Pricing','Negotiating','Sub/PO sent','Signed','Self-perform'];
+const BO_DONE=['Signed'];
+const SUB_ST=['Not submitted','Submitted','Approved','Approved as noted','Revise & resubmit','Rejected'];
+const SUB_OK=['Approved','Approved as noted'];
+const SUB_BALL=['Us','Vendor','GC','Engineer','Owner'];
+const CT_CHECKS=[['scope','Scope matches our proposal'],['excl','Our exclusions and clarifications are in the contract'],['pay','Payment terms and retainage are workable'],['ins','Insurance requirements we can meet'],['bond','Bond requirements (if any) arranged'],['indem','Indemnity and liability reviewed'],['warr','Warranty terms reviewed'],['sched','Schedule and liquidated damages reviewed'],['co','Change order process and markups reviewed']];
+const PM_ITEMS=['Notice to proceed received','Pre-construction meeting','Permits in hand','Certificate of insurance sent','Bonds issued','811 ticket called in','Erosion control / NPDES permit posted','Survey and staking ordered','Long-lead materials ordered','Mobilization date set'];
+const TO_CHECKS=[['est','Walked the PM through the estimate and quantities'],['subs','Reviewed sub and vendor quotes and any scope gaps'],['plans','Current plans and specs are in the project folder'],['sched','Schedule, phasing and production assumptions'],['risk','Risks, exclusions and assumptions'],['contacts','Owner, GC and engineer contacts shared'],['budget','Budget handed off']];
+S.awards=S.awards||[];S.awf=S.awf||{st:'open'};S.awPend=S.awPend||new Map();
+if(!TABLES.includes('awards'))TABLES.push('awards');
+const canAw=()=>can('awards','edit');
+const awBids=()=>{const ids=new Set(S.awards.map(a=>a.bid_id));return S.bids.filter(b=>!b._new&&(ids.has(b.id)||(b.status==='Awarded'&&live(b))))};
+function awSeedBuyout(b){const qs=quotesFor(b.id).filter(q=>q.status==='Received'&&num(q.amount)!=null);const g=new Map();
+  qs.forEach(q=>{const k=(q.scope||'General')+'|'+qTrade(q);const c=g.get(k);if(!c||num(q.amount)<num(c.amount))g.set(k,q)});
+  const rows=[...g.values()].map(q=>({id:newId(),scope:q.scope||'General',trade:qTrade(q),budget:num(q.amount),vendor_id:q.vendor_id||null,vendor:vendorOf(q.vendor_id)?.company||'',bought:null,status:'Not started',po:'',notes:''}));
+  const have=new Set(rows.map(r=>String(r.scope).toLowerCase()));
+  scopeItems(b).forEach(x=>{if(!have.has(String(x.name).toLowerCase()))rows.push({id:newId(),scope:x.name,trade:'',budget:null,vendor_id:null,vendor:'',bought:null,status:'Self-perform',po:'',notes:''})});
+  return rows.sort((a,c)=>String(a.scope).localeCompare(String(c.scope))||String(a.trade).localeCompare(String(c.trade)))}
+function awNew(b){return {bid_id:b.id,status:'Awarded',pm_name:'',contract:{value:wonValue(b)||null,checks:{}},buyout:awSeedBuyout(b),submittals:[],rfis:[],premob:{items:PM_ITEMS.map(l=>({id:newId(),label:l,done:false,date:'',note:''}))},turnover:{checks:{}},job_id:null,notes:'',_local:true}}
+function awGet(b){if(!b)return null;let a=S.awPend.get(b.id)||S.awards.find(x=>x.bid_id===b.id);if(!a){a=awNew(b);S.awards.push(a)}
+  a.contract=a.contract&&typeof a.contract==='object'?a.contract:{};a.contract.checks=a.contract.checks||{};a.turnover=a.turnover&&typeof a.turnover==='object'?a.turnover:{};a.turnover.checks=a.turnover.checks||{};
+  ['buyout','submittals','rfis'].forEach(k=>{if(!Array.isArray(a[k]))a[k]=[]});a.premob=a.premob&&typeof a.premob==='object'?a.premob:{};if(!Array.isArray(a.premob.items))a.premob.items=[];return a}
+function awSave(a,cols){if(!canAw())return;a._dirty=a._dirty||new Set();cols.forEach(c=>a._dirty.add(c));S.awPend.set(a.bid_id,a);clearTimeout(a._t);a._t=setTimeout(()=>awFlush(a),600)}
+async function awFlush(a){const cols=[...(a._dirty||[])];a._dirty=new Set();if(!cols.length&&!a._local)return;
+  const row={bid_id:a.bid_id,updated_by_name:myName()};(a._local?['status','pm_name','contract','buyout','submittals','rfis','premob','turnover','notes',...cols]:cols).forEach(c=>row[c]=a[c]);
+  try{const r=await sb.from('awards').upsert(row,{onConflict:'bid_id'}).select().single();if(r.error)throw r.error;delete a._local;if(r.data){a.id=r.data.id;a.updated_at=r.data.updated_at}
+    if(!a._dirty.size)S.awPend.delete(a.bid_id)}
+  catch(e){(a._dirty=a._dirty||new Set());cols.forEach(c=>a._dirty.add(c));S.tableErr=S.tableErr||{};if(/awards|relation|schema cache/i.test(errMsg(e)))S.tableErr.awards=true;toast('Couldn’t save: '+errMsg(e));render()}}
+function awMergePend(){S.awPend.forEach((o,k)=>{const i=S.awards.findIndex(x=>x.bid_id===k);if(i>=0)S.awards[i]=o;else S.awards.push(o)})}
+// numbers for a project
+function awStats(a){const today=todayStr();const bo=a.buyout.filter(r=>r.status!=='Self-perform');const done=bo.filter(r=>BO_DONE.includes(r.status));
+  const bud=bo.reduce((s,r)=>s+(num(r.budget)||0),0),bought=done.reduce((s,r)=>s+(num(r.bought)??num(r.budget)??0),0),budDone=done.reduce((s,r)=>s+(num(r.budget)||0),0);
+  const subOpen=a.submittals.filter(s=>!SUB_OK.includes(s.status));const subLate=subOpen.filter(s=>s.required&&s.required<today&&['Not submitted','Revise & resubmit','Rejected'].includes(s.status||'Not submitted'));
+  const rfiOpen=a.rfis.filter(r=>!r.answered);const rfiLate=rfiOpen.filter(r=>r.due&&r.due<today);
+  const pm=a.premob.items;const ck=CT_CHECKS.filter(([k])=>a.contract.checks[k]).length;const to=TO_CHECKS.filter(([k])=>a.turnover.checks[k]).length;
+  return {boN:bo.length,boDone:done.length,boPct:bo.length?done.length/bo.length:null,bud,bought,save:budDone-bought,subN:a.submittals.length,subOpen:subOpen.length,subLate:subLate.length,rfiN:a.rfis.length,rfiOpen:rfiOpen.length,rfiLate:rfiLate.length,pmN:pm.length,pmDone:pm.filter(x=>x.done).length,ck,to}}
+const awPath=(o,p)=>p.split('.').reduce((x,k)=>x==null?undefined:x[k],o);
+function awSetPath(o,p,v){const ks=p.split('.');let x=o;ks.slice(0,-1).forEach(k=>{if(x[k]==null||typeof x[k]!=='object')x[k]={};x=x[k]});x[ks[ks.length-1]]=v}
+const awBar=p=>`<div class="pbar"><i style="width:${Math.round((p||0)*100)}%"></i></div>`;
+
+function vAwards(){const f=S.awf;const q=(S.q.awards||'').trim().toLowerCase();const rows=awBids().map(b=>({b,a:awGet(b)})).map(x=>({...x,s:awStats(x.a)}));
+  const stF={open:x=>x.a.status!=='Complete',all:()=>true,...Object.fromEntries(AW_ST.map(s=>[s,x=>x.a.status===s]))};
+  const base=rows.filter(x=>!q||matchesQuery([x.b.name,x.b.location,clientName(x.b.awarded_client_id||propIds(x.b)[0]),x.a.pm_name].join(' ').toLowerCase(),q));
+  const list=base.filter(stF[f.st]||stF.open).sort((x,y)=>AW_ST.indexOf(x.a.status)-AW_ST.indexOf(y.a.status)||String(y.b.awarded_date||'').localeCompare(String(x.b.awarded_date||''))||x.b.name.localeCompare(y.b.name));
+  const open=rows.filter(x=>x.a.status!=='Complete');const sum=(arr,k)=>arr.reduce((t,x)=>t+(x.s[k]||0),0);
+  const neg=open.filter(x=>['Awarded','Contract negotiation'].includes(x.a.status)),ex=open.filter(x=>!['Awarded','Contract negotiation','On hold'].includes(x.a.status));
+  const boN=sum(open,'boN'),boD=sum(open,'boDone');
+  const chips=[['open','Open'],...AW_ST.map(s=>[s,s]),['all','All']];
+  const tr=list.map(({b,a,s})=>`<tr class="click" data-act="aw-open" data-id="${b.id}" tabindex="0">
+    <td><div class="proj">${esc(b.name)}</div><div class="dim small">${[clientName(b.awarded_client_id||propIds(b)[0]),b.location].filter(Boolean).map(esc).join(' · ')}</div></td>
+    <td>${pill(a.status,AW_CLS[a.status])}</td>
+    <td class="r num">${num(a.contract.value)!=null?money(num(a.contract.value)):'—'}</td>
+    <td class="small">${a.contract.executed?'Executed '+fmtShort(a.contract.executed):a.status==='Contract negotiation'?`Negotiating · ${s.ck}/${CT_CHECKS.length} checked`:'—'}</td>
+    <td style="min-width:120px">${s.boN?`${awBar(s.boPct)}<div class="small dim">${s.boDone} of ${s.boN} bought out</div>`:'<span class="small dim">Nothing to buy out</span>'}</td>
+    <td class="small">${s.subN?`${s.subOpen} open${s.subLate?` · <b style="color:var(--bad)">${s.subLate} late</b>`:''}`:'<span class="dim">—</span>'}</td>
+    <td class="small">${s.rfiN?`${s.rfiOpen} open${s.rfiLate?` · <b style="color:var(--bad)">${s.rfiLate} past due</b>`:''}`:'<span class="dim">—</span>'}</td>
+    <td class="small">${esc(a.pm_name||'—')}</td></tr>`).join('');
+  return `<div class="head"><div><h1>Awarded</h1><p>Contracts, buyout, submittals and RFIs for work we’ve won. Bids marked Awarded show up here on their own.</p></div><div class="tools"><button class="btn" data-act="refresh">↻ Refresh</button></div></div>
+  ${S.tableErr&&S.tableErr.awards?'<div class="notice bad">The Awarded tab needs a database update: run <b>supabase/update-43-awarded.sql</b> in Supabase. Until then nothing here will save.</div>':''}
+  <div class="kpis">
+    ${kpi('Awarded projects',open.length,moneyK(open.reduce((t,x)=>t+(num(x.a.contract.value)||0),0))+' in contracts')}
+    ${kpi('Contracts to finish',neg.length,neg.length?neg.filter(x=>x.a.status==='Contract negotiation').length+' in negotiation':'All contracts executed',neg.length?'hot':'')}
+    ${kpi('Contracts executed',ex.length,moneyK(ex.reduce((t,x)=>t+(num(x.a.contract.value)||0),0)),'good')}
+    ${kpi('Buyout',boN?Math.round(boD/boN*100)+'%':'—',boN?`${boD} of ${boN} subs & vendors signed`:'Nothing to buy out yet')}
+    ${kpi('Open submittals',sum(open,'subOpen'),sum(open,'subLate')?sum(open,'subLate')+' late':'None late',sum(open,'subLate')?'bad':'')}
+    ${kpi('Open RFIs',sum(open,'rfiOpen'),sum(open,'rfiLate')?sum(open,'rfiLate')+' past their answer date':'None past due',sum(open,'rfiLate')?'bad':'')}</div>
+  <div class="bar">${chips.map(([k,l])=>`<button class="chip ${f.st===k?'on':''}" data-act="aw-st" data-v="${esc(k)}">${esc(l)}<b>${base.filter(stF[k]).length}</b></button>`).join('')}</div>
+  <div class="pv-bar"><div class="pv-search"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><input id="q-awards" class="field" data-q="awards" placeholder="Search project, GC, PM…" value="${esc(S.q.awards||'')}"></div></div>
+  ${list.length?`<div class="panel scroll"><table class="lv"><thead><tr><th>Project</th><th>Status</th><th class="r">Contract</th><th>Contract status</th><th>Buyout</th><th>Submittals</th><th>RFIs</th><th>PM</th></tr></thead><tbody>${tr}</tbody></table></div>`
+   :`<div class="panel"><div class="empty"><b>${rows.length?'Nothing matches':'No awarded projects yet'}</b>${rows.length?'Try a different filter or search.':'When a bid is marked Awarded it shows up here.'}</div></div>`}`}
+
+function vAward(){const b=byId(S.bids,S.awBid);if(!b){S.view='awards';return vAwards()}const a=awGet(b);const s=awStats(a);const w=canAw();const tab=S.awTab||'overview';
+  const tabs=[['overview','Overview'],['contract','Contract'+(a.contract.executed?' ✓':'')],['buyout',`Buyout${s.boN?` ${s.boDone}/${s.boN}`:''}`],['submittals',`Submittals${s.subOpen?` (${s.subOpen})`:''}`],['rfis',`RFIs${s.rfiOpen?` (${s.rfiOpen})`:''}`],['premob',`Pre-mobilization ${s.pmDone}/${s.pmN}`],['turnover','Turnover']];
+  const st=AW_FLOW.indexOf(a.status);const fold=rfqOf(b).folder;
+  const steps=`<div class="aw-steps">${AW_FLOW.map((x,i)=>`<button class="aw-step${i<st?' done':''}${i===st?' on':''}" data-act="aw-status" data-v="${esc(x)}"${w?'':' disabled'}><span>${i<st?'✓':i+1}</span>${esc(x)}</button>`).join('')}</div>`;
+  const job=a.job_id?byId(S.jobs,a.job_id):S.jobs.find(j=>j.bid_id===b.id);
+  const jobBtn=job?`<button class="btn" data-act="open-job" data-id="${job.id}">Open job</button>`:tabOff('jobs')?'':can('jobs','edit')?`<button class="btn" data-act="aw-job">Send to Jobs</button>`:'';
+  const body={overview:awOverview,contract:awContract,buyout:awBuyout,submittals:awSubs,rfis:awRfis,premob:awPremob,turnover:awTurnover}[tab]||awOverview;
+  return `<div class="head"><div><button class="btn sm ghost" data-act="aw-back">← Awarded</button><h1 style="margin-top:6px">${esc(b.name)}</h1><p>${[clientName(b.awarded_client_id||propIds(b)[0]),b.location,b.awarded_date?'Awarded '+fmtShort(b.awarded_date):''].filter(Boolean).map(esc).join(' · ')}</p></div>
+    <div class="tools"><select class="field" data-aw="status" id="aw-status" style="width:auto"${w?'':' disabled'}>${AW_ST.map(x=>`<option${x===a.status?' selected':''}>${esc(x)}</option>`).join('')}</select>
+    <button class="btn" data-act="open-bid" data-id="${b.id}">Open bid</button>${folderOk(fold)?`<a class="btn" href="${esc(fold)}" target="_blank" rel="noopener">📁 Project folder</a>`:''}${jobBtn}</div></div>
+  ${S.tableErr&&S.tableErr.awards?'<div class="notice bad">Run <b>supabase/update-43-awarded.sql</b> in Supabase. Until then changes here won’t save.</div>':''}
+  ${a._local&&w?'<div class="notice">This project hasn’t been opened before. The buyout list is filled in from the bid’s quotes. Nothing is saved until you change something.</div>':''}
+  ${steps}<div class="seg acct-tabs aw-tabs">${tabs.map(([k,l])=>`<button class="${tab===k?'on':''}" data-act="aw-tab" data-v="${k}">${esc(l)}</button>`).join('')}</div>${body(b,a,s,w).replace(/data-aw(l?)="([^"]+)"/g,(m,l,v)=>`${m} id="aw${l}-${v.replace(/[^\w-]/g,'_')}"`)}`}
+const awDis=w=>w?'':' disabled';
+function awIn(path,a,w,type,ph,extra){const v=awPath(a,path);return `<input class="field" data-aw="${path}"${type?` type="${type}"`:''} value="${esc(v??'')}"${ph?` placeholder="${esc(ph)}"`:''}${type==='number'?' step="any" data-t="n"':''}${extra||''}${awDis(w)}>`}
+function awCard(t,sub,body,go){return `<div class="panel pad aw-card"><div class="aw-ch"><h3>${t}</h3>${go?`<button class="btn sm ghost" data-act="aw-tab" data-v="${go}">Open →</button>`:''}</div>${sub?`<div class="small dim">${sub}</div>`:''}${body}</div>`}
+function awOverview(b,a,s,w){const cv=num(a.contract.value),bv=wonValue(b);
+  return `<div class="aw-grid">
+    ${awCard('Contract',a.contract.executed?`Executed ${fmtShort(a.contract.executed)}`:a.status==='Contract negotiation'?'In negotiation':'Not started',`<div class="aw-big num">${cv!=null?money(cv):'—'}</div><div class="small">${cv!=null&&bv&&cv!==bv?`Our number was ${money(bv)} (${signMoney(cv-bv)})`:'Matches our number'}</div><div class="small dim">${s.ck} of ${CT_CHECKS.length} contract checks done</div>`,'contract')}
+    ${awCard('Buyout',s.boN?`${s.boDone} of ${s.boN} signed`:'No subs or vendors to buy out',`${awBar(s.boPct)}<div class="small" style="margin-top:6px">Bought ${money(s.bought)} of ${money(s.bud)} carried${s.boDone?` · <b style="color:var(--${s.save<0?'bad':'good'})">${s.save<0?'over by '+money(-s.save):'saved '+money(s.save)}</b>`:''}</div>`,'buyout')}
+    ${awCard('Submittals',`${s.subN} logged`,`<div class="aw-big num">${s.subOpen}<span class="small dim"> open</span></div>${s.subLate?`<div class="small" style="color:var(--bad)">${s.subLate} late</div>`:'<div class="small dim">None late</div>'}`,'submittals')}
+    ${awCard('RFIs',`${s.rfiN} logged`,`<div class="aw-big num">${s.rfiOpen}<span class="small dim"> open</span></div>${s.rfiLate?`<div class="small" style="color:var(--bad)">${s.rfiLate} past their answer date</div>`:'<div class="small dim">None past due</div>'}${a.rfis.some(r=>r.cost||r.time)?`<div class="small">⚠ ${a.rfis.filter(r=>r.cost||r.time).length} with cost or time impact</div>`:''}`,'rfis')}
+    ${awCard('Pre-mobilization',`${s.pmDone} of ${s.pmN} done`,`${awBar(s.pmN?s.pmDone/s.pmN:0)}${(()=>{const nx=a.premob.items.find(x=>!x.done);return nx?`<div class="small" style="margin-top:6px">Next: ${esc(nx.label)}</div>`:''})()}`,'premob')}
+    ${awCard('Turnover',a.pm_name?`PM: ${esc(a.pm_name)}`:'No PM assigned yet',`${awBar(s.to/TO_CHECKS.length)}<div class="small dim" style="margin-top:6px">${s.to} of ${TO_CHECKS.length} handoff items done${a.turnover.date?` · meeting ${fmtShort(a.turnover.date)}`:''}</div>`,'turnover')}</div>
+  <div class="panel pad" style="margin-top:14px"><label class="f"><span class="f-lab">Project notes</span><textarea class="field" data-aw="notes" rows="4" placeholder="Anything the team should know about this job"${awDis(w)}>${esc(a.notes||'')}</textarea></label></div>`}
+function awContract(b,a,s,w){const c=a.contract;const bv=wonValue(b),cv=num(c.value);const link=String(c.link||'').trim();
+  return `<div class="aw-two"><div class="panel pad"><h3>Contract</h3><div class="aw-form">
+    <label class="f"><span class="f-lab">Contract value</span>${awIn('contract.value',a,w,'number')}<small class="dim">Our number: ${bv?money(bv):'—'}${cv!=null&&bv&&cv!==bv?` · ${signMoney(cv-bv)}`:''}</small></label>
+    <label class="f"><span class="f-lab">Contract received</span>${awIn('contract.received',a,w,'date')}</label>
+    <label class="f"><span class="f-lab">Executed (signed by both)</span>${awIn('contract.executed',a,w,'date')}</label>
+    <label class="f"><span class="f-lab">Who’s negotiating</span>${awIn('contract.negotiator',a,w,'','Name',' list="aw-people"')}</label>
+    <label class="f"><span class="f-lab">Retainage %</span>${awIn('contract.retainage',a,w,'number','10')}</label>
+    <label class="f"><span class="f-lab">Payment terms</span>${awIn('contract.terms',a,w,'','e.g. Net 30, pay-when-paid')}</label>
+    <label class="f aw-wide"><span class="f-lab">Link to the contract</span><div style="display:flex;gap:6px">${awIn('contract.link',a,w,'url','Paste the SharePoint link to the contract')}${folderOk(link)?`<a class="btn" href="${esc(link)}" target="_blank" rel="noopener">Open</a>`:''}</div></label></div>
+    ${w&&!c.executed?`<button class="btn primary" data-act="aw-exec" style="margin-top:10px">Mark contract executed today</button>`:''}</div>
+  <div class="panel pad"><h3>Review checklist <span class="small dim">${s.ck}/${CT_CHECKS.length}</span></h3><div class="aw-checks">${CT_CHECKS.map(([k,l])=>`<label class="check"><input type="checkbox" data-aw="contract.checks.${k}"${c.checks[k]?' checked':''}${awDis(w)}> ${esc(l)}</label>`).join('')}</div>
+    <label class="f" style="margin-top:10px"><span class="f-lab">Redlines and open items</span><textarea class="field" data-aw="contract.redlines" rows="6" placeholder="What we’ve pushed back on, what’s still open, what they agreed to"${awDis(w)}>${esc(c.redlines||'')}</textarea></label></div></div>
+  <datalist id="aw-people">${[...new Set([...S.estimators.map(e=>e.name),...(S.pms||[]).map(p=>p.full_name||p.email)].filter(Boolean))].map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`}
+function awSel(col,id,field,opts,v,w){return `<select class="field" data-awl="${col}|${id}|${field}"${awDis(w)}>${opts.map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('')}</select>`}
+function awTx(col,id,field,v,w,type,ph){return `<input class="field" data-awl="${col}|${id}|${field}"${type?` type="${type}"`:''} value="${esc(v??'')}"${ph?` placeholder="${esc(ph)}"`:''}${type==='number'?' step="any" data-t="n"':''}${awDis(w)}>`}
+const awDel=(col,id,w)=>w?`<button class="btn sm ghost aw-x" data-act="aw-del" data-col="${col}" data-id="${id}" title="Remove">×</button>`:'';
+function awBuyout(b,a,s,w){const rows=a.buyout;
+  const tr=rows.map(r=>{const self=r.status==='Self-perform';const bud=num(r.budget),bo=num(r.bought);const d=bud!=null&&bo!=null?bud-bo:null;
+    return `<tr class="${self?'aw-self':''}${BO_DONE.includes(r.status)?' aw-done':''}"><td>${awTx('buyout',r.id,'scope',r.scope,w,'','Scope')}</td><td>${awTx('buyout',r.id,'trade',r.trade,w,'','Trade')}</td>
+      <td class="r">${awTx('buyout',r.id,'budget',r.budget,w,'number')}</td><td>${awTx('buyout',r.id,'vendor',r.vendor,w,'','Sub or vendor')}</td><td class="r">${awTx('buyout',r.id,'bought',r.bought,w,'number')}</td>
+      <td class="r num small" style="color:var(--${d==null?'ink-3':d<0?'bad':'good'})">${d==null?'—':signMoney(d)}</td><td>${awSel('buyout',r.id,'status',BO_ST,r.status||'Not started',w)}</td><td>${awTx('buyout',r.id,'po',r.po,w,'','PO / sub #')}</td><td>${awTx('buyout',r.id,'notes',r.notes,w,'','Notes')}</td><td>${awDel('buyout',r.id,w)}</td></tr>`}).join('');
+  return `<div class="panel pad"><div class="aw-th"><div><h3>Buyout</h3><div class="small dim">Started from the low quote for each scope and trade on the bid. “Carried” is what we carried in our number. Scopes with no quote are marked self-perform; change them if we’re subbing them out.</div></div>
+    <div class="adders">${w?`<button class="btn sm" data-act="aw-add" data-col="buyout">+ Add line</button><button class="btn sm ghost" data-act="aw-seed" title="Adds any scope from the bid that isn’t on this list yet">Pull in new quotes from the bid</button>`:''}</div></div>
+    ${rows.length?`<div class="scroll"><table class="aw-tbl"><thead><tr><th>Scope</th><th>Trade</th><th class="r">Carried</th><th>Bought from</th><th class="r">Bought for</th><th class="r">Saved</th><th>Status</th><th>PO / sub #</th><th>Notes</th><th></th></tr></thead><tbody>${tr}</tbody>
+      <tfoot><tr><td colspan="2"><b>${s.boDone} of ${s.boN} signed</b></td><td class="r num"><b>${money(s.bud)}</b></td><td></td><td class="r num"><b>${money(s.bought)}</b></td><td class="r num" style="color:var(--${s.save<0?'bad':'good'})"><b>${s.boDone?signMoney(s.save):''}</b></td><td colspan="4"></td></tr></tfoot></table></div>`:'<div class="empty">No buyout lines. Add one, or pull in the bid’s quotes.</div>'}</div>`}
+function awSubs(b,a,s,w){const today=todayStr();const rows=a.submittals;
+  const tr=rows.map(r=>{const open=!SUB_OK.includes(r.status);const late=open&&r.required&&r.required<today&&['Not submitted','Revise & resubmit','Rejected'].includes(r.status||'Not submitted');const out=r.sent&&!r.returned?dayDiff(r.sent,today):null;
+    return `<tr class="${late?'aw-late':''}${!open?' aw-done':''}"><td style="width:70px">${awTx('submittals',r.id,'no',r.no,w,'','#')}</td><td>${awTx('submittals',r.id,'spec',r.spec,w,'','Spec section')}</td><td>${awTx('submittals',r.id,'item',r.item,w,'','What’s being submitted')}</td><td>${awTx('submittals',r.id,'vendor',r.vendor,w,'','Vendor')}</td>
+      <td>${awTx('submittals',r.id,'required',r.required,w,'date')}</td><td>${awTx('submittals',r.id,'sent',r.sent,w,'date')}</td><td>${awTx('submittals',r.id,'returned',r.returned,w,'date')}</td>
+      <td>${awSel('submittals',r.id,'status',SUB_ST,r.status||'Not submitted',w)}</td><td>${awSel('submittals',r.id,'ball',SUB_BALL,r.ball||'Us',w)}</td><td class="r num small">${out!=null?out+'d':late?'<b style="color:var(--bad)">Late</b>':'—'}</td><td>${awDel('submittals',r.id,w)}</td></tr>`}).join('');
+  return `<div class="panel pad"><div class="aw-th"><div><h3>Submittals log</h3><div class="small dim">“Ball in court” is who owes the next move. Days out counts from the day it was sent until it comes back. Red rows are past their required date and not in yet.</div></div>${w?'<button class="btn sm" data-act="aw-add" data-col="submittals">+ Add submittal</button>':''}</div>
+    ${rows.length?`<div class="scroll"><table class="aw-tbl"><thead><tr><th>#</th><th>Spec</th><th>Item</th><th>Vendor</th><th>Required by</th><th>Sent</th><th>Returned</th><th>Status</th><th>Ball in court</th><th class="r">Out</th><th></th></tr></thead><tbody>${tr}</tbody></table></div>`:'<div class="empty">No submittals yet.</div>'}</div>`}
+function awRfis(b,a,s,w){const today=todayStr();
+  const cards=a.rfis.map(r=>{const open=!r.answered;const late=open&&r.due&&r.due<today;const days=r.sent?dayDiff(r.sent,r.answered||today):null;
+    return `<div class="panel pad aw-rfi${late?' aw-late':''}${open?'':' aw-done'}"><div class="aw-rh"><span style="width:70px">${awTx('rfis',r.id,'no',r.no,w,'','#')}</span>${awTx('rfis',r.id,'subject',r.subject,w,'','Subject')}${pill(open?(late?'Past due':'Open'):'Answered',open?(late?'bad':'warn'):'good')}${days!=null?`<span class="small dim">${days} day${days===1?'':'s'}${open?' open':' to answer'}</span>`:''}${awDel('rfis',r.id,w)}</div>
+      <div class="aw-rg"><label class="f"><span class="f-lab">Sent</span>${awTx('rfis',r.id,'sent',r.sent,w,'date')}</label><label class="f"><span class="f-lab">Answer needed by</span>${awTx('rfis',r.id,'due',r.due,w,'date')}</label><label class="f"><span class="f-lab">Answered</span>${awTx('rfis',r.id,'answered',r.answered,w,'date')}</label>
+        <label class="f"><span class="f-lab">Sent to</span>${awTx('rfis',r.id,'to',r.to,w,'','GC, engineer…')}</label></div>
+      <div class="aw-two"><label class="f"><span class="f-lab">Question</span><textarea class="field" rows="3" data-awl="rfis|${r.id}|question"${awDis(w)}>${esc(r.question||'')}</textarea></label><label class="f"><span class="f-lab">Answer</span><textarea class="field" rows="3" data-awl="rfis|${r.id}|answer"${awDis(w)}>${esc(r.answer||'')}</textarea></label></div>
+      <div class="aw-imp"><label class="check"><input type="checkbox" data-awl="rfis|${r.id}|cost"${r.cost?' checked':''}${awDis(w)}> Cost impact</label><label class="check"><input type="checkbox" data-awl="rfis|${r.id}|time"${r.time?' checked':''}${awDis(w)}> Schedule impact</label>${r.cost||r.time?'<span class="small" style="color:var(--warn)">⚠ Possible change order. Price it before the work is done.</span>':''}</div></div>`}).join('');
+  return `<div class="aw-th"><div><h3>RFIs</h3><div class="small dim">${s.rfiOpen} open · ${s.rfiN-s.rfiOpen} answered</div></div>${w?'<button class="btn sm" data-act="aw-add" data-col="rfis">+ New RFI</button>':''}</div>${cards||'<div class="panel"><div class="empty">No RFIs yet.</div></div>'}`}
+function awPremob(b,a,s,w){const it=a.premob.items;
+  return `<div class="panel pad"><div class="aw-th"><div><h3>Pre-mobilization</h3><div class="small dim">${s.pmDone} of ${s.pmN} done. Rename, add or remove items to fit the job.</div></div>${w?'<button class="btn sm" data-act="aw-add" data-col="premob">+ Add item</button>':''}</div>
+    <div class="aw-pm">${it.map(x=>`<div class="aw-pmr${x.done?' aw-done':''}"><input type="checkbox" data-awl="premob|${x.id}|done"${x.done?' checked':''}${awDis(w)} aria-label="Done">${awTx('premob',x.id,'label',x.label,w,'','Item')}${awTx('premob',x.id,'date',x.date,w,'date')}${awTx('premob',x.id,'note',x.note,w,'','Note (permit #, ticket #…)')}${awDel('premob',x.id,w)}</div>`).join('')||'<div class="empty">No items.</div>'}</div></div>`}
+function awTurnover(b,a,s,w){const t=a.turnover;const lead=byId(S.estimators,b.lead_estimator_id);const job=a.job_id?byId(S.jobs,a.job_id):S.jobs.find(j=>j.bid_id===b.id);
+  return `<div class="aw-two"><div class="panel pad"><h3>Estimator → PM handoff</h3><div class="aw-form">
+    <label class="f"><span class="f-lab">Project manager</span>${awIn('pm_name',a,w,'','Name',' list="aw-people"')}</label>
+    <label class="f"><span class="f-lab">Lead estimator</span><input class="field" value="${esc(lead?lead.name:'—')}" disabled></label>
+    <label class="f"><span class="f-lab">Turnover meeting</span>${awIn('turnover.date',a,w,'date')}</label></div>
+    <div class="aw-checks" style="margin-top:10px">${TO_CHECKS.map(([k,l])=>`<label class="check"><input type="checkbox" data-aw="turnover.checks.${k}"${t.checks[k]?' checked':''}${awDis(w)}> ${esc(l)}</label>`).join('')}</div></div>
+  <div class="panel pad"><h3>Notes for the field</h3><textarea class="field" data-aw="turnover.notes" rows="9" placeholder="What the PM and super need to know: tricky areas, what we assumed, what we left out"${awDis(w)}>${esc(t.notes||'')}</textarea>
+    <div style="margin-top:12px">${job?`<button class="btn" data-act="open-job" data-id="${job.id}">Open the job</button>`:tabOff('jobs')?'<p class="small dim">The Jobs tab is switched off, so there’s nothing to send this to yet. This page is the working copy.</p>':can('jobs','edit')?`<button class="btn primary" data-act="aw-job">Send to Jobs</button><p class="small dim">Makes a job for the PM side (budget from the estimate if there is one). This page stays as the working copy.</p>`:''}</div></div></div>
+  <datalist id="aw-people">${[...new Set([...S.estimators.map(e=>e.name),...(S.pms||[]).map(p=>p.full_name||p.email)].filter(Boolean))].map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`}
+function awNewRow(col,a){const next=list=>{const n=list.map(x=>parseInt(String(x.no||'').replace(/\D/g,''),10)).filter(x=>!isNaN(x));return String((n.length?Math.max(...n):0)+1).padStart(3,'0')};
+  if(col==='buyout')return {id:newId(),scope:'',trade:'',budget:null,vendor_id:null,vendor:'',bought:null,status:'Not started',po:'',notes:''};
+  if(col==='submittals')return {id:newId(),no:next(a.submittals),spec:'',item:'',vendor:'',required:'',sent:'',returned:'',status:'Not submitted',ball:'Us',notes:''};
+  if(col==='rfis')return {id:newId(),no:next(a.rfis),subject:'',question:'',to:'',sent:todayStr(),due:'',answered:'',answer:'',cost:false,time:false};
+  return {id:newId(),label:'',done:false,date:'',note:''}}
+const awList=(a,col)=>col==='premob'?a.premob.items:a[col];
+const awColOf=col=>col==='premob'?'premob':col;
+function awCur(){const b=byId(S.bids,S.awBid);return b?awGet(b):null}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const act=t.dataset.act;if(!/^aw-/.test(act))return;
+  if(act==='aw-open'){S.awBid=t.dataset.id;S.awTab='overview';S.view='award';render();window.scrollTo(0,0);return}
+  if(act==='aw-back'){S.view='awards';render();return}
+  if(act==='aw-frombid'){const id=t.dataset.id;closeModal();S.awBid=id;S.awTab='overview';S.view='award';render();window.scrollTo(0,0);return}
+  if(act==='aw-st'){S.awf.st=t.dataset.v;render();return}
+  if(act==='aw-tab'){S.awTab=t.dataset.v;render();return}
+  const a=awCur();if(!a||!canAw())return;
+  if(act==='aw-status'){a.status=t.dataset.v;if(a.status==='Contract executed'&&!a.contract.executed){a.contract.executed=todayStr();awSave(a,['status','contract'])}else awSave(a,['status']);render();return}
+  if(act==='aw-exec'){a.contract.executed=todayStr();if(AW_ST.indexOf(a.status)<2)a.status='Contract executed';awSave(a,['status','contract']);render();toast('Contract marked executed');return}
+  if(act==='aw-add'){const col=t.dataset.col;const r=awNewRow(col,a);awList(a,col).push(r);awSave(a,[awColOf(col)]);render();setTimeout(()=>{const f={buyout:'scope',submittals:'spec',rfis:'subject',premob:'label'}[col];const el=document.querySelector(`[data-awl="${col}|${r.id}|${f}"]`);if(el)el.focus()},30);return}
+  if(act==='aw-del'){const col=t.dataset.col,id=t.dataset.id;const L=awList(a,col);const i=L.findIndex(x=>x.id===id);if(i<0)return;
+    const r=L[i];const filled=Object.entries(r).some(([k,v])=>k!=='id'&&k!=='status'&&k!=='ball'&&k!=='no'&&v!==''&&v!=null&&v!==false);
+    if(filled&&!t.classList.contains('arm')){t.classList.add('arm');t.textContent='Remove?';setTimeout(()=>{t.classList.remove('arm');t.textContent='×'},2500);return}
+    L.splice(i,1);awSave(a,[awColOf(col)]);render();return}
+  if(act==='aw-seed'){const b=byId(S.bids,S.awBid);const have=new Set(a.buyout.map(r=>(String(r.scope).toLowerCase()+'|'+String(r.trade).toLowerCase())));const haveScope=new Set(a.buyout.map(r=>String(r.scope).toLowerCase()));
+    const add=awSeedBuyout(b).filter(r=>r.trade?!have.has(String(r.scope).toLowerCase()+'|'+String(r.trade).toLowerCase()):!haveScope.has(String(r.scope).toLowerCase()));a.buyout.push(...add);awSave(a,['buyout']);render();toast(add.length?`Added ${add.length} line${add.length===1?'':'s'}`:'Nothing new on the bid');return}
+  if(act==='aw-job'){const b=byId(S.bids,S.awBid);if(!b||!can('jobs','edit'))return;const ex=S.jobs.find(j=>j.bid_id===b.id);
+    if(ex){a.job_id=ex.id;awSave(a,['job_id']);S.view='job';S.jobId=ex.id;render();return}
+    createJobFromBid(b).then(()=>{const j=S.jobs.find(x=>x.bid_id===b.id);if(j){a.job_id=j.id;awSave(a,['job_id'])}});return}});
+function awInput(t,commit){const a=awCur();if(!a||!canAw())return false;
+  const v=t.type==='checkbox'?t.checked:t.dataset.t==='n'?(t.value===''?null:Number(t.value)):t.value;
+  if(t.dataset.aw!=null){const p=t.dataset.aw;awSetPath(a,p,v);const col=p.split('.')[0];
+    if(p==='contract.executed'&&v&&AW_ST.indexOf(a.status)<2&&commit){a.status='Contract executed';awSave(a,['status'])}awSave(a,[col]);return true}
+  if(t.dataset.awl!=null){const [col,id,f]=t.dataset.awl.split('|');const r=awList(a,col).find(x=>x.id===id);if(!r)return true;r[f]=v;
+    if(col==='buyout'&&f==='vendor'){const m=S.vendors.find(x=>String(x.company||'').toLowerCase()===String(v).trim().toLowerCase());r.vendor_id=m?m.id:null}
+    if(col==='submittals'&&f==='sent'&&v&&commit&&(r.status||'Not submitted')==='Not submitted'){r.status='Submitted';r.ball='GC'}
+    if(col==='submittals'&&f==='returned'&&v&&commit&&r.status==='Submitted')r.status='Approved';
+    awSave(a,[awColOf(col)]);return true}return false}
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&(t.dataset.aw!=null||t.dataset.awl!=null)&&t.type!=='checkbox'&&t.tagName!=='SELECT'&&t.type!=='date')awInput(t,false)});
+// a change fires on blur, which happens on mousedown: re-rendering then would swallow the click that caused it, so wait for the click
+let awPtr=false,awQ=false;document.addEventListener('pointerdown',()=>{awPtr=true},true);document.addEventListener('pointerup',()=>{setTimeout(()=>{awPtr=false;if(awQ){awQ=false;if(S.view==='award')render()}},0)},true);
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&(t.dataset.aw!=null||t.dataset.awl!=null)){if(awInput(t,true)){const plain=t.tagName==='TEXTAREA'||(t.tagName==='INPUT'&&!['number','date','checkbox'].includes(t.type));if(plain)return;if(awPtr&&t.type!=='checkbox'&&t.tagName!=='SELECT')awQ=true;else render()}}});
+document.addEventListener('keydown',e=>{const tr=e.target.closest&&e.target.closest('tr.click[data-act=aw-open]');if(tr&&(e.key==='Enter'||e.key===' ')&&e.target===tr){e.preventDefault();tr.click()}});
+FOCUS_ATTRS.push('data-aw','data-awl');
