@@ -865,3 +865,14 @@ On the AC Marriott Alpharetta DXF this gives the finished-grade contours, 224 sp
 Automatic suggestions in Import takeoff now only offer a bid item in the same unit, so a count is never added to a length.
 
 Not built yet: crossing / out-of-sequence contour checks, DXF and LandXML into a surface, the tool chest (sectional areas, curb templates, pipe runs with profile) and the finish step (apply to the estimate, or export).
+
+## Weekly bid activity
+
+On the Precon dashboard (under Projects overview) and on the Board dashboard (turn it on or off under **Customize view**). Each week, Monday to Sunday, shows four counts:
+
+- **New bids in:** bids whose intake date falls in that week (the bid's created date if no intake date was entered).
+- **Bids submitted:** bids that first went out that week (the submitted date, or the earliest GC "sent on" date). Budgets are counted separately.
+- **Budgets sent:** the same, for bids set as Budget / pricing.
+- **Revisions sent:** revisions in a bid's revision log dated that week (Rev 1 and up; the original proposal isn't a revision).
+
+Pick 8, 13 or 26 weeks, or a year. Totals and per-week averages are under the chart. Click a week to list the bids behind each count. On the Board dashboard it follows the year picker.
