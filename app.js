@@ -5499,7 +5499,7 @@ async function estSave(){const E=S.est;if(!E||!E.row||!E.dirty||E.saving||E.conf
       await run(sb.from('codebook').update({data,cost:r2(R.cost),description:String(E.tplName||'').trim()||'Template'}).eq('id',E.tpl));E.row.updated_at=new Date().toISOString();E.row.updated_by_name=myName();clearTimeout(estSave._cb);estSave._cb=setTimeout(()=>loadTable('codebook'),800)}
     else{const rows=await run(sb.from('estimates').update({data:E.data,version:v+1,total_cost:r2(R.cost),total_price:r2(R.total),updated_by_name:myName()}).eq('id',E.row.id).eq('version',v).select('id,version,updated_at'));
       if(!rows||!rows.length){E.conflict=true;E.dirty=true}else{E.row.version=v+1;E.row.updated_at=rows[0].updated_at||new Date().toISOString();E.row.updated_by_name=myName();
-        const ix=estOf(E.bidId);if(ix)Object.assign(ix,{version:v+1,total_cost:r2(R.cost),total_price:r2(R.total),updated_at:E.row.updated_at,updated_by_name:myName()})}}}
+        const ix=estOf(E.bidId);if(ix)Object.assign(ix,{version:v+1,total_cost:r2(R.cost),total_price:r2(R.total),updated_at:E.row.updated_at,updated_by_name:myName()});if(E.data.pe&&typeof chSyncEst==='function')chSyncEst(E.bidId,E.data)}}}
   catch(e){E.dirty=true;E.saveErr=errMsg(e)}
   E.saving=false;if(E.conflict&&S.view==='estimate')render();else estStatus();if(E.dirty&&!E.conflict&&!E.saveErr)E._t=setTimeout(estSave,1200)}
 
@@ -5549,7 +5549,7 @@ function estSelResolve(d){let s=S.est.sel;if(typeof s==='string')s=S.est.sel={t:
   if(s.t==='item'){const i=d.items.findIndex(x=>x.id===s.id);return i<0?null:{t:'item',i,o:d.items[i],p:`items.${i}`}}
   for(let i=0;i<d.items.length;i++){const j=d.items[i].acts.findIndex(a=>a.id===s.id);if(j>=0)return {t:'act',i,j,o:d.items[i].acts[j],it:d.items[i],p:`items.${i}.acts.${j}`}}return null}
 function estLevel(lv){const E=S.est,d=E.data;E.open=new Set(lv==='sec'?[]:lv==='items'?d.sections.map(s=>s.id):[...d.sections.map(s=>s.id),...d.items.map(i=>i.id)]);estOpenSave();render()}
-function estBuildView(d,R,ro){const E=S.est;if(!E.tpl&&!S.ch.rows&&can('estimates'))chLoad();const open=estOpenSet();const sel=E.sel||{};const g=(p,v,col,o={})=>epIn(p,v,{...o,attrs:` data-grid="eo" data-col="${col}"`});
+function estBuildView(d,R,ro){const E=S.est;if(!E.tpl&&!S.ch.rows&&can('estimates'))chLoad();if(!E.tpl)chBackfill();const open=estOpenSet();const sel=E.sel||{};const g=(p,v,col,o={})=>epIn(p,v,{...o,attrs:` data-grid="eo" data-col="${col}"`});
   const secTot=new Map();d.items.forEach((it,i)=>{const x=R.items[i];const t=secTot.get(it.sec)||{cost:0,price:0,alt:0,mh:0};if(it.alt)t.alt+=x.price;else{t.cost+=x.total;t.price+=x.price;t.mh+=x.mh}secTot.set(it.sec,t)});
   const dots=(t,id)=>ro?'':`<button class="eo-dots" data-act="eo-menu" data-t="${t}" data-id="${id}" aria-label="More">⋯</button>`;
   let rows='';
@@ -13602,7 +13602,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   if(a==='pee-open'){peeOpen();return}
   if(a==='pee-go'&&M&&M.kind==='peeimp'&&M.P){const d=S.est.data;const x=M;peeBuild(d,x.P,{mode:x.mode,keep:x.keep,names:x.names,file:x.file});const R=estCalc(d);
     S.est.open=new Set(d.sections.map(s=>s.id));estOpenSave&&estOpenSave();S.est.sel=d.sections[0]?{t:'sec',id:d.sections[0].id}:null;estTouch();closeModal();S.est.tab='build';render();
-    const diff=Math.abs(R.total-(x.mode==='replace'?x.P.bid:R.total));if(S.est.bidId)chSaveImport(x.P,byId(S.bids,S.est.bidId),x.file,x.mode==='replace').then(()=>render());toast(`Imported ${x.P.items.length} pay items and ${x.P.acts} activities.${x.mode==='replace'&&x.P.bid?(diff<1?' Bid total matches ProEstimate.':` Bid total is ${money(R.total)} vs ${money(x.P.bid)} in ProEstimate.`):''}`);return}});
+    const diff=Math.abs(R.total-(x.mode==='replace'?x.P.bid:R.total));if(S.est.bidId)setTimeout(()=>chSyncEst(S.est.bidId,S.est.data,true).then(()=>render()),2500);toast(`Imported ${x.P.items.length} pay items and ${x.P.acts} activities.${x.mode==='replace'&&x.P.bid?(diff<1?' Bid total matches ProEstimate.':` Bid total is ${money(R.total)} vs ${money(x.P.bid)} in ProEstimate.`):''}`);return}});
 
 /* =====================================================================
    Cost history: the app learns from every ProEstimate estimate imported.
@@ -13682,7 +13682,7 @@ async function chSaveImport(P,b,file,replace){if(!can('estimates','edit'))return
 // ---------- Estimates → Cost history ----------
 const chName=f=>String(f||'').replace(/\.[^.]+$/,'').replace(/[_]+/g,' ').replace(/\s+-\s+/g,' – ').trim();
 function chBidGuess(name){const k=normH(name);if(!k)return '';const b=S.bids.find(b=>{const n=normH(b.name);return n&&n.length>3&&(k.includes(n)||n.includes(k))});return b?b.id:''}
-function chPage(){const C=S.ch;if(!C.rows){chLoad();return dozerLoader('Loading cost history')}
+function chPage(){const C=S.ch;chBackfill();if(!C.rows){chLoad();return dozerLoader('Loading cost history')}
   if(C.missing)return '<div class="notice">Cost history needs a database update: run <b>supabase/update-45-cost-history.sql</b> in Supabase (SQL Editor → New query → paste → Run), then refresh.</div>';
   const ed=can('estimates','edit');const rows=C.rows;const used=rows.filter(r=>!r.excluded&&!r.budget);const I=chIndex();const items=used.reduce((s,r)=>s+(r.items||[]).length,0);
   const dates=used.map(r=>r.est_date).filter(Boolean).sort();
@@ -13696,10 +13696,10 @@ function chPage(){const C=S.ch;if(!C.rows){chLoad();return dozerLoader('Loading 
     <div class="adders" style="margin-top:10px"><button class="btn primary" data-act="ch-add"${stage.some(s=>s.P)&&!C.busy?'':' disabled'}>${C.busy?'Adding…':`Add ${stage.filter(s=>s.P).length} to cost history`}</button><button class="btn" data-act="ch-clear">Cancel</button></div></div>`:'';
   const q=normH(C.q||'');const lib=[...I.P.entries()].flatMap(([k,o])=>{const g=new Map();o.forEach(x=>{const dk=normH(x.desc);if(!g.has(dk))g.set(dk,[]);g.get(dk).push(x)});return [...g.values()].map(oo=>{const st=chStats(oo,0);const last=oo.reduce((a,x)=>!a||String(x.date)>String(a.date)?x:a,null);return {k,code:k.slice(2).split('|')[0],unit:k.split('|')[1],desc:last.desc,st}})}).filter(x=>!q||normH(x.code+x.desc).includes(q)).sort((a,b)=>num(a.code)-num(b.code));
   return `<div class="kpis">${kpi('Estimates learned from',used.length,rows.length>used.length?`${rows.length-used.length} left out (budgets or excluded)`:'All counted')}${kpi('Pay item prices',items.toLocaleString(),`${I.P.size} different pay items`)}${kpi('Covers',dates.length?`${dates[0].slice(0,4)}–${dates[dates.length-1].slice(0,4)}`:'—',dates.length?`${fmtShort(dates[0])} ${dates[0].slice(0,4)} to ${fmtShort(dates[dates.length-1])} ${dates[dates.length-1].slice(0,4)}`:'Nothing yet')}</div>
-    ${ed?`<div class="panel pad ch-up"><div><b>Add old ProEstimate estimates</b><p class="small dim" style="margin:2px 0 0">Pick one or many estimate exports (.xls or .xlsx). The more jobs it sees, the better the price checks get. Estimates you import into a bid are added on their own.</p></div><label class="btn primary">Choose files<input type="file" multiple accept=".xls,.xlsx" data-chfiles hidden></label></div>`:''}
+    ${ed?`<div class="panel pad ch-up"><div><b>Old jobs that aren’t in the app</b><p class="small dim" style="margin:2px 0 0">You don’t need to upload anything you’ve imported into a bid’s estimate: those are in the history already and stay in step with the estimate. Use this only for old ProEstimate exports of jobs that were never bids here.</p></div><label class="btn primary">Choose files<input type="file" multiple accept=".xls,.xlsx" data-chfiles hidden></label></div>`:''}
     ${stageHtml}
     <div class="grid2 ch-grid"><div class="sec" style="margin:0"><div class="sec-h"><h2>Estimates in the history</h2><span>${rows.length}</span></div><div class="panel scroll">${rows.length?`<table class="rp-tbl"><thead><tr><th>Project</th><th>Date</th><th>Type</th><th class="r">Items</th><th class="r">Cost</th><th>Counted</th><th></th></tr></thead><tbody>
-      ${rows.map(r=>`<tr class="${r.excluded||r.budget?'ch-off':''}"><td>${esc(r.name)}${r.bid_id&&byId(S.bids,r.bid_id)?' <span class="small dim">· in the app</span>':''}</td><td class="small">${r.est_date?fmtShort(r.est_date)+' '+r.est_date.slice(2,4):'—'}</td><td class="small">${esc(r.project_type||'—')}${r.budget?' · budget':''}</td><td class="r num">${(r.items||[]).length}</td><td class="r num">${moneyK(r.total_cost)}</td>
+      ${rows.map(r=>`<tr class="${r.excluded||r.budget?'ch-off':''}"><td>${esc(r.name)} <span class="small dim">· ${r.source==='estimate'?'from the bid’s estimate':'uploaded'}</span></td><td class="small">${r.est_date?fmtShort(r.est_date)+' '+r.est_date.slice(2,4):'—'}</td><td class="small">${esc(r.project_type||'—')}${r.budget?' · budget':''}</td><td class="r num">${(r.items||[]).length}</td><td class="r num">${moneyK(r.total_cost)}</td>
         <td><label class="check small"><input type="checkbox" data-chinc="${r.id}"${!r.excluded?' checked':''}${ed?'':' disabled'}> ${r.budget?'(budget)':''}</label></td><td>${ed?`<button class="btn sm ghost" data-act="ch-del" data-id="${r.id}" title="Remove from history">×</button>`:''}</td></tr>`).join('')}</tbody></table>`:'<div class="empty"><b>Nothing yet</b>Import a ProEstimate estimate into a bid, or add old exports above.</div>'}</div></div>
     <div class="sec" style="margin:0"><div class="sec-h"><h2>What it knows</h2><span>Typical unit cost per pay item</span></div><div class="panel pad"><input class="field" data-chq placeholder="Search pay item number or description" value="${esc(C.q||'')}" style="margin-bottom:8px">
       ${lib.length?`<div class="scroll ch-lib"><table class="rp-tbl"><thead><tr><th>Pay item</th><th>Description</th><th class="r">Jobs</th><th class="r">Typical</th><th class="r">Range</th><th class="r">Trend</th></tr></thead><tbody>${lib.slice(0,300).map(x=>`<tr><td class="num">${esc(String(+x.code))}</td><td>${esc(x.desc)} <span class="dim small">${esc(x.unit)}</span></td><td class="r num">${x.st.jobs}</td><td class="r num">${money2(x.st.med)}</td><td class="r num small dim">${money2(x.st.p25)}–${money2(x.st.p75)}</td><td class="r small">${x.st.trend!=null?`${x.st.trend>=0?'▲':'▼'}${Math.abs(Math.round(x.st.trend*100))}%/yr`:'—'}</td></tr>`).join('')}</tbody></table></div>${lib.length>300?'<p class="small dim">Showing 300. Search to narrow it down.</p>':''}`:'<div class="empty">No pay items yet.</div>'}</div></div></div>`}
@@ -13718,7 +13718,33 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
   if(a==='ch-clear'){C.stage=null;render();return}
   if(a==='ch-del'){if(!t.classList.contains('arm')){t.classList.add('arm');t.textContent='Remove?';setTimeout(()=>{t.classList.remove('arm');t.textContent='×'},2500);return}
     try{await run(sb.from('cost_history').delete().eq('id',t.dataset.id));C.rows=C.rows.filter(r=>r.id!==t.dataset.id);C.ver++;render();toast('Removed from cost history')}catch(err){toast(errMsg(err))}return}
-  if(a==='ch-add'){const go=C.stage.filter(s=>s.P);if(!go.length)return;C.busy=true;render();
+  if(a==='ch-add'){const inEst=new Set((C.rows||[]).filter(r=>r.source==='estimate').map(r=>r.bid_id));const skip=C.stage.filter(s=>s.P&&s.bid&&inEst.has(s.bid));skip.forEach(s=>{s.err='That bid’s imported estimate is already in the history.';s.P=null});if(skip.length)toast(`Skipped ${skip.length}: already in the history from the bid’s estimate`);const go=C.stage.filter(s=>s.P);if(!go.length){render();return}C.busy=true;render();
     const rows=go.map(s=>({bid_id:s.bid||null,name:s.name||chName(s.file),est_date:s.date||null,project_type:s.ptype||'',location:s.bid?(byId(S.bids,s.bid)?.location||''):'',budget:!!s.budget,source:'proestimate',file:s.file,total_cost:r2(s.P.cost),total_bid:r2(s.P.bid),items:chItemsFromPE(s.P),created_by_name:myName()}));
     try{for(let i=0;i<rows.length;i+=20){const r=await sb.from('cost_history').insert(rows.slice(i,i+20));if(r.error)throw r.error}C.stage=null;C.busy=false;await chLoad(true);toast(`Added ${rows.length} estimate${rows.length===1?'':'s'} to cost history`)}
     catch(err){C.busy=false;if(/cost_history|relation|schema cache/i.test(errMsg(err)))C.missing=true;toast(errMsg(err));render()}return}});
+
+/* ---------- cost history follows the estimates themselves: an estimate that came from a ProEstimate import
+   keeps one cost-history row for its bid, refreshed from the estimate as it's saved (no second upload) ---------- */
+function chItemsFromEst(d){const R=estCalc(d);const K={labor:'labor',equipment:'equipment',material:'material',sub:'sub',trucking:'hauling',other:'other'};
+  return d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>!o.it.alt&&num(o.it.qty)>0&&o.x.total>0).map(({it,x})=>{const q=num(it.qty);const t={};Object.entries(K).forEach(([k,n])=>{const v=(x.c[k]||0)/q;if(v)t[n]=+v.toFixed(4)});
+    return {p:String(it.code||''),d:it.desc||'',u:peeUnit(it.unit),q,c:+(x.total/q).toFixed(4),b:x.unitPrice?+x.unitPrice.toFixed(4):null,t}})}
+const chSyncT={};
+async function chSyncEst(bidId,d,now){if(!d||!d.pe||!bidId||!can('estimates','edit')||S.ch.missing)return;clearTimeout(chSyncT[bidId]);
+  const go=async()=>{const b=byId(S.bids,bidId);const R=estCalc(d);const items=chItemsFromEst(d);
+    const row={bid_id:bidId,name:b?b.name:'',est_date:(b&&(b.due_date||sentOn(b)))||String(d.pe.at||'').slice(0,10)||todayStr(),project_type:b?(normProjectType(b.project_type)||''):'',location:b?(b.location||''):'',budget:b?isBudget(b):false,
+      source:'estimate',file:d.pe.file||'',total_cost:r2(R.cost),total_bid:r2(R.total),items,created_by_name:myName()};
+    try{if(!S.ch.rows)await chLoad();const rows=S.ch.rows||[];
+      // the bid's own row, plus any copy of the same export uploaded by hand on the Cost history page
+      const peCost=num(d.pe.cost);const dups=rows.filter(r=>r.bid_id!==bidId&&!r.bid_id&&r.source!=='estimate'&&((peCost&&Math.abs((num(r.total_cost)||0)-peCost)<2)||(d.pe.file&&r.file===d.pe.file)));
+      const mine=rows.find(r=>r.bid_id===bidId&&r.source==='estimate');
+      for(const r of [...rows.filter(r=>r.bid_id===bidId&&r!==mine),...dups]){const x=await sb.from('cost_history').delete().eq('id',r.id);if(x.error)throw x.error}
+      if(mine){const x=await sb.from('cost_history').update(row).eq('id',mine.id);if(x.error)throw x.error}else{const x=await sb.from('cost_history').insert(row);if(x.error)throw x.error}
+      await chLoad(true)}catch(e){if(/cost_history|relation|schema cache/i.test(errMsg(e)))S.ch.missing=true}};
+  if(now)return go();chSyncT[bidId]=setTimeout(go,8000)}
+// estimates imported before cost history existed (or before this change): add them once
+let chBackfilled=false;
+async function chBackfill(){if(chBackfilled||!can('estimates','edit'))return;chBackfilled=true;
+  try{const r=await sb.from('estimates').select('bid_id,data');if(r.error)throw r.error;await chLoad();if(S.ch.missing)return;
+    const have=new Set((S.ch.rows||[]).filter(x=>x.source==='estimate').map(x=>x.bid_id));let n=0;
+    for(const e of (r.data||[])){if(e.data&&e.data.pe&&e.bid_id&&!have.has(e.bid_id)){await chSyncEst(e.bid_id,estNorm(clone(e.data)),true);n++}}
+    if(n)toast(`Added ${n} imported estimate${n===1?'':'s'} to cost history`)}catch(e){}}

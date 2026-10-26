@@ -945,7 +945,7 @@ Open a bid's estimate and either pick **From a ProEstimate export** when startin
 
 ## Cost history (the estimate learns from past jobs)
 
-Needs `supabase/update-45-cost-history.sql`. Every ProEstimate estimate imported into a bid's estimate is added to the cost history automatically (re-importing replaces that bid's earlier copy). Old exports can be added in bulk on **Estimates → Cost history → Choose files**: check the project name, date and project type for each file, link the bid if it's in the app, tick Budget for budgets (they're left out of the numbers), and click Add.
+Needs `supabase/update-45-cost-history.sql`. The history follows your estimates: every bid estimate that came from a ProEstimate import is in it automatically, and it stays in step as the estimate is edited and saved (one entry per bid, no second upload). Estimates imported before this existed are added the first time someone opens an estimate or the Cost history page, and any hand-uploaded copy of the same export is cleaned up. For old jobs that were never bids in the app, add their exports on **Estimates → Cost history → Choose files**: check the project name, date and project type for each file, link the bid if it's in the app, tick Budget for budgets (they're left out of the numbers), and click Add.
 
 On an estimate, select a bid item to see its **Cost history** card:
 - **Suggested unit cost** for this quantity, from past jobs with the same pay item number and unit (or the same description). With 5+ jobs over a range of quantities it accounts for bigger jobs costing less per unit; with jobs spread over time it accounts for the price trend. Recent jobs count more (a job's weight halves every 18 months).
