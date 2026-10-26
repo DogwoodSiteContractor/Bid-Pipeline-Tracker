@@ -882,10 +882,12 @@ function scopePills(b){const it=scopeItems(b);if(!it.length)return '<span class=
 // intake: the day the invitation came in (set on the Project tab; otherwise the day the bid was entered)
 function intakeOf(b){const r=b&&b.rfq&&typeof b.rfq==='object'?b.rfq:{};if(r.intake)return String(r.intake).slice(0,10);const c=b&&b.created_at?new Date(b.created_at):null;return c&&!isNaN(c)?`${c.getFullYear()}-${String(c.getMonth()+1).padStart(2,'0')}-${String(c.getDate()).padStart(2,'0')}`:''}
 const dayDiff=(a,b2)=>Math.round((parseD(b2)-parseD(a))/864e5);
+// business days (Mon–Fri) after a, up to and including b: same day 0, Friday → Monday 1
+function bizDays(a,b2){const A=parseD(a),B=parseD(b2);if(!A||!B||isNaN(A)||isNaN(B))return null;if(B<=A)return 0;const days=Math.round((B-A)/864e5);const full=Math.floor(days/7);let n=full*5;const d=new Date(A);d.setDate(d.getDate()+full*7);for(let i=0;i<days%7;i++){d.setDate(d.getDate()+1);const w=d.getDay();if(w!==0&&w!==6)n++}return n}
 // in house N days while it's being worked; turned around in N days once sent
 function inHouse(b){if(!b||b._new)return null;const i=intakeOf(b);if(!i)return null;
-  if(isSent(b)){const s=fuSentDate(b);if(!s)return null;const n=Math.max(0,dayDiff(i,s));return {n,sent:true,text:`Turned around in ${n} day${n===1?'':'s'}`,short:`${n}d turnaround`}}
-  if(DECIDED.includes(b.status))return null;const n=Math.max(0,dayDiff(i,todayStr()));return {n,sent:false,text:`In house ${n} day${n===1?'':'s'}`,short:`${n}d in house`}}
+  if(isSent(b)){const s=fuSentDate(b);if(!s)return null;const n=bizDays(i,s)||0;return {n,sent:true,text:`Turned around in ${n} business day${n===1?'':'s'}`,short:`${n}d turnaround`}}
+  if(DECIDED.includes(b.status))return null;const n=bizDays(i,todayStr())||0;return {n,sent:false,text:`In house ${n} business day${n===1?'':'s'}`,short:`${n}d in house`}}
 function card(b){
   const qs=quotesFor(b.id);const rec=qs.filter(q=>q.status==='Received').length;const v=bidValue(b);const nf=filesFor(b.id).length;
   const team=[b.lead_estimator_id,...(b.support_estimator_ids||[])].filter(id=>byId(S.estimators,id));
@@ -12849,7 +12851,7 @@ const wkMon=ds=>{const d=parseD(ds);if(!d)return '';const x=new Date(d.getFullYe
 // the day a bid first went out: the submitted date, or the earliest "sent on" date for any GC
 function sentOn(b){if(!isSent(b))return '';const ds=[b.submitted_date,...Object.values(b.client_proposals||{}).map(p=>p&&p.sent_date)].filter(Boolean).map(x=>String(x).slice(0,10)).sort();return ds[0]||''}
 function wkEvents(){const ev=[];S.bids.filter(b=>!b._new&&statOk(b)).forEach(b=>{const i=intakeOf(b);if(i)ev.push({k:'in',d:i,b});
-  const s=sentOn(b);if(s)ev.push({k:isBudget(b)?'bud':'sub',d:s,b,ta:i?Math.max(0,dayDiff(i,s)):null});
+  const s=sentOn(b);if(s)ev.push({k:isBudget(b)?'bud':'sub',d:s,b,ta:i?bizDays(i,s):null});
   revShown(b).forEach(r=>{if(+r.rev>0&&r.date)ev.push({k:'rev',d:String(r.date).slice(0,10),b,r})})});return ev}
 function wkRange(endDs,n){const out=[];const e=parseD(wkMon(endDs));for(let i=n-1;i>=0;i--){const d=new Date(e);d.setDate(d.getDate()-7*i);out.push(`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`)}return out}
 function weeklyPanel(where){const n=S.wkN||8;const Y=S.year||new Date().getFullYear();const cur=new Date().getFullYear();
@@ -12869,7 +12871,7 @@ function weeklyPanel(where){const n=S.wkN||8;const Y=S.year||new Date().getFullY
   const taAll=taOf([...allSent('sub'),...allSent('bud')]),taSub=taOf(allSent('sub')),taBud=taOf(allSent('bud'));const dd=v=>v==null?'—':`${v} day${v===1?'':'s'}`;
   const open=S.bids.filter(b=>live(b)&&!b._new&&!isSent(b)&&!DECIDED.includes(b.status)).map(inHouse).filter(Boolean);const taOpen=open.length?Math.round(open.reduce((a,x)=>a+x.n,0)/open.length):null;
   const sums=`<div class="wk-sums">${WK_SER.map(([k,l,c])=>`<div><i style="background:${c}"></i><b class="num">${tot[k]}</b><span class="small dim">${l.toLowerCase()} · ${avg(k)}/wk</span></div>`).join('')}
-    <div class="wk-ta" title="Days from intake to the day the proposal first went out, for proposals sent in these weeks"><i></i><b class="num">${dd(taAll)}</b><span class="small dim">avg turnaround, intake to sent</span><span class="small dim">Bids ${dd(taSub)} · Budgets ${dd(taBud)}${taOpen!=null?` · ${open.length} open, avg ${taOpen}d in house so far`:''}</span></div></div>`;
+    <div class="wk-ta" title="Business days (Mon–Fri) from intake to the day the proposal first went out, for proposals sent in these weeks"><i></i><b class="num">${dd(taAll)}</b><span class="small dim">avg turnaround, intake to sent (business days)</span><span class="small dim">Bids ${dd(taSub)} · Budgets ${dd(taBud)}${taOpen!=null?` · ${open.length} open, avg ${taOpen}d in house so far`:''}</span></div></div>`;
   let detail='';if(pick){const x=by[pick];const row=(e)=>`<li><button class="linkish" data-act="open-bid" data-id="${e.b.id}">${esc(e.b.name)}</button> <span class="dim small">${fmtShort(e.d)}${e.r?` · Rev ${e.r.rev}${e.r.reason?' · '+esc(e.r.reason):''}`:''}${e.ta!=null?` · ${e.ta}d turnaround`:''}</span></li>`;
     detail=`<div class="wk-detail"><div class="wk-dh"><b>Week of ${fmtShort(pick)}</b><button class="btn sm ghost" data-act="wk-pick" data-v="">Close</button></div><div class="wk-dg">${WK_SER.map(([k,l,c])=>`<div><div class="small"><i class="wk-dot" style="background:${c}"></i><b>${l}</b> (${x[k].length})</div>${x[k].length?`<ul>${x[k].map(row).join('')}</ul>`:'<div class="small dim">None</div>'}</div>`).join('')}</div></div>`}
   const sub=where==='board'&&Y!==cur?`${Y}, by week`:'By week, newest on the right · click a week to see the bids';
@@ -13095,7 +13097,7 @@ const RP_SRC={
       ptype:['Project type','cat',b=>normProjectType(b.project_type)||'Other'],btype:['Bid type','cat',b=>b.bid_type||'Hard bid'],size:['Size','cat',b=>rpSize(bidValue(b)),{order:'size'}],
       state:['State','cat',b=>rpState(b.location)||'Unknown'],lost:['Why we lost','cat',b=>b.status==='Not Awarded'?(b.lost_reason||'Not recorded'):''],
       value:['Bid value','money',b=>bidValue(b)||0],won:['Won value','money',b=>b.status==='Awarded'?(wonValue(b)||0):0],units:['Units','num',b=>num(b.units)],
-      turn:['Turnaround (days)','days',b=>{const t=inHouse(b);return t&&t.sent?t.n:null}],revs:['Revisions','num',b=>Math.max(0,revShown(b).length-1)],
+      turn:['Turnaround (business days)','days',b=>{const t=inHouse(b);return t&&t.sent?t.n:null}],revs:['Revisions','num',b=>Math.max(0,revShown(b).length-1)],
       intake:['Intake date','date',b=>intakeOf(b)],due:['Due date','date',b=>b.due_date||''],sent:['Sent date','date',b=>sentOn(b)],awarded:['Awarded date','date',b=>b.status==='Awarded'?(b.awarded_date||''):'']},
     list:['name','client','status','value','due']},
   quotes:{l:'Vendor quotes',need:()=>can('bids'),date:'received',rows:()=>S.quotes.filter(q=>{const b=byId(S.bids,q.bid_id);return b&&statOk(b)}),id:q=>q.id,open:q=>q.bid_id,
