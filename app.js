@@ -591,10 +591,11 @@ function overviewTable(all){
     <td>${propIds(b).map(id=>`<div style="white-space:nowrap">${esc(clientName(id))}</div>`).join('')||'<span class="dim">—</span>'}${ownerIds(b).filter(id=>!propIds(b).includes(id)).map(id=>`<div class="dim small" style="white-space:nowrap">Owner: ${esc(clientName(id))}</div>`).join('')}</td>
     <td>${dueCell(b)}</td>
     ${groups.map(([,g])=>`<td>${groupStatus(b,g)}</td>`).join('')}
+    <td>${stPill(b.status,b)}${(()=>{const n=stageInfo(b).qOut;return n?`<div class="small" style="color:var(--warn);font-weight:600;margin-top:3px;white-space:nowrap">⏳ ${n} quote${n===1?'':'s'} out</div>`:''})()}</td>
     <td>${pill(b.proposal_status||'Not Started',PROP_CLS[b.proposal_status])}${revShown(b).length>1||lastTouch(b)?`<div class="dim small" style="margin-top:3px">${[revShown(b).length>1?'Rev '+esc(revShown(b)[revShown(b).length-1].rev):'',lastTouch(b)?'GC contact '+fmtShort(lastTouch(b)):''].filter(Boolean).join(' · ')}</div>`:''}${openAddenda(b).length?`<div class="small" style="margin-top:3px;color:var(--warn);font-weight:600;white-space:nowrap">${openAddenda(b).length} addend${openAddenda(b).length===1?'um':'a'} open</div>`:''}</td>
     <td class="r num">${ovNumber(b)}</td>
-    <td>${stPill(b.status,b)}${(()=>{const n=stageInfo(b).qOut;return n?`<div class="small" style="color:var(--warn);font-weight:600;margin-top:3px;white-space:nowrap">⏳ ${n} quote${n===1?'':'s'} out</div>`:''})()}</td></tr>`).join('');
-  return `${all.length?ovBar(all,list.length):''}<div class="panel scroll"><table class="ov"><thead><tr>${th('name','Project')}${th('client','GC / client')}${th('due','Due date')}${groups.map(([l])=>th('g:'+l,l)).join('')}${th('proposal','Proposal')}${th('value','Our number','r')}${th('status','Status')}</tr></thead>
+    </tr>`).join('');
+  return `${all.length?ovBar(all,list.length):''}<div class="panel scroll"><table class="ov"><thead><tr>${th('name','Project')}${th('client','GC / client')}${th('due','Due date')}${groups.map(([l])=>th('g:'+l,l)).join('')}${th('status','Status')}${th('proposal','Proposal')}${th('value','Our number','r')}</tr></thead>
    <tbody>${rows||`<tr><td colspan="${6+groups.length}"><div class="empty">${all.length?'<b>No bids match these filters</b><button class="btn sm" data-act="ov-clear">Clear filters</button>':`<b>No active bids</b>${isAdmin()?'Click <b>+ New bid</b> to add one.':''}`}</div></td></tr>`}</tbody></table></div>`;
 }
 function closedTable(list){
