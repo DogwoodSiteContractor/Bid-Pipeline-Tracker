@@ -11467,7 +11467,8 @@ function tgHtml(b,work,team){const P=M.tgPick;const free=b.scope_items.map((it,i
   const picker=P?`<div class="tg-pick"><b>New takeoff group</b><span class="small dim">Pick the scopes that go together, then name the group.</span>
       <div class="tg-pick-list">${free.map(({it,i})=>`<button class="chip${P.sel.has(i)?' on':''}" data-act="tg-pick" data-i="${i}">${P.sel.has(i)?'✓ ':''}${esc(it.name)}</button>`).join('')||'<span class="dim small">Every scope is already in a group.</span>'}</div>
       <div class="adders"><input class="field" id="tg-new-name" placeholder="Group name, e.g. Utilities" value="${esc(P.name||'')}" style="width:240px"><button class="btn primary sm" data-act="tg-create"${P.sel.size?'':' disabled'}>Group ${P.sel.size||''} scope${P.sel.size===1?'':'s'}</button><button class="btn sm ghost" data-act="tg-pick-cancel">Cancel</button></div></div>`:'';
-  const btn=work&&!P&&free.length>1?`<div class="adders" style="margin:0 0 10px"><button class="btn sm" data-act="tg-pick-open">▦ Group scopes…</button><span class="small dim">Put scopes together to assign, update and sign them off as one.</span></div>`:'';
+  const ALL='All scopes';const hasAll=tgNames(b).includes(ALL);
+  const btn=work&&!P&&(free.length>1||(hasAll&&free.length))?`<div class="adders" style="margin:0 0 10px">${free.length>1?'<button class="btn sm" data-act="tg-pick-open">▦ Group scopes…</button>':''}<button class="btn sm" data-act="tg-all" title="One status and one sign-off for the whole takeoff">${hasAll?`▦ Add the rest to ${ALL}`:'▦ Group all'}</button><span class="small dim">Put scopes together to assign, update and sign them off as one. <b>Group all</b> gives the whole takeoff one status.</span></div>`:'';
   return `${btn}${picker}${cards?`<div class="tg-list">${cards}</div>`:''}${cards&&free.length?'<div class="small dim tg-sep">Individual scopes</div>':''}`}
 function tgApply(g,fn){tgMembers(M.draft,g).forEach(o=>fn(o.it))}
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT'||!M||M.kind!=='bid')return;const a=t.dataset.act;if(!a.startsWith('tg-'))return;const b=M.draft;const g=t.dataset.g;
@@ -11480,6 +11481,10 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
     // one person for the group: keep it if they all had the same one
     const asg=[...new Set(ms.map(x=>x.assignee_id||''))];if(asg.length>1)ms.forEach(x=>x.assignee_id='');
     M.tgPick=null;renderModal();toast(`Grouped ${ms.length} scopes as ${name}.`);return}
+  if(a==='tg-all'){const ALL='All scopes';const free=b.scope_items.filter(it=>!it.tg);if(!free.length)return;const was=tgMembers(b,ALL).map(o=>o.it);free.forEach(it=>{it.tg=ALL});
+    const ms=[...was,...free];const asg=[...new Set(ms.map(x=>x.assignee_id||''))];if(asg.length>1)ms.forEach(x=>x.assignee_id='');
+    if(was.length){const ip=was.some(x=>x.status==='In Progress');free.forEach(it=>{if(ip&&it.status!=='Complete')it.status='In Progress'})}
+    renderModal();toast(was.length?`Added ${free.length} scope${free.length===1?'':'s'} to ${ALL}.`:`All ${ms.length} scopes grouped. Set the status and sign off the takeoff once.`);return}
   if(a==='tg-ungroup'){tgApply(g,it=>{delete it.tg});renderModal();toast(`${g} ungrouped. Each scope is back on its own row.`);return}
   if(a==='tg-rm'){const it=b.scope_items[+t.dataset.i];if(it){delete it.tg;renderModal()}return}
   if(a==='tg-sign-start'){M.signing='g:'+g;renderModal();setTimeout(()=>{const n=$('#sign-init');if(n){n.focus();n.select()}},0);return}
