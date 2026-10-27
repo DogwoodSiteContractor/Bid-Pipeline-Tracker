@@ -514,7 +514,7 @@ function precon(){
   const maxL=Math.max(1,...load.map(x=>x.n));
   const loadHtml=load.length?`<div class="hbars">${load.sort((a,b)=>b.n-a.n).map(x=>`<div class="hb"><span class="lab who">${avatar(x.e.id,22)}${esc(x.e.name)}</span><div class="track"><div class="fill ${x.soon?'acc':''}" style="width:${x.n/maxL*100}%"></div></div><span class="v">${x.n} bid${x.n===1?'':'s'}${x.soon?` · ${x.soon} due soon`:''}</span></div>`).join('')}</div>`:`<div class="empty"><b>No estimators yet</b><button class="btn sm" data-act="nav" data-v="team">Add people</button></div>`;
   const closed=yr.filter(b=>live(b)&&DECIDED.includes(b.status)).sort((a,b)=>(b.awarded_date||b.due_date||'').localeCompare(a.awarded_date||a.due_date||''));
-  return kpis+`<div class="sec"><div class="sec-h"><h2>Projects overview</h2><span>Active bids and upcoming deadlines · click a row to open it</span></div>${overviewTable(act)}</div>
+  return kpis+`<div class="sec"><div class="sec-h ov-h"><h2>Projects overview</h2><span class="ov-view">${S.ov.hide?`<span class="dim small">${act.length} active bid${act.length===1?'':'s'} hidden</span>`:'<span class="dim small ov-hint">Active bids and upcoming deadlines · click a row to open it</span>'}${S.ov.hide?'':`<span class="seg sm wk-seg" title="How many bids to show"><span class="ov-lbl small dim">Show</span>${[[5,'5'],[10,'10'],[15,'15'],[0,'All']].map(([v,l])=>`<button class="${(+S.ov.limit||0)===v?'on':''}" data-act="ov-limit" data-v="${v}">${l}</button>`).join('')}</span>`}<button class="btn sm" data-act="ov-hide" aria-expanded="${!S.ov.hide}">${S.ov.hide?'▸ Expand':'▾ Collapse'}</button></span></div>${S.ov.hide?'':overviewTable(act)}</div>
   ${weeklyPanel('precon')}
   ${closed.length?`<div class="sec"><div class="sec-h"><h2>Closed this year</h2><span>Awarded, lost and no-bid</span></div>${closedTable(closed)}</div>`:''}
   <div class="grid3">
@@ -555,7 +555,7 @@ function amtCell(b,key){
   const lo=Math.min(...a),hi=Math.max(...a);return lo===hi?money(hi):`${moneyK(lo)}–${moneyK(hi)}`;
 }
 // ---- Projects overview: sort by any column, filter by status / estimator / GC / type / due / proposal
-const OV_KEY='bp-ov';const ovDefault=()=>({sort:'due',dir:1,q:'',status:'',est:'',client:'',type:'',due:'',prop:''});
+const OV_KEY='bp-ov';const ovDefault=()=>({sort:'due',dir:1,q:'',status:'',est:'',client:'',type:'',due:'',prop:'',limit:0,hide:false});
 S.ov=(()=>{const d=ovDefault();try{Object.assign(d,JSON.parse(localStorage.getItem(OV_KEY)||'{}'))}catch(e){}return d})();
 const saveOv=()=>{try{localStorage.setItem(OV_KEY,JSON.stringify(S.ov))}catch(e){}};
 function amtVal(b,key){const base=num(b[key]);if(base!=null)return base;const a=propIds(b).map(id=>num(propOf(b,id)[key])).filter(v=>v!=null);return a.length?Math.max(...a):null}
@@ -583,7 +583,7 @@ function ovBar(all,shown){const O=S.ov;const opt=(k,label,opts)=>`<select class=
     ${ests.length?opt('est','All estimators',ests.map(e=>[e.id,e.name])):''}${gcs.length?opt('client','All GCs',gcs):''}${types.length>1?opt('type','All types',types.map(x=>[x,x])):''}${opt('prop','Any proposal',PROPOSAL_ST.map(x=>[x,x]))}
     ${any?'<button class="btn sm ghost" data-act="ov-clear">Clear</button>':''}<span class="dim small ov-count">${shown===all.length?`${all.length} bid${all.length===1?'':'s'}`:`Showing ${shown} of ${all.length}`}</span></div>`}
 function overviewTable(all){
-  const list=ovApply(all);const O=S.ov;
+  const full=ovApply(all);const O=S.ov;const lim=+O.limit||0;const list=lim?full.slice(0,lim):full;
   const groups=OV_GROUPS.filter(([l,g])=>['Earthwork','Underground','Erosion / demo'].includes(l)||all.some(b=>scopeItems(b).some(x=>ovIn(g,ovGroupOf(x)))));
   const th=(k,label,cls='')=>`<th class="${cls}${O.sort===k?' sorted':''}" aria-sort="${O.sort===k?(O.dir>0?'ascending':'descending'):'none'}"><button class="ov-sort" data-act="ov-sort" data-k="${k}">${label}<span class="ov-arr" aria-hidden="true">${O.sort===k?(O.dir>0?'▲':'▼'):'↕'}</span></button></th>`;
   const rows=list.map(b=>`<tr class="click" data-act="open-bid" data-id="${b.id}">
@@ -595,8 +595,8 @@ function overviewTable(all){
     <td>${pill(b.proposal_status||'Not Started',PROP_CLS[b.proposal_status])}${revShown(b).length>1||lastTouch(b)?`<div class="dim small" style="margin-top:3px">${[revShown(b).length>1?'Rev '+esc(revShown(b)[revShown(b).length-1].rev):'',lastTouch(b)?'GC contact '+fmtShort(lastTouch(b)):''].filter(Boolean).join(' · ')}</div>`:''}${openAddenda(b).length?`<div class="small" style="margin-top:3px;color:var(--warn);font-weight:600;white-space:nowrap">${openAddenda(b).length} addend${openAddenda(b).length===1?'um':'a'} open</div>`:''}</td>
     <td class="r num">${ovNumber(b)}</td>
     </tr>`).join('');
-  return `${all.length?ovBar(all,list.length):''}<div class="panel scroll"><table class="ov"><thead><tr>${th('name','Project')}${th('client','GC / client')}${th('due','Due date')}${groups.map(([l])=>th('g:'+l,l)).join('')}${th('status','Status')}${th('proposal','Proposal')}${th('value','Our number','r')}</tr></thead>
-   <tbody>${rows||`<tr><td colspan="${6+groups.length}"><div class="empty">${all.length?'<b>No bids match these filters</b><button class="btn sm" data-act="ov-clear">Clear filters</button>':`<b>No active bids</b>${isAdmin()?'Click <b>+ New bid</b> to add one.':''}`}</div></td></tr>`}</tbody></table></div>`;
+  return `${all.length?ovBar(all,full.length):''}<div class="panel scroll"><table class="ov"><thead><tr>${th('name','Project')}${th('client','GC / client')}${th('due','Due date')}${groups.map(([l])=>th('g:'+l,l)).join('')}${th('status','Status')}${th('proposal','Proposal')}${th('value','Our number','r')}</tr></thead>
+   <tbody>${rows||`<tr><td colspan="${6+groups.length}"><div class="empty">${all.length?'<b>No bids match these filters</b><button class="btn sm" data-act="ov-clear">Clear filters</button>':`<b>No active bids</b>${isAdmin()?'Click <b>+ New bid</b> to add one.':''}`}</div></td></tr>`}</tbody></table>${lim&&full.length>lim?`<div class="ov-more"><span class="small dim">Showing ${lim} of ${full.length}</span><button class="btn sm ghost" data-act="ov-limit" data-v="0">Show all ${full.length}</button></div>`:''}</div>`;
 }
 function closedTable(list){
   return `<div class="panel scroll"><table><thead><tr><th>Project</th><th>GC / client</th><th>Due date</th><th class="r">W/ site impr.</th><th class="r">W/O site impr.</th><th class="r">Contract</th><th>Status</th></tr></thead><tbody>
@@ -4225,6 +4225,8 @@ document.addEventListener('click',e=>{
       const keep={img:k.img,pdf:k.pdf,imgs:k.imgs,fileName:k.fileName,fileKind:k.fileKind,pageCount:k.pageCount,page:k.page};Object.assign(k,tkBlank(),keep,{cur:[],res:null,pending:null,sel:null,align:null,clearArm:false,tool:tkHasSheet()?'scale':'pan',surfNotSaved:false,view:null});tkSave();tkMount();toast('Takeoff cleared');break}
     case 'ov-sort':{const k=t.dataset.k;if(S.ov.sort===k)S.ov.dir=-S.ov.dir;else{S.ov.sort=k;S.ov.dir=['value','with','without','contact','g:Earthwork','g:Underground','g:Erosion / demo','g:Paving','g:Other'].includes(k)?-1:1}saveOv();render();break}
     case 'ov-clear':Object.assign(S.ov,{q:'',status:'',est:'',client:'',type:'',due:'',prop:''});saveOv();render();break;
+    case 'ov-limit':S.ov.limit=+t.dataset.v||0;saveOv();render();break;
+    case 'ov-hide':S.ov.hide=!S.ov.hide;saveOv();render();break;
     case 'close':closeModal();break;
     case 'save':saveModal();break;
     case 'del':deleteModal();break;
