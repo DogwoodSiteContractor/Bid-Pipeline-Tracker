@@ -345,7 +345,7 @@ function renderNow(){
   if(role()==='pending'){top.hidden=true;main.innerHTML=pendingScreen();return}
   top.hidden=false;if(S.settings.company!==coApply.last){coApply.last=S.settings.company;coApply(S.settings.company)}renderTop();
   const a=document.activeElement;const fid=a&&a.id&&main.contains(a)?a.id:null;const pos=fid?a.selectionStart:null;const pe=fid?a.selectionEnd:null;const raw=fid&&a.tagName==='INPUT'&&a.type==='text'?a.value:null;
-  const views={reports:vReports,awards:vAwards,award:vAward,admin:vAdmin,btpl:vBtpl,workload:vWorkload,positions:vPositions,grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
+  const views={chores:vChores,reports:vReports,awards:vAwards,award:vAward,admin:vAdmin,btpl:vBtpl,workload:vWorkload,positions:vPositions,grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
   const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
@@ -446,13 +446,13 @@ function vDashboard(){
   const d=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
   if(S.dash==='reports'&&tabOff('reports'))S.dash=role()==='board'?'board':'precon';
   if(S.dash==='reports')return vReports(true);
-  if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+bidReqPanel()+reviewPanel()+fuPanel()+mine();
-  if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+bidReqPanel()+fuPanel()+precon();
+  if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+crPanel()+bidReqPanel()+reviewPanel()+fuPanel()+mine();
+  if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+crPanel()+bidReqPanel()+fuPanel()+precon();
   if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}<button class="btn" data-act="rp-board-copy" title="Copy these charts to a report page you can change">Copy to Reports</button>${dashSeg()}</div></div>`+board();
   return `<div class="head"><div><h1>${S.dash==='precon'?'Bid pipeline dashboard':'Board dashboard'}</h1><p>${d}${S.lastLoaded?` · <span class="dim">Last updated ${S.lastLoaded.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>`:''}</p></div>
   <div class="tools">${S.dash==='board'?yearSelect()+(S.bids.some(b=>b.archived_at)?`<label class="check small" title="Archived bids are left out of the numbers unless this is on"><input type="checkbox" data-inclarch${S.inclArch?' checked':''}> Include archived</label>`:'')+'<button class="btn" data-act="board-custom">Customize view</button><button class="btn" data-act="rp-board-copy" title="Copy these charts to a report page you can change">Copy to Reports</button>':'<button class="btn" data-act="refresh">↻ Refresh</button>'}
   ${dashSeg()}</div></div>`
-  +(S.dash==='precon'?vxUpkeepHtml():'')+bidReqPanel()+reviewPanel()+fuPanel()+(S.dash==='precon'?precon():board());
+  +(S.dash==='precon'?vxUpkeepHtml():'')+crPanel()+bidReqPanel()+reviewPanel()+fuPanel()+(S.dash==='precon'?precon():board());
 }
 function yearSelect(){const ys=new Set([new Date().getFullYear()]);S.bids.filter(statOk).forEach(b=>ys.add(yearOf(b)));return `<select class="field" data-act="year" style="width:auto">${[...ys].sort((a,b)=>b-a).map(y=>`<option${y===S.year?' selected':''}>${y}</option>`).join('')}</select>`}
 function kpi(l,v,s,cls,filter){const tag=filter?'button':'div';return `<${tag} class="kpi ${cls||''}"${filter?` data-act="kpi-filter" data-v="${filter}"`:''}><div class="l">${l}</div><div class="v">${v}</div><div class="s">${esc(s)}</div></${tag}>`}
@@ -973,7 +973,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal}[M.kind]();
+  const html={tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='bid'?' bidpage':''}${['rpcard','rpdrill','import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -1275,7 +1275,7 @@ function folderCard(b,work){const r=rfqOf(b);const v=String(r.folder||'').trim()
   return `<div class="bp-card fold-card"><h4>Project folder</h4><div class="fold-row"><input class="field" id="fold-in" data-fold placeholder="Paste the SharePoint folder link" value="${esc(v)}"${dis}>${work&&v&&ed?'<button class="btn sm ghost" data-act="fold-x">Done</button>':''}</div>
     ${folderBad(v)?`<div class="notice fold-warn small"><b>That’s a File Explorer path.</b> It points to a folder on one computer, so it won’t open for anyone else (and browsers can’t open it). Paste the folder’s SharePoint link instead.</div>`:v&&!folderOk(v)?`<div class="small warn-t">This doesn’t look like a web link. It should start with https://</div>`:''}${help}</div>`}
 function bpAside(b,work,admin,isNew){const files=isNew?[]:filesFor(b.id);
-  return `${folderCard(b,work)}<div class="bp-card"><h4>Notes</h4><textarea class="field" data-bf="notes" placeholder="Scope clarifications, bid strategy, site conditions…"${DIS()}>${esc(b.notes||'')}</textarea></div>
+  return `${folderCard(b,work)}${typeof crBidCard==='function'?crBidCard(b):''}<div class="bp-card"><h4>Notes</h4><textarea class="field" data-bf="notes" placeholder="Scope clarifications, bid strategy, site conditions…"${DIS()}>${esc(b.notes||'')}</textarea></div>
   ${files.length?`<div class="bp-card"><h4>Earlier files <span class="dim small">${files.length}</span></h4>
     <p class="hint" style="margin:0 0 6px">Files now live in the project folder. These were uploaded here before; download or delete them.</p>
     <div class="bp-files">${files.map(f=>`<div class="bp-file"><button class="linkish" data-act="dl" data-path="${esc(f.file_path)}" data-name="${esc(f.file_name)}" title="Download">${esc(f.file_name)}</button><span class="dim small">${esc(f.category)}${f.size_bytes?' · '+fmtSize(f.size_bytes):''}</span>${admin||f.uploaded_by===S.session.user.id?`<button class="rm" data-act="rm-file" data-id="${f.id}" title="Delete file">×</button>`:''}</div>`).join('')}</div></div>`:''}`}
@@ -6774,7 +6774,7 @@ const pAv=p=>`<span class="av" style="background:${avColor(p.id)}" title="${esc(
 function navGroups(){const g=[];
   if(can('dash'))g.push(['dashboard',onlyMine()?'My dashboard':scopeView()?'Dashboard':role()==='board'?'Board dashboard':'Dashboard',['dashboard']]);
   if(!can('dash')&&!tabOff('reports'))g.push(['reports','Reports',['reports']]);
-  if(can('bids')){const n=typeof grabCount==='function'?grabCount():0;SUBNAV_LABEL.pipeline=onlyMine()?'My bids':'Pipeline';SUBNAV_LABEL.grabs='Up for grabs'+(n?` (${n})`:'');SUBNAV_LABEL.workload='Workload';SUBNAV_LABEL.btpl='Bid templates';g.push(['pipeline',(onlyMine()?'My bids':'Pipeline')+(n?` <span class="nav-badge" title="${n} up for grabs">${n}</span>`:''),['pipeline','grabs','workload',...(btplCan()||btplList().length?['btpl']:[])]])}
+  if(can('bids')){const n=typeof grabCount==='function'?grabCount():0;SUBNAV_LABEL.pipeline=onlyMine()?'My bids':'Pipeline';SUBNAV_LABEL.grabs='Up for grabs'+(n?` (${n})`:'');SUBNAV_LABEL.workload='Workload';SUBNAV_LABEL.btpl='Bid templates';{const me=myEst();const lt=(S.chores||[]).filter(c=>!c.lib&&!crDone(c)&&c.due_date&&daysUntil(c.due_date)<0&&(crMgr()||(me&&c.estimator_id===me.id))).length;SUBNAV_LABEL.chores=(crMgr()?'Chores':'My chores')+(lt?` (${lt} late)`:'')}g.push(['pipeline',(onlyMine()?'My bids':'Pipeline')+(n?` <span class="nav-badge" title="${n} up for grabs">${n}</span>`:''),['pipeline','grabs','workload','chores',...(btplCan()||btplList().length?['btpl']:[])]])}
   const twFree=!!(S.twBid&&!byId(S.bids,S.twBid));const est=[...(can('estimates')?['estimates','estimate',...(twFree?[]:['tw'])]:[]),...(can('codebook')?['cb']:[]),...(can('codebook','edit')?['settings','scopes']:[])];
   if(est.length)g.push([est[0],'Estimates',est.includes('cb')&&!est.includes('estimates')?[...est]:est]);
   if(can('awards'))g.push(['awards','Awarded',['awards','award']]);
@@ -6975,7 +6975,7 @@ const FB_STATUS=['New','Reviewing','Planned','In progress','Done','Won’t do','
 const FB_OPEN=new Set(['New','Reviewing','Planned','In progress']);
 const FB_ST_CLS={New:'hot',Reviewing:'warn',Planned:'',['In progress']:'warn',Done:'good'};
 const fbStatusDb=s=>s==='Won’t do'?"Won't do":s;const fbStatusUi=s=>s==="Won't do"?'Won’t do':s;
-const VIEW_AREA={reports:'Reports',awards:'Awarded',award:'Awarded',lists:'Contacts',vendor:'Contacts',vboard:'Contacts',plan:'Planner',dashboard:'Dashboard',pipeline:'Bids & pipeline',estimates:'Estimates',estimate:'Estimates',cb:'Codebooks & bid settings',settings:'Codebooks & bid settings',scopes:'Codebooks & bid settings',jobs:'Jobs',job:'Jobs',acct:'Accounting',clients:'Contacts',vendors:'Contacts',calc:'Calculators',team:'Team & logins',estimators:'Team & logins',teampm:'Team & logins',teamoffice:'Team & logins',access:'Team & logins',help:'Help'};
+const VIEW_AREA={chores:'Chores',reports:'Reports',awards:'Awarded',award:'Awarded',lists:'Contacts',vendor:'Contacts',vboard:'Contacts',plan:'Planner',dashboard:'Dashboard',pipeline:'Bids & pipeline',estimates:'Estimates',estimate:'Estimates',cb:'Codebooks & bid settings',settings:'Codebooks & bid settings',scopes:'Codebooks & bid settings',jobs:'Jobs',job:'Jobs',acct:'Accounting',clients:'Contacts',vendors:'Contacts',calc:'Calculators',team:'Team & logins',estimators:'Team & logins',teampm:'Team & logins',teamoffice:'Team & logins',access:'Team & logins',help:'Help'};
 async function loadMyFb(){try{const {data,error}=await sb.rpc('my_feedback');if(error)throw error;S.myFb=(data||[]).map(f=>({...f,status:fbStatusUi(f.status)}));S.fbMissing=false}catch(e){S.myFb=[];S.fbMissing=true}schedule()}
 function fbOpen(kind){const from=S.prevView&&S.prevView!=='help'?S.prevView:S.view;M={kind:'fb',draft:{kind:kind||'bug',area:VIEW_AREA[from]||'Something else',title:'',body:'',importance:'normal'},from};showModal();setTimeout(()=>$('#fb-title')?.focus(),0)}
 function fbModal(){const d=M.draft;const ph={bug:'What were you doing? What happened? What did you expect to happen?',feature:'What would you like it to do? What problem would it solve for you?',question:'What are you trying to do?',other:'Tell us what’s on your mind.'}[d.kind];
@@ -13777,3 +13777,132 @@ async function devTabsSave(next){const pf={...(S.profile.profile||{}),devTabs:ne
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!isDev())return;const a=t.dataset.act;
   if(a==='devtab'){const next={...devTabs()};const k=t.dataset.k;if(t.dataset.v)next[k]=t.dataset.v;else delete next[k];devTabsSave(next);toast(`${(TAB_SWITCH.find(x=>x[0]===k)||[])[1]}: ${t.dataset.v==='on'?'on for you':t.dataset.v==='off'?'off for you':'back to the team setting'}`);return}
   if(a==='devtab-reset'){devTabsSave({});toast('All tabs follow the team setting again');return}});
+
+/* =====================================================================
+   Chores: the precon manager (or an admin) hands out chores to estimators,
+   for a job or general, from a standard chore list or typed in. Estimators
+   see theirs and tick them off. Some tick themselves off from the bid.
+   Table: chores (supabase/update-46-chores.sql).
+   ===================================================================== */
+S.chores=S.chores||[];S.cr=S.cr||{est:'',job:'',show:'open'};
+if(!TABLES.includes('chores'))TABLES.push('chores');
+const crMgr=()=>frIsMgr();
+const CR_AUTO=[['','Ticked off by hand'],['rfq','When RFQs go out'],['takeoff','When every scope is signed off'],['review','When the estimate goes to review'],['sent','When the proposal is sent']];
+const crReal=()=>S.chores.filter(c=>!c.lib);
+const crLib=()=>S.chores.filter(c=>c.lib).sort((a,b)=>(num(a.offset_days)??-999)-(num(b.offset_days)??-999)||(a.sort||0)-(b.sort||0)||String(a.title).localeCompare(b.title));
+function crAutoDone(c){if(!c.auto||!c.bid_id)return false;const b=byId(S.bids,c.bid_id);if(!b)return false;
+  if(c.auto==='rfq')return quotesFor(b.id).some(q=>['Requested','Received','No Response','No response'].includes(q.status))||!['Project Created','Not Started'].includes(b.status);
+  if(c.auto==='takeoff'){const it=scopeItems(b);return it.length>0&&it.every(x=>x.status==='Complete'||x.status==='N/A')}
+  if(c.auto==='review')return isSent(b)||b.status==='Proposal Review'||DECIDED.includes(b.status);
+  if(c.auto==='sent')return isSent(b);return false}
+const crDone=c=>!!c.done||crAutoDone(c);
+const crMine=c=>{const me=myEst();return !!me&&c.estimator_id===me.id};
+const crCan=c=>crMgr()||crMine(c);
+function crDue(c){if(crDone(c))return ['done','Done'];if(!c.due_date)return ['none','No date'];const d=daysUntil(c.due_date);
+  if(d<0)return ['late',`${-d} day${d===-1?'':'s'} late`];if(d===0)return ['today','Today'];if(d<=7)return ['week',d===1?'Tomorrow':`In ${d} days`];return ['later',fmtShort(c.due_date)]}
+// chores that should already be ticked off by the bid get saved as done (by whoever can)
+let crSweepT=null;function crSweep(){clearTimeout(crSweepT);crSweepT=setTimeout(()=>{crReal().filter(c=>!c.done&&crAutoDone(c)&&crCan(c)).slice(0,20).forEach(c=>{c.done=true;sb.rpc('chore_done',{p_id:c.id,p_done:true}).then(()=>{})})},1500)}
+async function crToggle(id,done){const c=S.chores.find(x=>x.id===id);if(!c||!crCan(c))return;const was={done:c.done,done_at:c.done_at,done_by_name:c.done_by_name};
+  Object.assign(c,{done,done_at:done?new Date().toISOString():null,done_by_name:done?myName():''});render();if(M&&M.kind==='bid')renderModal();
+  try{const {error}=await sb.rpc('chore_done',{p_id:id,p_done:done});if(error)throw error;if(done&&c.recur)loadTable('chores')}
+  catch(e){Object.assign(c,was);render();if(M&&M.kind==='bid')renderModal();toast(/chore_done|does not exist|schema cache/i.test(errMsg(e))?'Chores need a database update: run supabase/update-46-chores.sql.':errMsg(e))}}
+function crRow(c,o={}){const [k,lbl]=crDue(c);const b=c.bid_id?byId(S.bids,c.bid_id):null;const dn=crDone(c);const mgr=crMgr();
+  return `<div class="cr-row${dn?' done':''} cr-${k}"><label class="cr-ck"><input type="checkbox" data-crck="${c.id}"${dn?' checked':''}${crCan(c)&&!(crAutoDone(c)&&!c.done)?'':' disabled'} aria-label="Done"></label>
+    <div class="cr-main"><b>${esc(c.title)}</b>${c.recur?`<span class="pill">${c.recur==='weekly'?'↻ Weekly':'↻ Monthly'}</span>`:''}${c.auto?`<span class="pill info" title="${esc((CR_AUTO.find(a=>a[0]===c.auto)||[])[1]||'')}">auto</span>`:''}
+      <div class="small dim">${b?(o.noJob?'':`<button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button>`):'General'}${!o.noEst&&c.estimator_id?` · ${esc(estName(c.estimator_id)||'')}`:!c.estimator_id?' · <span style="color:var(--warn)">Not assigned</span>':''}${c.hours?` · ${fmtN(+c.hours,1)} hr`:''}${c.notes?` · ${esc(c.notes)}`:''}${dn&&c.done_by_name?` · done by ${esc(c.done_by_name)}`:dn&&crAutoDone(c)&&!c.done?' · done (from the bid)':''}</div></div>
+    <span class="cr-due ${k}">${esc(lbl)}</span>${mgr&&!o.ro?`<span class="cr-tools"><button class="btn sm ghost" data-act="cr-edit" data-id="${c.id}" title="Edit">✎</button><button class="btn sm ghost" data-act="cr-del" data-id="${c.id}" title="Delete">×</button></span>`:'<span></span>'}</div>`}
+function crList(list,o={}){const order={late:0,today:1,week:2,later:3,none:4,done:5};return list.sort((a,b)=>order[crDue(a)[0]]-order[crDue(b)[0]]||String(a.due_date||'9').localeCompare(String(b.due_date||'9'))).map(c=>crRow(c,o)).join('')}
+function vChores(){const mgr=crMgr();const F=S.cr;const me=myEst();if(!mgr&&me)F.est=me.id;crSweep();
+  const all=crReal();let L=all.filter(c=>(!F.est||(F.est==='__none'?!c.estimator_id:c.estimator_id===F.est))&&(!F.job||(F.job==='__gen'?!c.bid_id:c.bid_id===F.job)));
+  const open=L.filter(c=>!crDone(c));if(F.show==='open')L=open;else if(F.show==='done')L=L.filter(crDone);
+  const late=open.filter(c=>crDue(c)[0]==='late').length,wk=open.filter(c=>['today','week'].includes(crDue(c)[0])).length;
+  const ests=S.estimators.filter(e=>e.active!==false);const jobs=[...new Set(all.map(c=>c.bid_id).filter(Boolean))].map(id=>byId(S.bids,id)).filter(Boolean).sort((a,b)=>a.name.localeCompare(b.name));
+  const filt=`<div class="pv-bar cr-bar">${mgr?`<select class="field" data-crf="est"><option value="">Everyone</option>${ests.map(e=>`<option value="${e.id}"${F.est===e.id?' selected':''}>${esc(e.name)}</option>`).join('')}<option value="__none"${F.est==='__none'?' selected':''}>Not assigned</option></select>`:''}
+    <select class="field" data-crf="job"><option value="">Every job</option><option value="__gen"${F.job==='__gen'?' selected':''}>General (no job)</option>${jobs.map(b=>`<option value="${b.id}"${F.job===b.id?' selected':''}>${esc(b.name)}</option>`).join('')}</select>
+    <span class="seg sm wk-seg">${[['open','Open'],['done','Done'],['all','All']].map(([k,l])=>`<button class="${F.show===k?'on':''}" data-act="cr-show" data-v="${k}">${l}</button>`).join('')}</span></div>`;
+  let body='';
+  if(mgr&&!F.est){const groups=[...ests.map(e=>({id:e.id,name:e.name})),{id:'',name:'Not assigned'}].map(g=>({...g,list:L.filter(c=>(c.estimator_id||'')===g.id)})).filter(g=>g.list.length);
+    body=groups.map(g=>{const op=g.list.filter(c=>!crDone(c));const hrs=op.filter(c=>['late','today','week'].includes(crDue(c)[0])).reduce((s,c)=>s+(num(c.hours)||0),0);const lt=op.filter(c=>crDue(c)[0]==='late').length;
+      return `<div class="sec" style="margin:0 0 14px"><div class="sec-h"><h2>${g.id?avatar(g.id,22)+' ':''}${esc(g.name)}</h2><span>${op.length} open${lt?` · <b style="color:var(--bad)">${lt} late</b>`:''}${hrs?` · ${fmtN(hrs,1)} hr this week`:''}</span></div><div class="panel cr-list">${crList(g.list,{noEst:true})}</div></div>`}).join('')}
+  else body=L.length?`<div class="panel cr-list">${crList(L,{noEst:!mgr})}</div>`:'';
+  return `<div class="head"><div><h1>${mgr?'Chores':'My chores'}</h1><p>${mgr?'Hand out chores for each job, or general ones. Estimators see theirs here and on their dashboard and tick them off.':'Chores your precon manager handed you. Tick them off as you go.'}</p></div>
+    <div class="tools">${mgr?'<button class="btn" data-act="cr-lib">Chore list</button><button class="btn" data-act="cr-bulk">Assign from the chore list</button><button class="btn primary" data-act="cr-new">+ Add chore</button>':''}</div></div>
+  ${S.tableErr&&S.tableErr.chores?'<div class="notice bad">Chores need a database update: run <b>supabase/update-46-chores.sql</b> in Supabase.</div>':''}
+  <div class="kpis">${kpi('Open',open.length,F.est?'':'Across the team')}${kpi('Late',late,late?'Past their due date':'Nothing late',late?'bad':'good')}${kpi('Due this week',wk,'Including today')}</div>
+  ${filt}${body||`<div class="panel"><div class="empty"><b>${F.show==='open'?'Nothing open':'No chores here'}</b>${mgr?'Click <strong>+ Add chore</strong>, or <strong>Assign from the chore list</strong> to give an estimator a set of chores for a job.':'You’re all caught up.'}</div></div>`}`}
+// ---------- dashboard + bid page ----------
+function crPanel(){if(!can('bids')||(S.tableErr&&S.tableErr.chores))return '';crSweep();const me=myEst();const mgr=crMgr();const open=crReal().filter(c=>!crDone(c));
+  const mine=me?open.filter(c=>c.estimator_id===me.id&&['late','today','week','none'].includes(crDue(c)[0])):[];
+  if(mine.length)return `<div class="sec"><div class="sec-h"><h2>My chores</h2><span>${mine.filter(c=>crDue(c)[0]==='late').length?`<b style="color:var(--bad)">${mine.filter(c=>crDue(c)[0]==='late').length} late</b> · `:''}<button class="linkish" data-act="nav" data-v="chores">See all</button></span></div><div class="panel cr-list">${crList(mine.slice(0,8),{noEst:true,ro:true})}</div></div>`;
+  if(mgr){const late=open.filter(c=>crDue(c)[0]==='late');if(!late.length)return '';const by={};late.forEach(c=>{const k=c.estimator_id||'';by[k]=(by[k]||0)+1});
+    return `<div class="notice cr-note"><b>${late.length} chore${late.length===1?' is':'s are'} late</b> · ${Object.entries(by).map(([k,n])=>`${esc(k?estName(k):'Not assigned')} ${n}`).join(' · ')} <button class="linkish" data-act="nav" data-v="chores">Open chores</button></div>`}
+  return ''}
+function crBidCard(b){if(b._new||!can('bids'))return '';const L=crReal().filter(c=>c.bid_id===b.id);const mgr=crMgr();if(!L.length&&!mgr)return '';
+  return `<div class="bp-card"><h4>Chores ${L.length?`<span class="dim small">${L.filter(crDone).length}/${L.length} done</span>`:''}</h4>${L.length?`<div class="cr-list cr-mini">${crList(L,{noJob:true,ro:true})}</div>`:'<p class="hint" style="margin:0 0 6px">No chores on this job yet.</p>'}
+    ${mgr?`<div class="adders" style="margin-top:6px"><button class="btn sm" data-act="cr-bulk" data-bid="${b.id}">From the chore list</button><button class="btn sm ghost" data-act="cr-new" data-bid="${b.id}">+ Chore</button></div>`:''}</div>`}
+// ---------- modals ----------
+function crDueFrom(bidId,off){const b=bidId?byId(S.bids,bidId):null;if(!b||!b.due_date||off==null||off==='')return '';const d=parseD(b.due_date);d.setDate(d.getDate()+(num(off)||0));return rpD(d)}
+const crEstOpts=v=>`<option value="">Not assigned</option>${S.estimators.filter(e=>e.active!==false||e.id===v).map(e=>`<option value="${e.id}"${v===e.id?' selected':''}>${esc(e.name)}</option>`).join('')}`;
+const crJobOpts=v=>`<option value="">General (no job)</option>${S.bids.filter(b=>!b._new&&(live(b)&&!DECIDED.includes(b.status)||b.id===v)).sort((a,b)=>String(a.due_date||'9').localeCompare(String(b.due_date||'9'))).map(b=>`<option value="${b.id}"${v===b.id?' selected':''}>${esc(b.name)}${b.due_date?' · due '+fmtShort(b.due_date):''}</option>`).join('')}`;
+function crNewModal(){const x=M;const d=x.d;
+  return mhead(x.id?'Edit chore':'Add a chore','')+`<div class="mbody"><div class="fg">
+    <label class="f s4"><span class="f-lab">Chore</span><input class="field" data-crm="title" list="cr-lib-l" value="${esc(d.title)}" placeholder="Pick from the chore list or type one"><datalist id="cr-lib-l">${crLib().map(l=>`<option value="${esc(l.title)}">`).join('')}</datalist></label>
+    <label class="f s2"><span class="f-lab">Job</span><select class="field" data-crm="bid_id">${crJobOpts(d.bid_id)}</select></label>
+    <label class="f s2"><span class="f-lab">Estimator</span><select class="field" data-crm="estimator_id">${crEstOpts(d.estimator_id)}</select></label>
+    <label class="f"><span class="f-lab">Due</span><input class="field" type="date" data-crm="due_date" value="${esc(d.due_date||'')}"></label>
+    <label class="f"><span class="f-lab">Hours (optional)</span><input class="field" type="number" step="0.5" min="0" data-crm="hours" value="${esc(d.hours??'')}"></label>
+    <label class="f"><span class="f-lab">Repeats</span><select class="field" data-crm="recur">${[['','Doesn’t repeat'],['weekly','Every week'],['monthly','Every month']].map(([k,l])=>`<option value="${k}"${d.recur===k?' selected':''}>${l}</option>`).join('')}</select></label>
+    <label class="f"><span class="f-lab">Ticks itself off</span><select class="field" data-crm="auto"${d.bid_id?'':' disabled'}>${CR_AUTO.map(([k,l])=>`<option value="${k}"${d.auto===k?' selected':''}>${l}</option>`).join('')}</select></label>
+    <label class="f s4"><span class="f-lab">Notes</span><input class="field" data-crm="notes" value="${esc(d.notes||'')}" placeholder="Anything they need to know"></label></div>
+    ${d._off!=null&&d.bid_id&&!crDueFrom(d.bid_id,d._off)?'<p class="small dim">That job has no due date yet, so pick the date.</p>':''}</div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="cr-save"${String(d.title||'').trim()?'':' disabled'}>${x.id?'Save':'Add chore'}</button></div></div>`}
+function crBulkModal(){const x=M;const lib=crLib();
+  return mhead('Assign from the chore list','Pick the job and the estimator, then tick the chores. Due dates come from the job’s due date; change any of them.')+`<div class="mbody">
+   <div class="fg"><label class="f s2"><span class="f-lab">Job</span><select class="field" data-crb="bid">${crJobOpts(x.bid)}</select></label><label class="f s2"><span class="f-lab">Estimator</span><select class="field" data-crb="est">${crEstOpts(x.est)}</select></label></div>
+   ${lib.length?`<table class="rp-tbl cr-bulk"><thead><tr><th></th><th>Chore</th><th>Due</th><th class="r">Hours</th></tr></thead><tbody>${lib.map(l=>{const r=x.rows[l.id]||(x.rows[l.id]={on:true,due:crDueFrom(x.bid,l.offset_days)});
+     return `<tr><td><input type="checkbox" data-crbk="${l.id}|on"${r.on?' checked':''}></td><td><b>${esc(l.title)}</b>${l.auto?' <span class="pill info">auto</span>':''}${l.offset_days!=null?`<div class="small dim">${num(l.offset_days)===0?'On the bid due date':`${Math.abs(num(l.offset_days))} day${Math.abs(num(l.offset_days))===1?'':'s'} ${num(l.offset_days)<0?'before':'after'} the bid is due`}</div>`:''}</td><td><input class="field" type="date" data-crbk="${l.id}|due" value="${esc(r.due||'')}"></td><td class="r num">${l.hours?fmtN(+l.hours,1):''}</td></tr>`}).join('')}</tbody></table>`
+   :'<div class="empty"><b>The chore list is empty</b>Set up your standard chores first: click <b>Chore list</b> on the Chores page.</div>'}</div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="cr-bulk-go"${lib.some(l=>x.rows[l.id]&&x.rows[l.id].on)?'':' disabled'}>Add ${lib.filter(l=>x.rows[l.id]&&x.rows[l.id].on).length} chore${lib.filter(l=>x.rows[l.id]&&x.rows[l.id].on).length===1?'':'s'}</button></div></div>`}
+function crLibModal(){const lib=crLib();
+  return mhead('Chore list','Your standard chores. Each one can have a default due date counted from the bid due date, hours, and a way to tick itself off.')+`<div class="mbody">
+   ${lib.length?`<table class="rp-tbl cr-libt"><thead><tr><th>Chore</th><th>Due (days before the bid is due)</th><th>Hours</th><th>Ticks itself off</th><th></th></tr></thead><tbody>${lib.map(l=>`<tr>
+     <td><input class="field" data-crl="${l.id}|title" value="${esc(l.title)}"></td><td><input class="field" type="number" step="1" data-crl="${l.id}|before" value="${l.offset_days==null?'':-num(l.offset_days)}" placeholder="—"></td>
+     <td><input class="field" type="number" step="0.5" min="0" data-crl="${l.id}|hours" value="${esc(l.hours??'')}"></td><td><select class="field" data-crl="${l.id}|auto">${CR_AUTO.map(([k,lb])=>`<option value="${k}"${l.auto===k?' selected':''}>${lb}</option>`).join('')}</select></td>
+     <td><button class="btn sm ghost" data-act="cr-lib-del" data-id="${l.id}" title="Remove">×</button></td></tr>`).join('')}</tbody></table>`:'<p class="small dim">Nothing yet. Add your first standard chore below, or load the starter list.</p>'}
+   <div class="adders" style="margin-top:10px"><input class="field" id="cr-lib-new" placeholder="New chore, e.g. Send RFQs" style="width:260px"><button class="btn sm" data-act="cr-lib-add">Add</button>${lib.length?'':'<button class="btn sm ghost" data-act="cr-lib-starter">Load the starter list</button>'}</div></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn primary" data-act="close">Done</button></div></div>`}
+const CR_STARTER=[['Review plans & specs',-10,2,''],['Send RFQs',-8,1,'rfq'],['Site visit',-7,3,''],['Takeoff',-5,8,'takeoff'],['Quantity check',-3,2,''],['Estimate ready for review',-2,4,'review'],['Send the proposal',0,1,'sent'],['GC follow-up',7,0.5,'']];
+async function crIns(rows){const r=await sb.from('chores').insert(rows);if(r.error)throw r.error;await loadTable('chores')}
+function crErr(e){if(/chores|relation|schema cache|is_chore_mgr/i.test(errMsg(e))){S.tableErr=S.tableErr||{};S.tableErr.chores=true;return 'Chores need a database update: run supabase/update-46-chores.sql.'}return errMsg(e)}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!/^cr-/.test(a))return;
+  if(a==='cr-show'){S.cr.show=t.dataset.v;render();return}
+  if(!crMgr())return;
+  if(a==='cr-new'){const back=M&&M.kind==='bid'?M:null;M={kind:'crnew',d:{title:'',bid_id:t.dataset.bid||(S.cr.job&&S.cr.job!=='__gen'?S.cr.job:''),estimator_id:S.cr.est&&S.cr.est!=='__none'?S.cr.est:'',due_date:'',hours:null,recur:'',auto:'',notes:''},back};showModal();setTimeout(()=>$('[data-crm=title]')?.focus(),30);return}
+  if(a==='cr-edit'){const c=S.chores.find(x=>x.id===t.dataset.id);if(!c)return;M={kind:'crnew',id:c.id,d:{...c,bid_id:c.bid_id||'',estimator_id:c.estimator_id||''}};showModal();return}
+  if(a==='cr-save'){const x=M;const d=x.d;const row={title:String(d.title||'').trim(),notes:String(d.notes||''),bid_id:d.bid_id||null,estimator_id:d.estimator_id||null,due_date:d.due_date||null,hours:d.hours===''||d.hours==null?null:+d.hours,recur:d.recur||'',auto:d.bid_id?(d.auto||''):''};
+    try{if(x.id){const r=await sb.from('chores').update(row).eq('id',x.id);if(r.error)throw r.error;await loadTable('chores')}else await crIns([{...row,created_by_name:myName()}]);
+      const back=x.back;if(back){M=back;renderModal()}else closeModal();render();toast(x.id?'Chore saved':`Chore added${row.estimator_id?' for '+estName(row.estimator_id):''}`)}catch(err){toast(crErr(err));render()}return}
+  if(a==='cr-del'){if(!t.classList.contains('arm')){t.classList.add('arm');t.textContent='Delete?';setTimeout(()=>{t.classList.remove('arm');t.textContent='×'},2500);return}
+    try{await run(sb.from('chores').delete().eq('id',t.dataset.id));S.chores=S.chores.filter(c=>c.id!==t.dataset.id);render();if(M&&M.kind==='bid')renderModal();toast('Chore deleted')}catch(err){toast(crErr(err))}return}
+  if(a==='cr-bulk'){const back=M&&M.kind==='bid'?M:null;M={kind:'crbulk',bid:t.dataset.bid||(S.cr.job&&S.cr.job!=='__gen'?S.cr.job:''),est:S.cr.est&&S.cr.est!=='__none'?S.cr.est:'',rows:{},back};if(back){const b=byId(S.bids,M.bid);if(b&&b.lead_estimator_id)M.est=b.lead_estimator_id}showModal();return}
+  if(a==='cr-bulk-go'){const x=M;const lib=crLib().filter(l=>x.rows[l.id]&&x.rows[l.id].on);if(!lib.length)return;
+    const rows=lib.map(l=>({title:l.title,notes:l.notes||'',bid_id:x.bid||null,estimator_id:x.est||null,due_date:x.rows[l.id].due||null,hours:l.hours,recur:'',auto:x.bid?(l.auto||''):'',sort:l.sort||0,created_by_name:myName()}));
+    try{await crIns(rows);const back=x.back;if(back){M=back;renderModal()}else closeModal();render();toast(`${rows.length} chore${rows.length===1?'':'s'} added${x.est?' for '+estName(x.est):''}`)}catch(err){toast(crErr(err))}return}
+  if(a==='cr-lib'){M={kind:'crlib'};showModal();return}
+  if(a==='cr-lib-add'){const v=($('#cr-lib-new')?.value||'').trim();if(!v)return;try{await crIns([{lib:true,title:v,created_by_name:myName(),sort:crLib().length}]);renderModal();setTimeout(()=>$('#cr-lib-new')?.focus(),30)}catch(err){toast(crErr(err))}return}
+  if(a==='cr-lib-starter'){try{await crIns(CR_STARTER.map(([t,o,h,au],i)=>({lib:true,title:t,offset_days:o,hours:h,auto:au,sort:i,created_by_name:myName()})));renderModal()}catch(err){toast(crErr(err))}return}
+  if(a==='cr-lib-del'){try{await run(sb.from('chores').delete().eq('id',t.dataset.id).eq('lib',true));S.chores=S.chores.filter(c=>c.id!==t.dataset.id);renderModal()}catch(err){toast(crErr(err))}return}});
+document.addEventListener('change',async e=>{const t=e.target;if(!t.dataset)return;
+  if(t.dataset.crck!=null){crToggle(t.dataset.crck,t.checked);return}
+  if(t.dataset.crf!=null){S.cr[t.dataset.crf]=t.value;render();return}
+  if(!M)return;
+  if(M.kind==='crnew'&&t.dataset.crm){const d=M.d;const k=t.dataset.crm;d[k]=t.value;
+    const l=crLib().find(x=>normH(x.title)===normH(d.title));if(k==='title'&&l){if(d.hours==null||d.hours==='')d.hours=l.hours;if(!d.auto)d.auto=l.auto||'';d._off=l.offset_days;if(!d.due_date)d.due_date=crDueFrom(d.bid_id,l.offset_days)}
+    if(k==='bid_id'){if(l&&l.offset_days!=null)d.due_date=crDueFrom(d.bid_id,l.offset_days)||d.due_date;if(!d.bid_id)d.auto='';if(d.bid_id&&!d.estimator_id){const b=byId(S.bids,d.bid_id);if(b&&b.lead_estimator_id)d.estimator_id=b.lead_estimator_id}}
+    renderModal();return}
+  if(M.kind==='crbulk'){if(t.dataset.crb){M[t.dataset.crb]=t.value;if(t.dataset.crb==='bid'){crLib().forEach(l=>{const r=M.rows[l.id];if(r)r.due=crDueFrom(M.bid,l.offset_days)||r.due});const b=byId(S.bids,M.bid);if(b&&b.lead_estimator_id&&!M.est)M.est=b.lead_estimator_id}renderModal();return}
+    if(t.dataset.crbk){const [id,k]=t.dataset.crbk.split('|');const r=M.rows[id]||(M.rows[id]={});r[k]=t.type==='checkbox'?t.checked:t.value;renderModal();return}}
+  if(M.kind==='crlib'&&t.dataset.crl){const [id,k]=t.dataset.crl.split('|');const v=t.value;const up=k==='before'?{offset_days:v===''?null:-Math.round(+v)}:k==='hours'?{hours:v===''?null:+v}:{[k]:v};
+    const c=S.chores.find(x=>x.id===id);if(c)Object.assign(c,up);try{const r=await sb.from('chores').update(up).eq('id',id);if(r.error)throw r.error}catch(err){toast(crErr(err))}return}});
+document.addEventListener('input',e=>{const t=e.target;if(M&&M.kind==='crnew'&&t.dataset&&t.dataset.crm==='title'){M.d.title=t.value;const b=document.querySelector('[data-act=cr-save]');if(b)b.disabled=!t.value.trim()}});
+FOCUS_ATTRS.push('data-crm','data-crl','data-crbk');

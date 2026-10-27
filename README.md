@@ -959,3 +959,13 @@ The Cost history page lists every estimate it learned from (untick one to leave 
 Admins switch tabs off for everyone on Team → Access chart. The developer can also turn any tab **on or off just for themselves** on **Developer → My tabs** (Same as team / On / Off), for example to keep testing Jobs while the team has it switched off. It's saved on the developer's own profile, so it follows them to any device, and nobody else is affected. Tabs that only the developer can see are marked 🔧 in the top bar. **Put all back to the team setting** clears it.
 
 **Group all (scope takeoff).** Next to **Group scopes…** on the Takeoff tab, **▦ Group all** puts every scope into one group called *All scopes*, so the whole takeoff gets one status (Not started / In progress) and one **Sign off group**. Scopes added later show **Add the rest to All scopes**. **Ungroup** puts them back on their own rows, keeping their status.
+
+## Chores
+
+Needs `supabase/update-46-chores.sql`. **Pipeline → Chores.** Precon managers (admins, or anyone who edits bids with access to all of them) hand out chores; estimators see theirs (on **My chores** and at the top of their dashboard) and tick them off. Estimators can't add, change or delete chores.
+
+- **Chore list:** your standard chores, each with a default due date counted from the bid due date (e.g. Send RFQs 8 days before), hours, and an optional way to tick itself off. **Load the starter list** to begin with Review plans & specs, Send RFQs, Site visit, Takeoff, Quantity check, Estimate ready for review, Send the proposal and GC follow-up.
+- **Assign from the chore list:** pick a job and an estimator (the job's lead is filled in), tick the chores, adjust any dates, and add them all at once.
+- **+ Add chore:** type any chore, for a job or general (no job), with a due date, hours and an optional weekly or monthly repeat. Ticking off a repeating chore makes the next one.
+- **Ticks itself off:** chores tied to a job can complete themselves when RFQs go out, every scope is signed off, the estimate goes to review, or the proposal is sent.
+- The Chores page groups everything by estimator, with late chores in red and hours due this week. Each bid shows its chores on the right side of the bid page, where managers can add more. Managers see a note on the dashboard when chores are late.
