@@ -969,3 +969,12 @@ Needs `supabase/update-46-chores.sql`. **Pipeline → Chores.** Precon managers 
 - **+ Add chore:** type any chore, for a job or general (no job), with a due date, hours and an optional weekly or monthly repeat. Ticking off a repeating chore makes the next one.
 - **Ticks itself off:** chores tied to a job can complete themselves when RFQs go out, every scope is signed off, the estimate goes to review, or the proposal is sent.
 - The Chores page groups everything by estimator, with late chores in red and hours due this week. Each bid shows its chores on the right side of the bid page, where managers can add more. Managers see a note on the dashboard when chores are late.
+
+## App icon and installing
+
+The app has its own icon (the dogwood mark in white on the app's dark green): browser tab, phone home screen and desktop. To install it:
+- **Chrome or Edge on a computer:** the install icon at the right end of the address bar (or ⋮ → Cast, save and share → Install page as app). It opens in its own window with the icon in the taskbar / dock.
+- **iPhone / iPad (Safari):** Share → Add to Home Screen.
+- **Android (Chrome):** ⋮ → Add to Home screen / Install app.
+
+Files: `manifest.webmanifest` and `img/app/` (icons at 16–512 px, plus "maskable" versions so Android can shape them). If someone installed it before, they may need to remove and re-add it to pick up the new icon.
