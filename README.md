@@ -958,7 +958,7 @@ The Cost history page lists every estimate it learned from (untick one to leave 
 
 Admins switch tabs off for everyone on Team → Access chart. The developer can also turn any tab **on or off just for themselves** on **Developer → My tabs** (Same as team / On / Off), for example to keep testing Jobs while the team has it switched off. It's saved on the developer's own profile, so it follows them to any device, and nobody else is affected. Tabs that only the developer can see are marked 🔧 in the top bar. **Put all back to the team setting** clears it.
 
-**Group all (scope takeoff).** Next to **Group scopes…** on the Takeoff tab, **▦ Group all** puts every scope into one group called *All scopes*, so the whole takeoff gets one status (Not started / In progress) and one **Sign off group**. Scopes added later show **Add the rest to All scopes**. **Ungroup** puts them back on their own rows, keeping their status.
+**Group all (scope takeoff).** Next to **Group scopes…** on the Takeoff tab, **▦ Group all** puts every scope into one group called *All scopes*, so the whole takeoff gets one status (Not started / In progress) and one **Sign off group**. Scopes added later show **Add the rest to All scopes**. To sign off just one scope in a group, click its name in the group: sign it off with your initials (or reopen it) and it stays in the group. **Ungroup** puts them back on their own rows, keeping their status.
 
 ## Chores
 
