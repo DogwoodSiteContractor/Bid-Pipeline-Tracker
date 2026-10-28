@@ -13930,7 +13930,13 @@ function dueHistHtml(b,work){const h=dueHist(b);if(!h.length)return '';const ses
     <ul>${h.map((x,i)=>`<li class="small">${fmtShort(x.from)} → <b>${fmtShort(x.to)}</b> <span class="dim">(${dueDelta(x)})</span>${x.reason&&i!==M?.dueSess?` · ${esc(x.reason)}`:''} <span class="dim">· ${esc(x.by||'')} ${x.at?fmtShort(String(x.at).slice(0,10)):''}</span></li>`).join('')}</ul>
     ${sess&&work?`<div class="due-sess"><span class="small">Bid date moved ${fmtShort(sess.from)} → ${fmtShort(sess.to)}. Why?</span><input class="field" id="due-reason" data-duereason placeholder="e.g. Addendum 2, revised plans" value="${esc(sess.reason||'')}"><button class="btn sm ghost" data-act="due-typo" title="Don't keep this as a moved bid date">It was a typo</button></div>`:''}</div>`}
 const dueDelta=x=>{const n=dayDiff(x.from,x.to);return n==null?'':n===0?'same day':`${n>0?'+':''}${n} day${Math.abs(n)===1?'':'s'}`};
-document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid'||!t.dataset||t.dataset.bf!=='due_date'||M.draft._new)return;dueMoved(M.draft,t.value);renderModal();setTimeout(()=>{const r=$('#due-reason');if(r&&M&&M.dueSess!=null)r.focus()},30)});
+// typing a date fires a change for every partial date, so the move is recorded once the field is left
+document.addEventListener('focusout',e=>{const t=e.target;if(!M||M.kind!=='bid'||!t.dataset||t.dataset.bf!=='due_date'||M.draft._new)return;const v=t.value;if(!/^\d{4}-\d{2}-\d{2}$/.test(v)||+v.slice(0,4)<2000)return;
+  const h=rfqOf(M.draft).dueHist||[];const n=h.length,sess=M.dueSess!=null&&h[M.dueSess]?h[M.dueSess].to:null;dueMoved(M.draft,v);const h2=rfqOf(M.draft).dueHist||[];
+  if(h2.length!==n||(M.dueSess!=null&&h2[M.dueSess]&&h2[M.dueSess].to!==sess)||(M.dueSess==null&&sess!=null))dueRerender()});
+let duePtr=false;document.addEventListener('pointerdown',()=>{duePtr=true},true);document.addEventListener('pointerup',()=>{setTimeout(()=>{duePtr=false;if(dueRerender.q){dueRerender.q=false;if(M&&M.kind==='bid')renderModal()}},0)},true);
+// wait for a click in progress (e.g. on Save or a tab) to land before redrawing
+function dueRerender(){if(duePtr){dueRerender.q=true;return}setTimeout(()=>{if(M&&M.kind==='bid')renderModal()},0)}
 document.addEventListener('input',e=>{const t=e.target;if(!M||M.kind!=='bid'||!t.dataset||t.dataset.duereason==null)return;const h=rfqOf(M.draft).dueHist||[];const x=h[M.dueSess];if(x)x.reason=t.value});
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act="due-typo"]');if(!t||!M||M.kind!=='bid')return;const h=rfqOf(M.draft).dueHist||[];if(M.dueSess!=null){h.splice(M.dueSess,1);M.dueSess=null}renderModal();toast('Kept as a correction, not a moved bid date')});
 FOCUS_ATTRS.push('data-duereason');
