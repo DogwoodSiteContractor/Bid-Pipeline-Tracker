@@ -467,7 +467,7 @@ function dueCell(b){
   else if(d<=7){cls='warn';txt='In '+d+' days'}
   else txt='In '+d+' days';
   const thisYr=String(b.due_date).slice(0,4)===String(new Date().getFullYear());
-  return `<div class="due ${cls}">${thisYr?fmtShort(b.due_date):fmtDate(b.due_date)}${b.due_time?' <span class="dim small">'+esc(fmtTime(b.due_time))+'</span>':''}<small>${txt}</small></div>`;
+  const og=dueOrig(b);return `<div class="due ${cls}">${thisYr?fmtShort(b.due_date):fmtDate(b.due_date)}${b.due_time?' <span class="dim small">'+esc(fmtTime(b.due_time))+'</span>':''}<small>${txt}</small>${og&&og!==b.due_date?`<small class="due-was" title="Bid date moved ${dueHist(b).length} time${dueHist(b).length===1?'':'s'}">↻ was ${fmtShort(og)}</small>`:''}</div>`;
 }
 function scopeBar(b){const it=scopeItems(b);if(!it.length)return '<span class="dim small">No scopes</span>';const d=it.filter(x=>x.status==='Complete').length;
   return `<span class="who" style="gap:8px"><span class="scopebar" title="${esc(it.map(x=>x.name+': '+(x.status==='Complete'?'signed off'+(x.signed_initials?' by '+x.signed_initials:''):x.status||'Not Started')).join('\n'))}">${it.slice(0,14).map(x=>`<i class="${scopeCls(x)}"></i>`).join('')}</span><span class="small num">${d}/${it.length}</span></span>`}
@@ -1085,7 +1085,7 @@ function bidModal(){
   const b=M.draft;const admin=isAdmin();const work=canWork(b);const isNew=b._new;
   if(!M.tab)M.tab=isNew?'project':bpTabOf(b);
   const cur=bpStageIdx(b);
-  const due=b.due_date?`Due ${fmtShort(b.due_date)}${b.due_time?' '+fuTime(b.due_time):''}${(()=>{const n=daysUntil(b.due_date);return n==null?'':n<0?` · ${-n} day${n===-1?'':'s'} ago`:n===0?' · today':` · ${n} day${n===1?'':'s'}`})()}`:'No due date';
+  const due=b.due_date?`Due ${fmtShort(b.due_date)}${dueOrig(b)&&dueOrig(b)!==b.due_date?` (was ${fmtShort(dueOrig(b))})`:''}${b.due_time?' '+fuTime(b.due_time):''}${(()=>{const n=daysUntil(b.due_date);return n==null?'':n<0?` · ${-n} day${n===-1?'':'s'} ago`:n===0?' · today':` · ${n} day${n===1?'':'s'}`})()}`:'No due date';
   const sub=[partyLine(b),...(()=>{const t=inHouse(b);return t?[t.text]:[]})(),due,b.lead_estimator_id?'Lead: '+esc(estName(b.lead_estimator_id)||''):'No lead estimator'].filter(Boolean);
   const saveTxt=b._sample?'Practice · not saved':isNew?'Not created yet':!work?'Read-only':(M.bpErr?'<span class="bad">Not saved</span>':'Saved');
   const tabs=BP_TABS.map(([k,l],i)=>{const st=i<cur?'past':i===cur?'now':'';const skip=false;
@@ -1127,13 +1127,13 @@ function bpProject(b,work,admin){
   </div></fieldset>
   <fieldset><legend>Key dates</legend><div class="fg">
     <label class="f" title="The day the invitation came in. Blank = the day the bid was entered.">Intake date<input type="date" class="field" data-bprfq="intake" value="${esc(rfqOf(b).intake||(b._new?todayStr():intakeOf(b)))}"${work?'':' disabled'}></label>
-    <label class="f">Bid due date<input type="date" class="field" ${bf('due_date')}></label>
+    <label class="f"><span class="f-lab">Bid due date${dueOrig(b)?` <span class="dim small">(was ${fmtShort(dueOrig(b))})</span>`:''}</span><input type="date" class="field" ${bf('due_date')}></label>
     <label class="f">Due time<input type="time" class="field" ${bf('due_time')}></label>
     <label class="f" title="Shown to the client on their tracker. Blank = the bid due date.">Proposal expected by<input type="date" class="field" ${bf('proposal_eta')}></label>
     <label class="f" title="The date on the plan set you're bidding from">Plan date<input type="date" class="field" data-bprfq="planDate" value="${esc(rfqOf(b).planDate||'')}"${work?'':' disabled'}></label>
     <label class="f">RFI deadline<input type="date" class="field" ${bf('rfi_date')}></label>
     <label class="f">Site walk / pre-bid<input type="date" class="field" ${bf('walk_date')}></label>
-  </div></fieldset>
+  </div>${dueHistHtml(b,work)}</fieldset>
   <fieldset><legend>Bidding to</legend>
     <div class="bp-gcs">${b.client_ids.map(id=>{const c=byId(S.clients,id);const cs=c?.contacts||[];const R=cRole(b,id);const dis=work?'':' disabled';return `<div class="bp-gc"><div><b>${esc(clientName(id))}</b><div class="dim small">${esc(c?.type||'')}</div></div>
       <div class="bp-roles" role="group" aria-label="Role on this bid"><label class="check${R.gc?' on':''}"><input type="checkbox" data-crole="${id}.gc"${R.gc?' checked':''}${dis}> GC / client</label><label class="check${R.own?' on':''}"><input type="checkbox" data-crole="${id}.own"${R.own?' checked':''}${dis}> Developer / owner</label></div>
@@ -13126,7 +13126,7 @@ const RP_SRC={
       state:['State','cat',b=>rpState(b.location)||'Unknown'],lost:['Why we lost','cat',b=>b.status==='Not Awarded'?(b.lost_reason||'Not recorded'):''],
       value:['Bid value','money',b=>bidValue(b)||0],won:['Won value','money',b=>b.status==='Awarded'?(wonValue(b)||0):0],units:['Units','num',b=>num(b.units)],
       turn:['Turnaround (business days)','days',b=>{const t=inHouse(b);return t&&t.sent?t.n:null}],revs:['Revisions','num',b=>Math.max(0,revShown(b).length-1)],
-      intake:['Intake date','date',b=>intakeOf(b)],due:['Due date','date',b=>b.due_date||''],sent:['Sent date','date',b=>sentOn(b)],awarded:['Awarded date','date',b=>b.status==='Awarded'?(b.awarded_date||''):'']},
+      intake:['Intake date','date',b=>intakeOf(b)],due:['Due date','date',b=>b.due_date||''],origDue:['Original bid date','date',b=>dueOrig(b)||b.due_date||''],moves:['Times the bid date moved','num',b=>dueHist(b).length],sent:['Sent date','date',b=>sentOn(b)],awarded:['Awarded date','date',b=>b.status==='Awarded'?(b.awarded_date||''):'']},
     list:['name','client','status','value','due']},
   quotes:{l:'Vendor quotes',need:()=>can('bids'),date:'received',rows:()=>S.quotes.filter(q=>{const b=byId(S.bids,q.bid_id);return b&&statOk(b)}),id:q=>q.id,open:q=>q.bid_id,
     f:{bid:['Project','cat',q=>byId(S.bids,q.bid_id)?.name||'—'],vendor:['Vendor','cat',q=>vendorOf(q.vendor_id)?.company||'Unknown vendor'],trade:['Trade','cat',q=>qTrade(q)],scope:['Scope','cat',q=>q.scope||'General'],
@@ -13915,3 +13915,22 @@ document.addEventListener('change',async e=>{const t=e.target;if(!t.dataset)retu
     const c=S.chores.find(x=>x.id===id);if(c)Object.assign(c,up);try{const r=await sb.from('chores').update(up).eq('id',id);if(r.error)throw r.error}catch(err){toast(crErr(err))}return}});
 document.addEventListener('input',e=>{const t=e.target;if(M&&M.kind==='crnew'&&t.dataset&&t.dataset.crm==='title'){M.d.title=t.value;const b=document.querySelector('[data-act=cr-save]');if(b)b.disabled=!t.value.trim()}});
 FOCUS_ATTRS.push('data-crm','data-crl','data-crbk');
+
+/* ---------- bid date moves: keep the original bid date and a history when the due date changes ----------
+   The bid's due date is always the current one (sorting, dashboards, chores and reports follow it).
+   rfq.dueHist = [{from,to,at,by,reason}], oldest first; the first "from" is the original bid date. */
+const dueHist=b=>{const h=b&&b.rfq&&Array.isArray(b.rfq.dueHist)?b.rfq.dueHist:[];return h.filter(x=>x&&x.from&&x.to)};
+const dueOrig=b=>{const h=dueHist(b);return h.length?h[0].from:''};
+function dueMoved(b,dateStr){const r=rfqOf(b);const h=Array.isArray(r.dueHist)?r.dueHist:(r.dueHist=[]);const sess=M&&M.dueSess!=null?h[M.dueSess]:null;
+  const prev=sess?sess.from:(h.length?h[h.length-1].to:(byId(S.bids,b.id)||{}).due_date);
+  if(!prev||!dateStr)return;if(sess){if(dateStr===sess.from){h.splice(M.dueSess,1);M.dueSess=null}else sess.to=dateStr;return}
+  if(prev===dateStr)return;h.push({from:prev,to:dateStr,at:new Date().toISOString(),by:myName(),reason:''});M.dueSess=h.length-1}
+function dueHistHtml(b,work){const h=dueHist(b);if(!h.length)return '';const sess=M&&M.dueSess!=null?h[M.dueSess]:null;
+  return `<div class="due-hist"><div><b>Original bid date: ${fmtDate(h[0].from)}</b> <span class="dim small">· moved ${h.length} time${h.length===1?'':'s'}</span></div>
+    <ul>${h.map((x,i)=>`<li class="small">${fmtShort(x.from)} → <b>${fmtShort(x.to)}</b> <span class="dim">(${dueDelta(x)})</span>${x.reason&&i!==M?.dueSess?` · ${esc(x.reason)}`:''} <span class="dim">· ${esc(x.by||'')} ${x.at?fmtShort(String(x.at).slice(0,10)):''}</span></li>`).join('')}</ul>
+    ${sess&&work?`<div class="due-sess"><span class="small">Bid date moved ${fmtShort(sess.from)} → ${fmtShort(sess.to)}. Why?</span><input class="field" id="due-reason" data-duereason placeholder="e.g. Addendum 2, revised plans" value="${esc(sess.reason||'')}"><button class="btn sm ghost" data-act="due-typo" title="Don't keep this as a moved bid date">It was a typo</button></div>`:''}</div>`}
+const dueDelta=x=>{const n=dayDiff(x.from,x.to);return n==null?'':n===0?'same day':`${n>0?'+':''}${n} day${Math.abs(n)===1?'':'s'}`};
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid'||!t.dataset||t.dataset.bf!=='due_date'||M.draft._new)return;dueMoved(M.draft,t.value);renderModal();setTimeout(()=>{const r=$('#due-reason');if(r&&M&&M.dueSess!=null)r.focus()},30)});
+document.addEventListener('input',e=>{const t=e.target;if(!M||M.kind!=='bid'||!t.dataset||t.dataset.duereason==null)return;const h=rfqOf(M.draft).dueHist||[];const x=h[M.dueSess];if(x)x.reason=t.value});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act="due-typo"]');if(!t||!M||M.kind!=='bid')return;const h=rfqOf(M.draft).dueHist||[];if(M.dueSess!=null){h.splice(M.dueSess,1);M.dueSess=null}renderModal();toast('Kept as a correction, not a moved bid date')});
+FOCUS_ATTRS.push('data-duereason');

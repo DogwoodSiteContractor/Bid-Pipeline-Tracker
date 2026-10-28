@@ -978,3 +978,9 @@ The app has its own icon (the dogwood mark in white on the app's dark green): br
 - **Android (Chrome):** ⋮ → Add to Home screen / Install app.
 
 Files: `manifest.webmanifest` and `img/app/` (icons at 16–512 px, plus "maskable" versions so Android can shape them). If someone installed it before, they may need to remove and re-add it to pick up the new icon.
+
+## Moved bid dates
+
+When a bid's due date changes after the bid is saved (an addendum, revised plans, the GC pushes it), the app keeps the **original bid date** and a history of every move. On the Project tab's Key dates you'll see "Original bid date …", each move with the number of days it moved, who changed it and when, and a box for why (e.g. "Addendum 2"). If the change was only fixing a typo, click **It was a typo** and it isn't kept as a move.
+
+Everything else follows the new date: the dashboard, pipeline, follow-ups, Week in review and reports. The dashboard shows "↻ was Oct 29" under the date, and the bid header shows "(was …)". Reports have **Original bid date** and **Times the bid date moved** fields. With `supabase/update-47-bid-date-moves.sql` run, open chores on that bid move by the same number of days.
