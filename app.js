@@ -735,7 +735,7 @@ function vPipeline(){
     map:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14.5s-4.5-4.2-4.5-7.7a4.5 4.5 0 0 1 9 0c0 3.5-4.5 7.7-4.5 7.7z"/><circle cx="8" cy="6.8" r="1.6"/></svg>'};
   const body=!list.length&&pv.mode!=='calendar'?`<div class="panel"><div class="empty"><b>No bids match</b>${pool.length?(q||nf||S.filter!=='active'?`Try a different search or filter. <button class="linkbtn" data-act="pv-reset">Clear search and filters</button>`:'Nothing active right now.'):est?'Bids assigned to you will appear here.':'Create your first bid to fill the pipeline.'}</div></div>`
     :pv.mode==='list'?listView(list):pv.mode==='calendar'?calendarView(list):pv.mode==='map'?bmView(list):`<div class="cards${S.selMode?' selecting':''}">${list.map(card).join('')}</div>`;
-  return `<div class="head"><div><h1>${est?'My bids':'Pipeline'}</h1><p>${pool.filter(live).length} bid${pool.filter(live).length===1?'':'s'}${est?' assigned to you':' on file'}</p></div><div class="tools">${mineSeg()}${est||scopeView()?'':'<button class="btn" data-act="export-xlsx">Export Excel</button><button class="btn ghost" data-act="export">CSV</button>'}${isAdmin()?`<button class="btn" data-act="arch-open" title="Archive old or filler bids in one go: all of them, an Excel import, everything due before a date…">🗄 Archive…</button><button class="btn${S.selMode?' primary':''}" data-act="sel-mode">${S.selMode?'Selecting…':'Select'}</button>`:''}${isAdmin()?'<button class="btn" data-act="import">Import from Excel</button><button class="btn primary" data-act="new-bid">+ New bid</button>':''}</div></div>
+  return `<div class="head"><div><h1>${est?'My bids':'Pipeline'}</h1><p>${pool.filter(live).length} bid${pool.filter(live).length===1?'':'s'}${est?' assigned to you':' on file'}</p></div><div class="tools">${mineSeg()}${est||scopeView()?'':'<button class="btn" data-act="export-xlsx">Export Excel</button><button class="btn ghost" data-act="export">CSV</button>'}${isAdmin()?`<button class="btn" data-act="arch-open" title="Archive old or filler bids in one go: all of them, an Excel import, everything due before a date…">🗄 Archive…</button><button class="btn${S.selMode?' primary':''}" data-act="sel-mode">${S.selMode?'Selecting…':'Select'}</button>`:''}${aiOn()&&can('bids','view')?'<button class="btn ai-btn" data-act="ai-rate-open" title="Paste an invite; AI grades it go / no-go from our history">✨ Rate project</button>':''}${isAdmin()?'<button class="btn" data-act="import">Import from Excel</button><button class="btn primary" data-act="new-bid">+ New bid</button>':''}</div></div>
   <div class="bar">${FILTERS.map(([k,l,fn])=>`<button class="chip ${S.filter===k?'on':''}" data-act="filter" data-v="${k}">${l}<b>${base.filter(b=>live(b)&&fn(b)).length}</b></button>`).join('')}${base.some(b=>b.archived_at)||inArch?`<button class="chip ${inArch?'on':''}" data-act="filter" data-v="archived">🗄 Archived<b>${base.filter(b=>b.archived_at).length}</b></button>`:''}</div>
   <div class="pv-bar">
     <div class="pv-search"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><input id="q-pipe" class="field" placeholder="Search projects, GCs, estimators, scopes, vendors, notes…" value="${esc(S.q.pipe||'')}" data-q="pipe" aria-label="Search bids">${S.q.pipe?'<button class="rm" data-act="pv-clearq" aria-label="Clear search">×</button>':'<kbd>/</kbd>'}</div>
@@ -973,8 +973,8 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal}[M.kind]();
-  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='bid'?' bidpage':''}${['rpcard','rpdrill','import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
+  const html={tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal,airate:aiRateModal}[M.kind]();
+  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='bid'?' bidpage':''}${['rpcard','rpdrill','airate','import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();
@@ -1074,6 +1074,7 @@ function bpProgress(b,key){const Q=b.quotes||[];
   return ''}
 
 function bidModal(){
+  if(M.ai)return aiSubView();
   if(M.picker)return pickerView();
   if(M.sup)return supView();
   if(M.rfq)return rfqView();
@@ -1117,7 +1118,7 @@ function bpAdvanceHtml(b,work,isNew){
 function bpProject(b,work,admin){
   const ests=S.estimators.filter(e=>e.active!==false||e.id===b.lead_estimator_id||b.support_estimator_ids.includes(e.id));
   const clientsSorted=S.clients.slice().sort((a,c)=>a.company.localeCompare(c.company));
-  return btplBar(b,work)+`<fieldset><legend>Project</legend><div class="fg">
+  return (aiOn()&&work?`<div class="ai-bar"><button class="btn ai-btn" data-act="ai-invite">✨ Fill from invite</button><span class="small dim">Paste the invite email or drop the PDF and AI fills in the fields. The file isn’t saved.</span></div>`:'')+btplBar(b,work)+`<fieldset><legend>Project</legend><div class="fg">
     <label class="f s2"><span class="f-lab">Project name${work?' <span class="req">required</span>':''}</span><input class="field" ${bf('name')} placeholder="e.g. Riverside Commerce Park"></label>
     <label class="f s2">Location<input class="field" ${bf('location')} placeholder="City, county or address"></label>
     <label class="f">Project type${sel('project_type',PROJECT_TYPES)}</label>
@@ -1178,7 +1179,7 @@ function bpRfq(b,work,admin){
 function bpTakeoff(b,work){return `${peqPanel(b,work)}${scopeSection(b,work)}${logSection(b,work)}${addendaSection(b,work)}`}
 function bpQuotes(b,work,admin){
   const asked=b.quotes.filter(qAsked);
-  return `<fieldset><legend>Quotes back</legend>
+  return (aiOn()&&work?`<div class="ai-bar"><button class="btn ai-btn" data-act="ai-quotes">✨ Level quotes</button><span class="small dim">Drop in the vendor quote PDFs; AI lines them up by scope and flags what each one leaves out. Files aren’t saved.</span></div>`:'')+`<fieldset><legend>Quotes back</legend>
     <p class="hint" style="margin:0 0 10px">${asked.length?`${asked.filter(q=>q.status==='Received').length} received · ${asked.filter(q=>q.status==='Requested').length} still out · ${asked.filter(q=>['Declined','No response'].includes(q.status)).length} declined or no answer.`:'No quotes requested yet. Add vendors on the <b>Scopes & RFQs</b> tab.'} Enter each amount as quotes come in (that marks it Received). The low number in each scope is marked.</p>
     <div class="qgs">${quoteGroupsHtml(b,work,admin,'quotes')}</div></fieldset>`}
 // where the estimate & proposal stands: not started → in progress → ready for review → sent
@@ -6719,7 +6720,7 @@ const LVL_LABEL={none:'No access',view:'View',edit:'Edit'};
 function rolePerm(r,a){const o=ROLE_ACCESS[r]||ROLE_ACCESS.pending;return o[a]||(a==='bids_scope'?'all':'none')}
 function permOf(p,a){if(!p)return rolePerm('pending',a);if(p.role==='admin'||p.role==='pending')return rolePerm(p.role,a);const o=p.perms&&p.perms[a];return o||rolePerm(p.role,a)}
 // Tabs an admin has switched off for the whole company. Display only: it hides the tab and everything that leads to it.
-const TAB_SWITCH=[['dash','Dashboard'],['bids','Pipeline'],['estimates','Estimates','Estimates, codebooks, bid settings and templates'],['awards','Awarded'],['jobs','Jobs'],['acct','Accounting'],['contacts','Contacts'],['calc','Calculators'],['reports','Reports'],['fun','Break room'],['help','Help']];
+const TAB_SWITCH=[['dash','Dashboard'],['bids','Pipeline'],['estimates','Estimates','Estimates, codebooks, bid settings and templates'],['awards','Awarded'],['jobs','Jobs'],['acct','Accounting'],['contacts','Contacts'],['calc','Calculators'],['reports','Reports'],['ai','AI tools','Read bid invites, rate projects go / no-go, level vendor quotes'],['fun','Break room'],['help','Help']];
 const tabsOff=()=>{const v=S.settings&&S.settings.general&&S.settings.general.tabsOff;return Array.isArray(v)?v:[]};
 // the developer can turn tabs on or off just for themselves (kept on their own profile), whatever the company setting is
 const devTabs=()=>isDev()&&S.profile&&S.profile.profile&&S.profile.profile.devTabs||{};
@@ -13944,3 +13945,250 @@ function dueRerender(){if(duePtr){dueRerender.q=true;return}setTimeout(()=>{if(M
 document.addEventListener('input',e=>{const t=e.target;if(!M||M.kind!=='bid'||!t.dataset||t.dataset.duereason==null)return;const h=rfqOf(M.draft).dueHist||[];const x=h[M.dueSess];if(x)x.reason=t.value});
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act="due-typo"]');if(!t||!M||M.kind!=='bid')return;const h=rfqOf(M.draft).dueHist||[];if(M.dueSess!=null){h.splice(M.dueSess,1);M.dueSess=null}renderModal();toast('Kept as a correction, not a moved bid date')});
 FOCUS_ATTRS.push('data-duereason');
+
+
+
+/* ===================================================================================================
+   AI TOOLS — read a bid invite, rate a project go / no-go, level vendor quotes.
+   Files are read in the browser, sent once to the Supabase "ai" function, and never stored.
+   The AI key lives only in that function's secrets (ANTHROPIC_API_KEY), never in this file.
+   =================================================================================================== */
+const aiOn=()=>!tabOff('ai');
+const AI_ACCEPT='.pdf,.png,.jpg,.jpeg,.webp,.txt,.eml,.htm,.html,application/pdf,image/*,text/plain';
+const AI_MAX=18e6;
+const aiD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+function aiReadFile(f){return new Promise((res,rej)=>{const t=(f.type||'').toLowerCase();const r=new FileReader();r.onerror=()=>rej(new Error(`Couldn’t read ${f.name}`));
+  if(/\.msg$/i.test(f.name))return rej(new Error(`${f.name}: Outlook .msg files can’t be read. Open the email and copy its text in, or print it to PDF.`));
+  if(/^text\//.test(t)||/\.(txt|eml|html?)$/i.test(f.name)){r.onload=()=>{let s=String(r.result);
+      if(/\.html?$/i.test(f.name)||/^\s*<(!doctype|html)/i.test(s)){try{const d=new DOMParser().parseFromString(s,'text/html');s=(d.body&&d.body.textContent)||s}catch(e){}}
+      s=s.replace(/^[A-Za-z0-9+/=]{60,}\r?$/gm,'').replace(/\n{3,}/g,'\n\n');res({name:f.name,type:'text/plain',text:s,size:s.length})};r.readAsText(f);return}
+  const pdf=t==='application/pdf'||/\.pdf$/i.test(f.name);
+  if(pdf||/^image\/(png|jpeg|webp|gif)$/.test(t)){r.onload=()=>{const s=String(r.result);res({name:f.name,type:pdf?'application/pdf':t,data:s.slice(s.indexOf(',')+1),size:f.size})};r.readAsDataURL(f);return}
+  rej(new Error(`${f.name}: use a PDF, a picture, or paste the email text.`))})}
+async function aiAddFiles(A,list){const errs=[];for(const f of [...list]){try{const x=await aiReadFile(f);A.files=A.files.filter(y=>y.name!==x.name);A.files.push(x)}catch(e){errs.push(e.message)}}
+  const tot=A.files.reduce((n,f)=>n+(f.size||0),0);if(tot>AI_MAX){A.files.pop();errs.push('That’s more than 18 MB of files. Try fewer or smaller files.')}
+  A.err=errs.join(' ');renderModal()}
+async function aiCall(task,{text,files,ctx}){
+  if(!sb)throw new Error('Not connected to the database.');
+  const {data,error}=await sb.functions.invoke('ai',{body:{task,text:text||'',files:(files||[]).map(({size,...f})=>f),ctx}});
+  if(error){let m=error.message||'';try{const j=await error.context.json();if(j&&j.error)m=j.error}catch(e){}
+    if(/failed to send|not found|404|fetch/i.test(m))m='AI isn’t set up yet. The “ai” function needs to be deployed in Supabase (README → AI tools).';
+    throw new Error(m)}
+  if(!data||!data.result)throw new Error('The AI didn’t return a result. Try again.');
+  return data.result}
+const aiLibCtx=()=>({project_types:PROJECT_TYPES,bid_types:BID_TYPES,scope_library:[...new Set((lib().scopes||[]).map(s=>s.name))]});
+const aiRules=()=>String(S.settings?.general?.aiRules||'');
+function aiHistCtx(){
+  const bids=S.bids.filter(live);const y=new Date();y.setFullYear(y.getFullYear()-3);const since=aiD(y);
+  const recent=bids.filter(b=>(b.due_date||b.submitted_date||'9')>=since);
+  const agg=a=>{const won=a.filter(b=>b.status==='Awarded'),lost=a.filter(b=>b.status==='Not Awarded');
+    return{invites:a.length,proposals_sent:a.filter(b=>isSent(b)||DECIDED.slice(0,2).includes(b.status)).length,won:won.length,lost:lost.length,no_bid:a.filter(b=>b.status==='No Bid').length,
+      win_rate_pct:won.length+lost.length?Math.round(100*won.length/(won.length+lost.length)):null,won_value:Math.round(won.reduce((n,b)=>n+(num(b.awarded_amount)||bidValue(b)||0),0))}};
+  const grp=(key)=>{const o={};recent.forEach(b=>[].concat(key(b)).filter(Boolean).forEach(k=>(o[k]=o[k]||[]).push(b)));return Object.entries(o).sort((a,b)=>b[1].length-a[1].length)};
+  const bk=v=>!v?null:v<250e3?'under $250K':v<1e6?'$250K–$1M':v<3e6?'$1M–$3M':'over $3M';
+  const act=bids.filter(b=>ACTIVE.includes(b.status)&&b.status!=='On Hold'&&!isSent(b));
+  const wk=[0,1,2,3,4,5].map(i=>{const a=new Date();a.setDate(a.getDate()+i*7);const z=new Date(a);z.setDate(z.getDate()+6);const s=aiD(a),e=aiD(z);return{week_of:s,bids_due:act.filter(b=>b.due_date>=s&&b.due_date<=e).length}});
+  return{history_window:'last 3 years',overall:agg(recent),
+    by_gc:grp(b=>(b.client_ids||[]).map(clientName)).slice(0,80).map(([k,a])=>({gc:k,...agg(a)})),
+    by_project_type:grp(b=>b.project_type||'Other').map(([k,a])=>({type:k,...agg(a)})),
+    by_bid_value:grp(b=>bk(bidValue(b))).map(([k,a])=>({bid_value:k,...agg(a)})),
+    workload:{open_bids_not_sent:act.length,due_by_week:wk,by_estimator:S.estimators.filter(e=>e.active!==false).map(e=>({estimator:e.name,open_bids:act.filter(b=>b.lead_estimator_id===e.id).length}))},
+    company_rules:aiRules()}}
+const aiGc=n=>{const k=normH(n);if(!k)return null;const L=S.clients;return L.find(c=>normH(c.company)===k)||L.find(c=>{const c2=normH(c.company);return c2.length>3&&(c2.includes(k)||k.includes(c2))})||null};
+const aiDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(String(s||''))?s:'';
+const aiTime=s=>/^\d{1,2}:\d{2}$/.test(String(s||''))?String(s).padStart(5,'0'):'';
+function aiScopeItem(n){const ls=libScope(n);return{id:newId(),name:ls?.name||n,group:ls?.group||groupOf(n)||'Other',perform:ls?.perform||'Self perform',status:'Not Started',assignee_id:''}}
+function aiNotes(P,R){return [R?`AI rating: ${R.verdict} (${Math.round(num(R.score)||0)}/100). ${R.headline||''}`:'',P.summary||'',
+  (P.requirements||[]).length?'Requirements: '+P.requirements.join('; '):'',P.owner?'Owner: '+P.owner:'',P.engineer?'Engineer: '+P.engineer:'',P.plan_link?'Plans: '+P.plan_link:'',
+  P.gc_contact&&(P.gc_contact.name||P.gc_contact.email)?'GC contact: '+[P.gc_contact.name,P.gc_contact.email,P.gc_contact.phone].filter(Boolean).join(', '):''].filter(Boolean).join('\n')}
+// make sure the GC is in Contacts; returns its id (adds it when it's new)
+async function aiEnsureGc(P){if(!P.gc_name)return null;const c=aiGc(P.gc_name);if(c)return c.id;
+  const k=P.gc_contact||{};const row={company:P.gc_name.trim(),type:'General contractor',phone:'',email:'',address:'',notes:'Added from a bid invite',contacts:k.name||k.email?[{name:k.name||'',title:'',phone:k.phone||'',email:k.email||''}]:[]};
+  await run(sb.from('clients').insert(row));await loadTable('clients');return aiGc(P.gc_name)?.id||null}
+function aiDraft(P,R,gcId){const d=newBid();
+  Object.assign(d,{name:P.project_name||'',location:P.location||'',project_type:PROJECT_TYPES.includes(P.project_type)?P.project_type:d.project_type,bid_type:BID_TYPES.includes(P.bid_type)?P.bid_type:d.bid_type,
+    size:P.size||'',due_date:aiDate(P.due_date),due_time:aiTime(P.due_time),walk_date:aiDate(P.walk_date),rfi_date:aiDate(P.rfi_date),notes:aiNotes(P,R)});
+  if(gcId)d.client_ids=[gcId];const seen=new Set();d.scope_items=(P.scopes||[]).filter(n=>{const k=normH(n);if(!k||seen.has(k))return false;seen.add(k);return true}).map(aiScopeItem);return d}
+const aiBizLeft=s=>{if(!aiDate(s))return null;const t=todayStr();return s<t?-1:bizDays(t,s)};
+function aiDrop(A,hint){return `<label class="ai-drop" data-aidrop="1"><input type="file" multiple accept="${AI_ACCEPT}" data-aifile="1" hidden><b>Drop files here or click to choose</b><span>${esc(hint)}</span></label>
+  ${A.files.length?`<div class="ai-files">${A.files.map((f,i)=>`<span class="ai-file">📄 ${esc(f.name)}<button class="x" data-act="ai-rmfile" data-i="${i}" aria-label="Remove">×</button></span>`).join('')}</div>`:''}
+  ${A.err?`<div class="notice bad" style="margin:10px 0 0">${esc(A.err)}</div>`:''}`}
+const aiPrivacy='<p class="small dim ai-priv">🔒 Files are read once and not saved. Only the details you keep go into the app.</p>';
+function aiFactsHtml(P,gcHit){const left=aiBizLeft(P.due_date);
+  const row=(l,v)=>v?`<tr><th>${l}</th><td>${v}</td></tr>`:'';
+  return `<table class="ai-facts">${row('Project',esc(P.project_name||''))}${row('GC',P.gc_name?esc(P.gc_name)+' '+(gcHit?pill('In Contacts','good'):pill('New, will be added','info')):'')}${row('Location',esc(P.location||''))}
+    ${row('Bid due',P.due_date?`${fmtDate(aiDate(P.due_date)||P.due_date)}${aiTime(P.due_time)?' '+fuTime(aiTime(P.due_time)):P.due_time?' '+esc(P.due_time):''}${left==null?'':left<0?' '+pill('Already past','bad'):` · ${left} business day${left===1?'':'s'} left`}`:'')}
+    ${row('Site walk',P.walk_date?fmtDate(aiDate(P.walk_date)||P.walk_date):'')}${row('Questions due',P.rfi_date?fmtDate(aiDate(P.rfi_date)||P.rfi_date):'')}
+    ${row('Type',esc([P.project_type,P.bid_type,P.size].filter(Boolean).join(' · ')))}${row('Owner',esc(P.owner||''))}${row('Engineer',esc(P.engineer||''))}
+    ${row('Scopes',(P.scopes||[]).map(s=>`<span class="chip sm">${esc(s)}</span>`).join(' '))}${row('Plans',P.plan_link&&/^https?:\/\//.test(P.plan_link)?`<a href="${esc(P.plan_link)}" target="_blank" rel="noopener">${esc(P.plan_link.slice(0,60))}</a>`:esc(P.plan_link||''))}</table>
+    ${P.summary?`<p class="ai-sum">${esc(P.summary)}</p>`:''}
+    ${(P.requirements||[]).length?`<div class="ai-list"><b>Requirements</b><ul>${P.requirements.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
+    ${(P.missing||[]).length?`<div class="ai-list dim"><b>Not in the invite</b><ul>${P.missing.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}`}
+
+/* ----- Rate a project (Pipeline → ✨ Rate project) ----- */
+function aiRateModal(){const A=M;const R=A.res;
+  if(!R)return mhead('✨ Rate a project','Paste the invite or drop the PDF. AI reads it, checks it against our bid history and workload, and says go or no-go.')+`<div class="mbody">
+    <label class="f"><span class="f-lab">Invite email or notes</span><textarea class="field" rows="7" data-aitext="1" placeholder="Paste the bid invite email here…">${esc(A.text||'')}</textarea></label>
+    ${aiDrop(A,'PDF invites, plan cover sheets, screenshots, or a saved .eml / .txt email')}
+    <details class="ai-rules"${A.rulesOpen?' open':''}><summary>What matters to us when deciding</summary><p class="small dim">AI weighs these along with our history.${isAdmin()?' Admins can edit them; they apply for everyone.':''}</p>
+      <textarea class="field" rows="4" data-airules="1"${isAdmin()?'':' disabled'} placeholder="e.g. We don’t chase jobs over 90 minutes away. Under $150K only for GCs we win with. Avoid design-build without civil plans.">${esc(A.rules!=null?A.rules:aiRules())}</textarea>
+      ${isAdmin()?'<button class="btn sm" data-act="ai-rules-save">Save for everyone</button>':''}</details>
+    ${aiPrivacy}</div>
+    <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="ai-rate-run"${A.busy?' disabled':''}>${A.busy?'Reading and rating…':'Rate it'}</button></div></div>`;
+  const P=R.project||{};const v=R.verdict||'Maybe';const cls=v==='Go'?'good':v==='No-go'?'bad':'warn';const gcHit=aiGc(P.gc_name);
+  return mhead('✨ Bid recommendation',P.project_name||'')+`<div class="mbody">
+    <div class="ai-verdict ${cls}"><div class="ai-score"><b>${Math.round(num(R.score)||0)}</b><small>of 100</small></div><div><h3>${esc(v==='No-go'?'No-go':v)}</h3><p>${esc(R.headline||'')}</p></div></div>
+    <div class="ai-cols"><div><h4>Why</h4><ul class="ai-why">${(R.reasons||[]).map(x=>`<li class="${x.impact==='plus'?'p':x.impact==='minus'?'m':'n'}"><i>${x.impact==='plus'?'+':x.impact==='minus'?'–':'·'}</i><span><b>${esc(x.factor)}</b> ${esc(x.detail)}</span></li>`).join('')}</ul>
+      ${(R.risks||[]).length?`<div class="ai-list"><b>Risks</b><ul>${R.risks.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
+      ${(R.questions||[]).length?`<div class="ai-list"><b>Ask the GC</b><ul>${R.questions.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}</div>
+      <div><h4>From the invite</h4>${aiFactsHtml(P,gcHit)}</div></div>
+    ${A.err?`<div class="notice bad">${esc(A.err)}</div>`:''}
+    <p class="small dim">A recommendation from our own history, not a decision. ${aiPrivacy.replace(/<\/?p[^>]*>/g,'')}</p></div>
+    <div class="mfoot"><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="ai-rate-again">← Start over</button><button class="btn" data-act="ai-rate-copy">Copy summary</button>${P.gc_contact&&P.gc_contact.email?'<button class="btn" data-act="ai-rate-decline">Draft a decline email</button>':''}</div>
+      <div class="r">${isAdmin()?`<button class="btn" data-act="ai-rate-nobid"${A.busy?' disabled':''} title="Saves the invite as a No Bid so it counts in our history">Log as No bid</button><button class="btn primary" data-act="ai-rate-create"${A.busy?' disabled':''}>Create bid →</button>`:'<span class="small dim">Ask an admin to create the bid.</span>'}</div></div>`}
+function aiRateText(R){const P=R.project||{};return [`${P.project_name||'Project'}: ${R.verdict} (${Math.round(num(R.score)||0)}/100)`,R.headline||'','',...(R.reasons||[]).map(x=>`${x.impact==='plus'?'+':x.impact==='minus'?'–':'·'} ${x.factor}: ${x.detail}`),
+  ...((R.risks||[]).length?['','Risks:',...R.risks.map(x=>'- '+x)]:[]),...((R.questions||[]).length?['','Questions for the GC:',...R.questions.map(x=>'- '+x)]:[])].join('\n')}
+function aiDecline(P){const k=P.gc_contact||{};const first=String(k.name||'').split(/\s+/)[0];const co=S.settings.general?.companyName||CFG.companyName||'Dogwood Site Contractors';
+  const sub=`${P.project_name||'Bid invitation'}: we’ll pass on this one`;
+  const body=`Hi${first?' '+first:''},\n\nThank you for inviting us to bid ${P.project_name||'this project'}. After looking at it against our current workload, we won’t be submitting a price this time.\n\nWe appreciate you thinking of us and would welcome the chance to bid your next site package.\n\nThanks,\n${myName()}\n${co}`;
+  return `mailto:${encodeURIComponent(k.email||'')}?subject=${encodeURIComponent(sub)}&body=${encodeURIComponent(body)}`}
+
+/* ----- inside a bid: fill from invite · level quotes ----- */
+const AI_FIELDS=[['name','Project name','project_name'],['location','Location','location'],['project_type','Project type','project_type'],['bid_type','Bid type','bid_type'],['size','Size','size'],['due_date','Bid due date','due_date'],['due_time','Bid due time','due_time'],['walk_date','Site walk','walk_date'],['rfi_date','Questions due','rfi_date']];
+function aiInviteVal(k,P){const v=P[k];if(['due_date','walk_date','rfi_date'].includes(k))return aiDate(v);if(k==='due_time')return aiTime(v);if(k==='project_type')return PROJECT_TYPES.includes(v)?v:'';if(k==='bid_type')return BID_TYPES.includes(v)?v:'';return String(v||'').trim()}
+function aiInviteRows(b,P){const rows=AI_FIELDS.map(([f,l,k])=>{const nv=aiInviteVal(k,P);if(!nv)return null;const cur=String(b[f]||'');if(cur===nv)return null;return{key:f,label:l,cur,nv,on:!cur}}).filter(Boolean);
+  if(P.gc_name){const c=aiGc(P.gc_name);if(!c||!b.client_ids.includes(c.id))rows.push({key:'gc',label:'GC',cur:b.client_ids.map(clientName).join(', '),nv:P.gc_name+(c?'':' (new, will be added to Contacts)'),on:true})}
+  const have=new Set(scopeItems(b).map(x=>normH(x.name)));const add=(P.scopes||[]).filter(n=>!have.has(normH(libScope(n)?.name||n)));if(add.length)rows.push({key:'scopes',label:'Scopes to add',cur:'',nv:add.join(', '),on:true,list:add});
+  const n=aiNotes(P,null);if(n&&!String(b.notes||'').includes(P.summary||'§'))rows.push({key:'notes',label:'Notes',cur:b.notes?'(adds below what’s there)':'',nv:n,on:true});
+  return rows}
+function aiSubView(){const A=M.ai;const b=M.draft;const back=`<div class="bp-head"><button class="btn ghost bp-back" data-act="ai-back">← Back to the bid</button><div class="bp-title"><h2>${A.task==='quotes'?'✨ Level quotes':'✨ Fill from invite'}</h2><p>${esc(b.name||'New bid')}</p></div></div>`;
+  const run=(lab,busy)=>`<div class="mfoot"><div></div><div class="r"><button class="btn" data-act="ai-back">Cancel</button><button class="btn primary" data-act="ai-run"${A.busy?' disabled':''}>${A.busy?busy:lab}</button></div></div>`;
+  if(!A.res){const q=A.task==='quotes';
+    return back+`<div class="mbody bp-body"><div class="ai-pane">${q?'<p>Drop in the vendor quotes for this bid (PDFs or pictures, up to about 8 at once). AI reads each one, lines them up by scope, and flags what one vendor includes that another leaves out.</p>':'<p>Paste the invite email and/or drop the invite PDF. AI pulls out the project, GC, dates and scopes; you pick what to keep.</p>'}
+      ${q?'':`<label class="f"><span class="f-lab">Invite email</span><textarea class="field" rows="7" data-aitext="1" placeholder="Paste the bid invite email here…">${esc(A.text||'')}</textarea></label>`}
+      ${aiDrop(A,q?'Vendor quote PDFs or photos':'PDF invite, cover sheet, screenshot, or a saved .eml / .txt email')}${aiPrivacy}</div></div>`+run(q?'Read and level':'Read invite',q?'Reading quotes…':'Reading…')}
+  if(A.task==='invite'){const rows=A.rows;
+    return back+`<div class="mbody bp-body"><div class="ai-pane">${aiFactsHtml(A.res,aiGc(A.res.gc_name))}
+      <h4 style="margin-top:18px">Put these on the bid</h4>${rows.length?`<table class="ai-apply"><thead><tr><th></th><th>Field</th><th>Now</th><th>From the invite</th></tr></thead><tbody>${rows.map((r,i)=>`<tr><td><input type="checkbox" data-aipick="${i}"${r.on?' checked':''}></td><td><b>${esc(r.label)}</b></td><td class="dim">${esc(r.cur||'—')}</td><td>${esc(r.nv).replace(/\n/g,'<br>')}</td></tr>`).join('')}</tbody></table>`:'<p class="dim">The bid already matches the invite.</p>'}
+      ${A.err?`<div class="notice bad">${esc(A.err)}</div>`:''}</div></div>
+      <div class="mfoot"><div><button class="btn" data-act="ai-again">← Try another file</button></div><div class="r"><button class="btn" data-act="ai-back">Cancel</button>${rows.length?`<button class="btn primary" data-act="ai-apply"${A.busy?' disabled':''}>Put on the bid</button>`:''}</div></div>`}
+  return back+`<div class="mbody bp-body">${aiLevelHtml(A,b)}</div>
+    <div class="mfoot"><div style="display:flex;gap:8px"><button class="btn" data-act="ai-again">← Different quotes</button><button class="btn" data-act="ai-lv-xlsx">Export leveling to Excel</button></div><div class="r"><button class="btn" data-act="ai-back">Done</button>${M.draft&&canWork(b)?'<button class="btn primary" data-act="ai-lv-all">Put every total on the bid</button>':''}</div></div>`}
+const aiVendor=n=>{const k=normH(n);if(!k)return null;return S.vendors.find(v=>normH(v.company)===k)||S.vendors.find(v=>{const c=normH(v.company);return c.length>3&&(c.includes(k)||k.includes(c))})||null};
+function aiScopeName(b,s){const k=normH(s);if(!k)return 'Other';const names=[...scopeItems(b).map(x=>x.name),...(b.quotes||[]).map(q=>q.scope).filter(Boolean),...(lib().scopes||[]).map(x=>x.name)];
+  return names.find(n=>normH(n)===k)||names.find(n=>{const c=normH(n);return c&&(c.startsWith(k)||k.startsWith(c))})||names.find(n=>{const c=normH(n);return c.length>3&&(c.includes(k)||k.includes(c))})||s}
+function aiLevelGroups(A,b){const g={};(A.res.quotes||[]).forEach((q,i)=>{const s=aiScopeName(b,q.scope);(g[s]=g[s]||[]).push({...q,_i:i})});return Object.entries(g)}
+function aiLevelHtml(A,b){const R=A.res;const work=canWork(b);
+  const groups=aiLevelGroups(A,b);
+  return `<div class="ai-pane wide">${R.summary?`<div class="ai-verdict info"><div><h3>Leveling summary</h3><p>${esc(R.summary)}</p></div></div>`:''}
+    ${groups.map(([s,qs])=>{const tots=qs.map(q=>num(q.total)).filter(v=>v>0);const low=tots.length?Math.min(...tots):null;
+      const gaps=(R.gaps||[]).filter(x=>normH(aiScopeName(b,x.scope))===normH(s));
+      const hit=(q,L)=>(L||[]).some(n=>normH(n)&&normH(q.vendor)&&(normH(q.vendor).includes(normH(n))||normH(n).includes(normH(q.vendor))));
+      return `<div class="ai-lv"><h4>${esc(s)} <span class="small dim">${qs.length} quote${qs.length===1?'':'s'}</span></h4><div class="scroll"><table class="ai-lvt"><thead><tr><th></th>${qs.map(q=>{const v=aiVendor(q.vendor);return `<th>${esc(q.vendor||'Unknown vendor')}${v?'':'<div class="small dim">Not in Vendors</div>'}<div class="small dim">${esc(q.file||'')}</div></th>`}).join('')}</tr></thead><tbody>
+        <tr class="tot"><th>Base total</th>${qs.map(q=>{const t=num(q.total);return `<td>${t?money(t):'—'}${t&&t===low&&qs.length>1?' '+pill('Low','good'):''}${low&&t&&t>low?`<div class="small dim">+${money(t-low)}</div>`:''}</td>`}).join('')}</tr>
+        ${gaps.map(gp=>`<tr class="gap"><th>${esc(gp.item)}${gp.note?`<div class="small dim">${esc(gp.note)}</div>`:''}</th>${qs.map(q=>`<td>${hit(q,gp.missing_from)?'<span class="ai-no">✗ Not included</span>':hit(q,gp.included_by)?'<span class="ai-yes">✓ Included</span>':'<span class="dim">Not mentioned</span>'}</td>`).join('')}</tr>`).join('')}
+        <tr><th>Includes</th>${qs.map(q=>`<td class="small">${(q.inclusions||[]).map(esc).join('<br>')||'—'}</td>`).join('')}</tr>
+        <tr><th>Excludes</th>${qs.map(q=>`<td class="small">${(q.exclusions||[]).map(esc).join('<br>')||'—'}</td>`).join('')}</tr>
+        ${qs.some(q=>(q.qualifications||[]).length)?`<tr><th>Conditions</th>${qs.map(q=>`<td class="small">${(q.qualifications||[]).map(esc).join('<br>')||'—'}</td>`).join('')}</tr>`:''}
+        ${qs.some(q=>(q.alternates||[]).length)?`<tr><th>Alternates</th>${qs.map(q=>`<td class="small">${(q.alternates||[]).map(a=>esc(a.desc)+(a.amount!=null?' '+money(a.amount):'')).join('<br>')||'—'}</td>`).join('')}</tr>`:''}
+        ${work?`<tr><th></th>${qs.map(q=>{const st=A.applied&&A.applied[q._i];return `<td>${st?`<span class="small good">✓ ${esc(st)}</span>`:aiVendor(q.vendor)&&num(q.total)?`<button class="btn sm" data-act="ai-lv-apply" data-i="${q._i}">Put ${money(q.total)} on the bid</button>`:`<span class="small dim">${aiVendor(q.vendor)?'No total to use':'Add the vendor in Vendors first'}</span>`}</td>`}).join('')}</tr>`:''}
+      </tbody></table></div></div>`}).join('')}
+    ${A.err?`<div class="notice bad">${esc(A.err)}</div>`:''}${aiPrivacy}</div>`}
+function aiLvApply(i){const A=M.ai,b=M.draft;const q=A.res.quotes[i];const v=aiVendor(q.vendor);if(!v||!num(q.total))return false;const s=aiScopeName(b,q.scope);
+  let row=b.quotes.find(x=>x.vendor_id===v.id&&normH(x.scope)===normH(s))||b.quotes.find(x=>x.vendor_id===v.id&&b.quotes.filter(y=>y.vendor_id===v.id).length===1);
+  if(!row){row={id:newId(),bid_id:b.id,vendor_id:v.id,scope:s,status:'Received',requested_date:'',due_date:'',received_date:'',amount:null,note:'',file_path:null,file_name:null};b.quotes.push(row)}
+  row.amount=num(q.total);row.status='Received';row.received_date=row.received_date||todayStr();
+  const ex=(q.exclusions||[]).slice(0,6).join('; ');if(ex&&!String(row.note||'').includes('Excludes:'))row.note=[row.note,'Excludes: '+ex].filter(Boolean).join(' · ').slice(0,500);
+  A.applied=A.applied||{};A.applied[i]=`On the bid (${row.scope})`;return true}
+async function aiLvXlsx(){const A=M.ai,b=M.draft;const X=await loadXLSX();const wb=X.utils.book_new();
+  aiLevelGroups(A,b).forEach(([s,qs])=>{const gaps=(A.res.gaps||[]).filter(x=>normH(aiScopeName(b,x.scope))===normH(s));
+    const aoa=[[s+' — quote leveling',...qs.map(()=>'')],['',...qs.map(q=>q.vendor||'')],['Base total',...qs.map(q=>num(q.total)||null)],
+      ...gaps.map(gp=>[gp.item,...qs.map(q=>(gp.missing_from||[]).some(n=>normH(q.vendor).includes(normH(n))||normH(n).includes(normH(q.vendor)))?'Not included':'Included')]),
+      ['Includes',...qs.map(q=>(q.inclusions||[]).join('\n'))],['Excludes',...qs.map(q=>(q.exclusions||[]).join('\n'))],['Conditions',...qs.map(q=>(q.qualifications||[]).join('\n'))]];
+    const ws=X.utils.aoa_to_sheet(aoa);ws['!cols']=[{wch:34},...qs.map(()=>({wch:30}))];X.utils.book_append_sheet(wb,ws,String(s).replace(/[\\/?*[\]:]/g,' ').slice(0,31)||'Scope')});
+  X.writeFile(wb,`${(b.name||'Bid').replace(/[^\w -]+/g,'').slice(0,40)} - quote leveling.xlsx`)}
+
+/* ----- buttons ----- */
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('ai-'))return;
+  const A=M&&(M.kind==='airate'?M:M.ai);
+  try{switch(a){
+    case 'ai-rate-open':M={kind:'airate',text:'',files:[],res:null,err:'',busy:false};showModal();break;
+    case 'ai-invite':case 'ai-quotes':if(!M||M.kind!=='bid')return;M.ai={task:a==='ai-quotes'?'quotes':'invite',text:'',files:[],res:null,err:'',busy:false};renderModal();break;
+    case 'ai-back':if(M&&M.kind==='bid'){M.ai=null;renderModal()}break;
+    case 'ai-again':case 'ai-rate-again':if(A){A.res=null;A.err='';A.applied=null;renderModal()}break;
+    case 'ai-rmfile':if(A){A.files.splice(+t.dataset.i,1);renderModal()}break;
+    case 'ai-rules-save':{if(!isAdmin()||!A)return;const g={...(S.settings.general||{}),aiRules:String(A.rules!=null?A.rules:aiRules()).trim()};S.settings.general=g;await run(sb.from('settings').upsert({key:'general',value:g}));await loadTable('settings');toast('Saved. AI will weigh these for everyone.');break}
+    case 'ai-rate-run':case 'ai-run':{if(!A||A.busy)return;if(!String(A.text||'').trim()&&!A.files.length){A.err='Paste the invite text or add a file first.';renderModal();return}
+      A.busy=true;A.err='';renderModal();const task=M.kind==='airate'?'rate':A.task;
+      const ctx=task==='rate'?{...aiLibCtx(),history:aiHistCtx()}:task==='invite'?aiLibCtx():{bid:M.draft.name,scopes:scopeItems(M.draft).map(x=>x.name),vendors_on_bid:M.draft.quotes.filter(qAsked).map(q=>({vendor:byId(S.vendors,q.vendor_id)?.company||'',scope:q.scope}))};
+      const mine=M;try{const r=await aiCall(task,{text:A.text,files:A.files,ctx});if(M!==mine)return;A.res=r;if(task==='invite')A.rows=aiInviteRows(M.draft,r)}catch(er){A.err=er.message||String(er)}A.busy=false;if(M===mine)renderModal();break}
+    case 'ai-apply':{if(!M||M.kind!=='bid'||!A.res)return;const b=M.draft,P=A.res;const on=A.rows.filter((r,i)=>{const c=document.querySelector(`[data-aipick="${i}"]`);return c?c.checked:r.on});
+      A.busy=true;renderModal();
+      for(const r of on){if(r.key==='gc'){const id=await aiEnsureGc(P);if(id&&!b.client_ids.includes(id))b.client_ids.push(id)}
+        else if(r.key==='scopes'){b.scope_items=[...scopeItems(b),...r.list.map(aiScopeItem)]}
+        else if(r.key==='notes'){b.notes=[b.notes,r.nv].filter(Boolean).join('\n\n')}
+        else b[r.key]=aiInviteVal(AI_FIELDS.find(f=>f[0]===r.key)[2],P)}
+      M.ai=null;renderModal();toast(`Added ${on.length} detail${on.length===1?'':'s'} from the invite${b._new?'. Click Create bid when it looks right.':''}`);break}
+    case 'ai-rate-copy':{const s=aiRateText(A.res);(navigator.clipboard?navigator.clipboard.writeText(s):Promise.reject()).then(()=>toast('Summary copied')).catch(()=>toast('Couldn’t copy. Select the text instead.'));break}
+    case 'ai-rate-decline':window.location.href=aiDecline(A.res.project||{});break;
+    case 'ai-rate-create':case 'ai-rate-nobid':{if(!isAdmin()||!A.res||A.busy)return;const R=A.res,P=R.project||{};A.busy=true;renderModal();
+      let gc=null;try{gc=await aiEnsureGc(P)}catch(er){toast('Couldn’t add the GC: '+errMsg(er))}
+      const d=aiDraft(P,R,gc);
+      if(a==='ai-rate-create'){M={kind:'bid',draft:d,origQuoteIds:[],tab:'project'};showModal();toast('Filled in from the invite. Check it over, then click Create bid.');break}
+      if(!d.name)d.name=P.gc_name?`Invite from ${P.gc_name}`:'Declined invite';d.status='No Bid';d.lost_reason=R.headline||'Passed after AI review';
+      try{await saveBid({},{kind:'bid',draft:d,origQuoteIds:[]});closeModal();toast(`Logged ${d.name} as No bid`)}catch(er){A.busy=false;A.err=errMsg(er);renderModal()}break}
+    case 'ai-lv-apply':{if(aiLvApply(+t.dataset.i))renderModal();break}
+    case 'ai-lv-all':{let n=0;(A.res.quotes||[]).forEach((q,i)=>{if(!(A.applied&&A.applied[i])&&aiLvApply(i))n++});renderModal();toast(n?`Put ${n} total${n===1?'':'s'} on the bid. Check the Quotes tab.`:'Nothing new to put on the bid');break}
+    case 'ai-lv-xlsx':await aiLvXlsx();break}
+  }catch(er){if(A){A.busy=false;A.err=errMsg(er)}toast(errMsg(er));renderModal()}});
+document.addEventListener('change',e=>{const t=e.target;if(!t.dataset||t.dataset.aifile==null||!M)return;const A=M.kind==='airate'?M:M.ai;if(A&&t.files&&t.files.length)aiAddFiles(A,t.files)});
+document.addEventListener('input',e=>{const t=e.target;if(!M||!t.dataset)return;const A=M.kind==='airate'?M:M.ai;if(!A)return;if(t.dataset.aitext!=null)A.text=t.value;if(t.dataset.airules!=null){A.rules=t.value;A.rulesOpen=true}});
+['dragover','dragleave','drop'].forEach(ev=>document.addEventListener(ev,e=>{const z=e.target.closest&&e.target.closest('[data-aidrop]');if(!z)return;e.preventDefault();
+  if(ev==='dragover')z.classList.add('over');else z.classList.remove('over');
+  if(ev==='drop'&&M){const A=M.kind==='airate'?M:M.ai;if(A&&e.dataTransfer&&e.dataTransfer.files.length)aiAddFiles(A,e.dataTransfer.files)}}));
+FOCUS_ATTRS.push('data-aitext','data-airules');
+
+/* ===================================================================================================
+   RIGHT-CLICK MENU on bid rows (Pipeline, Projects overview, anywhere a row opens a bid).
+   Shift + right-click still gives the browser's own menu.
+   =================================================================================================== */
+function ctxDraft(b){const d=Object.assign(newBid(),clone(b));d.scope_items=clone(scopeItems(b));d.quotes=clone(quotesFor(b.id));d.client_ids=d.client_ids||[];return d}
+function ctxClose(){const m=document.getElementById('ctxm');if(m)m.remove()}
+function ctxHtml(b){const d=ctxDraft(b);const work=canWork(b);const cur=bpStageIdx(d);const n=BP_TABS.length;
+  let adv='';if(work&&cur<n-1&&b.status!=='On Hold'){const key=BP_TABS[cur][0];const miss=bpMissing(d,key);const ep=key==='estprop'||BP_TABS[cur+1][0]==='estprop';
+    adv=`<button class="ctx-i" data-ctx="adv" data-id="${b.id}"><span>⏩ ${ep?(key==='estprop'?'Finish estimate & proposal…':'Start estimate & proposal…'):`Advance to ${esc(BP_TABS[cur+1][1])}`}</span>${miss.length?`<small>${miss.length} still open</small>`:''}</button>`}
+  const tabs=BP_TABS.map(([k,l],i)=>`<button class="ctx-i" data-ctx="tab" data-v="${k}" data-id="${b.id}"><span>${i<cur?'✓':i===cur?'●':'○'} ${esc(l)}</span></button>`).join('');
+  const st=BID_ST.map(s=>`<button class="ctx-i${s===b.status?' on':''}" data-ctx="st" data-v="${esc(s)}" data-id="${b.id}"><span>${s===b.status?'✓ ':''}${esc(stLabel(s)==='Submitted'?'Proposal sent':s)}</span></button>`).join('');
+  return `<div class="ctx-h"><b>${esc(b.name||'Untitled bid')}</b><small>${esc([clientName((b.client_ids||[])[0]),b.due_date?'Due '+fmtShort(b.due_date):''].filter(Boolean).join(' · '))}</small></div>
+    <button class="ctx-i" data-ctx="open" data-id="${b.id}"><span>📂 Open bid</span><small>Click</small></button>
+    <div class="ctx-sub"><button class="ctx-i"><span>↪ Go to</span><small>▸</small></button><div class="ctx-m">${tabs}</div></div>
+    ${adv}
+    ${work?`<div class="ctx-sub"><button class="ctx-i"><span>🏷 Status</span><small>${esc(stLabel(b.status)==='Submitted'?'Proposal sent':b.status)} ▸</small></button><div class="ctx-m">${st}</div></div>`:''}
+    <div class="ctx-sep"></div>
+    ${b.status==='Awarded'&&can('awards')?`<button class="ctx-i" data-ctx="aw" data-id="${b.id}"><span>🏗️ Open on Awarded</span></button>`:''}
+    <button class="ctx-i" data-ctx="print" data-id="${b.id}"><span>🖨 Print summary</span></button>
+    <button class="ctx-i" data-ctx="link" data-id="${b.id}"><span>🔗 Copy link to this bid</span></button>`}
+document.addEventListener('contextmenu',e=>{if(e.shiftKey)return;const r=e.target.closest&&e.target.closest('[data-act="open-bid"][data-id]');if(!r){ctxClose();return}
+  const b=byId(S.bids,r.dataset.id);if(!b)return;e.preventDefault();ctxClose();
+  const m=document.createElement('div');m.id='ctxm';m.className='ctxm';m.setAttribute('role','menu');m.innerHTML=ctxHtml(b);document.body.appendChild(m);
+  const W=innerWidth,H=innerHeight,w=m.offsetWidth,h=m.offsetHeight;const x=Math.min(e.clientX,W-w-8),y=Math.min(e.clientY,H-h-8);m.style.left=Math.max(8,x)+'px';m.style.top=Math.max(8,y)+'px';
+  if(x+w*2>W)m.classList.add('flip')});
+window.addEventListener('scroll',e=>{if(!(e.target&&e.target.closest&&e.target.closest('#ctxm')))ctxClose()},true);
+window.addEventListener('resize',()=>ctxClose());window.addEventListener('blur',e=>{if(e.target===window)ctxClose()});
+document.addEventListener('mouseover',e=>{const sub=e.target.closest&&e.target.closest('#ctxm .ctx-sub');if(!sub)return;const m=sub.querySelector('.ctx-m');if(!m||m.dataset.fit)return;m.dataset.fit=1;
+  const r=m.getBoundingClientRect();const over=r.bottom-(innerHeight-8);if(over>0)m.style.top=(-6-Math.min(over,r.top-8))+'px'});
+document.addEventListener('keydown',e=>{if(e.key==='Escape')ctxClose()});
+document.addEventListener('pointerdown',e=>{if(!e.target.closest||!e.target.closest('#ctxm'))ctxClose()},true);
+async function ctxStatus(b,v){if(!canWork(b)||b.status===v)return;const patch={status:v};if(v==='Awarded'&&!b.awarded_date)patch.awarded_date=todayStr();if(v==='Submitted'&&!b.submitted_date)patch.submitted_date=todayStr();
+  const was={...b};Object.assign(b,patch);render();
+  try{await run(sb.from('bids').update(patch).eq('id',b.id));toast(`${b.name}: ${stLabel(v)==='Submitted'?'Proposal sent':v}`)}catch(er){Object.assign(b,was);render();toast(errMsg(er))}}
+document.addEventListener('click',async e=>{const t=e.target.closest&&e.target.closest('#ctxm [data-ctx]');if(!t)return;e.stopPropagation();const b=byId(S.bids,t.dataset.id);ctxClose();if(!b)return;const k=t.dataset.ctx;
+  if(k==='open')openBid(b.id);
+  else if(k==='tab'){openBid(b.id);if(M&&M.kind==='bid'){M.tab=t.dataset.v;renderModal()}}
+  else if(k==='st')ctxStatus(b,t.dataset.v);
+  else if(k==='adv'){const d=ctxDraft(b);const cur=bpStageIdx(d);const key=BP_TABS[cur][0];const nx=BP_TABS[cur+1];const miss=bpMissing(d,key);
+    if(!miss.length&&key!=='estprop'&&nx[0]!=='estprop'){await ctxStatus(b,BP_ORDER[cur+1]);return}
+    openBid(b.id);if(!M||M.kind!=='bid')return;M.tab=key;renderModal();const btn=document.querySelector('#modal [data-act="bp-advance"]');if(btn)btn.click()}
+  else if(k==='aw'){openBid(b.id);const y=document.querySelector('#modal [data-act="aw-frombid"]');if(y)y.click()}
+  else if(k==='print'){openBid(b.id);const y=document.querySelector('#modal [data-act="op-open"]');if(y)y.click()}
+  else if(k==='link'){const u=location.origin+location.pathname+'#bid='+b.id;(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(()=>toast('Link copied')).catch(()=>toast(u))}},true);

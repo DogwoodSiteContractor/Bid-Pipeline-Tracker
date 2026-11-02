@@ -986,3 +986,28 @@ When a bid's due date changes after the bid is saved (an addendum, revised plans
 Everything else follows the new date: the dashboard, pipeline, follow-ups, Week in review and reports. The dashboard shows "↻ was Oct 29" under the date, and the bid header shows "(was …)". Reports have **Original bid date** and **Times the bid date moved** fields. With `supabase/update-47-bid-date-moves.sql` run, open chores on that bid move by the same number of days.
 
 **Paused follow-ups.** A paused bid shows **GC follow-up: Paused · Turn follow-ups back on** on its Follow-up & outcome tab, and the GC follow-ups list has a **Paused** tab with a **Turn back on** button for each. **Revisions restart the clock:** when a bid has a revision dated after the proposal first went out, follow-ups count from the latest revision's date (and the follow-up rounds start over), shown as "counting from Rev 2 (Oct 20)".
+
+## AI tools
+
+Three AI helpers. Files you give them (PDFs, pictures, pasted emails) are read once and **never stored**. Only the details you choose to keep go into the app.
+
+- **✨ Rate project** (Pipeline). Paste a bid invite or drop the PDF. AI pulls out the project facts and grades it **Go / Maybe / No-go** with a score and reasons. It weighs our own history: win rate with that GC, how we do on that project type and bid size, estimator workload around the due date, business days left, and the company's own rules ("What matters to us", editable by admins). Buttons: **Create bid** (opens a new bid filled in, GC added to Contacts if new), **Log as No bid** (so the invite still counts in history), **Copy summary**, **Draft a decline email**.
+- **✨ Fill from invite** (bid page → Project tab). Same reader; you tick which fields to put on the bid.
+- **✨ Level quotes** (bid page → Quotes tab). Drop several vendor quotes. AI lines them up by scope, shows totals, includes, excludes and conditions side by side, and flags gaps (what one vendor includes and another leaves out). **Put on the bid** fills the quote amount and marks it Received; **Export leveling to Excel** saves the sheet.
+
+Turn the whole set on or off under Team → Tabs in use → **AI tools**.
+
+### Setting it up (one time, in Supabase)
+
+The AI key is kept in a Supabase server function. It is never in `app.js` or `config.js`.
+
+1. Get an API key from console.anthropic.com (Settings → API keys). Set a monthly spend limit there too.
+2. Supabase dashboard → **Edge Functions** → **Deploy a new function** → **Via editor**. Name it exactly `ai`, paste the contents of `supabase/functions/ai/index.ts`, and deploy.
+3. Edge Functions → **Secrets** → add `ANTHROPIC_API_KEY` with your key. (Optional: `AI_MODEL` to pick a different Claude model.)
+4. Reload the app and try **✨ Rate project**. Until the function is deployed, the buttons say "AI isn't set up yet."
+
+Only signed-in users can call the function. Each document read typically costs a few cents.
+
+## Right-click menu on bids
+
+Right-click any bid (Pipeline cards or list, Projects overview, anywhere a bid opens on click) for a quick menu: **Open bid**, **Go to** a step (Project, Scopes & RFQs, Takeoff, Quotes, Estimate & proposal, Follow-up), **Advance** to the next step (goes straight through when nothing's open; otherwise opens the bid to confirm), **Status**, **Open on Awarded**, **Print summary**, and **Copy link**. Shift + right-click gives the browser's normal menu.
