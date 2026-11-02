@@ -991,9 +991,9 @@ Everything else follows the new date: the dashboard, pipeline, follow-ups, Week 
 
 Three AI helpers. Files you give them (PDFs, pictures, pasted emails) are read once and **never stored**. Only the details you choose to keep go into the app.
 
-- **✨ Rate project** (Pipeline). Paste a bid invite or drop the PDF. AI pulls out the project facts and grades it **Go / Maybe / No-go** with a score and reasons. It weighs our own history: win rate with that GC, how we do on that project type and bid size, estimator workload around the due date, business days left, and the company's own rules ("What matters to us", editable by admins). Buttons: **Create bid** (opens a new bid filled in, GC added to Contacts if new), **Log as No bid** (so the invite still counts in history), **Copy summary**, **Draft a decline email**.
+- **✨ Rate project** (Pipeline). Paste a bid invite, drop the PDF, or paste a screenshot with Ctrl+V. AI pulls out the project facts and grades it **Go / Maybe / No-go** with a score and reasons. It weighs our own history: win rate with that GC, how we do on that project type and bid size, estimator workload around the due date, business days left, and the company's own rules ("What matters to us", editable by admins). Buttons: **Create bid** (opens a new bid filled in, GC added to Contacts if new), **Log as No bid** (so the invite still counts in history), **Copy summary**, **Draft a decline email**.
 - **✨ Fill from invite** (bid page → Project tab). Same reader; you tick which fields to put on the bid.
-- **✨ Level quotes** (bid page → Quotes tab). Drop several vendor quotes. AI lines them up by scope, shows totals, includes, excludes and conditions side by side, and flags gaps (what one vendor includes and another leaves out). **Put on the bid** fills the quote amount and marks it Received; **Export leveling to Excel** saves the sheet.
+- **✨ Level quotes** (bid page → Quotes tab). Drop several vendor quotes (or paste screenshots with Ctrl+V). AI lines them up by scope, shows totals, includes, excludes and conditions side by side, and flags gaps (what one vendor includes and another leaves out). **Put on the bid** fills the quote amount and marks it Received; **Export leveling to Excel** saves the sheet.
 
 Turn the whole set on or off under Team → Tabs in use → **AI tools**.
 

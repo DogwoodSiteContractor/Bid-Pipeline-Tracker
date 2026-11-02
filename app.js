@@ -13948,6 +13948,7 @@ FOCUS_ATTRS.push('data-duereason');
 
 
 
+
 /* ===================================================================================================
    AI TOOLS — read a bid invite, rate a project go / no-go, level vendor quotes.
    Files are read in the browser, sent once to the Supabase "ai" function, and never stored.
@@ -13970,7 +13971,8 @@ async function aiAddFiles(A,list){const errs=[];for(const f of [...list]){try{co
   A.err=errs.join(' ');renderModal()}
 async function aiCall(task,{text,files,ctx}){
   if(!sb)throw new Error('Not connected to the database.');
-  const {data,error}=await sb.functions.invoke('ai',{body:{task,text:text||'',files:(files||[]).map(({size,...f})=>f),ctx}});
+  const call=sb.functions.invoke('ai',{body:{task,text:text||'',files:(files||[]).map(({size,...f})=>f),ctx}});
+  const {data,error}=await Promise.race([call,new Promise((_,rej)=>setTimeout(()=>rej(new Error('The AI took too long (over 2 minutes). Try again, or use fewer or smaller files.')),145000))]);
   if(error){let m=error.message||'';try{const j=await error.context.json();if(j&&j.error)m=j.error}catch(e){}
     if(/failed to send|not found|404|fetch/i.test(m))m='AI isn’t set up yet. The “ai” function needs to be deployed in Supabase (README → AI tools).';
     throw new Error(m)}
@@ -14010,7 +14012,7 @@ function aiDraft(P,R,gcId){const d=newBid();
     size:P.size||'',due_date:aiDate(P.due_date),due_time:aiTime(P.due_time),walk_date:aiDate(P.walk_date),rfi_date:aiDate(P.rfi_date),notes:aiNotes(P,R)});
   if(gcId)d.client_ids=[gcId];const seen=new Set();d.scope_items=(P.scopes||[]).filter(n=>{const k=normH(n);if(!k||seen.has(k))return false;seen.add(k);return true}).map(aiScopeItem);return d}
 const aiBizLeft=s=>{if(!aiDate(s))return null;const t=todayStr();return s<t?-1:bizDays(t,s)};
-function aiDrop(A,hint){return `<label class="ai-drop" data-aidrop="1"><input type="file" multiple accept="${AI_ACCEPT}" data-aifile="1" hidden><b>Drop files here or click to choose</b><span>${esc(hint)}</span></label>
+function aiDrop(A,hint){return `<label class="ai-drop" data-aidrop="1"><input type="file" multiple accept="${AI_ACCEPT}" data-aifile="1" hidden><b>Drop files, click to choose, or paste a screenshot (Ctrl+V)</b><span>${esc(hint)}</span></label>
   ${A.files.length?`<div class="ai-files">${A.files.map((f,i)=>`<span class="ai-file">📄 ${esc(f.name)}<button class="x" data-act="ai-rmfile" data-i="${i}" aria-label="Remove">×</button></span>`).join('')}</div>`:''}
   ${A.err?`<div class="notice bad" style="margin:10px 0 0">${esc(A.err)}</div>`:''}`}
 const aiPrivacy='<p class="small dim ai-priv">🔒 Files are read once and not saved. Only the details you keep go into the app.</p>';
@@ -14119,7 +14121,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
     case 'ai-rmfile':if(A){A.files.splice(+t.dataset.i,1);renderModal()}break;
     case 'ai-rules-save':{if(!isAdmin()||!A)return;const g={...(S.settings.general||{}),aiRules:String(A.rules!=null?A.rules:aiRules()).trim()};S.settings.general=g;await run(sb.from('settings').upsert({key:'general',value:g}));await loadTable('settings');toast('Saved. AI will weigh these for everyone.');break}
     case 'ai-rate-run':case 'ai-run':{if(!A||A.busy)return;if(!String(A.text||'').trim()&&!A.files.length){A.err='Paste the invite text or add a file first.';renderModal();return}
-      A.busy=true;A.err='';renderModal();const task=M.kind==='airate'?'rate':A.task;
+      A.busy=true;A.err='';renderModal();aiTick(A);const task=M.kind==='airate'?'rate':A.task;
       const ctx=task==='rate'?{...aiLibCtx(),history:aiHistCtx()}:task==='invite'?aiLibCtx():{bid:M.draft.name,scopes:scopeItems(M.draft).map(x=>x.name),vendors_on_bid:M.draft.quotes.filter(qAsked).map(q=>({vendor:byId(S.vendors,q.vendor_id)?.company||'',scope:q.scope}))};
       const mine=M;try{const r=await aiCall(task,{text:A.text,files:A.files,ctx});if(M!==mine)return;A.res=r;if(task==='invite')A.rows=aiInviteRows(M.draft,r)}catch(er){A.err=er.message||String(er)}A.busy=false;if(M===mine)renderModal();break}
     case 'ai-apply':{if(!M||M.kind!=='bid'||!A.res)return;const b=M.draft,P=A.res;const on=A.rows.filter((r,i)=>{const c=document.querySelector(`[data-aipick="${i}"]`);return c?c.checked:r.on});
@@ -14192,3 +14194,14 @@ document.addEventListener('click',async e=>{const t=e.target.closest&&e.target.c
   else if(k==='aw'){openBid(b.id);const y=document.querySelector('#modal [data-act="aw-frombid"]');if(y)y.click()}
   else if(k==='print'){openBid(b.id);const y=document.querySelector('#modal [data-act="op-open"]');if(y)y.click()}
   else if(k==='link'){const u=location.origin+location.pathname+'#bid='+b.id;(navigator.clipboard?navigator.clipboard.writeText(u):Promise.reject()).then(()=>toast('Link copied')).catch(()=>toast(u))}},true);
+
+// a running timer on the busy button so it's clear the AI is working
+function aiTick(A){A.t0=Date.now();clearInterval(A.tick);A.tick=setInterval(()=>{if(!A.busy){clearInterval(A.tick);return}const el=document.querySelector('#modal [data-act="ai-rate-run"],#modal [data-act="ai-run"]');
+  if(el){const s=Math.round((Date.now()-A.t0)/1000);el.textContent=`${M&&M.kind==='airate'?'Reading and rating':'Reading'}… ${s}s`}},1000)}
+// paste a screenshot (or copied file) straight in with Ctrl+V
+document.addEventListener('paste',e=>{if(!M)return;const A=M.kind==='airate'?M:M.ai;if(!A||A.res||A.busy)return;
+  const items=[...((e.clipboardData&&e.clipboardData.items)||[])].filter(i=>i.kind==='file');if(!items.length)return;
+  e.preventDefault();const stamp=new Date().toTimeString().slice(0,8).replace(/:/g,'');
+  const files=items.map((i,n)=>{const f=i.getAsFile();if(!f)return null;const ext=(f.type.split('/')[1]||'png').replace('jpeg','jpg');
+    return /^image\//.test(f.type)&&(!f.name||/^image\.\w+$/i.test(f.name))?new File([f],`Screenshot ${stamp}${n?'-'+n:''}.${ext}`,{type:f.type}):f}).filter(Boolean);
+  if(files.length){aiAddFiles(A,files);toast(files.length===1?'Screenshot added':`${files.length} files added`)}});
