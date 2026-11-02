@@ -2958,3 +2958,6 @@ div.tw-pgh{cursor:default}
 .ctx-m{display:none;position:absolute;left:100%;top:-6px;min-width:220px;padding:6px;border-radius:10px;background:var(--surface);border:1px solid var(--line);box-shadow:0 12px 32px rgba(0,0,0,.28);max-height:70vh;overflow:auto}
 .ctxm.flip .ctx-m{left:auto;right:100%}
 .ctx-sub:hover>.ctx-m,.ctx-sub:focus-within>.ctx-m{display:block}
+.rh-mi{display:flex;gap:6px}.rh-mi .field{flex:1;min-width:0}
+.rh-qs{display:flex;flex-direction:column;gap:6px;margin:14px 0 6px}.rh-qs small{margin-left:4px}
+.rr-q{width:100%;border-collapse:collapse}.rr-q td{padding:4px 6px 4px 0}

@@ -995,7 +995,17 @@ Three AI helpers. Files you give them (PDFs, pictures, pasted emails) are read o
 - **✨ Fill from invite** (bid page → Project tab). Same reader; you tick which fields to put on the bid.
 - **✨ Level quotes** (bid page → Quotes tab). Drop several vendor quotes (or paste screenshots with Ctrl+V). AI lines them up by scope, shows totals, includes, excludes and conditions side by side, and flags gaps (what one vendor includes and another leaves out). **Put on the bid** fills the quote amount and marks it Received; **Export leveling to Excel** saves the sheet.
 
-Turn the whole set on or off under Team → Tabs in use → **AI tools**.
+**Turning AI off:** Settings → **AI & bid rating** → untick **AI is on**. Every AI option is hidden for everyone. **Rate project** stays, in **Rate by hand** mode.
+
+**Rate by hand** (always available, and a second tab next to the AI reader when AI is on): fill in project, GC, type, bid due, rough number, miles from the yard (**Estimate** works it out from the location and the yard address) and tick the yes / no questions. The score starts at 50 and each factor adds or takes away points:
+- win rate with that GC, on that project type, and at that job size, each against our overall win rate (needs 3+ decided bids)
+- job size inside our smallest–largest range
+- business days left to bid against our minimum
+- other bids due within 3 days of it against our weekly limit
+- miles from the yard against our limit
+- each ticked question's points
+
+Go / Maybe / No-go cut-offs, the limits, how much each factor counts, and the questions are all set in Settings → AI & bid rating. The AI rating weighs the same rules.
 
 ### Setting it up (one time, in Supabase)
 

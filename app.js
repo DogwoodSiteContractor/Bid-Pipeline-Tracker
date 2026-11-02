@@ -735,7 +735,7 @@ function vPipeline(){
     map:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14.5s-4.5-4.2-4.5-7.7a4.5 4.5 0 0 1 9 0c0 3.5-4.5 7.7-4.5 7.7z"/><circle cx="8" cy="6.8" r="1.6"/></svg>'};
   const body=!list.length&&pv.mode!=='calendar'?`<div class="panel"><div class="empty"><b>No bids match</b>${pool.length?(q||nf||S.filter!=='active'?`Try a different search or filter. <button class="linkbtn" data-act="pv-reset">Clear search and filters</button>`:'Nothing active right now.'):est?'Bids assigned to you will appear here.':'Create your first bid to fill the pipeline.'}</div></div>`
     :pv.mode==='list'?listView(list):pv.mode==='calendar'?calendarView(list):pv.mode==='map'?bmView(list):`<div class="cards${S.selMode?' selecting':''}">${list.map(card).join('')}</div>`;
-  return `<div class="head"><div><h1>${est?'My bids':'Pipeline'}</h1><p>${pool.filter(live).length} bid${pool.filter(live).length===1?'':'s'}${est?' assigned to you':' on file'}</p></div><div class="tools">${mineSeg()}${est||scopeView()?'':'<button class="btn" data-act="export-xlsx">Export Excel</button><button class="btn ghost" data-act="export">CSV</button>'}${isAdmin()?`<button class="btn" data-act="arch-open" title="Archive old or filler bids in one go: all of them, an Excel import, everything due before a date…">🗄 Archive…</button><button class="btn${S.selMode?' primary':''}" data-act="sel-mode">${S.selMode?'Selecting…':'Select'}</button>`:''}${aiOn()&&can('bids','view')?'<button class="btn ai-btn" data-act="ai-rate-open" title="Paste an invite; AI grades it go / no-go from our history">✨ Rate project</button>':''}${isAdmin()?'<button class="btn" data-act="import">Import from Excel</button><button class="btn primary" data-act="new-bid">+ New bid</button>':''}</div></div>
+  return `<div class="head"><div><h1>${est?'My bids':'Pipeline'}</h1><p>${pool.filter(live).length} bid${pool.filter(live).length===1?'':'s'}${est?' assigned to you':' on file'}</p></div><div class="tools">${mineSeg()}${est||scopeView()?'':'<button class="btn" data-act="export-xlsx">Export Excel</button><button class="btn ghost" data-act="export">CSV</button>'}${isAdmin()?`<button class="btn" data-act="arch-open" title="Archive old or filler bids in one go: all of them, an Excel import, everything due before a date…">🗄 Archive…</button><button class="btn${S.selMode?' primary':''}" data-act="sel-mode">${S.selMode?'Selecting…':'Select'}</button>`:''}${can('bids','view')?`<button class="btn ai-btn" data-act="ai-rate-open" title="Grade an invite go / no-go against our history and rules">${aiOn()?'✨ ':''}Rate project</button>`:''}${isAdmin()?'<button class="btn" data-act="import">Import from Excel</button><button class="btn primary" data-act="new-bid">+ New bid</button>':''}</div></div>
   <div class="bar">${FILTERS.map(([k,l,fn])=>`<button class="chip ${S.filter===k?'on':''}" data-act="filter" data-v="${k}">${l}<b>${base.filter(b=>live(b)&&fn(b)).length}</b></button>`).join('')}${base.some(b=>b.archived_at)||inArch?`<button class="chip ${inArch?'on':''}" data-act="filter" data-v="archived">🗄 Archived<b>${base.filter(b=>b.archived_at).length}</b></button>`:''}</div>
   <div class="pv-bar">
     <div class="pv-search"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><input id="q-pipe" class="field" placeholder="Search projects, GCs, estimators, scopes, vendors, notes…" value="${esc(S.q.pipe||'')}" data-q="pipe" aria-label="Search bids">${S.q.pipe?'<button class="rm" data-act="pv-clearq" aria-label="Clear search">×</button>':'<kbd>/</kbd>'}</div>
@@ -6720,7 +6720,7 @@ const LVL_LABEL={none:'No access',view:'View',edit:'Edit'};
 function rolePerm(r,a){const o=ROLE_ACCESS[r]||ROLE_ACCESS.pending;return o[a]||(a==='bids_scope'?'all':'none')}
 function permOf(p,a){if(!p)return rolePerm('pending',a);if(p.role==='admin'||p.role==='pending')return rolePerm(p.role,a);const o=p.perms&&p.perms[a];return o||rolePerm(p.role,a)}
 // Tabs an admin has switched off for the whole company. Display only: it hides the tab and everything that leads to it.
-const TAB_SWITCH=[['dash','Dashboard'],['bids','Pipeline'],['estimates','Estimates','Estimates, codebooks, bid settings and templates'],['awards','Awarded'],['jobs','Jobs'],['acct','Accounting'],['contacts','Contacts'],['calc','Calculators'],['reports','Reports'],['ai','AI tools','Read bid invites, rate projects go / no-go, level vendor quotes'],['fun','Break room'],['help','Help']];
+const TAB_SWITCH=[['dash','Dashboard'],['bids','Pipeline'],['estimates','Estimates','Estimates, codebooks, bid settings and templates'],['awards','Awarded'],['jobs','Jobs'],['acct','Accounting'],['contacts','Contacts'],['calc','Calculators'],['reports','Reports'],['fun','Break room'],['help','Help']];
 const tabsOff=()=>{const v=S.settings&&S.settings.general&&S.settings.general.tabsOff;return Array.isArray(v)?v:[]};
 // the developer can turn tabs on or off just for themselves (kept on their own profile), whatever the company setting is
 const devTabs=()=>isDev()&&S.profile&&S.profile.profile&&S.profile.profile.devTabs||{};
@@ -12337,7 +12337,7 @@ new MutationObserver(()=>{if(document.getElementById('bm-map'))bmMount()}).obser
    One place for the company-wide settings. The small ones are edited right here; the big editors that already have
    their own pages (estimate & bid settings, proposal wording, trades & scopes, positions, tabs in use…) are listed
    under "Everything else" and open in place. All of it is saved in the settings table, which only admins can write. */
-const ADM_SECS=[['company','Company','Name and contact details on the tracker and vendor pages'],['scopes','Scope categories','The categories bids are built from, and the scopes in each'],['pesheet','Bid item sheet','The bid items estimators fill in and export'],['review','Final review','Checklist items, warn or hard stop, who signs'],['followup','GC follow-ups','How often to follow up after a proposal goes out'],['rfq','RFQ email','The email that asks vendors for quotes'],['map','Bid map','The yard, for drive times'],['takeoff','Takeoff imports','The reports you import for every job'],['more','Everything else','Settings that have their own pages']];
+const ADM_SECS=[['company','Company','Name and contact details on the tracker and vendor pages'],['scopes','Scope categories','The categories bids are built from, and the scopes in each'],['pesheet','Bid item sheet','The bid items estimators fill in and export'],['review','Final review','Checklist items, warn or hard stop, who signs'],['followup','GC follow-ups','How often to follow up after a proposal goes out'],['rfq','RFQ email','The email that asks vendors for quotes'],['map','Bid map','The yard, for drive times'],['takeoff','Takeoff imports','The reports you import for every job'],['ai','AI & bid rating','Turn AI on or off; the rules Rate project scores against'],['more','Everything else','Settings that have their own pages']];
 S.adm={sec:'company',d:null};
 function admInit(sec){const g=S.settings.general||{};
   if(sec==='company'){const c=S.settings.company||{};return {companyName:g.companyName||'',...Object.fromEntries(['name','street','city','phone','web','email'].map(k=>['co_'+k,c[k]||'']))}}
@@ -12354,6 +12354,7 @@ function vAdmin(){if(!isAdmin())return '<div class="empty"><b>Admins only.</b>As
   const rad=(k,v,l,h)=>`<label><input type="radio" name="adm-${k}" data-admf="${k}" value="${v}"${d[k]===v?' checked':''}> <b>${l}</b>${h?` <span class="dim">${h}</span>`:''}</label>`;
   const save=(l='Save')=>`<div class="adders"><button class="btn primary" data-act="adm-save"${A.busy?' disabled':''}>${A.busy?'Saving…':l}</button>${A.dirty?'<span class="small warn-t">Not saved yet</span>':''}</div>`;
   let body='';
+  if(A.sec==='ai')body=aiAdminHtml();
   if(A.sec==='company')body=`<div class="panel pad"><div class="fg">${inp('companyName','Company name in the app',APP_NAME,{cls:'s4'})}</div></div>
     <div class="panel pad"><h3 class="adm-h">On the client tracker and vendor pages</h3><div class="fg">${inp('co_name','Name',COMPANY_DEF.name,{cls:'s2'})}${inp('co_street','Street address',COMPANY_DEF.street,{cls:'s2'})}${inp('co_city','City, state, ZIP',COMPANY_DEF.city,{cls:'s2'})}${inp('co_phone','Main phone',COMPANY_DEF.phone,{type:'tel'})}${inp('co_web','Website',COMPANY_DEF.web)}${inp('co_email','Email',COMPANY_DEF.email,{cls:'s2',type:'email'})}</div>
       <p class="hint">Blank boxes use what’s shown in grey.</p></div>${save()}`;
@@ -13949,12 +13950,15 @@ FOCUS_ATTRS.push('data-duereason');
 
 
 
+
+
+
 /* ===================================================================================================
    AI TOOLS — read a bid invite, rate a project go / no-go, level vendor quotes.
    Files are read in the browser, sent once to the Supabase "ai" function, and never stored.
    The AI key lives only in that function's secrets (ANTHROPIC_API_KEY), never in this file.
    =================================================================================================== */
-const aiOn=()=>!tabOff('ai');
+const aiOn=()=>!(S.settings&&S.settings.general&&S.settings.general.aiOff);
 const AI_ACCEPT='.pdf,.png,.jpg,.jpeg,.webp,.txt,.eml,.htm,.html,application/pdf,image/*,text/plain';
 const AI_MAX=18e6;
 const aiD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
@@ -13995,7 +13999,7 @@ function aiHistCtx(){
     by_project_type:grp(b=>b.project_type||'Other').map(([k,a])=>({type:k,...agg(a)})),
     by_bid_value:grp(b=>bk(bidValue(b))).map(([k,a])=>({bid_value:k,...agg(a)})),
     workload:{open_bids_not_sent:act.length,due_by_week:wk,by_estimator:S.estimators.filter(e=>e.active!==false).map(e=>({estimator:e.name,open_bids:act.filter(b=>b.lead_estimator_id===e.id).length}))},
-    company_rules:aiRules()}}
+    company_rules:aiRules(),rating_rules:rateRules()}}
 const aiGc=n=>{const k=normH(n);if(!k)return null;const L=S.clients;return L.find(c=>normH(c.company)===k)||L.find(c=>{const c2=normH(c.company);return c2.length>3&&(c2.includes(k)||k.includes(c2))})||null};
 const aiDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(String(s||''))?s:'';
 const aiTime=s=>/^\d{1,2}:\d{2}$/.test(String(s||''))?String(s).padStart(5,'0'):'';
@@ -14028,8 +14032,12 @@ function aiFactsHtml(P,gcHit){const left=aiBizLeft(P.due_date);
     ${(P.missing||[]).length?`<div class="ai-list dim"><b>Not in the invite</b><ul>${P.missing.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}`}
 
 /* ----- Rate a project (Pipeline → ✨ Rate project) ----- */
-function aiRateModal(){const A=M;const R=A.res;
+function aiRateModal(){const A=M;const R=A.res;const ai=aiOn();const mode=ai?(A.mode||'ai'):'hand';
+  if(!R&&mode==='hand')return mhead('Rate a project','Fill in what you know. The app scores it against our bid history and the company’s rules.')+`<div class="mbody">
+    ${ai?`<div class="seg" style="margin-bottom:14px"><button data-act="ai-rate-mode" data-v="ai">✨ AI reads the invite</button><button class="on" data-act="ai-rate-mode" data-v="hand">Rate by hand</button></div>`:''}${rateHandForm(A)}</div>
+    <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="ai-rate-hand">Score it</button></div></div>`;
   if(!R)return mhead('✨ Rate a project','Paste the invite or drop the PDF. AI reads it, checks it against our bid history and workload, and says go or no-go.')+`<div class="mbody">
+    <div class="seg" style="margin-bottom:14px"><button class="on" data-act="ai-rate-mode" data-v="ai">✨ AI reads the invite</button><button data-act="ai-rate-mode" data-v="hand">Rate by hand</button></div>
     <label class="f"><span class="f-lab">Invite email or notes</span><textarea class="field" rows="7" data-aitext="1" placeholder="Paste the bid invite email here…">${esc(A.text||'')}</textarea></label>
     ${aiDrop(A,'PDF invites, plan cover sheets, screenshots, or a saved .eml / .txt email')}
     <details class="ai-rules"${A.rulesOpen?' open':''}><summary>What matters to us when deciding</summary><p class="small dim">AI weighs these along with our history.${isAdmin()?' Admins can edit them; they apply for everyone.':''}</p>
@@ -14038,14 +14046,14 @@ function aiRateModal(){const A=M;const R=A.res;
     ${aiPrivacy}</div>
     <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="ai-rate-run"${A.busy?' disabled':''}>${A.busy?'Reading and rating…':'Rate it'}</button></div></div>`;
   const P=R.project||{};const v=R.verdict||'Maybe';const cls=v==='Go'?'good':v==='No-go'?'bad':'warn';const gcHit=aiGc(P.gc_name);
-  return mhead('✨ Bid recommendation',P.project_name||'')+`<div class="mbody">
+  return mhead(R.manual?'Bid recommendation · our rules':'✨ Bid recommendation',P.project_name||'')+`<div class="mbody">
     <div class="ai-verdict ${cls}"><div class="ai-score"><b>${Math.round(num(R.score)||0)}</b><small>of 100</small></div><div><h3>${esc(v==='No-go'?'No-go':v)}</h3><p>${esc(R.headline||'')}</p></div></div>
     <div class="ai-cols"><div><h4>Why</h4><ul class="ai-why">${(R.reasons||[]).map(x=>`<li class="${x.impact==='plus'?'p':x.impact==='minus'?'m':'n'}"><i>${x.impact==='plus'?'+':x.impact==='minus'?'–':'·'}</i><span><b>${esc(x.factor)}</b> ${esc(x.detail)}</span></li>`).join('')}</ul>
       ${(R.risks||[]).length?`<div class="ai-list"><b>Risks</b><ul>${R.risks.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
       ${(R.questions||[]).length?`<div class="ai-list"><b>Ask the GC</b><ul>${R.questions.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}</div>
-      <div><h4>From the invite</h4>${aiFactsHtml(P,gcHit)}</div></div>
+      <div><h4>${R.manual?'What you entered':'From the invite'}</h4>${aiFactsHtml(P,gcHit)}</div></div>
     ${A.err?`<div class="notice bad">${esc(A.err)}</div>`:''}
-    <p class="small dim">A recommendation from our own history, not a decision. ${aiPrivacy.replace(/<\/?p[^>]*>/g,'')}</p></div>
+    <p class="small dim">A recommendation from our own history, not a decision. ${R.manual?'Scored by hand against the rules in Settings → AI & bid rating.':aiPrivacy.replace(/<\/?p[^>]*>/g,'')}</p></div>
     <div class="mfoot"><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-act="ai-rate-again">← Start over</button><button class="btn" data-act="ai-rate-copy">Copy summary</button>${P.gc_contact&&P.gc_contact.email?'<button class="btn" data-act="ai-rate-decline">Draft a decline email</button>':''}</div>
       <div class="r">${isAdmin()?`<button class="btn" data-act="ai-rate-nobid"${A.busy?' disabled':''} title="Saves the invite as a No Bid so it counts in our history">Log as No bid</button><button class="btn primary" data-act="ai-rate-create"${A.busy?' disabled':''}>Create bid →</button>`:'<span class="small dim">Ask an admin to create the bid.</span>'}</div></div>`}
 function aiRateText(R){const P=R.project||{};return [`${P.project_name||'Project'}: ${R.verdict} (${Math.round(num(R.score)||0)}/100)`,R.headline||'','',...(R.reasons||[]).map(x=>`${x.impact==='plus'?'+':x.impact==='minus'?'–':'·'} ${x.factor}: ${x.detail}`),
@@ -14114,6 +14122,8 @@ async function aiLvXlsx(){const A=M.ai,b=M.draft;const X=await loadXLSX();const 
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('ai-'))return;
   const A=M&&(M.kind==='airate'?M:M.ai);
   try{switch(a){
+    case 'ai-rate-mode':if(M&&M.kind==='airate'){M.mode=t.dataset.v;M.err='';renderModal()}break;
+    case 'ai-rate-hand':{if(!M||M.kind!=='airate')return;const F=M.hand||{q:{}};if(!String(F.name||'').trim()&&!String(F.gc_name||'').trim()){toast('Add at least the project name or the GC');return}M.res=rateByHand(F);renderModal();break}
     case 'ai-rate-open':M={kind:'airate',text:'',files:[],res:null,err:'',busy:false};showModal();break;
     case 'ai-invite':case 'ai-quotes':if(!M||M.kind!=='bid')return;M.ai={task:a==='ai-quotes'?'quotes':'invite',text:'',files:[],res:null,err:'',busy:false};renderModal();break;
     case 'ai-back':if(M&&M.kind==='bid'){M.ai=null;renderModal()}break;
@@ -14205,3 +14215,83 @@ document.addEventListener('paste',e=>{if(!M)return;const A=M.kind==='airate'?M:M
   const files=items.map((i,n)=>{const f=i.getAsFile();if(!f)return null;const ext=(f.type.split('/')[1]||'png').replace('jpeg','jpg');
     return /^image\//.test(f.type)&&(!f.name||/^image\.\w+$/i.test(f.name))?new File([f],`Screenshot ${stamp}${n?'-'+n:''}.${ext}`,{type:f.type}):f}).filter(Boolean);
   if(files.length){aiAddFiles(A,files);toast(files.length===1?'Screenshot added':`${files.length} files added`)}});
+
+/* ===================================================================================================
+   AI ON / OFF (Settings → AI & bid rating) and RATE BY HAND (scores a job against the company's rules).
+   =================================================================================================== */
+const RATE_DEF={minJob:150000,maxJob:5000000,maxMiles:90,weekCap:4,minDays:5,go:70,maybe:45,
+  w:{gc:15,type:10,size:5,lead:15,work:15,dist:15,range:20},
+  questions:[{q:'Complete civil plans are out',pts:10},{q:'Repeat client or a strong relationship',pts:10},{q:'Bond required',pts:-5},{q:'Public job / prevailing wage',pts:-5},{q:'Liquidated damages or a tight schedule',pts:-10}]};
+const RATE_W=[['gc','Win rate with the GC'],['type','Win rate on this project type'],['size','Win rate at this job size'],['lead','Time to bid (business days)'],['work','Estimator workload that week'],['dist','Distance from the yard'],['range','Job size inside our range']];
+function rateRules(){const r=S.settings.rating||{};return {...RATE_DEF,...r,w:{...RATE_DEF.w,...(r.w||{})},questions:Array.isArray(r.questions)?r.questions:RATE_DEF.questions}}
+function rateWinStats(arr){const won=arr.filter(b=>b.status==='Awarded').length,lost=arr.filter(b=>b.status==='Not Awarded').length;return {won,lost,n:won+lost,rate:won+lost?won/(won+lost):null}}
+const rateBucket=v=>!v?null:v<250e3?'under $250K':v<1e6?'$250K–$1M':v<3e6?'$1M–$3M':'over $3M';
+// F = the hand-entered form; returns the same shape the AI returns so one results screen shows both
+function rateByHand(F){const R=rateRules(),W=R.w;const y=new Date();y.setFullYear(y.getFullYear()-3);const since=aiD(y);
+  const hist=S.bids.filter(b=>live(b)&&(b.due_date||'9')>=since);const all=rateWinStats(hist);const base=all.rate==null?0.3:all.rate;
+  const reasons=[],risks=[];let score=50;const pct=x=>Math.round(x*100)+'%';
+  const add=(factor,pts,detail)=>{pts=Math.round(pts);score+=pts;reasons.push({factor,impact:pts>0?'plus':pts<0?'minus':'neutral',detail:detail+(pts?` (${pts>0?'+':''}${pts})`:''),pts})};
+  const vs=(factor,arr,w,what)=>{if(!w)return;const s=rateWinStats(arr);if(s.n<3){add(factor,0,`Only ${s.n} decided bid${s.n===1?'':'s'} ${what}, not enough to judge.`);return}
+    const d=Math.max(-1,Math.min(1,(s.rate-base)/0.2));add(factor,d*w,`We won ${s.won} of ${s.n} (${pct(s.rate)}) ${what}, against ${pct(base)} overall.`)};
+  const gc=F.gc_id?byId(S.clients,F.gc_id):aiGc(F.gc_name);
+  if(gc)vs('GC history',hist.filter(b=>(b.client_ids||[]).includes(gc.id)),W.gc,`with ${gc.company}`);else if(F.gc_name)add('GC history',0,`${F.gc_name} is new to us, no history yet.`);
+  if(F.project_type)vs('Project type',hist.filter(b=>(b.project_type||'Other')===F.project_type),W.type,`on ${F.project_type} jobs`);
+  const v=num(F.value);
+  if(v){vs('Job size',hist.filter(b=>rateBucket(bidValue(b))===rateBucket(v)),W.size,`at ${rateBucket(v)}`);
+    if(W.range){if(R.minJob&&v<R.minJob)add('Size range',-W.range,`${money(v)} is under our ${money(R.minJob)} minimum.`);else if(R.maxJob&&v>R.maxJob)add('Size range',-W.range*0.75,`${money(v)} is over our ${money(R.maxJob)} maximum.`);else add('Size range',W.range/4,`${money(v)} is inside our ${money(R.minJob)}–${money(R.maxJob)} range.`)}}
+  else reasons.push({factor:'Job size',impact:'neutral',detail:'No estimated value entered.'});
+  const left=aiBizLeft(F.due_date);
+  if(F.due_date&&W.lead){if(left<0)add('Lead time',-W.lead*1.5,'The due date has already passed.');else if(left<R.minDays)add('Lead time',-W.lead,`Only ${left} business day${left===1?'':'s'} to bid; we want ${R.minDays}.`);else if(left<R.minDays+3)add('Lead time',-W.lead/3,`${left} business days to bid, a little tight.`);else add('Lead time',W.lead/3,`${left} business days to bid.`)}
+  if(F.due_date&&W.work){const d=parseD(F.due_date);const a=new Date(d);a.setDate(a.getDate()-3);const z=new Date(d);z.setDate(z.getDate()+3);const A=aiD(a),Z=aiD(z);
+    const n=S.bids.filter(b=>live(b)&&ACTIVE.includes(b.status)&&b.status!=='On Hold'&&!isSent(b)&&b.due_date>=A&&b.due_date<=Z).length;const cap=num(R.weekCap)||4;
+    if(n>=cap){add('Workload',-W.work,`${n} other bids are due within 3 days of this one; our limit is ${cap}.`);risks.push('The team is already full that week.')}else if(n>=cap*0.75)add('Workload',-W.work/2,`${n} other bids due that week, close to our limit of ${cap}.`);else add('Workload',W.work/3,`${n} other bid${n===1?'':'s'} due that week; room under our limit of ${cap}.`)}
+  const mi=num(F.miles);
+  if(mi&&W.dist){if(R.maxMiles&&mi>R.maxMiles){add('Distance',-W.dist,`About ${Math.round(mi)} miles out; we stay within ${R.maxMiles}.`);risks.push('Travel time and trucking costs.')}else if(R.maxMiles&&mi<=R.maxMiles/2)add('Distance',W.dist/3,`About ${Math.round(mi)} miles from the yard.`);else add('Distance',0,`About ${Math.round(mi)} miles from the yard, inside our ${R.maxMiles}-mile limit.`)}
+  R.questions.forEach((q,i)=>{if(F.q&&F.q[i]&&num(q.pts))add(q.q,num(q.pts),'Yes.')});
+  score=Math.max(0,Math.min(100,Math.round(score)));const verdict=score>=R.go?'Go':score>=R.maybe?'Maybe':'No-go';
+  const top=reasons.filter(r=>r.pts).sort((a,b)=>Math.abs(b.pts)-Math.abs(a.pts))[0];
+  return {manual:true,verdict,score,headline:top?`${verdict}, mainly on ${/^[A-Z]{2}/.test(top.factor)?top.factor:top.factor[0].toLowerCase()+top.factor.slice(1)}. ${top.detail.replace(/ \([+-]\d+\)$/,'')}`:`${verdict} on our rules.`,reasons:reasons.map(({pts,...r})=>r),risks,questions:[],
+    project:{project_name:F.name||'',gc_name:gc?gc.company:(F.gc_name||''),location:F.location||'',due_date:F.due_date||'',project_type:F.project_type||'',bid_type:F.bid_type||'',size:F.size||'',scopes:[],summary:v?`Estimated at ${money(v)}.`:'',requirements:R.questions.filter((q,i)=>F.q&&F.q[i]).map(q=>q.q)}}}
+function rateHandForm(A){const F=A.hand=A.hand||{q:{}};const R=rateRules();const opt=(L,v)=>`<option value="">—</option>${L.map(o=>`<option${o===v?' selected':''}>${esc(o)}</option>`).join('')}`;
+  const inp=(k,l,o={})=>`<label class="f${o.s?' '+o.s:''}">${l}<input class="field" data-rh="${k}" value="${esc(F[k]??'')}"${o.type?` type="${o.type}"`:''}${o.ph?` placeholder="${esc(o.ph)}"`:''}${o.num?' inputmode="decimal"':''}></label>`;
+  return `<div class="fg">${inp('name','Project name',{s:'s2',ph:'e.g. TPA Small Bay'})}<label class="f s2">GC / client<input class="field" data-rh="gc_name" list="rh-gcs" value="${esc(F.gc_name||'')}" placeholder="Start typing a GC"><datalist id="rh-gcs">${gcClients().map(c=>`<option value="${esc(c.company)}">`).join('')}</datalist></label>
+    ${inp('location','Location',{s:'s2',ph:'City, state'})}<label class="f">Project type<select class="field" data-rh="project_type">${opt(PROJECT_TYPES,F.project_type)}</select></label><label class="f">Bid type<select class="field" data-rh="bid_type">${opt(BID_TYPES,F.bid_type)}</select></label>
+    ${inp('due_date','Bid due',{type:'date'})}${inp('value','Our rough number ($)',{num:1,ph:'e.g. 850000'})}<label class="f">Miles from the yard<span class="rh-mi"><input class="field" data-rh="miles" inputmode="decimal" value="${esc(F.miles??'')}" placeholder="e.g. 45"><button class="btn sm" data-act="rh-miles"${F.mBusy?' disabled':''} title="Estimate from the location and the yard address">${F.mBusy?'…':'Estimate'}</button></span></label>${inp('size','Size',{ph:'e.g. 12 acres'})}</div>
+    ${R.questions.length?`<div class="rh-qs"><b>Check what’s true</b>${R.questions.map((q,i)=>`<label class="check"><input type="checkbox" data-rhq="${i}"${F.q[i]?' checked':''}> <span>${esc(q.q)} <small class="dim">${num(q.pts)>0?'+':''}${num(q.pts)}</small></span></label>`).join('')}</div>`:''}
+    <p class="small dim">Scored against our bid history and the rules in Settings → AI & bid rating${isAdmin()?'':' (set by admins)'}.</p>`}
+// approximate road miles: straight line × 1.25
+async function rateMiles(F){const y=bmYard()||await bmLookup(bmYardAddr()).catch(()=>null);if(!y)throw new Error('Set the yard address in Settings → Bid map first.');
+  const g=await bmLookup(F.location).catch(()=>null);if(!g)throw new Error('Couldn’t find that location. Add the city and state.');
+  const R=3958.8,r=x=>x*Math.PI/180;const a=Math.sin(r(g.lat-y.lat)/2)**2+Math.cos(r(y.lat))*Math.cos(r(g.lat))*Math.sin(r(g.lng-y.lng)/2)**2;return Math.round(2*R*Math.asin(Math.sqrt(a))*1.25)}
+
+/* ----- Settings section ----- */
+function aiAdminHtml(){const D=S.aiAdm=S.aiAdm||{off:!!(S.settings.general||{}).aiOff,r:clone(rateRules())};const r=D.r;
+  const n=(k,l,ph)=>`<label class="f">${l}<input class="field" data-rr="${k}" inputmode="decimal" value="${esc(r[k]??'')}" placeholder="${esc(ph||'')}"></label>`;
+  return `<div class="panel pad"><h3 class="adm-h">AI features</h3><label class="check"><input type="checkbox" data-rr-ai="1"${D.off?'':' checked'}> <span><b>AI is on</b><br><small class="dim">Fill from invite, Level quotes, and the AI side of Rate project. Turn it off and every AI option is hidden for everyone. Rate project stays, scoring by hand against the rules below.</small></span></label></div>
+    <div class="panel pad"><h3 class="adm-h">Our limits</h3><div class="fg">${n('minJob','Smallest job we chase ($)','150000')}${n('maxJob','Largest job we chase ($)','5000000')}${n('maxMiles','Farthest from the yard (miles)','90')}${n('weekCap','Most bids due in one week','4')}${n('minDays','Fewest business days to bid','5')}${n('go','Go at this score or higher','70')}${n('maybe','Maybe at this score or higher','45')}</div></div>
+    <div class="panel pad"><h3 class="adm-h">How much each factor counts</h3><p class="hint" style="margin-top:0">Points a factor can add or take away from a starting score of 50. 0 turns it off.</p><div class="fg">${RATE_W.map(([k,l])=>`<label class="f">${l}<input class="field" data-rrw="${k}" inputmode="decimal" value="${esc(r.w[k]??'')}"></label>`).join('')}</div></div>
+    <div class="panel pad"><h3 class="adm-h">Yes / no questions</h3><p class="hint" style="margin-top:0">Shown as checkboxes when rating. A checked box adds its points (use a minus number to take points away).</p>
+      <table class="rr-q"><tbody>${r.questions.map((q,i)=>`<tr><td><input class="field" data-rrq="${i}" value="${esc(q.q)}" placeholder="Question"></td><td style="width:110px"><input class="field" data-rrp="${i}" inputmode="decimal" value="${esc(q.pts??'')}" placeholder="Points"></td><td style="width:40px"><button class="btn sm ghost" data-act="rr-qdel" data-i="${i}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>
+      <div class="adders"><button class="btn sm" data-act="rr-qadd">+ Question</button></div></div>
+    <div class="adders"><button class="btn primary" data-act="rr-save"${D.busy?' disabled':''}>${D.busy?'Saving…':'Save'}</button>${D.dirty?'<span class="small warn-t">Not saved yet</span>':''}<button class="btn ghost" data-act="rr-reset">Back to the starting rules</button></div>`}
+document.addEventListener('input',e=>{const t=e.target;if(!t.dataset)return;
+  if(M&&M.kind==='airate'&&t.dataset.rh!=null){const F=M.hand=M.hand||{q:{}};F[t.dataset.rh]=t.value;return}
+  const D=S.aiAdm;if(!D||S.view!=='admin')return;const r=D.r;let hit=1;
+  if(t.dataset.rr!=null)r[t.dataset.rr]=t.value===''?null:num(t.value);else if(t.dataset.rrw!=null)r.w[t.dataset.rrw]=t.value===''?0:num(t.value);
+  else if(t.dataset.rrq!=null)r.questions[+t.dataset.rrq].q=t.value;else if(t.dataset.rrp!=null)r.questions[+t.dataset.rrp].pts=num(t.value)||0;else hit=0;
+  if(hit&&!D.dirty){D.dirty=true;const b=document.querySelector('[data-act="rr-save"]');if(b&&!b.nextElementSibling?.classList.contains('warn-t'))b.insertAdjacentHTML('afterend','<span class="small warn-t">Not saved yet</span>')}});
+document.addEventListener('change',e=>{const t=e.target;if(!t.dataset)return;
+  if(M&&M.kind==='airate'){const F=M.hand=M.hand||{q:{}};if(t.dataset.rhq!=null){F.q[t.dataset.rhq]=t.checked;return}if(t.dataset.rh!=null){F[t.dataset.rh]=t.value;return}}
+  if(t.dataset.rrAi!=null&&S.aiAdm){S.aiAdm.off=!t.checked;S.aiAdm.dirty=true;render()}});
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!/^(rr-|rh-)/.test(a))return;
+  if(a==='rh-miles'){const F=M&&M.hand;if(!F)return;if(!String(F.location||'').trim()){toast('Enter the location first');return}F.mBusy=true;renderModal();
+    try{F.miles=await rateMiles(F);toast(`About ${F.miles} miles by road (estimated)`)}catch(er){toast(er.message)}F.mBusy=false;renderModal();return}
+  const D=S.aiAdm;if(!D||!isAdmin())return;
+  if(a==='rr-qadd'){D.r.questions.push({q:'',pts:5});D.dirty=true;render()}
+  if(a==='rr-qdel'){D.r.questions.splice(+t.dataset.i,1);D.dirty=true;render()}
+  if(a==='rr-reset'){D.r=clone(RATE_DEF);D.dirty=true;render()}
+  if(a==='rr-save'){D.busy=true;render();const r={...D.r,questions:D.r.questions.filter(q=>String(q.q||'').trim()).map(q=>({q:String(q.q).trim(),pts:num(q.pts)||0}))};
+    try{if(num(r.go)<=num(r.maybe))throw new Error('The Go score has to be higher than the Maybe score.');
+      await run(sb.from('settings').upsert({key:'rating',value:r}));await run(sb.from('settings').upsert({key:'general',value:{...(S.settings.general||{}),aiOff:!!D.off}}));await loadTable('settings');
+      S.aiAdm=null;toast(`Saved. AI is ${D.off?'off':'on'}.`)}catch(er){D.busy=false;toast(errMsg(er))}render()}});
+FOCUS_ATTRS.push('data-rh','data-rr','data-rrw','data-rrq','data-rrp');
