@@ -973,8 +973,8 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal,airate:aiRateModal,aiinstr:aiInstrModal}[M.kind]();
-  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='bid'?' bidpage':''}${['rpcard','rpdrill','airate','import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
+  const html={tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal,airate:aiRateModal,aiinstr:aiInstrModal,aitko:atkModal,aitkr:atkReportModal}[M.kind]();
+  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='bid'?' bidpage':''}${['rpcard','rpdrill','airate','aitko','aitkr','import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();
@@ -9095,7 +9095,7 @@ function twToolbarHtml(){const R=twR();const T=S.tw;const s=twActive();const ro=
   const el=s&&s.kind==='elev';
   return ro?grp('',['pan','select']):`${grp('',['pan','select'])}${grp('Measure',['draw','area','count','pipe'].concat(el?['sweep']:[]))}${grp('Fix',['pick','edit'])}${grp('Sheets',['scale','apt','align'])}
     ${el?`<div class="tw-tg"><span class="tw-tgl">Contours</span><label class="tw-iv">Interval <input class="field sm num" id="tw-int" data-twint value="${esc(T.interval)}" inputmode="decimal"></label><button class="btn sm" data-act="tw-dir" title="Which way the sweep counts">${T.dir>0?'↑ Rising':'↓ Falling'}</button><button class="btn sm" data-act="tw-missing">Next missing</button><button class="btn sm${R.chk?' on':''}" data-act="tw-chkrun" title="Find contours that cross, and elevations that jump (typos)">✓ Check</button></div>`:''}
-    <span style="flex:1"></span><div class="tw-tg"><button class="btn sm${R.cfOpen?' on':''}" data-act="tw-cfopen">⛰ Cut / fill</button><button class="btn sm primary" data-act="tw-qty">📋 Quantities</button><button class="btn sm" data-act="tw-3d" title="See the surfaces, linework and pipes in 3D">🧊 3D</button><button class="btn sm" data-act="tw-undo" title="Undo (Ctrl+Z)"${R.undo.length?'':' disabled'}>↶</button><button class="btn sm" data-act="tw-redo" title="Redo (Ctrl+Shift+Z)"${R.redo.length?'':' disabled'}>↷</button></div>`}
+    <span style="flex:1"></span>${aiOn()?`<div class="tw-tg"><button class="btn sm ai-btn" data-act="atk-open" title="AI reads the sheets you pick and does the takeoff here">✨ AI takeoff</button>${T.ai||(T.aiProps||[]).length?`<button class="btn sm ghost" data-act="atk-report" title="What the last AI takeoff did, and teach it for next time">Report & 🎓 Teach${(T.aiProps||[]).length?` <b class="atk-badge">${T.aiProps.length}</b>`:''}</button>`:''}</div>`:''}<div class="tw-tg"><button class="btn sm${R.cfOpen?' on':''}" data-act="tw-cfopen">⛰ Cut / fill</button><button class="btn sm primary" data-act="tw-qty">📋 Quantities</button><button class="btn sm" data-act="tw-3d" title="See the surfaces, linework and pipes in 3D">🧊 3D</button><button class="btn sm" data-act="tw-undo" title="Undo (Ctrl+Z)"${R.undo.length?'':' disabled'}>↶</button><button class="btn sm" data-act="tw-redo" title="Redo (Ctrl+Shift+Z)"${R.redo.length?'':' disabled'}>↷</button></div>`}
 function twAskHtml(){const R=twR();const A=R.ask;if(!A)return '';return `<div class="tw-ask"><span>${esc(A.label)}</span><input class="field" id="tw-askv" value="${esc(A.def??'')}" ${A.type==='apt'||A.type==='surf'||A.type==='surf1'?'':'inputmode="decimal"'} autocomplete="off"><button class="btn sm primary" data-act="tw-askok">OK</button>${A.type==='z'?'<button class="btn sm" data-act="tw-askanno" title="Keep it with no elevation: shown, not used in the surface. Give it one later.">Annotation</button>':''}<button class="btn sm" data-act="tw-askno">Cancel</button></div>`}
 function twPlanSideHtml(){const R=twR();const n=S.tw.page;const V=R.vec[n];const sh=twSheet(n);const ro=twRo();
   let card='';
@@ -9112,7 +9112,7 @@ function twPlanSideHtml(){const R=twR();const n=S.tw.page;const V=R.vec[n];const
   return (['align','scale','pick'].includes(R.tool)?'':twAutoCard())+card+(R.lastPane==='model'?'':twAskHtml())}
 function twItemCard(){const R=twR();const it=S.tw.items.find(x=>x.id===R.selItem);if(!it)return '';if(it.t==='pipe')return twPipeCard(it);const s=twSurf(it.sid);const ro=twRo();
   return `<div class="tw-card tw-item"><div class="tw-ih"><b>${esc({contour:it.em==='anno'||it.zs?'Line':'Contour',spot:'Spot elevation',line:'Line',area:'Area',count:'Count'}[it.t])}</b><button class="x" data-act="tw-desel" aria-label="Close">×</button></div>
-    <div class="small dim">${esc(twItemText(it))}</div>
+    <div class="small dim">${esc(twItemText(it))}</div>${it.ai?`<div class="small tw-ainote">✨ ${esc(it.ai)}</div>`:''}
     ${s&&s.kind==='elev'&&it.t==='contour'?twZCard(it):''}${s&&s.kind==='elev'&&it.t==='spot'?`<label class="f">Elevation <input class="field sm num" data-twz="${it.id}" id="twz-${it.id}" value="${twHasZ(it)?it.z:''}" inputmode="decimal"${ro?' disabled':''}></label>`:''}
     ${it.t==='line'&&s&&s.kind==='util'&&!ro?`<div class="adders"><button class="btn sm" data-act="tw-topipe" data-id="${it.id}">Make it a pipe run</button><span class="small dim">ends become structures</span></div>`:''}
     ${it.t==='line'&&it.pts.length>2&&!ro?`<div class="adders"><button class="btn sm" data-act="tw-toarea" data-id="${it.id}">Make it an area</button><span class="small dim">closes the outline</span></div>`:''}
@@ -9600,7 +9600,7 @@ function twPipeSheets(X,wb){const runs=S.tw.items.filter(i=>i.t==='pipe');if(!ru
 function twPipeReport(){const runs=S.tw.items.filter(i=>i.t==='pipe');if(!runs.length)return '';
   return `<h2 style="font-size:15px">Pipe runs</h2><table><thead><tr><th>Run</th><th>From → To</th><th>Pipe</th><th class="r">LF</th><th class="r">Slope</th><th class="r">Inverts</th><th class="r">Depth</th></tr></thead><tbody>${runs.map(it=>{const C=twPipeCalc(it);return C.segs.map(g=>{const a=C.nodes[g.i],b=C.nodes[g.i+1];
     return `<tr><td>${esc(it.name||'')}</td><td>${esc(a.n||a.k||'')} → ${esc(b.n||b.k||'')}</td><td>${g.d?g.d+'″ ':''}${esc(g.m||'')}</td><td class="r">${fmtN(g.L,1)}</td><td class="r">${g.s!=null?g.s.toFixed(2)+'%':''}</td><td class="r">${g.iu!=null?g.iu.toFixed(2):'?'} → ${g.id!=null?g.id.toFixed(2):'?'}</td><td class="r">${g.min!=null?fmtN(g.min,1)+'–'+fmtN(g.max,1)+' ft':''}</td></tr>`}).join('')}).join('')}</tbody></table>`}
-function twPipeCard(it){const ro=twRo();return `<div class="tw-card tw-item"><div class="tw-ih"><b>Pipe run${it.name?': '+esc(it.name):''}</b><button class="x" data-act="tw-desel" aria-label="Close">×</button></div><div class="small dim">${esc(twItemText(it))}</div>
+function twPipeCard(it){const ro=twRo();return `<div class="tw-card tw-item"><div class="tw-ih"><b>Pipe run${it.name?': '+esc(it.name):''}</b><button class="x" data-act="tw-desel" aria-label="Close">×</button></div><div class="small dim">${esc(twItemText(it))}</div>${it.ai?`<div class="small tw-ainote">✨ ${esc(it.ai)}</div>`:''}
   <p class="small" style="margin:4px 0">Rims, inverts, sizes and the profile are in the panel under the drawing.</p>${ro?'':`<div class="adders"><select class="field sm" data-twmove="${it.id}"><option value="">Move to…</option>${S.tw.surfaces.filter(x=>x.id!==it.sid&&x.kind==='util').map(x=>`<option value="${x.id}">${esc(x.name)}</option>`).join('')}</select><button class="btn sm" data-act="tw-del" data-id="${it.id}">Delete</button></div>`}</div>`}
 
 /* ---------- CAD / LandXML / point file import ----------
@@ -13954,6 +13954,12 @@ FOCUS_ATTRS.push('data-duereason');
 
 
 
+
+
+
+
+
+
 /* ===================================================================================================
    AI TOOLS — read a bid invite, rate a project go / no-go, level vendor quotes.
    Files are read in the browser, sent once to the Supabase "ai" function, and never stored.
@@ -13976,6 +13982,7 @@ async function aiAddFiles(A,list){const errs=[];for(const f of [...list]){try{co
   A.err=errs.join(' ');renderModal()}
 async function aiCall(task,{text,files,ctx}){
   if(!sb)throw new Error('Not connected to the database.');
+  await aiLessonsLoad();
   const call=sb.functions.invoke('ai',{body:{task,text:text||'',files:(files||[]).map(({size,...f})=>f),ctx,instr:aiInstrFor(task)}});
   const {data,error}=await Promise.race([call,new Promise((_,rej)=>setTimeout(()=>rej(new Error('The AI took too long (over 2 minutes). Try again, or use fewer or smaller files.')),145000))]);
   if(error){let m=error.message||'';try{const j=await error.context.json();if(j&&j.error)m=j.error}catch(e){}
@@ -14271,7 +14278,7 @@ function aiAdminHtml(){const D=S.aiAdm=S.aiAdm||{off:!!(S.settings.general||{}).
     <div class="panel pad"><h3 class="adm-h">Yes / no questions</h3><p class="hint" style="margin-top:0">Shown as checkboxes when rating. A checked box adds its points (use a minus number to take points away).</p>
       <table class="rr-q"><tbody>${r.questions.map((q,i)=>`<tr><td><input class="field" data-rrq="${i}" value="${esc(q.q)}" placeholder="Question"></td><td style="width:110px"><input class="field" data-rrp="${i}" inputmode="decimal" value="${esc(q.pts??'')}" placeholder="Points"></td><td style="width:40px"><button class="btn sm ghost" data-act="rr-qdel" data-i="${i}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>
       <div class="adders"><button class="btn sm" data-act="rr-qadd">+ Question</button></div></div>
-    <div class="adders"><button class="btn primary" data-act="rr-save"${D.busy?' disabled':''}>${D.busy?'Saving…':'Save'}</button>${D.dirty?'<span class="small warn-t">Not saved yet</span>':''}<button class="btn ghost" data-act="rr-reset">Back to the starting rules</button></div>${aiInstrAdminHtml()}`}
+    <div class="adders"><button class="btn primary" data-act="rr-save"${D.busy?' disabled':''}>${D.busy?'Saving…':'Save'}</button>${D.dirty?'<span class="small warn-t">Not saved yet</span>':''}<button class="btn ghost" data-act="rr-reset">Back to the starting rules</button></div>${aiInstrAdminHtml()}${aiLessonsAdminHtml()}`}
 document.addEventListener('input',e=>{const t=e.target;if(!t.dataset)return;
   if(M&&M.kind==='airate'&&t.dataset.rh!=null){const F=M.hand=M.hand||{q:{}};F[t.dataset.rh]=t.value;return}
   const D=S.aiAdm;if(!D||S.view!=='admin')return;const r=D.r;let hit=1;
@@ -14308,7 +14315,8 @@ const aiInstrMine=()=>(S.profile&&S.profile.profile&&S.profile.profile.aiInstr)|
 // what goes to the server for one task: the general + task-specific text, company first, then mine
 function aiInstrFor(task){const C=aiInstrCo(),P=aiInstrMine();const k=task==='rate'?'rate':task==='quotes'?'quotes':task==='takeoff'?'takeoff':'invite';
   const c=[C.general,C[k]].map(x=>String(x||'').trim()).filter(Boolean).join('\n\n'),m=[P.general,P[k]].map(x=>String(x||'').trim()).filter(Boolean).join('\n\n');
-  return {company:c,mine:m,by:myName()}}
+  const les=aiLessonsFor(task).map(aiLessonText);const c2=[c,les.length?`Lessons from our estimators (follow these):\n- ${les.join('\n- ')}`:''].filter(Boolean).join('\n\n');
+  return {company:c2,mine:m,by:myName()}}
 const aiInstrCount=()=>Object.values(aiInstrMine()).filter(v=>String(v||'').trim()).length;
 function aiInstrLink(){const n=aiInstrCount();return `<button class="btn sm ghost" data-act="aii-open" title="Tell AI how you like things done">✎ My AI instructions${n?` (${n})`:''}</button>`}
 // Settings → AI & bid rating: company instructions
@@ -14337,3 +14345,187 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
   if(a==='aii-co-save'&&isAdmin()&&S.aiInstr){const D=S.aiInstr;D.busy=true;render();const v=Object.fromEntries(AI_INSTR.map(([k])=>[k,String(D.v[k]||'').trim()]));
     try{await run(sb.from('settings').upsert({key:'ai_instr',value:v}));await loadTable('settings');S.aiInstr=null;toast('Saved. AI follows these for everyone.')}catch(er){D.busy=false;toast(errMsg(er))}render()}});
 FOCUS_ATTRS.push('data-aiico','data-aiime');
+
+/* ===================================================================================================
+   AI TAKEOFF (Takeoff workspace → ✨ AI takeoff). One sheet per AI request. AI never traces by eye:
+   it says WHICH of the sheet's own PDF lines (vector groups) and labels are what, and the app adds
+   that exact geometry to the workspace. Storm structures are placed at their name labels; pipes are
+   drawn structure to structure. Nothing is stored except the takeoff items and a short report.
+   =================================================================================================== */
+const ATK_SCOPES=[['storm','Storm & utilities','Structures and pipe runs from plan labels, profiles and structure tables'],['espc','Erosion control','Silt fence and other lines by layer, counted items by label'],['earth','Earthwork','Existing and proposed contours from the sheet’s linework, spot elevations, earthwork tables']];
+function atkOpen(){aiLessonsLoad();const R=twR();if(!R.pdf){toast('Open the plan PDF first (it isn’t saved; it only opens here).');return}
+  M={kind:'aitko',pick:new Set(),scopes:{storm:true,espc:true,earth:true},replace:true,run:null};showModal();setTimeout(()=>{const x=document.querySelector('#modal [data-twthumb]:not([src])');if(x)twThumb(+x.dataset.twthumb)},50)}
+function atkModal(){const x=M;const R=twR();const n=R.pdf?R.pdf.numPages:0;
+  if(x.run)return mhead('✨ AI takeoff',x.run.done?'Done. Everything it added is on the plans and in the workspace.':'Working one sheet at a time. You can watch it in the workspace.')+`<div class="mbody">${atkRunHtml(x.run)}</div>
+    <div class="mfoot"><div></div><div class="r">${x.run.done?'<button class="btn primary" data-act="close">See it in the workspace</button>':`<button class="btn" data-act="atk-stop"${x.run.stop?' disabled':''}>${x.run.stop?'Stopping after this sheet…':'Stop'}</button>`}</div></div>`;
+  return mhead('✨ AI takeoff','Pick the sheets for AI to read. It works through them one at a time, inside this workspace, so you can see everything it did.')+`<div class="mbody">
+    <div class="notice" style="margin-bottom:12px"><b>Pick only the sheets it needs:</b> storm plan and profiles, structure table, grading plan, erosion control plan. Fewer sheets is faster and cheaper (roughly a few cents to 30¢ a sheet). You can also save just those sheets as their own PDF and open that here. The PDF itself is never saved.</div>
+    <div class="atk-scopes">${ATK_SCOPES.map(([k,l,d])=>`<label class="check"><input type="checkbox" data-atks="${k}"${x.scopes[k]?' checked':''}> <span><b>${l}</b><br><small class="dim">${d}</small></span></label>`).join('')}</div>
+    <div class="atk-pick-h"><b>Sheets</b> <span class="small dim">${x.pick.size} picked</span><button class="btn sm ghost" data-act="atk-none">Clear</button></div>
+    <div class="atk-grid">${Array.from({length:n},(_,i)=>i+1).map(p=>{const sh=S.tw.sheets[p];return `<label class="atk-pg${x.pick.has(p)?' on':''}"><input type="checkbox" data-atkp="${p}"${x.pick.has(p)?' checked':''}><img data-twthumb="${p}" alt="" ${R.thumbs[p]?`src="${R.thumbs[p]}"`:''}><span>Sheet ${p}${sh&&sh.scaled?` · ${esc(twScaleText(sh))}`:''}</span></label>`}).join('')}</div>
+    <label class="check" style="margin-top:12px"><input type="checkbox" data-atkr="1"${x.replace?' checked':''}> <span>Replace what the last AI takeoff added <small class="dim">(your own items are never touched)</small></span></label>
+    ${aiPrivacy}</div>
+    <div class="mfoot"><div>${aiInstrLink()}</div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="atk-go"${x.pick.size&&Object.values(x.scopes).some(Boolean)?'':' disabled'}>Take off ${x.pick.size||''} sheet${x.pick.size===1?'':'s'}</button></div></div>`}
+function atkRunHtml(r){const st={wait:'○',work:'◐',ok:'✓',err:'✕',skip:'–'};
+  return `<ol class="atk-log">${r.sheets.map(s=>`<li class="${s.st}"><i>${st[s.st]}</i><div><b>Sheet ${s.n}${s.title?' · '+esc(s.title):''}</b>${s.st==='work'?` <span class="small dim" data-atkt="${s.n}">reading…</span>`:''}
+    ${s.did.length?`<ul>${s.did.map(d=>`<li>${esc(d)}</li>`).join('')}</ul>`:''}${s.warn.length?`<ul class="atk-warn">${s.warn.map(d=>`<li>⚠ ${esc(d)}</li>`).join('')}</ul>`:''}</div></li>`).join('')}</ol>
+    ${r.done?atkReportHtml(S.tw.ai)+atkTeachHtml():''}`}
+function atkReportHtml(A){if(!A)return '';const st=A.stated||[];const runs=A.runs||[];
+  return `${runs.length?`<h4>Pipe runs</h4><ul class="atk-runs">${runs.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''}
+    ${A.ew?`<h4>Earthwork table on the plans</h4><p class="small">${[A.ew.cut_cy!=null?`Cut ${fmtN(A.ew.cut_cy,0)} CY`:'',A.ew.fill_cy!=null?`Fill ${fmtN(A.ew.fill_cy,0)} CY`:'',A.ew.net_cy!=null?`Net ${fmtN(A.ew.net_cy,0)} CY`:''].filter(Boolean).join(' · ')}${A.ew.note?` (${esc(A.ew.note)})`:''}. Compare with ⛰ Cut / fill.</p>`:''}
+    ${st.length?`<h4>Quantities written on the sheets</h4><table class="ai-apply"><thead><tr><th>Scope</th><th>Item</th><th>Qty</th><th>Sheet</th></tr></thead><tbody>${st.map(q=>`<tr><td>${esc(q.scope||'')}</td><td>${esc(q.item)}</td><td>${q.qty!=null?fmtN(q.qty,q.qty%1?2:0):''} ${esc(q.unit||'')}</td><td>${q.n}</td></tr>`).join('')}</tbody></table><p class="small dim">Check these against 📋 Quantities, which measures what AI put on the plans.</p>`:''}`}
+
+// ---- gathering one sheet ----
+async function atkText(n){const R=twR();const page=await R.pdf.getPage(n);const vp=page.getViewport({scale:1});const tc=await page.getTextContent();const out=[];
+  tc.items.forEach(it=>{const s=String(it.str||'').replace(/\s+/g,' ').trim();if(!s)return;const m=it.transform;const T=vp.transform;const w=it.width||0;const ang=Math.atan2(m[1],m[0]);const h=Math.hypot(m[2],m[3])||8;
+    const cx=m[4]+Math.cos(ang)*w/2-Math.sin(ang)*h*0.35,cy=m[5]+Math.sin(ang)*w/2+Math.cos(ang)*h*0.35;const x=T[0]*cx+T[2]*cy+T[4],y=T[1]*cx+T[3]*cy+T[5];out.push({s:s.slice(0,80),x,y})});
+  let L=out;if(L.length>4000)L=L.filter(t=>t.s.length>1);if(L.length>4000)L=L.slice(0,4000);
+  return {items:L.map((t,i)=>({...t,id:i})),W:vp.width,H:vp.height}}
+function atkJpeg(cv,sx,sy,sw,sh,max){const k=Math.min(1,max/Math.max(sw,sh));const c=document.createElement('canvas');c.width=Math.round(sw*k);c.height=Math.round(sh*k);const g=c.getContext('2d');g.fillStyle='#fff';g.fillRect(0,0,c.width,c.height);g.drawImage(cv,sx,sy,sw,sh,0,0,c.width,c.height);
+  const u=c.toDataURL('image/jpeg',0.82);return u.slice(u.indexOf(',')+1)}
+async function atkVec(n){for(let i=0;i<60;i++){const V=await twVectors(n);if(V)return V;await new Promise(r=>setTimeout(r,500))}return null}
+
+// ---- putting results in the workspace ----
+function atkSurf(kind,name){let s=S.tw.surfaces.find(x=>x.kind===kind&&x.name===name);if(!s)s=twMkSurf(name,kind);return s}
+function atkElev(which){return twElevOf(which)||atkSurf('elev',which==='ex'?'Existing':'Design')}
+// put an AI item under the workspace's own Take off list entry when it is one (Silt fence, Inlet protection…), else its own type on that list's surface
+function atkDest(name,form,scope){const k=normH(name);const P=twPalAll().filter(p=>twPalForm(p)===form&&['line','area','count'].includes(p.how));
+  const hit=P.find(p=>normH(p.n)===k)||null;const near=hit||P.find(p=>k.includes(normH(p.n))&&(scope!=='erosion'||p.g==='ec'))||(scope==='erosion'?P.find(p=>p.g==='ec'):null);
+  if(hit){const d=twPalDest(hit);return {s:d,ty:twPalType(d,hit)}}const d=near?twPalDest(near):atkSurf('take','Takeoff');return {s:d,ty:atkType(d,name,form)}}
+function atkType(s,name,form){s.ct=s.ct||[];let t=s.ct.find(x=>x.name.toLowerCase()===String(name).toLowerCase()&&x.form===form);
+  if(!t){t={id:newId(),name:String(name).slice(0,60),form,color:TW_CTCOL[s.ct.length%TW_CTCOL.length],w:'',sec:'',th:''};s.ct.push(t)}return t}
+function atkSolveAlign(pairs,f){// page points p → world w with a known scale f: rotation + shift (least squares)
+  const P=pairs.map(x=>[x.p[0]*f,x.p[1]*f]),W=pairs.map(x=>x.w);const cp=[0,1].map(k=>P.reduce((a,v)=>a+v[k],0)/P.length),cw=[0,1].map(k=>W.reduce((a,v)=>a+v[k],0)/W.length);
+  let sn=0,cs=0;P.forEach((p,i)=>{const a=[p[0]-cp[0],p[1]-cp[1]],b=[W[i][0]-cw[0],W[i][1]-cw[1]];cs+=a[0]*b[0]+a[1]*b[1];sn+=a[0]*b[1]-a[1]*b[0]});const rot=Math.atan2(sn,cs);const c=Math.cos(rot),s=Math.sin(rot);
+  const tx=cw[0]-(cp[0]*c-cp[1]*s),ty=cw[1]-(cp[0]*s+cp[1]*c);const sh={s:f,rot,tx,ty};const worst=Math.max(...pairs.map(x=>{const q=twP2W(sh,x.p);return Math.hypot(q[0]-x.w[0],q[1]-x.w[1])}));return {rot,tx,ty,worst}}
+// a structure label sits beside the symbol: move to the nearest end of a real line within ~25 pt (pipes start and end at structures)
+function atkSnapEnd(V,p){if(!V)return p;let best=null,bd=25;V.paths.forEach(P=>{if(P.pts.length<2||tkPolyLen(P.pts)<20)return;[P.pts[0],P.pts[P.pts.length-1]].forEach(q=>{const d=Math.hypot(q[0]-p[0],q[1]-p[1]);if(d<bd){bd=d;best=q}})});return best?[best[0],best[1]]:p}
+// the same line drawn on two sheets: skip it when most of it sits on an item already in the takeoff
+function atkDup(pts,sid,match,tol){const bb=twBB({pts});const cand=S.tw.items.filter(i=>i.sid===sid&&match(i)&&i.pts&&i.pts.length);if(!cand.length)return false;
+  const L=twLen(pts);const N=Math.max(2,Math.min(40,Math.round(L/10)));const samp=[];if(pts.length===1)samp.push(pts[0]);else{for(let k=0;k<=N;k++){let d=L*k/N;for(let i=1;i<pts.length;i++){const a=pts[i-1],b=pts[i];const sl=Math.hypot(b[0]-a[0],b[1]-a[1]);if(d<=sl||i===pts.length-1){const t=sl?Math.min(1,d/sl):0;samp.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t]);break}d-=sl}}}
+  const near=q=>cand.some(c=>{const b=twBB(c);if(q[0]<b[0]-tol||q[0]>b[2]+tol||q[1]<b[1]-tol||q[1]>b[3]+tol)return false;if(c.pts.length===1)return Math.hypot(c.pts[0][0]-q[0],c.pts[0][1]-q[1])<tol;for(let i=1;i<c.pts.length;i++)if(tkSegDist(q,c.pts[i-1],c.pts[i])<tol)return true;return false});
+  void bb;return samp.filter(near).length>=samp.length*0.8}
+const atkMat=m=>{const s=String(m||'').toUpperCase();if(/C-?900/.test(s))return 'C900 PVC';if(/SDR\s*-?26/.test(s))return 'SDR26 PVC';if(/SDR/.test(s))return 'SDR35 PVC';if(/HDPE|ADS|N-?12|DUAL/.test(s))return 'HDPE';if(/RCP|CONC/.test(s))return 'RCP';if(/CMP|CORR.*METAL/.test(s))return 'CMP';if(/DIP|DUCTILE/.test(s))return 'DIP';if(/PVC/.test(s))return 'PVC';if(/\bHP\b|POLYPROP/.test(s))return 'HP';return s?'RCP':''};
+const atkKind=k=>{const s=String(k||'').trim().toLowerCase();const hit=Object.keys(TW_PFX).find(x=>s.includes(x));return hit?hit[0].toUpperCase()+hit.slice(1):(s?s[0].toUpperCase()+s.slice(1):'Manhole')};
+
+async function atkSheet(run,x,n){const R=twR();const L=run.sheets.find(s=>s.n===n);L.st='work';renderModal();
+  await twGoPage(n);const im=await twRenderPage(n);const V=await atkVec(n);const T=await atkText(n);
+  if(!T.items.length&&(!V||!V.paths.length))L.warn.push('This sheet looks like a scan (no PDF text or linework), so AI can only read numbers off the picture; nothing can be placed exactly.');
+  const cv=im.cv,hw=cv.width/2,hh=cv.height/2;const files=[{name:`sheet-${n}.jpg`,type:'image/jpeg',data:atkJpeg(cv,0,0,cv.width,cv.height,1568)},
+    ...[[0,0],[hw,0],[0,hh],[hw,hh]].map(([sx,sy],i)=>({name:`sheet-${n}-${['top-left','top-right','bottom-left','bottom-right'][i]}.jpg`,type:'image/jpeg',data:atkJpeg(cv,sx,sy,hw,hh,1600)}))];
+  const groups=V?V.groups.filter(g=>g.count).sort((a,b)=>b.len-a.len).slice(0,160):[];
+  const text=`TEXT (id|x|y|text):\n${T.items.map(t=>`${t.id}|${Math.round(t.x/T.W*1000)}|${Math.round(t.y/T.H*1000)}|${t.s}`).join('\n')}\n\nVECTOR GROUPS (id|layer|color|dash|width|pieces|length_in):\n${groups.map(g=>`${g.id}|${g.layer||'-'}|${g.color||'-'}|${g.dash?'dashed':'solid'}|${g.width!=null?(+g.width).toFixed(2):'-'}|${g.count}|${Math.round(g.len/72)}`).join('\n')}`;
+  const ctx={scopes:ATK_SCOPES.filter(([k])=>x.scopes[k]).map(([,l])=>l),sheet_number:n,sheet_scale_already_set:S.tw.sheets[n]&&S.tw.sheets[n].scaled?twScaleText(S.tw.sheets[n]):null,
+    known_structures:Object.values(run.net.st).map(s=>({name:s.name,kind:s.kind,rim:s.rim,inv_out:s.inv_out})).slice(0,300),known_pipes:run.net.pipes.map(p=>`${p.from}→${p.to}`).slice(0,300),takeoff_item_names:twPalAll().filter(p=>['line','area','count'].includes(p.how)).map(p=>`${p.n} (${twPalForm(p)})`),scope_library:aiLibCtx().scope_library};
+  const r=await aiCall('takeoff',{text,files,ctx});const tag=`AI · sheet ${n}`;L.title=r.sheet&&r.sheet.title||'';
+  (r.notes||[]).slice(0,4).forEach(t=>L.did.push(t));(r.warnings||[]).forEach(t=>L.warn.push(t));
+  const posOf=id=>{const t=T.items[id];return t?[t.x,t.y]:null};
+  // scale
+  let sh=S.tw.sheets[n];const planish=r.sheet&&!['profile','structure_table','detail','cover'].includes(r.sheet.kind);
+  if(planish&&(!sh||!sh.scaled)&&num(r.sheet.scale_ft_per_in)>0){const f=num(r.sheet.scale_ft_per_in)/72;const others=Object.entries(S.tw.sheets).some(([k,o])=>+k!==n&&o.scaled&&o.aligned);
+    if(!others){S.tw.page=n;twSetScale(f)}else S.tw.sheets[n]={...(sh||{}),bar:f,s:f,scaled:true,aligned:false,w:im.w,h:im.h};sh=S.tw.sheets[n];L.did.push(`Set the scale from the sheet: ${r.sheet.scale_text||`1" = ${r.sheet.scale_ft_per_in}'`}.`)}
+  // structures (merge across sheets) and alignment from shared labels
+  const here=[];(r.structures||[]).forEach(s=>{if(!s||!s.name)return;const k=normH(s.name);const o=run.net.st[k]=run.net.st[k]||{name:s.name};
+    ['kind','system','rim','inv_out'].forEach(f=>{if(s[f]!=null&&s[f]!==''&&o[f]==null)o[f]=s[f]});if(Array.isArray(s.inverts_in)&&s.inverts_in.length&&!o.inverts_in)o.inverts_in=s.inverts_in;
+    const p=(s.label_ids||[]).map(posOf).find(Boolean);if(p)here.push({k,p:atkSnapEnd(V,p)})});
+  if(sh&&sh.scaled&&!sh.aligned){const pairs=here.filter(h=>run.net.st[h.k].w).map(h=>({p:h.p,w:run.net.st[h.k].w}));
+    if(pairs.length>=2){const a=atkSolveAlign(pairs,sh.s);if(a.worst<40){Object.assign(sh,{rot:a.rot,tx:a.tx,ty:a.ty,aligned:true});L.did.push(`Lined this sheet up with the others using ${pairs.length} structures it shares with them (within ${fmtN(a.worst,1)} ft).`)}else L.warn.push('Tried to line this sheet up using shared structures, but they didn’t agree. Line it up with Align sheet, then run it again.')}
+    else if(planish)L.warn.push('This sheet isn’t lined up with the others and doesn’t share enough labeled structures to do it automatically. Line it up with Align sheet, then run it again to place its items.')}
+  const placed=sh&&sh.scaled&&sh.aligned;const W=p=>twP2W(sh,p);
+  if(placed)here.forEach(h=>{const o=run.net.st[h.k];if(!o.w){o.w=W(h.p);o.page=n}});
+  (r.pipes||[]).forEach(p=>{if(!p||!p.from||!p.to)return;const key=normH(p.from)+'>'+normH(p.to);let o=run.net.pipes.find(q=>q.key===key);if(!o){o={key,from:p.from,to:p.to};run.net.pipes.push(o)}
+    ['system','size_in','material','length_ft','slope_pct','inv_up','inv_down'].forEach(f=>{if(p[f]!=null&&p[f]!==''&&o[f]==null)o[f]=p[f]})});
+  if((r.structures||[]).length||(r.pipes||[]).length)L.did.push(`Read ${(r.structures||[]).length} structures and ${(r.pipes||[]).length} pipes${here.length&&placed?`; placed ${here.length} at their labels`:''}.`);
+  if(!placed){if(planish&&((r.line_groups||[]).length||(r.counts||[]).length||(r.contours||{}).existing_group_ids?.length))L.warn.push('Its lines and counts were found but can’t go on the plans until the sheet is scaled and lined up.');}
+  else{const added={};const bump=(k,v=1)=>added[k]=(added[k]||0)+v;
+    const pathsOf=gid=>V?V.paths.filter(P=>P.g===gid&&!P.used):[];const gName=gid=>{const g=V&&V.groups.find(q=>q.id===gid);return g?(g.layer||`${g.color||'black'} ${g.dash?'dashed':'solid'} ${g.width!=null?(+g.width).toFixed(1):''}pt line`):'group '+gid};
+    (r.line_groups||[]).forEach(gp=>{if(gp.scope==='storm'||gp.scope==='earthwork')return;if(!x.scopes.espc&&gp.scope==='erosion')return;const {s,ty}=atkDest(gp.what,'line',gp.scope);
+      pathsOf(gp.group_id).forEach(P=>{if(atkDup(P.pts.map(W),s.id,i=>i.ct===ty.id,3)){bump('dup');return}S.tw.items.push({id:newId(),sid:s.id,t:'line',ct:ty.id,pts:P.pts.map(W),page:n,vkey:P.vkey,ai:`${tag}: “${gp.what}” = ${gName(gp.group_id)}`,aiRun:run.id,layer:gName(gp.group_id),aiWhat:ty.name});P.used=true;bump(gp.what+' (LF)',twLen(P.pts.map(W)))})});
+    (r.area_groups||[]).forEach(gp=>{if(!x.scopes.espc&&gp.scope==='erosion')return;const {s,ty}=atkDest(gp.what,'area',gp.scope);
+      pathsOf(gp.group_id).forEach(P=>{const pts=P.pts.map(W);if(pts.length<3)return;S.tw.items.push({id:newId(),sid:s.id,t:'area',ct:ty.id,pts,page:n,vkey:P.vkey,ai:`${tag}: “${gp.what}” = ${gName(gp.group_id)}`,aiRun:run.id,layer:gName(gp.group_id),aiWhat:ty.name});P.used=true;bump(gp.what+' (SF)',twArea(pts))})});
+    (r.counts||[]).forEach(c=>{if(!x.scopes.espc&&c.scope==='erosion')return;if(c.scope==='storm')return;const {s,ty}=atkDest(c.what,'count',c.scope);
+      (c.label_ids||[]).map(posOf).filter(Boolean).forEach(p=>{if(atkDup([W(p)],s.id,i=>i.ct===ty.id,8)){bump('dup');return}S.tw.items.push({id:newId(),sid:s.id,t:'count',ct:ty.id,pts:[W(p)],page:n,ai:`${tag}: counted at its “${c.what}” label`,aiRun:run.id});bump(c.what+' (EA)')})});
+    if(x.scopes.earth){const C=r.contours||{};[['ex',C.existing_group_ids],['pr',C.proposed_group_ids]].forEach(([w,ids])=>{if(!ids||!ids.length)return;const s=atkElev(w);let k=0,nz=0;
+        ids.forEach(gid=>pathsOf(gid).forEach(P=>{if(tkPolyLen(P.pts)<30)return;if(atkDup(P.pts.map(W),s.id,i=>i.t==='contour',2)){bump('dup');return}const it={id:newId(),sid:s.id,t:'contour',pts:P.pts.map(W),page:n,vkey:P.vkey,ai:`${tag}: ${w==='ex'?'existing':'proposed'} contours = ${gName(gid)}`,aiRun:run.id,layer:gName(gid),aiWhat:w==='ex'?'Existing contour':'Proposed contour'};const z=twLabelZ(V,P);if(z!=null)it.z=z;else nz++;S.tw.items.push(it);P.used=true;k++}));
+        if(k)L.did.push(`Added ${k} ${w==='ex'?'existing':'proposed'} contours to “${s.name}”${nz?`; ${nz} need an elevation (use Sweep or Next missing)`:', all with elevations from their labels'}.`);if(num(C.interval_ft)>0)S.tw.interval=num(C.interval_ft)});
+      let sp=0;(r.spots||[]).forEach(q=>{const p=posOf(q.label_id);if(!p||!isFinite(+q.z))return;const s=atkElev(q.surface==='existing'?'ex':'pr');S.tw.items.push({id:newId(),sid:s.id,t:'spot',pts:[W(p)],z:+q.z,page:n,ai:`${tag}: spot elevation label`,aiRun:run.id});sp++});if(sp)L.did.push(`Added ${sp} spot elevations.`)}
+    if(added.dup){L.did.push(`Skipped ${added.dup} item${added.dup===1?'':'s'} already taken off from another sheet.`);delete added.dup}Object.entries(added).forEach(([k,v])=>L.did.push(`Added ${k.replace(/ \((LF|SF|EA)\)$/,'')}: ${fmtN(v,0)} ${/\((\w+)\)$/.exec(k)[1]}.`))}
+  (r.stated||[]).forEach(q=>run.stated.push({...q,n}));if(r.earthwork_summary&&(r.earthwork_summary.cut_cy!=null||r.earthwork_summary.fill_cy!=null))run.ew={...r.earthwork_summary,note:(r.earthwork_summary.note||'')+` · sheet ${n}`};
+  L.st=L.warn.length&&!L.did.length?'err':'ok';twVecUsed();twTouch()}
+
+// after every sheet: the storm network becomes pipe runs on a utility surface
+function atkBuildRuns(run){const N=run.net;const st=k=>N.st[normH(k)];const out={};N.pipes.forEach(p=>{(out[normH(p.from)]=out[normH(p.from)]||[]).push(p)});
+  const inc=new Set(N.pipes.map(p=>normH(p.to)));const used=new Set();const lines=[];let missing=new Set();
+  const starts=[...Object.keys(out).filter(k=>!inc.has(k)),...Object.keys(out)];
+  starts.forEach(k0=>{(out[k0]||[]).forEach(p0=>{if(used.has(p0.key))return;const chain=[p0];used.add(p0.key);let cur=normH(p0.to);
+    for(let g=0;g<500;g++){const nx=(out[cur]||[]).find(p=>!used.has(p.key));if(!nx)break;chain.push(nx);used.add(nx.key);cur=normH(nx.to)}
+    const names=[chain[0].from,...chain.map(p=>p.to)];const ok=names.every(nm=>st(nm)&&st(nm).w);if(!ok){names.filter(nm=>!(st(nm)&&st(nm).w)).forEach(nm=>missing.add(nm));
+      // split at structures we couldn't place and keep the placed stretches
+      let cur2=[];const flush=()=>{if(cur2.length>=1)lines.push(cur2);cur2=[]};chain.forEach(p=>{if(st(p.from)&&st(p.from).w&&st(p.to)&&st(p.to).w)cur2.push(p);else flush()});flush();return}
+    lines.push(chain)})});
+  const sys=s=>s||'Storm Drain';const bySys={};const report=[];
+  lines.forEach((ch,ci)=>{const S0=sys(ch[0].system||st(ch[0].from).system);const surf=bySys[S0]||(bySys[S0]=S.tw.surfaces.find(u=>u.kind==='util'&&twDefSys(u)===S0)||twMkSurf(twSysShort(S0),'util'));
+    const names=[ch[0].from,...ch.map(p=>p.to)];const nodes=names.map((nm,i)=>{const o=st(nm);const pin=ch[i-1],pout=ch[i];const ii=pin&&pin.inv_down!=null?pin.inv_down:(o.inverts_in&&o.inverts_in.length?Math.min(...o.inverts_in):null);const io=pout&&pout.inv_up!=null?pout.inv_up:o.inv_out;
+      return {n:o.name,k:atkKind(o.kind),rim:o.rim!=null?String(o.rim):'',ii:i>0&&ii!=null?String(ii):'',io:pout&&io!=null?String(io):''}});
+    const pts=names.map(nm=>st(nm).w);const segs=ch.map(p=>({d:num(p.size_in)||(S0==='Storm Drain'?15:8),m:atkMat(p.material)||twDefMat(S0)}));
+    const it={id:newId(),sid:surf.id,t:'pipe',pts,page:st(names[0]).page||null,name:`${names[0]} → ${names[names.length-1]}`,sys:S0,nodes,segs,gnd:'',tw:'',bb:'',sc:'',ai:`AI: ${ch.length} pipe${ch.length===1?'':'s'} drawn structure to structure from plan labels; sizes, rims and inverts from the sheets`,aiRun:run.id};S.tw.items.push(it);
+    const stated=ch.reduce((a,p)=>a+(num(p.length_ft)||0),0),meas=twLen(pts);report.push(`${it.name}: ${ch.length} pipe${ch.length===1?'':'s'}, ${fmtN(meas,0)} LF on the plans${stated?` (sheets say ${fmtN(stated,0)} LF${Math.abs(stated-meas)>Math.max(10,stated*0.08)?' — check this one':''})`:''}`)});
+  if(missing.size)report.push(`Couldn’t place ${missing.size} structure${missing.size===1?'':'s'} (no label found on a lined-up sheet): ${[...missing].slice(0,12).join(', ')}${missing.size>12?'…':''}. Draw those runs with the Pipe tool.`);
+  return report}
+
+async function atkGo(){const x=M;if(!S.tw||twRo())return;const pages=[...x.pick].sort((a,b)=>a-b);twSnap();
+  if(x.replace){const k=S.tw.items.length;S.tw.items=S.tw.items.filter(i=>!i.aiRun);twVecUsed();if(k!==S.tw.items.length)toast(`Cleared ${k-S.tw.items.length} items from the last AI takeoff`)}
+  const run=x.run={id:newId(),sheets:pages.map(n=>({n,st:'wait',did:[],warn:[],title:''})),net:{st:{},pipes:[]},stated:[],ew:null,done:false,stop:false};renderModal();
+  // plan sheets first (so structures get placed), then profiles and tables fill in the rest; a second look at any sheet that couldn't be lined up the first time
+  for(const n of pages){if(run.stop)break;const L=run.sheets.find(s=>s.n===n);const t0=Date.now();const tick=setInterval(()=>{const e=document.querySelector(`[data-atkt="${n}"]`);if(e)e.textContent=`reading… ${Math.round((Date.now()-t0)/1000)}s`},1000);
+    try{await atkSheet(run,x,n)}catch(er){L.st='err';L.warn.push(errMsg(er))}clearInterval(tick);if(M===x)renderModal()}
+  run.sheets.filter(s=>s.st==='wait').forEach(s=>{s.st='skip';s.warn.push('Stopped before this sheet.')});
+  const runs=x.scopes.storm?atkBuildRuns(run):[];
+  S.tw.ai={at:new Date().toISOString(),by:myName(),sheets:run.sheets.map(({n,title,did,warn})=>({n,title,did,warn})),runs,stated:run.stated,ew:run.ew};
+  run.done=true;twVecUsed();twTouch();twPanels();twDraw();if(M===x)renderModal();await twSave()}
+function atkReportModal(){const A=S.tw.ai;return mhead('✨ Last AI takeoff',A?`${fmtDate(A.at.slice(0,10))} by ${A.by}`:'')+`<div class="mbody">${A?atkRunHtml({sheets:A.sheets.map(s=>({...s,st:s.warn.length&&!s.did.length?'err':'ok'})),done:true}):'None yet.'}</div><div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Close</button></div></div>`}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('atk-'))return;
+  if(a==='atk-open')atkOpen();if(a==='atk-report'){aiLessonsLoad().then(()=>{if(M&&M.kind==='aitkr')renderModal()});M={kind:'aitkr'};showModal()}
+  if(!M||M.kind!=='aitko')return;if(a==='atk-go'&&!M.run)atkGo();if(a==='atk-stop'&&M.run){M.run.stop=true;renderModal()}if(a==='atk-none'){M.pick.clear();renderModal()}});
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='aitko'||!t.dataset)return;
+  if(t.dataset.atkp!=null){const p=+t.dataset.atkp;t.checked?M.pick.add(p):M.pick.delete(p);renderModal()}if(t.dataset.atks!=null){M.scopes[t.dataset.atks]=t.checked;renderModal()}if(t.dataset.atkr!=null)M.replace=t.checked});
+
+/* ===================================================================================================
+   TEACH AI — lessons the company AI keeps (public.ai_lessons, update 48). Corrections to AI takeoff
+   items become suggested lessons ("layer X is really Y"); anyone can type one; every AI request
+   carries the lessons for its kind. Admins (or the author) can remove them in Settings.
+   =================================================================================================== */
+const AIL_KINDS=[['takeoff','Takeoffs'],['rate','Rating projects'],['invite','Reading invites'],['quotes','Leveling quotes'],['general','Everything']];
+async function aiLessonsLoad(force){if(S.aiLessons&&!force)return S.aiLessons;if(S.aiLessonsMissing&&!force)return [];
+  try{const {data,error}=await sb.from('ai_lessons').select('*').eq('active',true).order('created_at');if(error)throw error;S.aiLessons=data||[];S.aiLessonsMissing=false}
+  catch(e){if(/ai_lessons|relation|schema cache|does not exist|404/i.test(e.message||'')){S.aiLessonsMissing=true;S.aiLessons=null}else console.warn('ai_lessons',e)}return S.aiLessons||[]}
+function aiLessonText(L){return L.layer?`Layer “${L.layer}” ${L.what==='ignore'?'is not part of the takeoff; leave it out':`is ${L.what}${L.form?` (${L.form.replace('contour-ex','existing contours').replace('contour-fg','proposed contours')})`:''}`}.${L.text&&!/^Layer /.test(L.text)?' '+L.text:''}`:L.text}
+function aiLessonsFor(task){const k=task==='rate'?'rate':task==='quotes'?'quotes':task==='takeoff'?'takeoff':'invite';return (S.aiLessons||[]).filter(L=>L.kind===k||L.kind==='general')}
+async function aiLessonAdd(o){const row={kind:o.kind||'takeoff',text:String(o.text||'').trim(),layer:o.layer||null,what:o.what||null,form:o.form||null,active:true,by_name:myName()};if(!row.text)row.text=aiLessonText(row);
+  const {error}=await sb.from('ai_lessons').insert(row);if(error)throw error;await aiLessonsLoad(true)}
+// corrections → suggested lessons (kept on the takeoff until someone keeps or dismisses them)
+function aiPropAdd(it,what){if(!S.tw||!it||!it.aiRun||!it.layer)return;const P=S.tw.aiProps=S.tw.aiProps||[];if((S.aiLessons||[]).some(L=>L.layer===it.layer&&L.what===what))return;
+  const form=it.t==='contour'?(twSurf(it.sid)===twElevOf('ex')?'contour-ex':'contour-fg'):it.t;const ex=P.find(p=>p.layer===it.layer);if(ex){ex.what=what;ex.form=form}else P.push({layer:it.layer,what,form,from:it.aiWhat||''});twTouch()}
+{const _del=twDelItem;twDelItem=function(id){const it=S.tw&&S.tw.items.find(x=>x.id===id);if(it&&it.aiRun&&it.layer)aiPropAdd(it,'ignore');return _del(id)}}
+document.addEventListener('change',e=>{const t=e.target;if(!S.tw||!t.dataset||t.dataset.twas==null)return;setTimeout(()=>{const it=S.tw.items.find(x=>x.id===t.dataset.twas);if(!it||!it.aiRun||!it.layer)return;const ty=twCtOf(it);
+  if(ty&&ty.name!==it.aiWhat){aiPropAdd(it,ty.name);toast('AI will ask to learn this: see 🎓 Teach AI')}},0)});
+function atkTeachHtml(){const P=(S.tw&&S.tw.aiProps)||[];const miss=S.aiLessonsMissing;const ro=twRo();
+  return `<div class="atk-teach"><h4>🎓 Teach AI</h4>${miss?'<div class="notice">Shared lessons need one database update. An admin runs <b>update-48-ai-lessons.sql</b> in Supabase (SQL editor), then lessons save for everyone.</div>':''}
+    ${P.length?`<p class="small dim" style="margin:0 0 6px">You corrected what AI did. Keep these so it does it your way next time:</p><ul class="atk-props">${P.map((p,i)=>`<li><span><b>Layer “${esc(p.layer)}”</b> ${p.from?`AI said <i>${esc(p.from)}</i>, `:''}you made it <b>${esc(p.what==='ignore'?'not part of the takeoff':p.what)}</b></span>${miss||ro?'':`<button class="btn sm" data-act="ail-keep" data-i="${i}">Keep as a lesson</button>`}<button class="btn sm ghost" data-act="ail-drop" data-i="${i}">Dismiss</button></li>`).join('')}</ul>`:''}
+    <label class="f"><span class="f-lab">Tell AI something for next time</span><textarea class="field" rows="3" data-ailnew="1" placeholder="e.g. On Kimley-Horn plans the existing contours are layer C-TOPO-EXST. We take off silt fence from the ESPC Phase 2 sheet only. Count every inlet as inlet protection, even yard inlets.">${esc((S.ailDraft&&S.ailDraft.text)||'')}</textarea></label>
+    <div class="adders"><select class="field sm" data-ailkind style="width:auto">${AIL_KINDS.map(([k,l])=>`<option value="${k}"${((S.ailDraft&&S.ailDraft.kind)||'takeoff')===k?' selected':''}>${l}</option>`).join('')}</select><button class="btn sm primary" data-act="ail-save"${miss?' disabled':''}>Save lesson</button>
+      <span class="small dim">${(S.aiLessons||[]).length} lesson${(S.aiLessons||[]).length===1?'':'s'} so far. Every AI request uses them.</span></div></div>`}
+function aiLessonsAdminHtml(){if(!S.aiLessons&&!S.aiLessonsMissing){aiLessonsLoad().then(()=>render());return '<div class="panel pad"><h3 class="adm-h">What AI has learned</h3><p class="dim">Loading…</p></div>'}
+  if(S.aiLessonsMissing)return `<div class="panel pad"><h3 class="adm-h">What AI has learned</h3><div class="notice">Run <b>update-48-ai-lessons.sql</b> in Supabase (SQL editor) to turn on shared lessons. Until then, use the Instructions for AI boxes above.</div></div>`;
+  const me=S.session&&S.session.user&&S.session.user.id;const L=S.aiLessons||[];
+  return `<div class="panel pad"><h3 class="adm-h">What AI has learned <span class="small dim">${L.length}</span></h3><p class="hint" style="margin-top:0">Lessons from your team: corrections they kept from AI takeoffs and things they typed in with 🎓 Teach AI. Each AI request carries the lessons for what it’s doing. Remove any that are wrong.</p>
+    ${L.length?`<table class="ai-apply"><thead><tr><th>For</th><th>Lesson</th><th>From</th><th></th></tr></thead><tbody>${L.map(x=>`<tr><td class="small">${esc((AIL_KINDS.find(k=>k[0]===x.kind)||[,x.kind])[1])}</td><td>${esc(aiLessonText(x))}</td><td class="small dim">${esc(x.by_name||'')}<br>${fmtDate(String(x.created_at).slice(0,10))}</td><td>${isAdmin()||x.created_by===me?`<button class="btn sm ghost" data-act="ail-del" data-id="${x.id}">Remove</button>`:''}</td></tr>`).join('')}</tbody></table>`:'<p class="dim">Nothing yet. Lessons show up here as people teach AI.</p>'}
+    ${atkTeachHtml().replace('<h4>🎓 Teach AI</h4>','').replace(/<p class="small dim" style="margin:0 0 6px">You corrected[\s\S]*?<\/ul>/,'')}</div>`}
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.ailnew!=null){S.ailDraft=S.ailDraft||{};S.ailDraft.text=t.value}});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.ailkind!=null){S.ailDraft=S.ailDraft||{};S.ailDraft.kind=t.value}});
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('ail-'))return;const redraw=()=>{M?renderModal():render()};
+  try{if(a==='ail-save'){const D=S.ailDraft||{};if(!String(D.text||'').trim()){toast('Type the lesson first');return}await aiLessonAdd({kind:D.kind||'takeoff',text:D.text});S.ailDraft=null;toast('Saved. AI will use it from now on.');redraw()}
+    if(a==='ail-keep'){const P=S.tw.aiProps;const p=P[+t.dataset.i];if(!p)return;await aiLessonAdd({kind:'takeoff',layer:p.layer,what:p.what,form:p.form});P.splice(+t.dataset.i,1);twTouch();toast('Kept. Next AI takeoff will do it your way.');redraw()}
+    if(a==='ail-drop'){S.tw.aiProps.splice(+t.dataset.i,1);twTouch();redraw()}
+    if(a==='ail-del'){const {error}=await sb.from('ai_lessons').delete().eq('id',t.dataset.id);if(error)throw error;await aiLessonsLoad(true);toast('Removed');redraw()}}catch(er){toast(errMsg(er))}});
+FOCUS_ATTRS.push('data-ailnew');

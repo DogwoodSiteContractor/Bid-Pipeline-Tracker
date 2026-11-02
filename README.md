@@ -1027,6 +1027,27 @@ Tell AI how Dogwood works so its answers fit. Every AI request carries them.
 
 AI follows the company's instructions first and yours on top; if they conflict, the company's win. It is told never to invent numbers to satisfy an instruction.
 
+## AI takeoff (Takeoff workspace)
+
+**✨ AI takeoff** in the workspace toolbar (when AI is on). Open the plan PDF, pick the sheets (storm plan and profiles, structure table, grading, erosion control), pick the scopes (Storm & utilities, Erosion control, Earthwork) and go. Tip: fewer sheets is faster and cheaper; you can also save just those sheets as their own PDF and open that. The PDF is never saved.
+
+How it works, one sheet per AI request:
+- The app renders the sheet (whole + four close-up quarters) and pulls the sheet's own PDF text and linework (vector groups by CAD layer or line style), the same vectors the workspace uses.
+- AI says **which** groups and labels are what: the scale, existing / proposed contour layers, silt fence and other line items, counted items by their labels, spot elevations, and every storm structure and pipe it can read (sizes, materials, rims, inverts from callouts, profiles and structure tables).
+- The app adds that exact geometry to the workspace: it sets the scale, lines up later sheets using the structures they share with sheets already placed, adds contours with elevations from their labels, puts line / area / count items under the regular Take off list (Silt fence, Inlet protection…), and draws pipe runs structure to structure with the rims and inverts filled in. The same line on two sheets is only taken off once.
+- Every AI item is marked ✨ with where it came from (sheet and layer); the report (toolbar → **Report & 🎓 Teach**) lists what each sheet did, pipe runs with measured vs. stated length, quantities written on the sheets, and anything to check.
+
+Sheets that are scans (no PDF text or linework) can only be read, not placed. A sheet that can't be lined up automatically gets a note: line it up with Align sheet and run it again.
+
+## Teaching the company AI
+
+AI gets better from your team's corrections:
+- Change what an AI item is, or delete one, and the app suggests a lesson ("layer C-SILT is Tree protection fence", "layer X isn't part of the takeoff"). **Keep as a lesson** saves it.
+- **Tell AI something for next time** (in the takeoff report, and in Settings → AI & bid rating) for anything else: which layers a firm uses, which sheet to take silt fence from, how you count inlets.
+- Lessons are shared company-wide and go with every AI request of that kind (takeoffs, ratings, invites, quotes, or everything). Settings → AI & bid rating → **What AI has learned** lists them; admins (or whoever wrote one) can remove it.
+
+Needs **update-48-ai-lessons.sql** (the `ai_lessons` table).
+
 ## Right-click menu on bids
 
 Right-click any bid (Pipeline cards or list, Projects overview, anywhere a bid opens on click) for a quick menu: **Open bid**, **Go to** a step (Project, Scopes & RFQs, Takeoff, Quotes, Estimate & proposal, Follow-up), **Advance** to the next step (goes straight through when nothing's open; otherwise opens the bid to confirm), **Status**, **Open on Awarded**, **Print summary**, and **Copy link**. Shift + right-click gives the browser's normal menu.

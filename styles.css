@@ -2963,3 +2963,19 @@ div.tw-pgh{cursor:default}
 .rr-q{width:100%;border-collapse:collapse}.rr-q td{padding:4px 6px 4px 0}
 .aii-f{margin-bottom:14px}.aii-f>small{display:block;margin:0 0 4px}
 .aii-co{margin:2px 0 6px}.aii-co summary{cursor:pointer}.aii-co div{padding:6px 10px;margin-top:4px;border-left:3px solid var(--line)}
+/* AI takeoff */
+.atk-scopes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}@media(max-width:700px){.atk-scopes{grid-template-columns:1fr}}
+.atk-pick-h{display:flex;align-items:center;gap:10px;margin:4px 0 8px}
+.atk-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;max-height:46vh;overflow:auto;padding:2px}
+.atk-pg{display:flex;flex-direction:column;gap:4px;padding:6px;border:2px solid var(--line);border-radius:8px;cursor:pointer;position:relative;font-size:12px}
+.atk-pg.on{border-color:var(--accent);background:var(--accent-soft)}.atk-pg input{position:absolute;top:8px;left:8px}
+.atk-pg img{width:100%;aspect-ratio:3/2;object-fit:contain;background:#fff;border-radius:4px}
+.atk-log{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.atk-log>li{display:flex;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px}
+.atk-log>li>i{font-style:normal;font-weight:700;width:18px;flex:none}.atk-log>li.ok>i{color:var(--good)}.atk-log>li.err>i{color:var(--bad)}.atk-log>li.work{border-color:var(--accent)}
+.atk-log ul{margin:4px 0 0;padding-left:18px;font-size:13px}.atk-warn{color:var(--warn)}
+.atk-runs{font-size:13px;padding-left:18px}
+.tw-ainote{margin-top:4px;padding:4px 8px;border-radius:6px;background:var(--accent-soft)}
+.atk-teach{margin-top:18px;padding:14px;border:1px dashed color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:10px}.atk-teach h4{margin:0 0 8px}
+.atk-props{list-style:none;margin:0 0 10px;padding:0;display:flex;flex-direction:column;gap:6px}.atk-props li{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.atk-props li>span{flex:1;min-width:200px;font-size:14px}
+.atk-badge{display:inline-grid;place-items:center;min-width:18px;height:18px;border-radius:9px;background:var(--accent);color:var(--accent-ink);font-size:11px;margin-left:4px}
