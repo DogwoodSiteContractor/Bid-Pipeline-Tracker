@@ -2961,3 +2961,5 @@ div.tw-pgh{cursor:default}
 .rh-mi{display:flex;gap:6px}.rh-mi .field{flex:1;min-width:0}
 .rh-qs{display:flex;flex-direction:column;gap:6px;margin:14px 0 6px}.rh-qs small{margin-left:4px}
 .rr-q{width:100%;border-collapse:collapse}.rr-q td{padding:4px 6px 4px 0}
+.aii-f{margin-bottom:14px}.aii-f>small{display:block;margin:0 0 4px}
+.aii-co{margin:2px 0 6px}.aii-co summary{cursor:pointer}.aii-co div{padding:6px 10px;margin-top:4px;border-left:3px solid var(--line)}

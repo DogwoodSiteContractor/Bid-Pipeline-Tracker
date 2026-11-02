@@ -973,7 +973,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal,airate:aiRateModal}[M.kind]();
+  const html={tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal,airate:aiRateModal,aiinstr:aiInstrModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='bid'?' bidpage':''}${['rpcard','rpdrill','airate','import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -13953,6 +13953,7 @@ FOCUS_ATTRS.push('data-duereason');
 
 
 
+
 /* ===================================================================================================
    AI TOOLS — read a bid invite, rate a project go / no-go, level vendor quotes.
    Files are read in the browser, sent once to the Supabase "ai" function, and never stored.
@@ -13975,7 +13976,7 @@ async function aiAddFiles(A,list){const errs=[];for(const f of [...list]){try{co
   A.err=errs.join(' ');renderModal()}
 async function aiCall(task,{text,files,ctx}){
   if(!sb)throw new Error('Not connected to the database.');
-  const call=sb.functions.invoke('ai',{body:{task,text:text||'',files:(files||[]).map(({size,...f})=>f),ctx}});
+  const call=sb.functions.invoke('ai',{body:{task,text:text||'',files:(files||[]).map(({size,...f})=>f),ctx,instr:aiInstrFor(task)}});
   const {data,error}=await Promise.race([call,new Promise((_,rej)=>setTimeout(()=>rej(new Error('The AI took too long (over 2 minutes). Try again, or use fewer or smaller files.')),145000))]);
   if(error){let m=error.message||'';try{const j=await error.context.json();if(j&&j.error)m=j.error}catch(e){}
     if(/failed to send|not found|404|fetch/i.test(m))m='AI isn’t set up yet. The “ai” function needs to be deployed in Supabase (README → AI tools).';
@@ -13999,7 +14000,7 @@ function aiHistCtx(){
     by_project_type:grp(b=>b.project_type||'Other').map(([k,a])=>({type:k,...agg(a)})),
     by_bid_value:grp(b=>bk(bidValue(b))).map(([k,a])=>({bid_value:k,...agg(a)})),
     workload:{open_bids_not_sent:act.length,due_by_week:wk,by_estimator:S.estimators.filter(e=>e.active!==false).map(e=>({estimator:e.name,open_bids:act.filter(b=>b.lead_estimator_id===e.id).length}))},
-    company_rules:aiRules(),rating_rules:rateRules()}}
+    rating_rules:rateRules()}}
 const aiGc=n=>{const k=normH(n);if(!k)return null;const L=S.clients;return L.find(c=>normH(c.company)===k)||L.find(c=>{const c2=normH(c.company);return c2.length>3&&(c2.includes(k)||k.includes(c2))})||null};
 const aiDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(String(s||''))?s:'';
 const aiTime=s=>/^\d{1,2}:\d{2}$/.test(String(s||''))?String(s).padStart(5,'0'):'';
@@ -14040,11 +14041,8 @@ function aiRateModal(){const A=M;const R=A.res;const ai=aiOn();const mode=ai?(A.
     <div class="seg" style="margin-bottom:14px"><button class="on" data-act="ai-rate-mode" data-v="ai">✨ AI reads the invite</button><button data-act="ai-rate-mode" data-v="hand">Rate by hand</button></div>
     <label class="f"><span class="f-lab">Invite email or notes</span><textarea class="field" rows="7" data-aitext="1" placeholder="Paste the bid invite email here…">${esc(A.text||'')}</textarea></label>
     ${aiDrop(A,'PDF invites, plan cover sheets, screenshots, or a saved .eml / .txt email')}
-    <details class="ai-rules"${A.rulesOpen?' open':''}><summary>What matters to us when deciding</summary><p class="small dim">AI weighs these along with our history.${isAdmin()?' Admins can edit them; they apply for everyone.':''}</p>
-      <textarea class="field" rows="4" data-airules="1"${isAdmin()?'':' disabled'} placeholder="e.g. We don’t chase jobs over 90 minutes away. Under $150K only for GCs we win with. Avoid design-build without civil plans.">${esc(A.rules!=null?A.rules:aiRules())}</textarea>
-      ${isAdmin()?'<button class="btn sm" data-act="ai-rules-save">Save for everyone</button>':''}</details>
     ${aiPrivacy}</div>
-    <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="ai-rate-run"${A.busy?' disabled':''}>${A.busy?'Reading and rating…':'Rate it'}</button></div></div>`;
+    <div class="mfoot"><div>${aiInstrLink()}</div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="ai-rate-run"${A.busy?' disabled':''}>${A.busy?'Reading and rating…':'Rate it'}</button></div></div>`;
   const P=R.project||{};const v=R.verdict||'Maybe';const cls=v==='Go'?'good':v==='No-go'?'bad':'warn';const gcHit=aiGc(P.gc_name);
   return mhead(R.manual?'Bid recommendation · our rules':'✨ Bid recommendation',P.project_name||'')+`<div class="mbody">
     <div class="ai-verdict ${cls}"><div class="ai-score"><b>${Math.round(num(R.score)||0)}</b><small>of 100</small></div><div><h3>${esc(v==='No-go'?'No-go':v)}</h3><p>${esc(R.headline||'')}</p></div></div>
@@ -14072,7 +14070,7 @@ function aiInviteRows(b,P){const rows=AI_FIELDS.map(([f,l,k])=>{const nv=aiInvit
   const n=aiNotes(P,null);if(n&&!String(b.notes||'').includes(P.summary||'§'))rows.push({key:'notes',label:'Notes',cur:b.notes?'(adds below what’s there)':'',nv:n,on:true});
   return rows}
 function aiSubView(){const A=M.ai;const b=M.draft;const back=`<div class="bp-head"><button class="btn ghost bp-back" data-act="ai-back">← Back to the bid</button><div class="bp-title"><h2>${A.task==='quotes'?'✨ Level quotes':'✨ Fill from invite'}</h2><p>${esc(b.name||'New bid')}</p></div></div>`;
-  const run=(lab,busy)=>`<div class="mfoot"><div></div><div class="r"><button class="btn" data-act="ai-back">Cancel</button><button class="btn primary" data-act="ai-run"${A.busy?' disabled':''}>${A.busy?busy:lab}</button></div></div>`;
+  const run=(lab,busy)=>`<div class="mfoot"><div>${aiInstrLink()}</div><div class="r"><button class="btn" data-act="ai-back">Cancel</button><button class="btn primary" data-act="ai-run"${A.busy?' disabled':''}>${A.busy?busy:lab}</button></div></div>`;
   if(!A.res){const q=A.task==='quotes';
     return back+`<div class="mbody bp-body"><div class="ai-pane">${q?'<p>Drop in the vendor quotes for this bid (PDFs or pictures, up to about 8 at once). AI reads each one, lines them up by scope, and flags what one vendor includes that another leaves out.</p>':'<p>Paste the invite email and/or drop the invite PDF. AI pulls out the project, GC, dates and scopes; you pick what to keep.</p>'}
       ${q?'':`<label class="f"><span class="f-lab">Invite email</span><textarea class="field" rows="7" data-aitext="1" placeholder="Paste the bid invite email here…">${esc(A.text||'')}</textarea></label>`}
@@ -14273,7 +14271,7 @@ function aiAdminHtml(){const D=S.aiAdm=S.aiAdm||{off:!!(S.settings.general||{}).
     <div class="panel pad"><h3 class="adm-h">Yes / no questions</h3><p class="hint" style="margin-top:0">Shown as checkboxes when rating. A checked box adds its points (use a minus number to take points away).</p>
       <table class="rr-q"><tbody>${r.questions.map((q,i)=>`<tr><td><input class="field" data-rrq="${i}" value="${esc(q.q)}" placeholder="Question"></td><td style="width:110px"><input class="field" data-rrp="${i}" inputmode="decimal" value="${esc(q.pts??'')}" placeholder="Points"></td><td style="width:40px"><button class="btn sm ghost" data-act="rr-qdel" data-i="${i}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table>
       <div class="adders"><button class="btn sm" data-act="rr-qadd">+ Question</button></div></div>
-    <div class="adders"><button class="btn primary" data-act="rr-save"${D.busy?' disabled':''}>${D.busy?'Saving…':'Save'}</button>${D.dirty?'<span class="small warn-t">Not saved yet</span>':''}<button class="btn ghost" data-act="rr-reset">Back to the starting rules</button></div>`}
+    <div class="adders"><button class="btn primary" data-act="rr-save"${D.busy?' disabled':''}>${D.busy?'Saving…':'Save'}</button>${D.dirty?'<span class="small warn-t">Not saved yet</span>':''}<button class="btn ghost" data-act="rr-reset">Back to the starting rules</button></div>${aiInstrAdminHtml()}`}
 document.addEventListener('input',e=>{const t=e.target;if(!t.dataset)return;
   if(M&&M.kind==='airate'&&t.dataset.rh!=null){const F=M.hand=M.hand||{q:{}};F[t.dataset.rh]=t.value;return}
   const D=S.aiAdm;if(!D||S.view!=='admin')return;const r=D.r;let hit=1;
@@ -14295,3 +14293,47 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
       await run(sb.from('settings').upsert({key:'rating',value:r}));await run(sb.from('settings').upsert({key:'general',value:{...(S.settings.general||{}),aiOff:!!D.off}}));await loadTable('settings');
       S.aiAdm=null;toast(`Saved. AI is ${D.off?'off':'on'}.`)}catch(er){D.busy=false;toast(errMsg(er))}render()}});
 FOCUS_ATTRS.push('data-rh','data-rr','data-rrw','data-rrq','data-rrp');
+
+/* ===================================================================================================
+   INSTRUCTIONS FOR AI — company-wide (admins) + personal (anyone). Sent with every AI request.
+   =================================================================================================== */
+const AI_INSTR=[
+  ['general','Everything AI does','Who we are and how we work: what we self-perform and sub out, where we work, the words and units we use, how answers should read.','e.g. Dogwood is a site contractor in north Georgia. We self-perform clearing, grading, storm, sanitary and water. We sub out paving, striping, fencing and landscaping. Use cubic yards for dirt, linear feet for pipe, tons for stone. Keep answers short and plain.'],
+  ['rate','Rating projects (go / no-go)','What makes a job a go or a no-go for us beyond the numbers in the limits above.','e.g. We don’t chase jobs over 90 minutes from the yard. Under $150K only for GCs we win with. Avoid design-build without civil plans. Rock clauses and unbalanced sites are a minus.'],
+  ['invite','Reading bid invites','What to look for and pull out of an invite.','e.g. Always note the plan room link and any addenda. Flag pre-bid meetings marked mandatory. Treat “site work” packages as earthwork + erosion control + storm unless it says otherwise.'],
+  ['quotes','Leveling quotes','How to compare vendor quotes and what counts as a gap.','e.g. Stone base, prime coat, traffic control, testing and mobilization are the usual gaps on paving. Flag any quote older than 30 days and any escalation clause.'],
+  ['takeoff','Takeoffs (coming next)','How AI should read plans and run takeoffs with our calculators when that arrives. Saved now and used as soon as the AI takeoff is built.','e.g. Use the Pipe bedding & stone backfill calculator for every storm run. Bedding is 6" under pipe unless the detail says otherwise. Swell 25% for clay, 15% for sand. Always list the sheet each quantity came from.']];
+const aiInstrCo=()=>{const v=S.settings.ai_instr||{};return {...v,rate:v.rate!=null?v.rate:aiRules()}};
+const aiInstrMine=()=>(S.profile&&S.profile.profile&&S.profile.profile.aiInstr)||{};
+// what goes to the server for one task: the general + task-specific text, company first, then mine
+function aiInstrFor(task){const C=aiInstrCo(),P=aiInstrMine();const k=task==='rate'?'rate':task==='quotes'?'quotes':task==='takeoff'?'takeoff':'invite';
+  const c=[C.general,C[k]].map(x=>String(x||'').trim()).filter(Boolean).join('\n\n'),m=[P.general,P[k]].map(x=>String(x||'').trim()).filter(Boolean).join('\n\n');
+  return {company:c,mine:m,by:myName()}}
+const aiInstrCount=()=>Object.values(aiInstrMine()).filter(v=>String(v||'').trim()).length;
+function aiInstrLink(){const n=aiInstrCount();return `<button class="btn sm ghost" data-act="aii-open" title="Tell AI how you like things done">✎ My AI instructions${n?` (${n})`:''}</button>`}
+// Settings → AI & bid rating: company instructions
+function aiInstrAdminHtml(){const D=S.aiInstr=S.aiInstr||{v:{...aiInstrCo()}};const calcs=typeof CALCS!=='undefined'?CALCS.map(c=>c.name):[];
+  return `<div class="panel pad"><h3 class="adm-h">Instructions for AI</h3><p class="hint" style="margin-top:0">Company-wide. AI follows these on every request, along with each person’s own instructions (people set theirs from <b>✎ My AI instructions</b> in any AI screen). Write it the way you’d brief a new estimator.</p>
+    ${AI_INSTR.map(([k,l,dsc,ph])=>`<label class="f aii-f"><span class="f-lab">${esc(l)}</span><small class="dim">${esc(dsc)}</small><textarea class="field" rows="${k==='general'?5:4}" data-aiico="${k}" placeholder="${esc(ph)}">${esc(D.v[k]||'')}</textarea>
+      ${k==='takeoff'&&calcs.length?`<small class="dim">Calculators it will have: ${esc(calcs.join(' · '))}</small>`:''}</label>`).join('')}
+    <div class="adders"><button class="btn primary" data-act="aii-co-save"${D.busy?' disabled':''}>${D.busy?'Saving…':'Save instructions'}</button>${D.dirty?'<span class="small warn-t">Not saved yet</span>':''}</div></div>`}
+// personal instructions modal
+function aiInstrModal(){const D=M;const C=aiInstrCo();
+  return mhead('My AI instructions','Only for you. AI adds these to the company’s instructions whenever you use it.')+`<div class="mbody">
+    ${AI_INSTR.map(([k,l,dsc,ph])=>`<label class="f aii-f"><span class="f-lab">${esc(l)}</span>${String(C[k]||'').trim()?`<details class="aii-co"><summary class="small dim">Company instructions for this</summary><div class="small">${esc(C[k]).replace(/\n/g,'<br>')}</div></details>`:''}
+      <textarea class="field" rows="3" data-aiime="${k}" placeholder="${esc(k==='general'?'e.g. Give me the numbers first. Call out anything that affects trucking.':k==='rate'?'e.g. I’m weighing schedule heavily this quarter.':k==='quotes'?'e.g. Always show the unit price per ton on stone.':k==='takeoff'?'e.g. Show cut and fill separately by area.':'e.g. Pull the engineer’s name and phone every time.')}">${esc(D.v[k]||'')}</textarea></label>`).join('')}
+    ${isAdmin()?'<p class="small dim">Company-wide instructions are in Settings → AI & bid rating.</p>':''}</div>
+    <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="${D.back?'aii-back':'close'}">Cancel</button><button class="btn primary" data-act="aii-save"${D.busy?' disabled':''}>${D.busy?'Saving…':'Save'}</button></div></div>`}
+document.addEventListener('input',e=>{const t=e.target;if(!t.dataset)return;
+  if(t.dataset.aiico!=null&&S.aiInstr){S.aiInstr.v[t.dataset.aiico]=t.value;if(!S.aiInstr.dirty){S.aiInstr.dirty=true;const b=document.querySelector('[data-act="aii-co-save"]');if(b)b.insertAdjacentHTML('afterend','<span class="small warn-t">Not saved yet</span>')}}
+  if(t.dataset.aiime!=null&&M&&M.kind==='aiinstr')M.v[t.dataset.aiime]=t.value});
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('aii-'))return;
+  if(a==='aii-open'){const back=M&&M.kind!=='aiinstr'?M:null;M={kind:'aiinstr',v:{...aiInstrMine()},back};showModal();return}
+  if(a==='aii-back'){if(M&&M.back){M=M.back;showModal()}else closeModal();return}
+  if(a==='aii-save'&&M&&M.kind==='aiinstr'){const v=Object.fromEntries(Object.entries(M.v).map(([k,x])=>[k,String(x||'').trim()]).filter(([,x])=>x));M.busy=true;renderModal();
+    const pf={...(S.profile.profile||{}),aiInstr:v};if(!Object.keys(v).length)delete pf.aiInstr;
+    try{const {error}=await sb.rpc('update_my_profile',{p_name:String(S.profile.full_name||'').trim(),p_title:String(S.profile.title||'').trim(),p_phone:String(S.profile.phone||'').trim(),p_profile:pf});if(error)throw error;
+      S.profile.profile=pf;toast('Saved. AI will use your instructions.');if(M.back){M=M.back;showModal()}else closeModal()}catch(er){M.busy=false;renderModal();toast('Couldn’t save: '+errMsg(er))}return}
+  if(a==='aii-co-save'&&isAdmin()&&S.aiInstr){const D=S.aiInstr;D.busy=true;render();const v=Object.fromEntries(AI_INSTR.map(([k])=>[k,String(D.v[k]||'').trim()]));
+    try{await run(sb.from('settings').upsert({key:'ai_instr',value:v}));await loadTable('settings');S.aiInstr=null;toast('Saved. AI follows these for everyone.')}catch(er){D.busy=false;toast(errMsg(er))}render()}});
+FOCUS_ATTRS.push('data-aiico','data-aiime');

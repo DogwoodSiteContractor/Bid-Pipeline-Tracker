@@ -1018,6 +1018,15 @@ The AI key is kept in a Supabase server function. It is never in `app.js` or `co
 
 Only signed-in users can call the function. Each document read typically costs a few cents.
 
+### Instructions for AI
+
+Tell AI how Dogwood works so its answers fit. Every AI request carries them.
+
+- **Company instructions** (admins): Settings → AI & bid rating → *Instructions for AI*. One box for everything AI does (who we are, what we self-perform, units, how answers should read) plus one each for rating projects, reading invites, leveling quotes, and **takeoffs**. The takeoff box is saved now and will be used by the AI takeoff when it's built; it lists the calculators AI will have.
+- **My AI instructions** (everyone): the **✎ My AI instructions** button on every AI screen. The same five boxes, just for you; you can peek at the company's instructions for each. Saved on your profile.
+
+AI follows the company's instructions first and yours on top; if they conflict, the company's win. It is told never to invent numbers to satisfy an instruction.
+
 ## Right-click menu on bids
 
 Right-click any bid (Pipeline cards or list, Projects overview, anywhere a bid opens on click) for a quick menu: **Open bid**, **Go to** a step (Project, Scopes & RFQs, Takeoff, Quotes, Estimate & proposal, Follow-up), **Advance** to the next step (goes straight through when nothing's open; otherwise opens the bid to confirm), **Status**, **Open on Awarded**, **Print summary**, and **Copy link**. Shift + right-click gives the browser's normal menu.
