@@ -14535,6 +14535,7 @@ FOCUS_ATTRS.push('data-ailnew');
 
 
 
+
 /* ===================================================================================================
    TAKEOFF SPRINT (Break room → Games). Take off a plan against the clock. Three kinds of sites, each
    with its own items and classic traps: a commercial parking lot, a subdivision street with a cul-de-sac,
@@ -14563,7 +14564,7 @@ const TS_LV=[
   {site:'pond',n:'Outlet',items:['opipe','rip'],S:30,t:150,tip:'Outlet pipe runs from the outlet structure to the headwall. Rip rap is the apron at the headwall, in SY.'},
   {site:'pond',n:'Whole pond',items:['fence','mat','opipe','rip'],S:40,t:240,graphic:1,tip:'The whole pond, with only a graphic scale. Set the scale first.'}];
 const TS_IT={sf:{n:'Silt fence',u:'LF',f:'line',c:'#c0392b'},inl:{n:'Inlets',u:'EA',f:'count',c:'#2566c0'},asp:{n:'Asphalt paving',u:'SF',f:'area',c:'#7f8c8d'},curb:{n:'Curb & gutter',u:'LF',f:'line',c:'#8e44ad'},pipe:{n:'15" RCP storm pipe',u:'LF',f:'line',c:'#16a085'},
-  rcurb:{n:'Curb & gutter',u:'LF',f:'line',c:'#8e44ad'},sw:{n:'5\' sidewalk',u:'SF',f:'area',c:'#b8860b'},san:{n:'8" PVC sanitary sewer',u:'LF',f:'line',c:'#6b4f2a'},mh:{n:'New sanitary manholes',u:'EA',f:'count',c:'#d35400'},wl:{n:'8" water line',u:'LF',f:'line',c:'#2980b9'},fh:{n:'Fire hydrants',u:'EA',f:'count',c:'#c0392b'},
+  rcurb:{n:'Curb & gutter',u:'LF',f:'line',c:'#8e44ad'},sw:{n:'5\' sidewalk',u:'SF',f:'area',c:'#b8860b',w:5},san:{n:'8" PVC sanitary sewer',u:'LF',f:'line',c:'#6b4f2a'},mh:{n:'New sanitary manholes',u:'EA',f:'count',c:'#d35400'},wl:{n:'8" water line',u:'LF',f:'line',c:'#2980b9'},fh:{n:'Fire hydrants',u:'EA',f:'count',c:'#c0392b'},
   fence:{n:'4\' pond fence',u:'LF',f:'line',c:'#2c3e50'},mat:{n:'Slope matting',u:'SY',f:'area',c:'#27ae60',div:9},rip:{n:'Rip rap apron',u:'SY',f:'area',c:'#7f6a55',div:9},opipe:{n:'24" RCP outlet pipe',u:'LF',f:'line',c:'#16a085'}};
 const TS_SITE_ITEMS={lot:['sf','inl','asp','curb','pipe'],road:['rcurb','sw','san','mh','wl','fh'],pond:['fence','mat','opipe','rip']};
 function tsRng(seed){let a=seed>>>0;return ()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
@@ -14574,7 +14575,7 @@ const tsR10=v=>Math.round(v/10)*10;
 const tsRectPts=(x,y,w,h)=>[[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
 const tsBlank=()=>({lines:[],areas:[],counts:[]});
 // quantity of a set of marks in the item's unit (f = player scale ÷ true scale)
-function tsMQ(m,k,f=1){const it=TS_IT[k];if(it.f==='count')return m.counts.length;if(it.f==='line')return m.lines.reduce((s,p)=>s+tsLen(p),0)*f;return m.areas.reduce((s,a)=>s+(a.ded?-1:1)*tsArea(a.pts),0)*f*f/(it.div||1)}
+function tsMQ(m,k,f=1){const it=TS_IT[k];if(it.f==='count')return m.counts.length;if(it.f==='line')return m.lines.reduce((s,p)=>s+tsLen(p),0)*f;return m.areas.reduce((s,a)=>s+(a.ded?-1:1)*(a.strip?tsLen(a.pts)*f*a.w:tsArea(a.pts)*f*f),0)/(it.div||1)}
 function tsGen(seed,L){const P=(L.site==='road'?tsGenRoad:L.site==='pond'?tsGenPond:tsGenLot)(seed,L);P.kind=L.site||'lot';P.S=L.S;P.truth={};Object.keys(P.ans).forEach(k=>P.truth[k]=tsMQ(P.ans[k],k));const sb=tsBar(P);P.snaps.push([sb.x,sb.y],[sb.x+sb.len,sb.y]);return P}
 
 // ---------- site 1: parking lot ----------
@@ -14731,7 +14732,7 @@ function tsDraw(){const T=S.fun.ts;const cv=document.getElementById('ts-cv');if(
   g.restore();
   const path=(pts,close)=>{g.beginPath();pts.forEach((q0,i)=>{const q=X(q0);i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1])});if(close)g.closePath()};
   const drawMarks=(m,k,alpha)=>{if(!m)return;const c=TS_IT[k].c;g.globalAlpha=alpha;g.lineWidth=3;
-    m.areas.forEach(a=>{path(a.pts,true);g.globalAlpha=alpha*(a.ded?0.35:0.22);g.fillStyle=a.ded?'#d1462f':c;g.fill();g.globalAlpha=alpha;g.strokeStyle=a.ded?'#d1462f':c;g.setLineDash(a.ded?[6,4]:[]);g.stroke();g.setLineDash([])});
+    m.areas.forEach(a=>{if(a.strip){g.strokeStyle=c;g.lineWidth=Math.max(4,a.w*z);g.globalAlpha=alpha*0.45;path(a.pts);g.stroke();g.globalAlpha=alpha;g.lineWidth=3;return}path(a.pts,true);g.globalAlpha=alpha*(a.ded?0.35:0.22);g.fillStyle=a.ded?'#d1462f':c;g.fill();g.globalAlpha=alpha;g.strokeStyle=a.ded?'#d1462f':c;g.setLineDash(a.ded?[6,4]:[]);g.stroke();g.setLineDash([])});
     m.lines.forEach(p=>{g.strokeStyle=c;path(p);g.stroke()});
     m.counts.forEach((p,i)=>{const q=X(p);const dup=m.counts.slice(0,i).filter(o=>Math.hypot(o[0]-p[0],o[1]-p[1])<1).length;g.beginPath();g.arc(q[0]+dup*7,q[1]-dup*7,7,0,7);g.fillStyle=c;g.fill();g.fillStyle='#fff';g.font='bold 9px system-ui';g.textAlign='center';g.textBaseline='middle';g.fillText(String(i+1),q[0]+dup*7,q[1]-dup*7)});g.globalAlpha=1};
   const keys=T.mode==='fix'?Object.keys(T.marks).filter(k=>TS_IT[k]):T.L.items;
@@ -14747,7 +14748,7 @@ function tsDraw(){const T=S.fun.ts;const cv=document.getElementById('ts-cv');if(
 // ---- input ----
 function tsWorld(T,e){const cv=document.getElementById('ts-cv');const r=cv.getBoundingClientRect();const sx=(e.clientX-r.left)*(cv.width/r.width),sy=(e.clientY-r.top)*(cv.height/r.height);return {s:[sx,sy],w:[(sx-T.view.ox)/T.view.z,(sy-T.view.oy)/T.view.z]}}
 function tsSnapAt(T,w){const tol=12/T.view.z;let best=null,bd=tol;T.P.snaps.forEach(p=>{const d=Math.hypot(p[0]-w[0],p[1]-w[1]);if(d<bd){bd=d;best=p}});return best}
-function tsFinish(){const T=S.fun.ts;const it=TS_IT[T.sel];if(it.f==='line'&&T.cur.length>=2)T.marks[T.sel].lines.push(T.cur.slice());if(it.f==='area'&&T.cur.length>=3)T.marks[T.sel].areas.push({pts:T.cur.slice(),ded:T.deduct});T.cur=[];tsSide();tsDraw()}
+function tsFinish(){const T=S.fun.ts;const it=TS_IT[T.sel];if(it.f==='area'&&T.cur.length===2&&it.w){T.marks[T.sel].areas.push({pts:T.cur.slice(),strip:true,w:it.w,ded:T.deduct});T.cur=[];tsSide();tsDraw();return}if(it.f==='area'&&T.cur.length>0&&T.cur.length<3){toast(it.w?`Click both ends of the ${it.n.toLowerCase()} (it’s ${it.w}' wide), or all four corners.`:'An area needs at least 3 corners. Click around the outline, then Enter.');return}if(it.f==='line'&&T.cur.length>=2)T.marks[T.sel].lines.push(T.cur.slice());if(it.f==='area'&&T.cur.length>=3)T.marks[T.sel].areas.push({pts:T.cur.slice(),ded:T.deduct});T.cur=[];tsSide();tsDraw()}
 function tsClick(e){const T=S.fun.ts;if(!T||T.mode!=='play'||!T.view)return;const {w}=tsWorld(T,e);const p=tsSnapAt(T,w)||w;
   if(T.scaleRun){T.scaleRun.push(p);if(T.scaleRun.length===2){const d=tsLen(T.scaleRun);const v=prompt('How many feet is that?');T.scaleRun=null;const ft=num(v);if(ft>0&&d>0){/* world feet per drawn foot */T.scale=T.P.S*ft/d;toast(`Scale set: 1" = ${Math.round(T.scale)}'`)}tsSide()}tsDraw();return}
   if(T.L.graphic&&!T.scale){toast('Set the scale first: use the Scale tool on the graphic scale bar.');return}
@@ -14775,7 +14776,7 @@ function tsUndo(){const T=S.fun.ts;if(T.cur.length){T.cur.pop();tsDraw();return}
 // ---- screens ----
 const tsFmt=(v,u)=>`${u==='EA'?Math.round(v):Math.round(v).toLocaleString()} ${u}`;
 function tsSideHtml(){const T=S.fun.ts;const L=T.L;
-  return `<div class="ts-items">${L.items.map(k=>{const it=TS_IT[k];const q=tsQty(T,k);return `<button class="ts-item${T.sel===k?' on':''}" data-act="ts-sel" data-v="${k}"><i style="background:${it.c}"></i><span><b>${esc(it.n)}</b><small>${it.f==='count'?'Count: click each one':it.f==='line'?'Line: click points, Enter to finish':'Area: click corners, Enter to close'}</small></span><em>${tsFmt(q,it.u)}</em></button>`}).join('')}</div>
+  return `<div class="ts-items">${L.items.map(k=>{const it=TS_IT[k];const q=tsQty(T,k);return `<button class="ts-item${T.sel===k?' on':''}" data-act="ts-sel" data-v="${k}"><i style="background:${it.c}"></i><span><b>${esc(it.n)}</b><small>${it.f==='count'?'Count: click each one':it.w?`Click both ends (${it.w}' wide) or the corners, then Enter`:it.f==='line'?'Line: click points, Enter to finish':'Area: click corners, Enter to close'}</small></span><em>${tsFmt(q,it.u)}</em></button>`}).join('')}</div>
     ${TS_IT[T.sel].f==='area'?`<label class="check small"><input type="checkbox" data-tsded${T.deduct?' checked':''}> <span><b>Deduct</b> (islands, pond bottom, cut-outs)</span></label>`:''}
     <div class="adders"><button class="btn sm${T.scaleRun?' on':''}" data-act="ts-scale">📏 Scale${T.scale&&L.graphic?`: 1" = ${Math.round(T.scale)}'`:''}</button><button class="btn sm" data-act="ts-undo">↶ Undo</button><button class="btn sm ghost" data-act="ts-fit">Fit</button></div>
     <p class="small dim ts-tip">💡 ${esc(L.tip)}</p><p class="small dim">Corners and structures snap (orange box). Scroll to zoom, right-drag or Space-drag to move. Double-click also finishes a line.</p>

@@ -1059,7 +1059,7 @@ Games → **📐 Takeoff Sprint**. Take off a site plan against the clock.
 - **Scoring:** each item within 2% is perfect (100), dropping to 0 at 15% off; total × up to 1.5 for speed. Stars: 95% / 80% / 60% average accuracy. After turning it in you see your number, the right one, the math, and can show the right answer on the plan.
 - **Three sites, 16 levels**, each site unlocked from the start (a star opens the next level in that site):
   - **Parking lot** (8): silt fence, inlets, asphalt, curb & gutter, storm pipe.
-  - **Subdivision street** (4): curb both sides and around the cul-de-sac (the curve snaps every 10°), 5' sidewalk that stops where the plan says, 8" sanitary from the existing manhole you tie into, new manholes only, water line, new hydrants only.
+  - **Subdivision street** (4): curb both sides and around the cul-de-sac (the curve snaps every 10°), 5' sidewalk that stops where the plan says (click both ends and it figures length × 5', or click the four corners), 8" sanitary from the existing manhole you tie into, new manholes only, water line, new hydrants only.
   - **Detention pond** (4): pond fence outside the top of bank less the 12' gate, slope matting in SY (top of bank minus the pond bottom), rip rap apron in SY, outlet pipe; the last level has only a graphic scale.
 - The parking lot levels teach the classic traps: stop silt fence at the construction exit, deduct islands, curb around islands but not across the entrance, don't count existing inlets, read a graphic-only scale (Scale tool). A star unlocks the next level.
 - **Daily takeoff:** the same plan for everyone each day; your first try counts on today's board.
