@@ -1051,3 +1051,13 @@ Needs **update-48-ai-lessons.sql** (the `ai_lessons` table).
 ## Right-click menu on bids
 
 Right-click any bid (Pipeline cards or list, Projects overview, anywhere a bid opens on click) for a quick menu: **Open bid**, **Go to** a step (Project, Scopes & RFQs, Takeoff, Quotes, Estimate & proposal, Follow-up), **Advance** to the next step (goes straight through when nothing's open; otherwise opens the bid to confirm), **Status**, **Open on Awarded**, **Print summary**, and **Copy link**. Shift + right-click gives the browser's normal menu.
+
+## Break room: Takeoff Sprint
+
+Games → **📐 Takeoff Sprint**. Take off a site plan against the clock.
+- **Tools:** pick an item on the right (silt fence, inlets, asphalt, curb & gutter, 15" storm pipe), then click on the plan: lines (Enter or double-click to finish), areas (Enter to close; tick **Deduct** for islands), counts (click each one). Corners and structures snap. Scroll to zoom, right-drag or Space-drag to move, Ctrl+Z to undo.
+- **Scoring:** each item within 2% is perfect (100), dropping to 0 at 15% off; total × up to 1.5 for speed. Stars: 95% / 80% / 60% average accuracy. After turning it in you see your number, the right one, the math, and can show the right answer on the plan.
+- **Eight levels** that teach the classic traps: stop silt fence at the construction exit, deduct islands, curb around islands but not across the entrance, don't count existing inlets, read a graphic-only scale (Scale tool). A star unlocks the next level.
+- **Daily takeoff:** the same plan for everyone each day; your first try counts on today's board.
+- **Find the mistake:** five finished takeoffs with one bad line each (missed fence run, fence across the exit, islands not deducted, island curb left out, existing inlets counted, an inlet counted twice, wrong scale, curb across the entrance). Pick the line and the reason: 100 for both, 50 for the line.
+- Plans are generated from a seed, so every level and each day's plan are the same for everyone. Scores save to fun_stats (`sprint`, `sprint-day`, `sprint-fix`); a new trophy tracks the Sprint total.
