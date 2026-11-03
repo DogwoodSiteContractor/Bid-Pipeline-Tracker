@@ -14533,58 +14533,178 @@ FOCUS_ATTRS.push('data-ailnew');
 
 
 
+
+
 /* ===================================================================================================
-   TAKEOFF SPRINT (Break room → Games). Take off a site plan against the clock: silt fence, inlets,
-   asphalt, curb & gutter, storm pipe. Score = accuracy × speed. Eight levels, a daily plan that's the
-   same for everyone (first try counts), and Find the Mistake (spot the bad line on someone's takeoff).
-   Plans are generated from a seed, so every level and every day's plan is the same for everyone.
+   TAKEOFF SPRINT (Break room → Games). Take off a plan against the clock. Three kinds of sites, each
+   with its own items and classic traps: a commercial parking lot, a subdivision street with a cul-de-sac,
+   and a detention pond. Score = accuracy × speed. Levels by site, a daily plan that's the same for
+   everyone (first try counts), and Find the Mistake. Plans come from a seed, so they're the same for all.
+   Every generator returns the right answer as geometry (ans), so scoring, "show the answer" and Find the
+   Mistake all work the same way for every site.
    Scores: fun_stats keys sprint (best total of levels), sprint-day (today's daily), sprint-fix (best of 5).
    =================================================================================================== */
+const TS_SITES=[['lot','🅿️ Parking lot'],['road','🏘️ Subdivision street'],['pond','💧 Detention pond']];
 const TS_LV=[
-  {n:'Fence line',items:['sf'],S:40,t:120,isl:0,tip:'Silt fence runs on the low sides of the site. It stops at the construction exit.'},
-  {n:'Fence and inlets',items:['sf','inl'],S:40,t:150,isl:0,tip:'Count every inlet inside the lot.'},
-  {n:'The lot',items:['asp','inl'],S:30,t:150,isl:1,tip:'Asphalt is the lot minus the landscape islands. Use Deduct for the islands.'},
-  {n:'Curb work',items:['curb','asp'],S:40,t:180,isl:2,tip:'Curb runs around the lot and around every island. It stops at the entrance.'},
-  {n:'Storm line',items:['pipe','inl'],S:30,t:180,isl:1,ex:1,tip:'Pipe runs inlet to inlet to the flared end. Existing inlets in the road are not ours.'},
-  {n:'Whole sheet',items:['sf','inl','asp','curb','pipe'],S:40,t:300,isl:2,ex:1,tip:'Everything at once. Watch the islands and the existing inlets.'},
-  {n:'No scale given',items:['sf','asp','curb','pipe'],S:50,t:300,isl:2,ex:1,graphic:1,tip:'Only a graphic scale. Set the scale first: Scale tool, click both ends of the bar, enter the feet.'},
-  {n:'Big box',items:['sf','inl','asp','curb','pipe'],S:50,t:300,isl:3,ex:2,big:1,tip:'A big site and a tight clock.'}];
-const TS_IT={sf:{n:'Silt fence',u:'LF',f:'line',c:'#c0392b'},inl:{n:'Inlets',u:'EA',f:'count',c:'#2566c0'},asp:{n:'Asphalt paving',u:'SF',f:'area',c:'#7f8c8d'},curb:{n:'Curb & gutter',u:'LF',f:'line',c:'#8e44ad'},pipe:{n:'15" RCP storm pipe',u:'LF',f:'line',c:'#16a085'}};
+  {site:'lot',n:'Fence line',items:['sf'],S:40,t:120,isl:0,tip:'Silt fence runs on the low sides of the site. It stops at the construction exit.'},
+  {site:'lot',n:'Fence and inlets',items:['sf','inl'],S:40,t:150,isl:0,tip:'Count every inlet inside the lot.'},
+  {site:'lot',n:'The lot',items:['asp','inl'],S:30,t:150,isl:1,tip:'Asphalt is the lot minus the landscape islands. Use Deduct for the islands.'},
+  {site:'lot',n:'Curb work',items:['curb','asp'],S:40,t:180,isl:2,tip:'Curb runs around the lot and around every island. It stops at the entrance.'},
+  {site:'lot',n:'Storm line',items:['pipe','inl'],S:30,t:180,isl:1,ex:1,tip:'Pipe runs inlet to inlet to the flared end. Existing inlets in the road are not ours.'},
+  {site:'lot',n:'Whole sheet',items:['sf','inl','asp','curb','pipe'],S:40,t:300,isl:2,ex:1,tip:'Everything at once. Watch the islands and the existing inlets.'},
+  {site:'lot',n:'No scale given',items:['sf','asp','curb','pipe'],S:50,t:300,isl:2,ex:1,graphic:1,tip:'Only a graphic scale. Set the scale first: Scale tool, click both ends of the bar, enter the feet.'},
+  {site:'lot',n:'Big box',items:['sf','inl','asp','curb','pipe'],S:50,t:300,isl:3,ex:2,big:1,tip:'A big site and a tight clock.'},
+  {site:'road',n:'New street',items:['rcurb','sw'],S:50,t:180,tip:'Curb runs both sides and all the way around the cul-de-sac. Sidewalk is on one side and stops where the plan says.'},
+  {site:'road',n:'Sewer main',items:['san','mh'],S:50,t:180,tip:'The sewer starts at the existing manhole you tie into. Count only the new manholes.'},
+  {site:'road',n:'Water and hydrants',items:['wl','fh','sw'],S:50,t:200,tip:'The water line ties into the existing main. Don’t count the existing hydrant on the main road.'},
+  {site:'road',n:'Whole street',items:['rcurb','sw','san','mh','wl','fh'],S:60,t:300,big:1,tip:'The whole street. The cul-de-sac curve snaps every few degrees: click around it.'},
+  {site:'pond',n:'Pond fence',items:['fence'],S:30,t:150,tip:'The fence runs outside the top of bank. Leave the gate opening out.'},
+  {site:'pond',n:'Slope matting',items:['mat'],S:30,t:180,tip:'Matting covers the side slopes: top of bank minus the pond bottom (Deduct). It’s priced in SY, and the app divides by 9 for you.'},
+  {site:'pond',n:'Outlet',items:['opipe','rip'],S:30,t:150,tip:'Outlet pipe runs from the outlet structure to the headwall. Rip rap is the apron at the headwall, in SY.'},
+  {site:'pond',n:'Whole pond',items:['fence','mat','opipe','rip'],S:40,t:240,graphic:1,tip:'The whole pond, with only a graphic scale. Set the scale first.'}];
+const TS_IT={sf:{n:'Silt fence',u:'LF',f:'line',c:'#c0392b'},inl:{n:'Inlets',u:'EA',f:'count',c:'#2566c0'},asp:{n:'Asphalt paving',u:'SF',f:'area',c:'#7f8c8d'},curb:{n:'Curb & gutter',u:'LF',f:'line',c:'#8e44ad'},pipe:{n:'15" RCP storm pipe',u:'LF',f:'line',c:'#16a085'},
+  rcurb:{n:'Curb & gutter',u:'LF',f:'line',c:'#8e44ad'},sw:{n:'5\' sidewalk',u:'SF',f:'area',c:'#b8860b'},san:{n:'8" PVC sanitary sewer',u:'LF',f:'line',c:'#6b4f2a'},mh:{n:'New sanitary manholes',u:'EA',f:'count',c:'#d35400'},wl:{n:'8" water line',u:'LF',f:'line',c:'#2980b9'},fh:{n:'Fire hydrants',u:'EA',f:'count',c:'#c0392b'},
+  fence:{n:'4\' pond fence',u:'LF',f:'line',c:'#2c3e50'},mat:{n:'Slope matting',u:'SY',f:'area',c:'#27ae60',div:9},rip:{n:'Rip rap apron',u:'SY',f:'area',c:'#7f6a55',div:9},opipe:{n:'24" RCP outlet pipe',u:'LF',f:'line',c:'#16a085'}};
+const TS_SITE_ITEMS={lot:['sf','inl','asp','curb','pipe'],road:['rcurb','sw','san','mh','wl','fh'],pond:['fence','mat','opipe','rip']};
 function tsRng(seed){let a=seed>>>0;return ()=>{a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 const tsSeedOf=s=>{let h=2166136261;for(const ch of String(s)){h^=ch.charCodeAt(0);h=Math.imul(h,16777619)}return h>>>0};
 const tsLen=p=>{let L=0;for(let i=1;i<p.length;i++)L+=Math.hypot(p[i][0]-p[i-1][0],p[i][1]-p[i-1][1]);return L};
 const tsArea=p=>{let a=0;for(let i=0,j=p.length-1;i<p.length;j=i++)a+=(p[j][0]+p[i][0])*(p[j][1]-p[i][1]);return Math.abs(a/2)};
 const tsR10=v=>Math.round(v/10)*10;
-// a site plan from a seed: property, building, lot with islands and an entrance, inlets, storm pipe, silt fence, construction exit
-function tsGen(seed,L){const r=tsRng(seed);const big=L.big?1.5:1;
+const tsRectPts=(x,y,w,h)=>[[x,y],[x+w,y],[x+w,y+h],[x,y+h]];
+const tsBlank=()=>({lines:[],areas:[],counts:[]});
+// quantity of a set of marks in the item's unit (f = player scale ÷ true scale)
+function tsMQ(m,k,f=1){const it=TS_IT[k];if(it.f==='count')return m.counts.length;if(it.f==='line')return m.lines.reduce((s,p)=>s+tsLen(p),0)*f;return m.areas.reduce((s,a)=>s+(a.ded?-1:1)*tsArea(a.pts),0)*f*f/(it.div||1)}
+function tsGen(seed,L){const P=(L.site==='road'?tsGenRoad:L.site==='pond'?tsGenPond:tsGenLot)(seed,L);P.kind=L.site||'lot';P.S=L.S;P.truth={};Object.keys(P.ans).forEach(k=>P.truth[k]=tsMQ(P.ans[k],k));const sb=tsBar(P);P.snaps.push([sb.x,sb.y],[sb.x+sb.len,sb.y]);return P}
+
+// ---------- site 1: parking lot ----------
+function tsGenLot(seed,L){const r=tsRng(seed);const big=L.big?1.5:1;
   const W=tsR10((380+r()*200)*big),H=tsR10((260+r()*120)*big);
   const bw=tsR10(90+r()*70*big),bd=tsR10(60+r()*30),bx=tsR10(40+r()*(W-bw-80)),by=30;
   const lx=30,ly=by+bd+25,lw=W-60,lh=Math.max(100,H-ly-45);
   const entW=30,ex=tsR10(lx+40+r()*(lw-120));
-  const islands=[];const n=L.isl||0;if(n){const ih=18;const iy=Math.round(ly+lh/2-ih/2);const slot=lw/n;for(let i=0;i<n;i++){const iw=tsR10(40+r()*Math.min(40,slot-60));const ix=Math.round(lx+slot*i+(slot-iw)/2);islands.push([ix,iy,iw,ih])}}
+  const islands=[];const n=L.isl==null?2:L.isl;if(n){const ih=18;const iy=Math.round(ly+lh/2-ih/2);const slot=lw/n;for(let i=0;i<n;i++){const iw=tsR10(40+r()*Math.max(0,Math.min(40,slot-60)));const ix=Math.round(lx+slot*i+(slot-iw)/2);islands.push([ix,iy,iw,ih])}}
   const inIsl=(x,y,m)=>islands.some(([ix,iy,iw,ih])=>x>ix-m&&x<ix+iw+m&&y>iy-m&&y<iy+ih+m);
   const inlets=[];const k=2+Math.floor(r()*3*big);for(let g=0;g<400&&inlets.length<k;g++){const x=Math.round(lx+20+r()*(lw-40)),y=Math.round(ly+20+r()*(lh-40));if(inIsl(x,y,12))continue;if(inlets.some(p=>Math.hypot(p[0]-x,p[1]-y)<55))continue;if(y>ly+lh-25&&x>ex-15&&x<ex+entW+15)continue;inlets.push([x,y])}
   inlets.sort((a,b)=>a[0]-b[0]);const fes=[W-12,Math.round(ly+lh*0.55)];const pipe=[...inlets,fes];
-  const exIn=[];for(let i=0;i<(L.ex||0);i++)exIn.push([tsR10(40+r()*(W-80)),H+12]);
+  const exIn=[];for(let i=0;i<(L.ex==null?1:L.ex);i++)exIn.push([tsR10(40+r()*(W-80)),H+12]);
   const cex=[ex+3,ly+lh,entW-6,H+20-(ly+lh)];const yTop=Math.round(H*0.3);
   const sf=[[[10,yTop],[10,H-10],[cex[0],H-10]],[[cex[0]+cex[2],H-10],[W-10,H-10],[W-10,yTop]]];
-  const lot=[[lx,ly],[lx+lw,ly],[lx+lw,ly+lh],[lx,ly+lh]];
-  const truth={sf:tsLen(sf[0])+tsLen(sf[1]),inl:inlets.length,asp:lw*lh-islands.reduce((s,[,,w,h])=>s+w*h,0),curb:2*(lw+lh)-entW+islands.reduce((s,[,,w,h])=>s+2*(w+h),0),pipe:tsLen(pipe)};
+  const lot=tsRectPts(lx,ly,lw,lh);const curbLot=[[ex,ly+lh],[lx,ly+lh],[lx,ly],[lx+lw,ly],[lx+lw,ly+lh],[ex+entW,ly+lh]];const isl=islands.map(([x,y,w,h])=>[...tsRectPts(x,y,w,h),[x,y]]);
+  const ans={sf:{...tsBlank(),lines:sf},inl:{...tsBlank(),counts:inlets.slice()},asp:{...tsBlank(),areas:[{pts:lot},...islands.map(a=>({pts:tsRectPts(...a),ded:true}))]},curb:{...tsBlank(),lines:[curbLot,...isl]},pipe:{...tsBlank(),lines:[pipe]}};
   const how={sf:`Two runs on the low sides: ${Math.round(tsLen(sf[0]))} + ${Math.round(tsLen(sf[1]))} LF. No fence across the ${cex[2]}' construction exit.`,
     inl:`${inlets.length} inlets in the lot${exIn.length?`; the ${exIn.length} existing inlet${exIn.length===1?'':'s'} in the road aren’t ours`:''}.`,
     asp:`Lot ${lw}' × ${lh}' = ${(lw*lh).toLocaleString()} SF${islands.length?` minus ${islands.length} island${islands.length===1?'':'s'} (${islands.map(([,,w,h])=>`${w}×${h}`).join(', ')})`:''}.`,
     curb:`Lot perimeter ${(2*(lw+lh)).toLocaleString()} LF minus the ${entW}' entrance${islands.length?`, plus around each island (${islands.map(([,,w,h])=>2*(w+h)).join(' + ')})`:''}.`,
     pipe:`Inlet to inlet to the flared end: ${pipe.slice(1).map((p,i)=>Math.round(Math.hypot(p[0]-pipe[i][0],p[1]-pipe[i][1]))).join(' + ')} LF, measured center to center.`};
-  const snaps=[[0,0],[W,0],[W,H],[0,H],[bx,by],[bx+bw,by],[bx+bw,by+bd],[bx,by+bd],...lot,[ex,ly+lh],[ex+entW,ly+lh],...islands.flatMap(([x,y,w,h])=>[[x,y],[x+w,y],[x+w,y+h],[x,y+h]]),...inlets,...exIn,fes,...sf.flat(),[cex[0],cex[1]],[cex[0]+cex[2],cex[1]]];
-  return {W,H,S:L.S,bld:[bx,by,bw,bd],lot:[lx,ly,lw,lh],ent:{x:ex,w:entW},islands,inlets,exIn,fes,pipe,sf,cex,truth,how,snaps}}
-function tsLvl(i){return i==='day'?{...TS_LV[7],n:'Daily takeoff',items:['sf','inl','asp','curb','pipe'],S:[30,40,50][tsSeedOf(todayStr())%3],t:300}:TS_LV[i]}
+  const snaps=[[0,0],[W,0],[W,H],[0,H],...tsRectPts(bx,by,bw,bd),...lot,[ex,ly+lh],[ex+entW,ly+lh],...islands.flatMap(a=>tsRectPts(...a)),...inlets,...exIn,fes,...sf.flat(),[cex[0],cex[1]],[cex[0]+cex[2],cex[1]]];
+  return {W,H,title:'SITE PLAN',ans,how,snaps,d:{bld:[bx,by,bw,bd],lot:[lx,ly,lw,lh],ent:{x:ex,w:entW},islands,inlets,exIn,fes,pipe,sf,cex}}}
+function tsDrawLot(D,P){const {g,lw,txt,line,rect}=D;const d=P.d;
+  g.fillStyle='#ecebe6';g.fillRect(-20,P.H+4,P.W+40,30);g.strokeStyle='#555';g.lineWidth=1.2*lw;line([[-20,P.H+4],[P.W+20,P.H+4]]);g.stroke();line([[-20,P.H+34],[P.W+20,P.H+34]]);g.stroke();g.fillStyle='#777';txt('EX. ROAD',P.W/2+60,P.H+26,7);
+  const [lx,ly,lwid,lh]=d.lot;g.fillStyle='#e3e3e0';rect(lx,ly,lwid,lh);g.fill();d.islands.forEach(([x,y,w,h])=>{g.fillStyle='#cfe5c8';rect(x,y,w,h);g.fill()});
+  const [cx,cy,cw,ch]=d.cex;tsHatch(D,cx,cy,cw,ch,4,'#999');g.strokeStyle='#666';g.lineWidth=lw;rect(cx,cy,cw,ch);g.stroke();g.fillStyle='#444';txt('CONST. EXIT',cx+cw/2,cy+ch/2,5);
+  g.strokeStyle='#222';const curbRun=(off)=>{const a=lx-off,b=ly-off,c=lx+lwid+off,e=ly+lh+off;line([[d.ent.x,e],[a,e],[a,b],[c,b],[c,e],[d.ent.x+d.ent.w,e]]);g.stroke()};g.lineWidth=1.6*lw;curbRun(0);g.lineWidth=0.8*lw;curbRun(2);
+  d.islands.forEach(([x,y,w,h])=>{g.lineWidth=1.6*lw;rect(x,y,w,h);g.stroke();g.lineWidth=0.8*lw;rect(x+2,y+2,w-4,h-4);g.stroke()});
+  const [bx,by,bw,bd]=d.bld;tsHatch(D,bx,by,bw,bd,6,'#bbb');g.strokeStyle='#222';g.lineWidth=2*lw;rect(bx,by,bw,bd);g.stroke();g.fillStyle='#222';txt('PROPOSED BUILDING',bx+bw/2,by+bd/2,7);
+  g.strokeStyle='#444';g.lineWidth=1.2*lw;g.setLineDash([14*lw,4*lw,2*lw,4*lw]);rect(0,0,P.W,P.H);g.stroke();g.setLineDash([]);
+  tsSiltFence(D,d.sf);
+  g.strokeStyle='#333';g.lineWidth=1.4*lw;line(d.pipe);g.stroke();if(d.pipe.length>1){const a=d.pipe[0],b=d.pipe[1];g.fillStyle='#333';txt('15" RCP',(a[0]+b[0])/2,(a[1]+b[1])/2-5,5)}
+  d.inlets.forEach(([x,y],i)=>{tsInlet(D,x,y);g.fillStyle='#111';txt(`CB-${i+1}`,x+5,y-6,5,'left')});
+  d.exIn.forEach(([x,y])=>{g.strokeStyle='#777';g.setLineDash([2*lw,2*lw]);rect(x-3,y-3,6,6);g.stroke();g.setLineDash([]);g.fillStyle='#777';txt('EX. INLET',x,y+9,4.5)});
+  {const [x,y]=d.fes;g.fillStyle='#333';g.beginPath();g.moveTo(x-6,y-4);g.lineTo(x,y);g.lineTo(x-6,y+4);g.closePath();g.fill();txt('FES',x-10,y-8,5)}}
+
+// ---------- site 2: subdivision street with a cul-de-sac ----------
+function tsGenRoad(seed,L){const r=tsRng(seed);const big=L.big?1.35:1;
+  const W=tsR10((620+r()*260)*big),H=220,yc=110,x0=30,hw=14,R=40,xc=W-70;const xt=xc-Math.sqrt(R*R-hw*hw);const at=Math.asin(hw/R);
+  const arc=[];const t0=-Math.PI+at,t1=Math.PI-at;const nA=Math.ceil((t1-t0)/(Math.PI/18));for(let i=0;i<=nA;i++){const t=t0+(t1-t0)*i/nA;arc.push([xc+R*Math.cos(t),yc+R*Math.sin(t)])}
+  const curb=[[x0,yc-hw],...arc,[x0,yc+hw]];
+  const xs=tsR10(xt-30-r()*Math.max(0,(xt-x0)*0.35));const sw=tsRectPts(x0,yc-25,xs-x0,5);
+  const exMH=[15,yc];const mhs=[];let x=x0+tsR10(120+r()*80);while(x<xc-60){mhs.push([x,yc]);x+=tsR10(260+r()*120)}mhs.push([xc,yc]);const san=[exMH,...mhs];
+  const wy=yc+22;const wl=[[18,wy],[xc-R-8,wy]];const fhs=[];let fx=x0+tsR10(140+r()*80);while(fx<xc-R-30){fhs.push([fx,wy+6]);fx+=tsR10(330+r()*120)}const exFH=[8,yc+70];
+  const ans={rcurb:{...tsBlank(),lines:[curb]},sw:{...tsBlank(),areas:[{pts:sw}]},san:{...tsBlank(),lines:[san]},mh:{...tsBlank(),counts:mhs.slice()},wl:{...tsBlank(),lines:[wl]},fh:{...tsBlank(),counts:fhs.slice()}};
+  const arcL=R*(t1-t0);
+  const how={rcurb:`Both sides of the street, ${Math.round(xt-x0)} LF each, plus around the cul-de-sac (radius ${R}', ${Math.round(arcL)} LF of curve). The curve is measured along the curb.`,
+    sw:`One side only, from the tie-in to where it ends: ${Math.round(xs-x0)}' × 5' = ${Math.round((xs-x0)*5).toLocaleString()} SF.`,
+    san:`From the existing manhole you tie into, through each new manhole: ${san.slice(1).map((p,i)=>Math.round(p[0]-san[i][0])).join(' + ')} LF.`,
+    mh:`${mhs.length} new manholes. The existing manhole in the main road isn’t ours.`,
+    wl:`From the tie-in at the existing main to the end cap: ${Math.round(tsLen(wl))} LF.`,
+    fh:`${fhs.length} new hydrant${fhs.length===1?'':'s'}. The existing hydrant on the main road isn’t ours.`};
+  const snaps=[...curb,[x0,yc-25],[xs,yc-25],[xs,yc-20],[x0,yc-20],...san,...wl,...fhs,exFH,[xc,yc]];
+  return {W,H,title:'STREET PLAN',ans,how,snaps,d:{yc,x0,hw,R,xc,xt,curb,xs,exMH,mhs,wl,fhs,exFH}}}
+function tsDrawRoad(D,P){const {g,lw,txt,line,rect}=D;const d=P.d;const {yc,x0,xc,R}=d;
+  // existing main road along the left
+  g.fillStyle='#ecebe6';g.fillRect(-10,-10,x0+10,P.H+20);g.strokeStyle='#555';g.lineWidth=1.2*lw;line([[x0,-10],[x0,yc-d.hw]]);g.stroke();line([[x0,yc+d.hw],[x0,P.H+10]]);g.stroke();g.save();g.translate(12,P.H/2+60);g.rotate(-Math.PI/2);g.fillStyle='#777';txt('EX. MAIN ROAD',0,0,7);g.restore();
+  // pavement and cul-de-sac
+  g.fillStyle='#e3e3e0';line(d.curb,true);g.fill();
+  // right of way and lots
+  g.strokeStyle='#555';g.lineWidth=0.8*lw;g.setLineDash([10*lw,4*lw,2*lw,4*lw]);line([[x0,yc-32],[xc-R-10,yc-32]]);g.stroke();line([[x0,yc+32],[xc-R-10,yc+32]]);g.stroke();g.beginPath();g.arc(xc,yc,R+18,0,7);g.stroke();g.setLineDash([]);
+  g.strokeStyle='#bbb';g.lineWidth=0.6*lw;let n=1;for(let x=x0+100;x<xc-R-20;x+=100){line([[x,yc-32],[x,yc-100]]);g.stroke();line([[x,yc+32],[x,yc+100]]);g.stroke();g.fillStyle='#aaa';txt(`LOT ${n}`,x-50,yc-70,6);txt(`LOT ${n+1}`,x-50,yc+70,6);n+=2}
+  // curb (double line)
+  g.strokeStyle='#222';g.lineWidth=1.6*lw;line(d.curb);g.stroke();
+  // sidewalk
+  g.fillStyle='#f3ead2';rect(x0,yc-25,d.xs-x0,5);g.fill();g.strokeStyle='#777';g.lineWidth=0.8*lw;rect(x0,yc-25,d.xs-x0,5);g.stroke();for(let x=x0+5;x<d.xs;x+=5){line([[x,yc-25],[x,yc-20]]);g.stroke()}g.fillStyle='#555';txt('5\' SIDEWALK',x0+60,yc-29,5);txt('END SIDEWALK',d.xs+4,yc-22,4.5,'left');
+  // centerline + sanitary
+  g.strokeStyle='#999';g.lineWidth=0.6*lw;g.setLineDash([12*lw,6*lw]);line([[x0,yc],[d.xt,yc]]);g.stroke();g.setLineDash([]);
+  g.strokeStyle='#5b4320';g.lineWidth=1.6*lw;line([d.exMH,...d.mhs]);g.stroke();g.fillStyle='#5b4320';txt('8" PVC SS',(d.exMH[0]+d.mhs[0][0])/2+20,yc+5,5);
+  const mh=(x,y,ex)=>{g.beginPath();g.arc(x,y,3.5,0,7);g.fillStyle='#fff';g.fill();g.strokeStyle=ex?'#888':'#111';g.lineWidth=1.2*lw;if(ex)g.setLineDash([2*lw,2*lw]);g.stroke();g.setLineDash([]);g.fillStyle=ex?'#888':'#111';txt('S',x,y,4)};
+  mh(...d.exMH,true);g.fillStyle='#888';txt('EX. SMH',d.exMH[0],yc-8,4.5);d.mhs.forEach(([x,y],i)=>{mh(x,y);g.fillStyle='#111';txt(`SMH-${i+1}`,x,y-8,4.5)});
+  // water line + hydrants
+  g.strokeStyle='#1f5f99';g.lineWidth=1.2*lw;line(d.wl);g.stroke();g.fillStyle='#1f5f99';txt('8" DIP WL',d.wl[0][0]+50,d.wl[0][1]+5,5);txt('EX. 8" WATER MAIN',6,d.wl[0][1]+16,4,'left');
+  const fh=(x,y,ex)=>{g.fillStyle=ex?'#fff':'#c0392b';g.strokeStyle=ex?'#888':'#7b241c';g.lineWidth=lw;g.beginPath();g.moveTo(x,y-4);g.lineTo(x+3.5,y+3);g.lineTo(x-3.5,y+3);g.closePath();if(ex)g.setLineDash([2*lw,2*lw]);g.fill();g.stroke();g.setLineDash([])};
+  d.fhs.forEach(([x,y])=>{fh(x,y);g.fillStyle='#7b241c';txt('FH',x,y+9,4.5)});fh(...d.exFH,true);g.fillStyle='#888';txt('EX. FH',d.exFH[0]+10,d.exFH[1],4.5,'left')}
+
+// ---------- site 3: detention pond ----------
+function tsGenPond(seed,L){const r=tsRng(seed);
+  const W=tsR10(440+r()*100),H=tsR10(320+r()*60),cx=Math.round(W*0.45),cy=Math.round(H*0.45),Rx=110+r()*40,Ry=80+r()*30;
+  const n=8,ang=[...Array(n)].map((_,i)=>-Math.PI/2+i*2*Math.PI/n);const jit=ang.map(()=>0.9+r()*0.2);
+  const ring=(k,add)=>ang.map((a,i)=>[Math.round(cx+(Rx*k*jit[i]+add)*Math.cos(a)),Math.round(cy+(Ry*k*jit[i]+add)*Math.sin(a))]);
+  const top=ring(1,0),mid=ring(0.75,0),bot=ring(0.5,0),fen=ring(1,10);
+  // gate: 12' gap on the south edge (the edge with the biggest y), centered
+  let gi=0,gy=-1;fen.forEach((p,i)=>{const q=fen[(i+1)%n];const m=(p[1]+q[1])/2;if(m>gy){gy=m;gi=i}});const A=fen[gi],B=fen[(gi+1)%n];const eL=Math.hypot(B[0]-A[0],B[1]-A[1]);const u=[(B[0]-A[0])/eL,(B[1]-A[1])/eL];
+  const g1=[A[0]+u[0]*(eL/2-6),A[1]+u[1]*(eL/2-6)],g2=[A[0]+u[0]*(eL/2+6),A[1]+u[1]*(eL/2+6)];
+  const fence=[g2];for(let k=1;k<=n;k++)fence.push(fen[(gi+k)%n]);fence.push(g1);
+  // outlet: outlet structure at the east bottom vertex, pipe out to a headwall, rip rap apron
+  const ei=bot.reduce((b,p,i)=>p[0]>bot[b][0]?i:b,0);const ocs=bot[ei];const hw=[W-50,ocs[1]+tsR10(20+r()*30)];const opipe=[ocs,[ocs[0]+Math.round((hw[0]-ocs[0])*0.55),ocs[1]],hw];
+  const rw=tsR10(20+r()*20),rl=tsR10(30+r()*20);const rip=tsRectPts(hw[0],hw[1]-rw/2,rl,rw);
+  const ans={fence:{...tsBlank(),lines:[fence]},mat:{...tsBlank(),areas:[{pts:top},{pts:bot,ded:true}]},opipe:{...tsBlank(),lines:[opipe]},rip:{...tsBlank(),areas:[{pts:rip}]}};
+  const At=tsArea(top),Ab=tsArea(bot);
+  const how={fence:`Around the pond outside the top of bank: ${Math.round(tsLen(fence)+12)} LF minus the 12' gate = ${Math.round(tsLen(fence))} LF.`,
+    mat:`Top of bank ${Math.round(At).toLocaleString()} SF minus the pond bottom ${Math.round(Ab).toLocaleString()} SF = ${Math.round(At-Ab).toLocaleString()} SF of slopes ÷ 9 = ${Math.round((At-Ab)/9).toLocaleString()} SY.`,
+    opipe:`Outlet structure to the headwall: ${opipe.slice(1).map((p,i)=>Math.round(Math.hypot(p[0]-opipe[i][0],p[1]-opipe[i][1]))).join(' + ')} LF.`,
+    rip:`${rl}' × ${rw}' = ${rl*rw} SF ÷ 9 = ${Math.round(rl*rw/9)} SY.`};
+  const snaps=[...top,...bot,...fen,g1,g2,...opipe,...rip,[0,0],[W,0],[W,H],[0,H]];
+  return {W,H,title:'POND PLAN',ans,how,snaps,d:{top,mid,bot,fen,fence,g1,g2,ocs,hw,opipe,rip,rl,rw,cx,cy}}}
+function tsDrawPond(D,P){const {g,lw,txt,line,rect}=D;const d=P.d;
+  g.strokeStyle='#444';g.lineWidth=1.2*lw;g.setLineDash([14*lw,4*lw,2*lw,4*lw]);rect(0,0,P.W,P.H);g.stroke();g.setLineDash([]);
+  // access drive from the south edge to the gate
+  const gm=[(d.g1[0]+d.g2[0])/2,(d.g1[1]+d.g2[1])/2];g.fillStyle='#eee8dc';line([[gm[0]-6,gm[1]],[gm[0]+6,gm[1]],[gm[0]+6,P.H],[gm[0]-6,P.H]],true);g.fill();g.fillStyle='#777';txt('GRAVEL ACCESS',gm[0]+10,P.H-20,4.5,'left');
+  // water and slopes
+  g.fillStyle='#e8f1ec';line(d.top,true);g.fill();g.fillStyle='#d4e6f1';line(d.bot,true);g.fill();
+  g.strokeStyle='#222';g.lineWidth=1.6*lw;line(d.top,true);g.stroke();g.strokeStyle='#666';g.lineWidth=0.8*lw;g.setLineDash([6*lw,3*lw]);line(d.mid,true);g.stroke();g.setLineDash([]);g.strokeStyle='#222';g.lineWidth=1.2*lw;line(d.bot,true);g.stroke();
+  g.fillStyle='#333';txt('TOP OF BANK',d.top[0][0],d.top[0][1]-6,5);txt('POND BOTTOM',d.cx,d.cy,6);txt('3:1 SLOPES',(d.top[5][0]+d.bot[5][0])/2,(d.top[5][1]+d.bot[5][1])/2,4.5);
+  // fence (x line) with gate
+  g.strokeStyle='#2c3e50';g.lineWidth=1*lw;line(d.fence);g.stroke();g.fillStyle='#2c3e50';for(let i=1;i<d.fence.length;i++){const a=d.fence[i-1],b=d.fence[i];const L=Math.hypot(b[0]-a[0],b[1]-a[1]);for(let s=10;s<L;s+=20){const t=s/L;txt('x',a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,5)}}
+  txt('12\' GATE',(d.g1[0]+d.g2[0])/2,(d.g1[1]+d.g2[1])/2+7,4.5);txt('4\' CHAIN LINK FENCE',d.fence[2][0]+8,d.fence[2][1],4.5,'left');
+  // outlet structure, pipe, headwall, rip rap
+  g.strokeStyle='#333';g.lineWidth=1.6*lw;line(d.opipe);g.stroke();g.fillStyle='#333';txt('24" RCP',(d.opipe[1][0]+d.opipe[2][0])/2,(d.opipe[1][1]+d.opipe[2][1])/2-5,5);
+  g.fillStyle='#fff';rect(d.ocs[0]-4,d.ocs[1]-4,8,8);g.fill();g.strokeStyle='#111';g.lineWidth=1.2*lw;g.stroke();g.fillStyle='#111';txt('OCS',d.ocs[0],d.ocs[1]-8,5);
+  const [rx,ry]=d.rip[0];tsHatch(D,rx,ry,d.rl,d.rw,3,'#8a7a66');g.strokeStyle='#5d4e3c';g.lineWidth=lw;rect(rx,ry,d.rl,d.rw);g.stroke();g.fillStyle='#5d4e3c';txt('RIP RAP APRON',rx+d.rl/2,ry-5,4.5);
+  g.strokeStyle='#111';g.lineWidth=2*lw;line([[d.hw[0],d.hw[1]-7],[d.hw[0],d.hw[1]+7]]);g.stroke();txt('HW',d.hw[0]-8,d.hw[1]-9,5)}
+
+// ---------- shared drawing helpers ----------
+function tsHatch(D,x,y,w,h,step,col){const {g,lw,line,rect}=D;g.save();rect(x,y,w,h);g.clip();g.strokeStyle=col;g.lineWidth=0.6*lw;for(let i=-h;i<w+h;i+=step){line([[x+i,y],[x+i+h,y+h]]);g.stroke()}g.restore()}
+function tsInlet(D,x,y){const {g,lw,line,rect}=D;g.fillStyle='#fff';rect(x-3,y-3,6,6);g.fill();g.strokeStyle='#111';g.lineWidth=1.2*lw;g.stroke();line([[x-3,y-3],[x+3,y+3]]);g.stroke();line([[x+3,y-3],[x-3,y+3]]);g.stroke()}
+function tsSiltFence(D,runs){const {g,lw,txt,line}=D;g.strokeStyle='#333';g.lineWidth=1*lw;g.setLineDash([6*lw,3*lw]);runs.forEach(r=>{line(r);g.stroke()});g.setLineDash([]);g.fillStyle='#333';
+  runs.forEach(r=>{for(let i=1;i<r.length;i++){const a=r[i-1],b=r[i];const L=Math.hypot(b[0]-a[0],b[1]-a[1]);for(let s=30;s<L-10;s+=60){const t=s/L;txt('SF',a[0]+(b[0]-a[0])*t+(a[0]===b[0]?6:0),a[1]+(b[1]-a[1])*t+(a[1]===b[1]?-5:0),5)}}})}
+const TS_DRAW={lot:tsDrawLot,road:tsDrawRoad,pond:tsDrawPond};
+
+function tsLvl(i){if(i!=='day')return TS_LV[i];const h=tsSeedOf(todayStr());const site=TS_SITES[h%3][0];return {site,n:'Daily takeoff',items:TS_SITE_ITEMS[site],S:[30,40,50][(h>>3)%3],t:300,isl:2,ex:1,big:site==='lot'?1:0,tip:'Today’s plan: everything on it. Read the scale, watch for existing work.'}}
 function tsStart(i){const F=S.fun;const L=tsLvl(i);const seed=i==='day'?tsSeedOf('day-'+todayStr()):tsSeedOf('lvl-'+i);const P=tsGen(seed,L);
-  const marks={};L.items.forEach(k=>marks[k]={lines:[],areas:[],counts:[]});const sb=tsBar(P);P.snaps.push([sb.x,sb.y],[sb.x+sb.len,sb.y]);
+  const marks={};L.items.forEach(k=>marks[k]=tsBlank());
   F.ts={mode:'play',lvl:i,L,P,marks,sel:L.items[0],cur:[],deduct:false,view:null,t0:Date.now(),scale:L.graphic?null:L.S,res:null};clearInterval(F.tsT);F.tsT=setInterval(tsTick,1000);render()}
 const tsBar=P=>({x:P.W-2*P.S-30,y:P.H+52,len:2*P.S});
 // measured quantity for an item, using the scale the player set (a wrong scale gives wrong numbers, like real life)
-function tsQty(T,k){const m=T.marks[k];const f=(T.scale||T.P.S)/T.P.S;const it=TS_IT[k];
-  if(it.f==='count')return m.counts.length;if(it.f==='line')return m.lines.reduce((s,p)=>s+tsLen(p),0)*f;return m.areas.reduce((s,a)=>s+(a.ded?-1:1)*tsArea(a.pts),0)*f*f}
+function tsQty(T,k){return tsMQ(T.marks[k],k,(T.scale||T.P.S)/T.P.S)}
 const tsPts=(mine,truth)=>{if(!truth)return 0;const e=Math.abs(mine-truth)/truth;return e<=0.02?100:Math.max(0,Math.round(100*(1-(e-0.02)/0.13)))};
 function tsSubmit(){const F=S.fun;const T=F.ts;if(!T||T.mode!=='play')return;clearInterval(F.tsT);if(T.cur.length>1)tsFinish();
   const secs=Math.min(T.L.t,Math.round((Date.now()-T.t0)/1000));const rows=T.L.items.map(k=>{const mine=tsQty(T,k),tr=T.P.truth[k];return {k,mine,tr,err:tr?(mine-tr)/tr:0,pts:tsPts(mine,tr)}});
@@ -14604,45 +14724,24 @@ function tsDraw(){const T=S.fun.ts;const cv=document.getElementById('ts-cv');if(
   g.fillStyle='#fbfaf6';g.fillRect(0,0,cv.width,cv.height);g.save();g.translate(ox,oy);g.scale(z,z);const lw=1/z;
   const rect=(x,y,w,h)=>{g.beginPath();g.rect(x,y,w,h)};const line=(pts,close)=>{g.beginPath();pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));if(close)g.closePath()};
   const txt=(s,x,y,sz,al)=>{g.font=`${sz}px system-ui,sans-serif`;g.textAlign=al||'center';g.textBaseline='middle';g.fillText(s,x,y)};
-  // road
-  g.fillStyle='#ecebe6';g.fillRect(-20,P.H+4,P.W+40,30);g.strokeStyle='#555';g.lineWidth=1.2*lw;line([[-20,P.H+4],[P.W+20,P.H+4]]);g.stroke();line([[-20,P.H+34],[P.W+20,P.H+34]]);g.stroke();g.fillStyle='#777';txt('EX. ROAD',P.W/2+60,P.H+26,7);
-  // asphalt lot + islands
-  const [lx,ly,lwid,lh]=P.lot;g.fillStyle='#e3e3e0';rect(lx,ly,lwid,lh);g.fill();P.islands.forEach(([x,y,w,h])=>{g.fillStyle='#cfe5c8';rect(x,y,w,h);g.fill()});
-  // construction exit (stone hatch)
-  const [cx,cy,cw,ch]=P.cex;g.save();rect(cx,cy,cw,ch);g.clip();g.strokeStyle='#999';g.lineWidth=0.6*lw;for(let i=-ch;i<cw+ch;i+=4){line([[cx+i,cy],[cx+i+ch,cy+ch]]);g.stroke()}g.restore();g.strokeStyle='#666';g.lineWidth=lw;rect(cx,cy,cw,ch);g.stroke();g.fillStyle='#444';txt('CONST. EXIT',cx+cw/2,cy+ch/2,5);
-  // curb: double line around lot (gap at entrance) and islands
-  g.strokeStyle='#222';const curbRun=(off)=>{const a=lx-off,b=ly-off,c=lx+lwid+off,d=ly+lh+off;line([[P.ent.x,d],[a,d],[a,b],[c,b],[c,d],[P.ent.x+P.ent.w,d]]);g.stroke()};g.lineWidth=1.6*lw;curbRun(0);g.lineWidth=0.8*lw;curbRun(2);
-  P.islands.forEach(([x,y,w,h])=>{g.lineWidth=1.6*lw;rect(x,y,w,h);g.stroke();g.lineWidth=0.8*lw;rect(x+2,y+2,w-4,h-4);g.stroke()});
-  // building
-  const [bx,by,bw,bd]=P.bld;g.save();rect(bx,by,bw,bd);g.clip();g.strokeStyle='#bbb';g.lineWidth=0.6*lw;for(let i=-bd;i<bw;i+=6){line([[bx+i,by+bd],[bx+i+bd,by]]);g.stroke()}g.restore();g.strokeStyle='#222';g.lineWidth=2*lw;rect(bx,by,bw,bd);g.stroke();g.fillStyle='#222';txt('PROPOSED BUILDING',bx+bw/2,by+bd/2,7);
-  // property line (dash-dot)
-  g.strokeStyle='#444';g.lineWidth=1.2*lw;g.setLineDash([14*lw,4*lw,2*lw,4*lw]);rect(0,0,P.W,P.H);g.stroke();g.setLineDash([]);
-  // silt fence
-  g.strokeStyle='#333';g.lineWidth=1*lw;g.setLineDash([6*lw,3*lw]);P.sf.forEach(r=>{line(r);g.stroke()});g.setLineDash([]);g.fillStyle='#333';P.sf.forEach(r=>{for(let i=1;i<r.length;i++){const a=r[i-1],b=r[i];const L=Math.hypot(b[0]-a[0],b[1]-a[1]);for(let s=30;s<L-10;s+=60){const t=s/L;txt('SF',a[0]+(b[0]-a[0])*t+(a[0]===b[0]?6:0),a[1]+(b[1]-a[1])*t+(a[1]===b[1]?-5:0),5)}}});
-  // storm pipe
-  g.strokeStyle='#333';g.lineWidth=1.4*lw;line(P.pipe);g.stroke();if(P.pipe.length>1){const a=P.pipe[0],b=P.pipe[1];g.fillStyle='#333';txt('15" RCP',(a[0]+b[0])/2,(a[1]+b[1])/2-5,5)}
-  // inlets, existing inlets, FES
-  P.inlets.forEach(([x,y],i)=>{g.fillStyle='#fff';rect(x-3,y-3,6,6);g.fill();g.strokeStyle='#111';g.lineWidth=1.2*lw;g.stroke();line([[x-3,y-3],[x+3,y+3]]);g.stroke();line([[x+3,y-3],[x-3,y+3]]);g.stroke();g.fillStyle='#111';txt(`CB-${i+1}`,x+5,y-6,5,'left')});
-  P.exIn.forEach(([x,y])=>{g.strokeStyle='#777';g.setLineDash([2*lw,2*lw]);rect(x-3,y-3,6,6);g.stroke();g.setLineDash([]);g.fillStyle='#777';txt('EX. INLET',x,y+9,4.5)});
-  {const [x,y]=P.fes;g.fillStyle='#333';g.beginPath();g.moveTo(x-6,y-4);g.lineTo(x,y);g.lineTo(x-6,y+4);g.closePath();g.fill();txt('FES',x-10,y-8,5)}
+  (TS_DRAW[P.kind]||tsDrawLot)({g,lw,txt,line,rect},P);
   // title block + scale bar
-  const sb=tsBar(P);g.fillStyle='#222';txt(T.L.graphic?'SITE PLAN':`SITE PLAN · SCALE: 1" = ${P.S}'`,sb.x-10,sb.y-12,7,'left');
-  [0,1,2,3].forEach(i=>{g.fillStyle=i%2?'#fff':'#222';rect(sb.x+i*sb.len/4,sb.y,sb.len/4,3);g.fill()});g.strokeStyle='#222';g.lineWidth=lw;rect(sb.x,sb.y,sb.len,3);g.stroke();txt('0',sb.x,sb.y+8,5);txt(String(P.S),sb.x+sb.len/2,sb.y+8,5);txt(String(2*P.S),sb.x+sb.len,sb.y+8,5);txt('FEET',sb.x+sb.len+12,sb.y+2,4.5);
+  const sb=tsBar(P);g.fillStyle='#222';txt(T.L.graphic?P.title:`${P.title} · SCALE: 1" = ${P.S}'`,sb.x-10,sb.y-12,7,'left');
+  [0,1,2,3].forEach(i=>{g.fillStyle=i%2?'#fff':'#222';rect(sb.x+i*sb.len/4,sb.y,sb.len/4,3);g.fill()});g.strokeStyle='#222';g.lineWidth=lw;rect(sb.x,sb.y,sb.len,3);g.stroke();g.fillStyle='#222';txt('0',sb.x,sb.y+8,5);txt(String(P.S),sb.x+sb.len/2,sb.y+8,5);txt(String(2*P.S),sb.x+sb.len,sb.y+8,5);txt('FEET',sb.x+sb.len+12,sb.y+2,4.5);
   g.restore();
-  // marks
-  const drawMarks=(k,alpha)=>{const m=T.marks[k];if(!m)return;const c=TS_IT[k].c;g.globalAlpha=alpha;g.strokeStyle=c;g.fillStyle=c;g.lineWidth=3;
-    m.areas.forEach(a=>{g.beginPath();a.pts.forEach((p,i)=>{const q=X(p);i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1])});g.closePath();g.globalAlpha=alpha*(a.ded?0.35:0.22);g.fillStyle=a.ded?'#d1462f':c;g.fill();g.globalAlpha=alpha;g.strokeStyle=a.ded?'#d1462f':c;g.setLineDash(a.ded?[6,4]:[]);g.stroke();g.setLineDash([])});
-    m.lines.forEach(p=>{g.strokeStyle=c;g.beginPath();p.forEach((q0,i)=>{const q=X(q0);i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1])});g.stroke()});
+  const path=(pts,close)=>{g.beginPath();pts.forEach((q0,i)=>{const q=X(q0);i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1])});if(close)g.closePath()};
+  const drawMarks=(m,k,alpha)=>{if(!m)return;const c=TS_IT[k].c;g.globalAlpha=alpha;g.lineWidth=3;
+    m.areas.forEach(a=>{path(a.pts,true);g.globalAlpha=alpha*(a.ded?0.35:0.22);g.fillStyle=a.ded?'#d1462f':c;g.fill();g.globalAlpha=alpha;g.strokeStyle=a.ded?'#d1462f':c;g.setLineDash(a.ded?[6,4]:[]);g.stroke();g.setLineDash([])});
+    m.lines.forEach(p=>{g.strokeStyle=c;path(p);g.stroke()});
     m.counts.forEach((p,i)=>{const q=X(p);const dup=m.counts.slice(0,i).filter(o=>Math.hypot(o[0]-p[0],o[1]-p[1])<1).length;g.beginPath();g.arc(q[0]+dup*7,q[1]-dup*7,7,0,7);g.fillStyle=c;g.fill();g.fillStyle='#fff';g.font='bold 9px system-ui';g.textAlign='center';g.textBaseline='middle';g.fillText(String(i+1),q[0]+dup*7,q[1]-dup*7)});g.globalAlpha=1};
-  (T.mode==='fix'?Object.keys(T.marks).filter(k=>TS_IT[k]):T.L.items).forEach(k=>drawMarks(k,T.mode==='result'?0.55:(k===T.sel||T.mode==='fix'?1:0.6)));
-  // answers after submit
-  if(T.mode==='result'&&T.showTrue){T.L.items.forEach(k=>{const c=TS_IT[k].c;g.strokeStyle=c;g.lineWidth=2;g.setLineDash([2,3]);
-    const L=k==='sf'?P.sf:k==='pipe'?[P.pipe]:k==='curb'?[[[P.ent.x,ly+lh],[lx,ly+lh],[lx,ly],[lx+lwid,ly],[lx+lwid,ly+lh],[P.ent.x+P.ent.w,ly+lh]],...P.islands.map(([x,y,w,h])=>[[x,y],[x+w,y],[x+w,y+h],[x,y+h],[x,y]])]:[];
-    L.forEach(p=>{g.beginPath();p.forEach((q0,i)=>{const q=X(q0);i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1])});g.stroke()});
-    if(k==='inl')P.inlets.forEach(p=>{const q=X(p);g.beginPath();g.arc(q[0],q[1],11,0,7);g.stroke()});g.setLineDash([])})}
+  const keys=T.mode==='fix'?Object.keys(T.marks).filter(k=>TS_IT[k]):T.L.items;
+  keys.forEach(k=>drawMarks(T.marks[k],k,T.mode==='result'?0.55:(k===T.sel||T.mode==='fix'?1:0.6)));
+  // the right answer, after turning it in
+  if(T.mode==='result'&&T.showTrue)T.L.items.forEach(k=>{const A=P.ans[k];if(!A)return;const c=TS_IT[k].c;g.strokeStyle=c;g.lineWidth=2;g.setLineDash([2,3]);
+    A.lines.forEach(p=>{path(p);g.stroke()});A.areas.forEach(a=>{path(a.pts,true);g.strokeStyle=a.ded?'#d1462f':c;g.stroke()});A.counts.forEach(p=>{const q=X(p);g.strokeStyle=c;g.beginPath();g.arc(q[0],q[1],11,0,7);g.stroke()});g.setLineDash([])});
   // drawing in progress
-  if(T.cur.length&&T.mode==='play'){const it=TS_IT[T.sel];g.strokeStyle=T.deduct&&it.f==='area'?'#d1462f':it.c;g.lineWidth=2.5;g.setLineDash([5,4]);g.beginPath();[...T.cur,T.hov||T.cur[T.cur.length-1]].forEach((p0,i)=>{const q=X(p0);i?g.lineTo(q[0],q[1]):g.moveTo(q[0],q[1])});g.stroke();g.setLineDash([])}
-  if(T.scaleRun&&T.scaleRun.length){const q=X(T.scaleRun[0]);g.strokeStyle='#e67e22';g.lineWidth=2;g.beginPath();g.moveTo(q[0],q[1]);const h=X(T.hov||T.scaleRun[0]);g.lineTo(h[0],h[1]);g.stroke()}
+  if(T.cur.length&&T.mode==='play'){const it=TS_IT[T.sel];g.strokeStyle=T.deduct&&it.f==='area'?'#d1462f':it.c;g.lineWidth=2.5;g.setLineDash([5,4]);path([...T.cur,T.hov||T.cur[T.cur.length-1]]);g.stroke();g.setLineDash([])}
+  if(T.scaleRun&&T.scaleRun.length){const q=X(T.scaleRun[0]);g.strokeStyle='#e67e22';g.lineWidth=2;g.beginPath();g.moveTo(q[0],q[1]);const h2=X(T.hov||T.scaleRun[0]);g.lineTo(h2[0],h2[1]);g.stroke()}
   if(T.snap&&T.mode==='play'){const q=X(T.snap);g.strokeStyle='#ff8c00';g.lineWidth=2;g.strokeRect(q[0]-6,q[1]-6,12,12)}}
 
 // ---- input ----
@@ -14652,7 +14751,7 @@ function tsFinish(){const T=S.fun.ts;const it=TS_IT[T.sel];if(it.f==='line'&&T.c
 function tsClick(e){const T=S.fun.ts;if(!T||T.mode!=='play'||!T.view)return;const {w}=tsWorld(T,e);const p=tsSnapAt(T,w)||w;
   if(T.scaleRun){T.scaleRun.push(p);if(T.scaleRun.length===2){const d=tsLen(T.scaleRun);const v=prompt('How many feet is that?');T.scaleRun=null;const ft=num(v);if(ft>0&&d>0){/* world feet per drawn foot */T.scale=T.P.S*ft/d;toast(`Scale set: 1" = ${Math.round(T.scale)}'`)}tsSide()}tsDraw();return}
   if(T.L.graphic&&!T.scale){toast('Set the scale first: use the Scale tool on the graphic scale bar.');return}
-  const it=TS_IT[T.sel];if(it.f==='count'){const hit=T.P.inlets.concat(T.P.exIn).find(q=>Math.hypot(q[0]-w[0],q[1]-w[1])<15/T.view.z+6);T.marks[T.sel].counts.push(hit||p);tsSide();tsDraw();return}
+  const it=TS_IT[T.sel];if(it.f==='count'){T.marks[T.sel].counts.push(p);tsSide();tsDraw();return}
   if(it.f==='area'&&T.cur.length>=3&&Math.hypot(p[0]-T.cur[0][0],p[1]-T.cur[0][1])<1e-6){tsFinish();return}
   T.cur.push(p);tsDraw()}
 document.addEventListener('pointerdown',e=>{const cv=e.target;if(cv.id!=='ts-cv')return;const T=S.fun.ts;if(!T)return;
@@ -14677,45 +14776,60 @@ function tsUndo(){const T=S.fun.ts;if(T.cur.length){T.cur.pop();tsDraw();return}
 const tsFmt=(v,u)=>`${u==='EA'?Math.round(v):Math.round(v).toLocaleString()} ${u}`;
 function tsSideHtml(){const T=S.fun.ts;const L=T.L;
   return `<div class="ts-items">${L.items.map(k=>{const it=TS_IT[k];const q=tsQty(T,k);return `<button class="ts-item${T.sel===k?' on':''}" data-act="ts-sel" data-v="${k}"><i style="background:${it.c}"></i><span><b>${esc(it.n)}</b><small>${it.f==='count'?'Count: click each one':it.f==='line'?'Line: click points, Enter to finish':'Area: click corners, Enter to close'}</small></span><em>${tsFmt(q,it.u)}</em></button>`}).join('')}</div>
-    ${TS_IT[T.sel].f==='area'?`<label class="check small"><input type="checkbox" data-tsded${T.deduct?' checked':''}> <span><b>Deduct</b> (islands, cut-outs)</span></label>`:''}
+    ${TS_IT[T.sel].f==='area'?`<label class="check small"><input type="checkbox" data-tsded${T.deduct?' checked':''}> <span><b>Deduct</b> (islands, pond bottom, cut-outs)</span></label>`:''}
     <div class="adders"><button class="btn sm${T.scaleRun?' on':''}" data-act="ts-scale">📏 Scale${T.scale&&L.graphic?`: 1" = ${Math.round(T.scale)}'`:''}</button><button class="btn sm" data-act="ts-undo">↶ Undo</button><button class="btn sm ghost" data-act="ts-fit">Fit</button></div>
     <p class="small dim ts-tip">💡 ${esc(L.tip)}</p><p class="small dim">Corners and structures snap (orange box). Scroll to zoom, right-drag or Space-drag to move. Double-click also finishes a line.</p>
     <button class="btn primary" data-act="ts-done" style="width:100%">Turn it in</button>`}
 function tsSide(){const e=document.getElementById('ts-side');if(e&&S.fun.ts&&S.fun.ts.mode==='play')e.innerHTML=tsSideHtml()}
 function tsMenu(){const me=myId();const st=funStat(me,'sprint');const lv=st?.data?.lv||{},stars=st?.data?.st||{};const d=funStat(me,'sprint-day');const doneDay=d&&d.data?.day===todayStr();const fx=funStat(me,'sprint-fix');
-  const open=i=>i===0||(num(stars[i-1])||0)>=1;
-  return `<div class="ts-menu"><div class="panel pad"><h2 style="margin-top:0">📐 Takeoff Sprint</h2><p class="small">Take off the plan against the clock. Within 2% is perfect; every item’s math is shown when you turn it in.</p>
-    <div class="ts-levels">${TS_LV.map((L,i)=>`<button class="ts-lv${open(i)?'':' locked'}" data-act="ts-go" data-v="${i}"${open(i)?'':' disabled'}><b>${i+1}. ${esc(L.n)}</b><small>${L.items.map(k=>TS_IT[k].n).join(' · ')}</small><span>${open(i)?('★'.repeat(num(stars[i])||0)+'☆'.repeat(3-(num(stars[i])||0))):'🔒 Get a ★ on the last one'}${lv[i]?` · ${Number(lv[i]).toLocaleString()}`:''}</span></button>`).join('')}</div>
-    <div class="ts-modes"><div class="panel pad"><b>📅 Daily takeoff</b><p class="small">Same plan for everyone today. Your first try counts.</p>${doneDay?`<p class="small">Today: <b>${Number(d.value).toLocaleString()}</b> · ${num(d.data.acc)}% accurate</p><button class="btn" data-act="ts-go" data-v="day">Practice it again</button>`:'<button class="btn primary" data-act="ts-go" data-v="day">Take off today’s plan</button>'}</div>
-      <div class="panel pad"><b>🔎 Find the mistake</b><p class="small">Five takeoffs, one bad line each. Find it and say why.</p><p class="small dim">Your best: ${num(fx?.value)||0} / 500</p><button class="btn" data-act="ts-fix">Check their work</button></div></div></div>
+  const first=i=>i===0||TS_LV[i-1].site!==TS_LV[i].site;const open=i=>first(i)||(num(stars[i-1])||0)>=1;const today=TS_SITES.find(x=>x[0]===tsLvl('day').site);
+  return `<div class="ts-menu"><div class="panel pad"><h2 style="margin-top:0">📐 Takeoff Sprint</h2><p class="small">Take off the plan against the clock. Within 2% is perfect; every item’s math is shown when you turn it in. Each site starts unlocked; a star opens the next level.</p>
+    ${TS_SITES.map(([site,label])=>`<h3 class="ts-site">${label}</h3><div class="ts-levels">${TS_LV.map((L,i)=>L.site!==site?'':`<button class="ts-lv${open(i)?'':' locked'}" data-act="ts-go" data-v="${i}"${open(i)?'':' disabled'}><b>${i+1}. ${esc(L.n)}</b><small>${L.items.map(k=>TS_IT[k].n).join(' · ')}</small><span>${open(i)?('★'.repeat(num(stars[i])||0)+'☆'.repeat(3-(num(stars[i])||0))):'🔒 Get a ★ on the last one'}${lv[i]?` · ${Number(lv[i]).toLocaleString()}`:''}</span></button>`).join('')}</div>`).join('')}
+    <div class="ts-modes"><div class="panel pad"><b>📅 Daily takeoff</b><p class="small">Same plan for everyone today: <b>${today?today[1]:''}</b>. Your first try counts.</p>${doneDay?`<p class="small">Today: <b>${Number(d.value).toLocaleString()}</b> · ${num(d.data.acc)}% accurate</p><button class="btn" data-act="ts-go" data-v="day">Practice it again</button>`:'<button class="btn primary" data-act="ts-go" data-v="day">Take off today’s plan</button>'}</div>
+      <div class="panel pad"><b>🔎 Find the mistake</b><p class="small">Five takeoffs from all three sites, one bad line each. Find it and say why.</p><p class="small dim">Your best: ${num(fx?.value)||0} / 500</p><button class="btn" data-act="ts-fix">Check their work</button></div></div></div>
     <div class="ts-boards"><div class="panel pad"><b>Today’s takeoff</b>${funBoard('sprint-day',{f:x=>x.data&&x.data.day===todayStr()&&num(x.value)>0,fmt:(v,x)=>`${Number(v).toLocaleString()} · ${num(x.data.acc)}%`,empty:'Nobody yet today. Go first.'})}</div>
       <div class="panel pad"><b>All levels</b>${funBoard('sprint',{fmt:v=>Number(v).toLocaleString()})}</div><div class="panel pad"><b>Find the mistake</b>${funBoard('sprint-fix',{fmt:v=>`${v} / 500`})}</div></div></div>`}
 function tsResultHtml(){const T=S.fun.ts;const R=T.res;
   return `<div class="ts-res"><div class="ts-score"><b>${R.score.toLocaleString()}</b><span>${'★'.repeat(R.stars)}${'☆'.repeat(3-R.stars)}</span><small>${Math.round(R.avg)}% accurate · ${tsClock(R.secs)}${R.best?' · new best!':''}${T.lvl==='day'?(R.counted?' · counted for today':' · practice (first try already counted)'):''}</small></div>
     <table class="ts-rt"><thead><tr><th>Item</th><th class="r">You</th><th class="r">Actual</th><th class="r">Off</th><th class="r">Pts</th></tr></thead><tbody>${R.rows.map(r=>{const it=TS_IT[r.k];return `<tr><td><i style="background:${it.c}"></i>${esc(it.n)}<div class="small dim">${esc(T.P.how[r.k])}</div></td><td class="r">${tsFmt(r.mine,it.u)}</td><td class="r">${tsFmt(r.tr,it.u)}</td><td class="r ${Math.abs(r.err)<=0.02?'good':Math.abs(r.err)>0.1?'bad':''}">${r.err>0?'+':''}${(r.err*100).toFixed(1)}%</td><td class="r"><b>${r.pts}</b></td></tr>`}).join('')}</tbody></table>
     <label class="check small"><input type="checkbox" data-tstrue${T.showTrue?' checked':''}> <span>Show the right answer on the plan</span></label>
-    <div class="adders"><button class="btn" data-act="ts-go" data-v="${T.lvl}">Try again</button>${T.lvl!=='day'&&T.lvl<TS_LV.length-1&&R.stars>=1?`<button class="btn primary" data-act="ts-go" data-v="${T.lvl+1}">Next: ${esc(TS_LV[T.lvl+1].n)} →</button>`:''}<button class="btn ghost" data-act="ts-menu">All levels</button></div></div>`}
+    <div class="adders"><button class="btn" data-act="ts-go" data-v="${T.lvl}">Try again</button>${T.lvl!=='day'&&T.lvl<TS_LV.length-1&&TS_LV[T.lvl+1].site===T.L.site&&R.stars>=1?`<button class="btn primary" data-act="ts-go" data-v="${T.lvl+1}">Next: ${esc(TS_LV[T.lvl+1].n)} →</button>`:''}<button class="btn ghost" data-act="ts-menu">All levels</button></div></div>`}
 
 // ---- Find the mistake ----
+// each error edits a copy of the right answer; the bad quantity is then measured from the edited marks (or set directly for scale / unit mix-ups)
+const tsWrongScale=S=>S===40?30:S===30?40:S===50?40:50;
 const TS_ERR=[
-  {id:'sf-side',k:'sf',why:'Missed a run of silt fence',ok:P=>true,apply:(P,v,m)=>{m.sf.lines=[P.sf[0]];return P.truth.sf-tsLen(P.sf[1])}},
-  {id:'sf-exit',k:'sf',why:'Ran the fence across the construction exit',ok:P=>true,apply:(P,v,m)=>{const a=P.sf[0],b=P.sf[1];m.sf.lines=[[...a,...b]];return P.truth.sf+P.cex[2]}},
-  {id:'asp-isl',k:'asp',why:'Didn’t deduct the islands',ok:P=>P.islands.length>0,apply:(P,v,m)=>{m.asp.areas=m.asp.areas.filter(a=>!a.ded);return P.truth.asp+P.islands.reduce((s,[,,w,h])=>s+w*h,0)}},
-  {id:'curb-isl',k:'curb',why:'Left out the island curb',ok:P=>P.islands.length>0,apply:(P,v,m)=>{m.curb.lines=m.curb.lines.slice(0,1);return P.truth.curb-P.islands.reduce((s,[,,w,h])=>s+2*(w+h),0)}},
-  {id:'inl-ex',k:'inl',why:'Counted the existing inlets in the road',ok:P=>P.exIn.length>0,apply:(P,v,m)=>{m.inl.counts=[...P.inlets,...P.exIn];return P.inlets.length+P.exIn.length}},
-  {id:'inl-dbl',k:'inl',why:'Counted one inlet twice',ok:P=>true,apply:(P,v,m)=>{m.inl.counts=[...P.inlets,P.inlets[0]];return P.inlets.length+1}},
-  {id:'pipe-scale',k:'pipe',why:'Measured at the wrong scale',ok:P=>true,apply:(P,v,m)=>{const f=P.S===40?30/40:P.S===30?40/30:40/50;m.scl={pipe:Math.round(P.S*f)};return P.truth.pipe*f}},
-  {id:'curb-ent',k:'curb',why:'Ran the curb across the entrance',ok:P=>true,apply:(P,v,m)=>{const [lx,ly,lw,lh]=P.lot;m.curb.lines[0]=[[lx,ly],[lx+lw,ly],[lx+lw,ly+lh],[lx,ly+lh],[lx,ly]];return P.truth.curb+P.ent.w}}];
-function tsFixRound(n){const F=S.fun;const seed=tsSeedOf('fix-'+Date.now()+'-'+n);const r=tsRng(seed);const L={...TS_LV[5],isl:1+Math.floor(r()*2),ex:1};const P=tsGen(seed,L);
-  const [lx,ly,lw,lh]=P.lot;const marks={sf:{lines:P.sf.map(x=>x.slice()),areas:[],counts:[]},inl:{lines:[],areas:[],counts:P.inlets.slice()},asp:{lines:[],areas:[{pts:[[lx,ly],[lx+lw,ly],[lx+lw,ly+lh],[lx,ly+lh]],ded:false},...P.islands.map(([x,y,w,h])=>({pts:[[x,y],[x+w,y],[x+w,y+h],[x,y+h]],ded:true}))],counts:[]},
-    curb:{lines:[[[P.ent.x,ly+lh],[lx,ly+lh],[lx,ly],[lx+lw,ly],[lx+lw,ly+lh],[P.ent.x+P.ent.w,ly+lh]],...P.islands.map(([x,y,w,h])=>[[x,y],[x+w,y],[x+w,y+h],[x,y+h],[x,y]])],areas:[],counts:[]},pipe:{lines:[P.pipe.slice()],areas:[],counts:[]}};
-  const errs=TS_ERR.filter(e=>e.ok(P));const E=errs[Math.floor(r()*errs.length)];const vals={...P.truth};vals[E.k]=E.apply(P,vals,marks);
-  const wrong=TS_ERR.filter(x=>x.id!==E.id).sort(()=>r()-0.5).slice(0,3);const opts=[E,...wrong].sort(()=>r()-0.5).map(x=>x.why);
-  return {P,L:{...L,items:['sf','inl','asp','curb','pipe']},marks,vals,E,opts}}
+  {site:'lot',id:'sf-side',k:'sf',why:'Missed a run of silt fence',ok:P=>true,apply:(P,m)=>{m.sf.lines=[P.ans.sf.lines[0]]}},
+  {site:'lot',id:'sf-exit',k:'sf',why:'Ran the fence across the construction exit',ok:P=>true,apply:(P,m)=>{const [a,b]=P.ans.sf.lines;m.sf.lines=[[...a,...b]]}},
+  {site:'lot',id:'asp-isl',k:'asp',why:'Didn’t deduct the islands',ok:P=>P.d.islands.length>0,apply:(P,m)=>{m.asp.areas=m.asp.areas.filter(a=>!a.ded)}},
+  {site:'lot',id:'curb-isl',k:'curb',why:'Left out the island curb',ok:P=>P.d.islands.length>0,apply:(P,m)=>{m.curb.lines=m.curb.lines.slice(0,1)}},
+  {site:'lot',id:'inl-ex',k:'inl',why:'Counted the existing inlets in the road',ok:P=>P.d.exIn.length>0,apply:(P,m)=>{m.inl.counts=[...P.d.inlets,...P.d.exIn]}},
+  {site:'lot',id:'inl-dbl',k:'inl',why:'Counted one inlet twice',ok:P=>true,apply:(P,m)=>{m.inl.counts=[...P.d.inlets,P.d.inlets[0]]}},
+  {site:'lot',id:'pipe-scale',k:'pipe',why:'Measured at the wrong scale',ok:P=>true,scale:1},
+  {site:'lot',id:'curb-ent',k:'curb',why:'Ran the curb across the entrance',ok:P=>true,apply:(P,m)=>{const [lx,ly,lw,lh]=P.d.lot;m.curb.lines[0]=[...tsRectPts(lx,ly,lw,lh),[lx,ly]]}},
+  {site:'road',id:'curb-one',k:'rcurb',why:'Took off only one side of the street',ok:P=>true,apply:(P,m)=>{const d=P.d;m.rcurb.lines=[[[d.x0,d.yc-d.hw],[d.xt,d.yc-d.hw]]]}},
+  {site:'road',id:'curb-bulb',k:'rcurb',why:'Left out the curb around the cul-de-sac',ok:P=>true,apply:(P,m)=>{const d=P.d;m.rcurb.lines=[[[d.x0,d.yc-d.hw],[d.xt,d.yc-d.hw]],[[d.x0,d.yc+d.hw],[d.xt,d.yc+d.hw]]]}},
+  {site:'road',id:'mh-ex',k:'mh',why:'Counted the existing manhole',ok:P=>true,apply:(P,m)=>{m.mh.counts=[P.d.exMH,...P.d.mhs]}},
+  {site:'road',id:'san-tie',k:'san',why:'Left out the tie-in to the existing manhole',ok:P=>true,apply:(P,m)=>{m.san.lines=[P.d.mhs.slice()]}},
+  {site:'road',id:'fh-ex',k:'fh',why:'Counted the existing hydrant',ok:P=>true,apply:(P,m)=>{m.fh.counts=[...P.d.fhs,P.d.exFH]}},
+  {site:'road',id:'sw-full',k:'sw',why:'Ran the sidewalk past where it ends',ok:P=>true,apply:(P,m)=>{const d=P.d;m.sw.areas=[{pts:tsRectPts(d.x0,d.yc-25,d.xt-d.x0,5)}]}},
+  {site:'road',id:'wl-scale',k:'wl',why:'Measured at the wrong scale',ok:P=>true,scale:1},
+  {site:'pond',id:'mat-ded',k:'mat',why:'Didn’t deduct the pond bottom',ok:P=>true,apply:(P,m)=>{m.mat.areas=m.mat.areas.filter(a=>!a.ded)}},
+  {site:'pond',id:'mat-sf',k:'mat',why:'Left the matting in SF instead of SY',ok:P=>true,val:P=>P.truth.mat*9},
+  {site:'pond',id:'fence-gate',k:'fence',why:'Ran the fence across the gate',ok:P=>true,apply:(P,m)=>{const f=P.d.fence;m.fence.lines=[[...f,f[0]]]}},
+  {site:'pond',id:'fence-tob',k:'fence',why:'Measured the fence on the top of bank, not the fence line',ok:P=>true,apply:(P,m)=>{m.fence.lines=[[...P.d.top,P.d.top[0]]]}},
+  {site:'pond',id:'rip-sf',k:'rip',why:'Left the rip rap in SF instead of SY',ok:P=>true,val:P=>P.truth.rip*9},
+  {site:'pond',id:'opipe-scale',k:'opipe',why:'Measured at the wrong scale',ok:P=>true,scale:1}];
+function tsFixRound(n){const seed=tsSeedOf('fix-'+Date.now()+'-'+n);const r=tsRng(seed);const site=TS_SITES[Math.floor(r()*3)][0];
+  const L={site,S:[30,40,50][Math.floor(r()*3)],isl:1+Math.floor(r()*2),ex:1,items:TS_SITE_ITEMS[site]};const P=tsGen(seed,L);
+  const marks=JSON.parse(JSON.stringify(P.ans));marks.scl={};const errs=TS_ERR.filter(e=>e.site===site&&e.ok(P));const E=errs[Math.floor(r()*errs.length)];const vals={...P.truth};
+  if(E.scale){const w=tsWrongScale(P.S);marks.scl[E.k]=w;vals[E.k]=P.truth[E.k]*w/P.S}else if(E.val)vals[E.k]=E.val(P);else{E.apply(P,marks);vals[E.k]=tsMQ(marks[E.k],E.k)}
+  const pool=TS_ERR.filter(x=>x.id!==E.id&&x.why!==E.why);const wrong=[...new Set(pool.sort(()=>r()-0.5).map(x=>x.why))].slice(0,3);const opts=[E.why,...wrong].sort(()=>r()-0.5);
+  return {P,L,marks,vals,E,opts}}
 function tsFixStart(){const F=S.fun;clearInterval(F.tsT);const R=tsFixRound(0);F.ts={mode:'fix',round:0,score:0,pick:null,why:null,done:false,...R,view:null,cur:[],sel:null,scale:null,log:[]};render()}
 function tsFixHtml(){const T=S.fun.ts;const answered=T.done;
   return `<div class="ts-fix"><p class="small">Round ${T.round+1} of 5 · score ${T.score}. Check their lines against the plan and the title block.</p>
-    <table class="ts-rt"><thead><tr><th>Their takeoff</th><th class="r">Scale used</th><th class="r">Qty</th></tr></thead><tbody>${['sf','inl','asp','curb','pipe'].map(k=>{const it=TS_IT[k];const bad=answered&&k===T.E.k;const picked=T.pick===k;return `<tr class="ts-fr${picked?' on':''}${bad?' bad':''}" data-act="ts-fpick" data-v="${k}"><td><i style="background:${it.c}"></i>${esc(it.n)}</td><td class="r small">${it.f==='count'?'—':`1" = ${(T.marks.scl&&T.marks.scl[k])||T.P.S}'`}</td><td class="r">${tsFmt(T.vals[k],it.u)}</td></tr>`}).join('')}</tbody></table>
+    <table class="ts-rt"><thead><tr><th>Their takeoff</th><th class="r">Scale used</th><th class="r">Qty</th></tr></thead><tbody>${T.L.items.map(k=>{const it=TS_IT[k];const bad=answered&&k===T.E.k;const picked=T.pick===k;return `<tr class="ts-fr${picked?' on':''}${bad?' bad':''}" data-act="ts-fpick" data-v="${k}"><td><i style="background:${it.c}"></i>${esc(it.n)}</td><td class="r small">${it.f==='count'?'—':`1" = ${(T.marks.scl&&T.marks.scl[k])||T.P.S}'`}</td><td class="r">${tsFmt(T.vals[k],it.u)}</td></tr>`}).join('')}</tbody></table>
     ${T.pick&&!answered?`<p class="small"><b>What went wrong?</b></p><div class="ts-why">${T.opts.map(o=>`<button class="btn sm" data-act="ts-fwhy" data-v="${esc(o)}">${esc(o)}</button>`).join('')}</div>`:!T.pick?'<p class="small dim">Click the line you think is wrong.</p>':''}
     ${answered?`<div class="notice ${T.last>0?'':'bad'}" style="margin-top:10px">${T.last===100?'✓ Right line, right reason. +100':T.last===50?'Right line, wrong reason. +50':'Not that one.'} The bad line was <b>${esc(TS_IT[T.E.k].n)}</b>: ${esc(T.E.why.toLowerCase())}. It should be <b>${tsFmt(T.P.truth[T.E.k],TS_IT[T.E.k].u)}</b>.</div>
       <div class="adders"><button class="btn primary" data-act="ts-fnext">${T.round<4?'Next takeoff →':'See your score'}</button></div>`:''}</div>`}

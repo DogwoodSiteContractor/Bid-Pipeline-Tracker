@@ -3002,3 +3002,4 @@ div.tw-pgh{cursor:default}
 .ts-fr{cursor:pointer}.ts-fr:hover td{background:var(--accent-soft)}.ts-fr.on td{background:var(--accent-soft);font-weight:700}.ts-fr.bad td{background:var(--bad-soft)}
 .ts-why{display:flex;flex-direction:column;gap:6px}.ts-why .btn{text-align:left;justify-content:flex-start}
 .ts-endp{max-width:520px;margin-top:10px}
+.ts-site{margin:14px 0 2px;font-size:15px}
