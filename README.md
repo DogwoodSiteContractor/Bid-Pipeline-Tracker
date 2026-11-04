@@ -1066,3 +1066,13 @@ Games → **📐 Takeoff Sprint**. Take off a site plan against the clock.
 - **Daily takeoff** rotates between the three sites.
 - **Find the mistake:** five finished takeoffs from all three sites with one bad line each (21 kinds: missed fence run, fence across the exit or the gate, islands or pond bottom not deducted, island or cul-de-sac curb left out, one side of the street only, existing inlets / manholes / hydrants counted, sewer tie-in left out, sidewalk run past its end, SF left as SY, wrong scale…). Pick the line and the reason: 100 for both, 50 for the line.
 - Plans are generated from a seed, so every level and each day's plan are the same for everyone. Scores save to fun_stats (`sprint`, `sprint-day`, `sprint-fix`); a new trophy tracks the Sprint total.
+
+## Board dashboard: CRM view
+
+Dashboard → **Board** now opens on a **CRM view**: only the last two stages of a bid (estimate & proposal, follow-up & outcome), seen from the client side. Board members always get this view; everyone else can switch **CRM / Charts** (Charts is the earlier set of report cards).
+- **Headline numbers:** out for decision now (count and $), follow-ups due today or overdue, proposals sent this year, won (count and $), win rate (won ÷ won + lost) and dollar hit rate.
+- **Out for decision:** every submitted bid not yet decided: GC(s), our number, sent date (and latest revision), business days out, last contact and number of follow-ups, and the next step from the follow-up plan (Overdue / Due today / On track / Waiting / Paused), overdue first.
+- **Recent activity:** follow-ups logged, proposals sent, revised prices, wins and losses, newest first.
+- **By GC / client:** open proposals and dollars, sent this year, won, lost, win rate and last contact for each GC. Click a GC to filter the lists to it.
+- **Outcomes:** this year's wins and losses with who it went to, plus **Why we lose** by lost reason.
+- The year picker sets the yearly counts; "out for decision" is always right now. Click any row to open the bid (right-click works too).

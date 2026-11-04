@@ -448,9 +448,9 @@ function vDashboard(){
   if(S.dash==='reports')return vReports(true);
   if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+crPanel()+bidReqPanel()+reviewPanel()+fuPanel()+mine();
   if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+crPanel()+bidReqPanel()+fuPanel()+precon();
-  if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}<button class="btn" data-act="rp-board-copy" title="Copy these charts to a report page you can change">Copy to Reports</button>${dashSeg()}</div></div>`+board();
+  if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}${dashSeg()}</div></div>`+board();
   return `<div class="head"><div><h1>${S.dash==='precon'?'Bid pipeline dashboard':'Board dashboard'}</h1><p>${d}${S.lastLoaded?` · <span class="dim">Last updated ${S.lastLoaded.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>`:''}</p></div>
-  <div class="tools">${S.dash==='board'?yearSelect()+(S.bids.some(b=>b.archived_at)?`<label class="check small" title="Archived bids are left out of the numbers unless this is on"><input type="checkbox" data-inclarch${S.inclArch?' checked':''}> Include archived</label>`:'')+'<button class="btn" data-act="board-custom">Customize view</button><button class="btn" data-act="rp-board-copy" title="Copy these charts to a report page you can change">Copy to Reports</button>':'<button class="btn" data-act="refresh">↻ Refresh</button>'}
+  <div class="tools">${S.dash==='board'?yearSelect()+(S.bids.some(b=>b.archived_at)?`<label class="check small" title="Archived bids are left out of the numbers unless this is on"><input type="checkbox" data-inclarch${S.inclArch?' checked':''}> Include archived</label>`:'')+`<div class="seg" title="What the board sees is the CRM view"><button class="${crmMode()==='crm'?'on':''}" data-act="crm-mode" data-v="crm">CRM</button><button class="${crmMode()==='charts'?'on':''}" data-act="crm-mode" data-v="charts">Charts</button></div>`+(crmMode()==='charts'?'<button class="btn" data-act="board-custom">Customize view</button><button class="btn" data-act="rp-board-copy" title="Copy these charts to a report page you can change">Copy to Reports</button>':''):'<button class="btn" data-act="refresh">↻ Refresh</button>'}
   ${dashSeg()}</div></div>`
   +(S.dash==='precon'?vxUpkeepHtml():'')+crPanel()+bidReqPanel()+reviewPanel()+fuPanel()+(S.dash==='precon'?precon():board());
 }
@@ -650,7 +650,7 @@ function mine(){
 function boardCfg(){const d={};WIDGETS.forEach(([k])=>d[k]=true);return Object.assign(d,S.settings.board?.widgets||{})}
 function panel(t,sub,body){return `<div class="sec" style="margin:0"><div class="sec-h"><h2>${esc(t)}</h2><span>${sub}</span></div><div class="panel pad">${body}</div></div>`}
 function hbars(items){return `<div class="hbars">${items.map(x=>`<div class="hb"><span class="lab">${esc(x.l)}</span><div class="track"><div class="fill ${x.c||''}" style="width:${Math.max(0,x.w*100)}%"></div></div><span class="v">${esc(x.v)}</span></div>`).join('')}</div>`}
-function board(){const Y=S.year||new Date().getFullYear(),cfg=boardCfg();const range=Y===new Date().getFullYear()?'ytd':'y:'+Y;
+function board(){if(crmMode()==='crm')return crmBoard();const Y=S.year||new Date().getFullYear(),cfg=boardCfg();const range=Y===new Date().getFullYear()?'ytd':'y:'+Y;
   const cards=BOARD_CARDS().filter(c=>cfg[c.w]!==false);const real=cards.filter(c=>!c.special);S.rpCtx={cards:real,range};
   const note=`<div class="small dim rp-bnote">${Y===new Date().getFullYear()?`${Y} to date, compared with the same dates last year`:`${Y}, compared with ${Y-1}`} · click any number, bar or row to see the bids behind it</div>`;
   return note+`<div class="rp-grid board">${cards.map(c=>c.special==='weekly'?`<div class="rp-span3">${weeklyPanel('board')}</div>`:rpCardHtml(c,real.indexOf(c),{range})).join('')}</div>`}
@@ -14851,3 +14851,70 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'ts-fwhy':{if(T.done)return;const right=T.pick===T.E.k;const why=t.dataset.v===T.E.why;T.last=right?(why?100:50):0;T.score+=T.last;T.done=true;render();break}
     case 'ts-fnext':if(T.round>=4){tsFixEnd();break}Object.assign(T,tsFixRound(T.round+1),{round:T.round+1,pick:null,done:false,view:null});render();break}});
 document.addEventListener('change',e=>{const t=e.target;const T=S.fun&&S.fun.ts;if(!T||!t.dataset)return;if(t.dataset.tsded!=null){T.deduct=t.checked;tsDraw()}if(t.dataset.tstrue!=null){T.showTrue=t.checked;tsDraw()}});
+
+
+/* ===================================================================================================
+   BOARD: CRM VIEW. The board sees only the last two stages of a bid, from a client standpoint:
+   what's out for decision, where each follow-up stands, how each GC relationship is going, and the
+   outcomes. Board members always get this view; everyone else can switch between CRM and Charts.
+   =================================================================================================== */
+const crmMode=()=>role()==='board'?'crm':((()=>{try{return localStorage.getItem('bp-board-mode')}catch(e){return null}})()||'crm');
+const crmSent=b=>fuSentDate(b);
+const crmDecided=b=>['Awarded','Not Awarded'].includes(b.status);
+const crmDecDate=b=>String(b.awarded_date||(b.updated_at||'').slice(0,10)||b.due_date||'');
+const crmY=s=>s?+String(s).slice(0,4):null;
+const crmGcs=b=>propIds(b).filter(id=>byId(S.clients,id));
+const crmLastContact=b=>{const f=(b.follow_ups||[]).filter(x=>x.date).map(x=>String(x.date).slice(0,10)).sort();return f.length?f[f.length-1]:''};
+// where a bid stands right now, for the "out for decision" list
+function crmNext(b){const s=fuState(b);const today=todayStr();
+  if(s.paused)return {cls:'na',tag:'Paused',txt:'Follow-ups paused',due:'',ord:4};
+  if(!s.kind){return s.done?{cls:'warn',tag:'Waiting',txt:s.label||'All follow-ups sent',due:'',ord:2}:{cls:'na',tag:'—',txt:'No follow-up plan',due:'',ord:5}}
+  const late=s.due&&s.due<today,now=s.due===today;
+  return {cls:late?'bad':now?'warn':'good',tag:late?`Overdue ${bizDays(s.due,today)}d`:now?'Due today':s.wait?'On track':'Due',txt:s.label,due:s.due,ord:late?0:now?1:3}}
+function crmBoard(){const Y=S.year||new Date().getFullYear();const today=todayStr();const C=S.crm=S.crm||{gc:'',act:15};
+  const all=S.bids.filter(b=>statOk(b)&&!b._sample);
+  const out=all.filter(b=>b.status==='Submitted'&&!b.archived_at);
+  const sentY=all.filter(b=>crmY(crmSent(b))===Y);
+  const decY=all.filter(b=>crmDecided(b)&&crmY(crmDecDate(b))===Y);const won=decY.filter(b=>b.status==='Awarded'),lost=decY.filter(b=>b.status==='Not Awarded');
+  const fuY=all.flatMap(b=>(b.follow_ups||[]).filter(f=>crmY(f.date)===Y).map(f=>({f,b})));
+  const due=out.filter(b=>{const n=crmNext(b);return n.ord<=1});
+  const sum=a=>a.reduce((s,b)=>s+(bidValue(b)||0),0);const wonV=won.reduce((s,b)=>s+(num(b.awarded_amount)||bidValue(b)||0),0);
+  const wr=won.length+lost.length?won.length/(won.length+lost.length):null;const hr=sum(won)+sum(lost)?sum(won)/(sum(won)+sum(lost)):null;
+  const kpi=(l,v,sub,cls)=>`<div class="crm-k${cls?' '+cls:''}"><span>${l}</span><b>${v}</b>${sub?`<small>${sub}</small>`:''}</div>`;
+  const kpis=`<div class="crm-kpis">${kpi('Out for decision',out.length,moneyK(sum(out))+' in proposals')}${kpi('Follow-ups due',due.length,due.length?'today or overdue':'all caught up',due.length?'warn':'')}${kpi('Proposals sent',sentY.length,`${moneyK(sum(sentY))} · ${Y}`)}${kpi('Won',won.length,`${moneyK(wonV)} · ${Y}`,'good')}${kpi('Win rate',wr==null?'—':Math.round(wr*100)+'%',`${won.length} won · ${lost.length} lost`)}${kpi('Dollar hit rate',hr==null?'—':Math.round(hr*100)+'%','of decided dollars')}</div>`;
+  // out for decision
+  const rows=out.filter(b=>!C.gc||crmGcs(b).includes(C.gc)).map(b=>({b,n:crmNext(b),s:crmSent(b)})).sort((x,y)=>x.n.ord-y.n.ord||String(x.n.due||'9').localeCompare(String(y.n.due||'9'))||String(x.s).localeCompare(String(y.s)));
+  const outT=`<div class="panel scroll"><table class="crm-t"><thead><tr><th>Project</th><th>GC / client</th><th class="r">Our number</th><th>Sent</th><th class="r" title="Business days since the proposal went out">Out</th><th>Last contact</th><th>Next step</th></tr></thead><tbody>${rows.map(({b,n,s})=>{const lc=crmLastContact(b);const st=fuState(b);return `<tr class="click" data-act="open-bid" data-id="${b.id}"><td><b>${esc(b.name)}</b><div class="small dim">${esc([b.project_type,b.location].filter(Boolean).join(' · '))}</div></td>
+      <td>${crmGcs(b).map(id=>esc(clientName(id))).join('<br>')||'<span class="dim">—</span>'}</td><td class="r num">${bidValue(b)?money(bidValue(b)):'—'}</td><td>${s?fmtShort(s):'—'}${st.rev?`<div class="small dim">Rev ${esc(String(st.rev.rev))} ${fmtShort(st.rev.d)}</div>`:''}</td><td class="r">${s?bizDays(s,today)+'d':''}</td>
+      <td>${lc?fmtShort(lc):'<span class="dim">none yet</span>'}<div class="small dim">${st.n?`${st.n} follow-up${st.n===1?'':'s'}`:''}</div></td><td>${pill(n.tag,n.cls)}<div class="small">${esc(n.txt)}${n.due?' · '+fmtShort(n.due):''}</div></td></tr>`}).join('')||`<tr><td colspan="7" class="dim">${C.gc?'Nothing out with this GC right now.':'No proposals out for decision.'}</td></tr>`}</tbody></table></div>`;
+  // by GC
+  const gm=new Map();const g=id=>{if(!gm.has(id))gm.set(id,{id,open:0,openV:0,sent:0,won:0,lost:0,wonV:0,last:''});return gm.get(id)};
+  all.forEach(b=>{crmGcs(b).forEach(id=>{const o=g(id);const p=propOf(b,id);const amt=clientAmount(b,id)||bidValue(b)||0;
+    if(b.status==='Submitted'&&!b.archived_at&&p.status!=='Lost'){o.open++;o.openV+=amt}
+    if(crmY(p.sent_date||crmSent(b))===Y&&(isSent(b)||crmDecided(b)))o.sent++;
+    if(crmY(crmDecDate(b))===Y){if(b.status==='Awarded'&&(b.awarded_client_id===id||crmGcs(b).length===1)){o.won++;o.wonV+=num(b.awarded_amount)||amt}else if(b.status==='Not Awarded'||p.status==='Lost')o.lost++}
+    const lc=(b.follow_ups||[]).filter(f=>f.date&&(!f.client_id||f.client_id===id)).map(f=>String(f.date).slice(0,10)).sort().pop()||'';if(lc>o.last)o.last=lc})});
+  const gcs=[...gm.values()].filter(o=>o.open||o.sent||o.won||o.lost).sort((a,b)=>b.openV-a.openV||b.sent-a.sent).slice(0,C.allGc?999:12);const nG=[...gm.values()].filter(o=>o.open||o.sent||o.won||o.lost).length;
+  const gcT=`<div class="panel scroll"><table class="crm-t"><thead><tr><th>GC / client</th><th class="r">Open</th><th class="r">Open $</th><th class="r">Sent ${Y}</th><th class="r">Won</th><th class="r">Lost</th><th class="r">Win rate</th><th>Last contact</th></tr></thead><tbody>${gcs.map(o=>{const w=o.won+o.lost?Math.round(o.won/(o.won+o.lost)*100)+'%':'—';return `<tr class="click${C.gc===o.id?' on':''}" data-act="crm-gc" data-id="${o.id}" title="Show only this GC’s open proposals"><td><b>${esc(clientName(o.id))}</b></td><td class="r">${o.open||''}</td><td class="r num">${o.openV?moneyK(o.openV):''}</td><td class="r">${o.sent||''}</td><td class="r">${o.won||''}</td><td class="r">${o.lost||''}</td><td class="r"><b>${w}</b></td><td>${o.last?fmtShort(o.last):'<span class="dim">—</span>'}</td></tr>`}).join('')||'<tr><td colspan="8" class="dim">No GC activity yet.</td></tr>'}</tbody></table></div>${nG>12?`<div class="adders"><button class="btn sm ghost" data-act="crm-allgc">${C.allGc?'Show top 12':`Show all ${nG}`}</button></div>`:''}`;
+  // activity
+  const ev=[];all.forEach(b=>{const gcN=crmGcs(b).map(clientName).join(', ');
+    (b.follow_ups||[]).forEach(f=>{if(f.date)ev.push({d:String(f.date).slice(0,10),b,ic:f.kind==='nudge'?'📞':'📝',t:f.note||'Follow-up',who:f.by||'',gc:f.client_id?clientName(f.client_id):gcN})});
+    const s=crmSent(b);if(s&&(isSent(b)||crmDecided(b)))ev.push({d:s,b,ic:'📤',t:'Proposal sent',gc:gcN});
+    revShown(b).forEach(r=>{if(+r.rev>0&&r.date)ev.push({d:String(r.date).slice(0,10),b,ic:'🔁',t:`Revised price (Rev ${r.rev})${snapValue(b,r.snapshot)!=null?' '+money(snapValue(b,r.snapshot)):''}${r.reason&&r.reason!=='Numbers updated'?' · '+r.reason:''}`,gc:gcN})});
+    if(crmDecided(b))ev.push({d:crmDecDate(b),b,ic:b.status==='Awarded'?'🏆':'✖️',t:b.status==='Awarded'?`Awarded${num(b.awarded_amount)?' '+money(b.awarded_amount):''}`:`Lost${b.lost_reason?' · '+b.lost_reason:''}${b.awarded_to?' · went to '+b.awarded_to:''}`,gc:gcN})});
+  const evs=ev.filter(e=>e.d&&e.d<=today&&(!C.gc||(e.b.client_ids||[]).includes(C.gc))).sort((a,b)=>b.d.localeCompare(a.d));
+  const actH=`<ol class="crm-feed">${evs.slice(0,C.act).map(e=>`<li data-act="open-bid" data-id="${e.b.id}" class="click"><span class="crm-fi">${e.ic}</span><div><b>${esc(e.b.name)}</b> <span class="small dim">${esc(e.gc||'')}</span><div class="small">${esc(e.t)}${e.who?` · <span class="dim">${esc(e.who)}</span>`:''}</div></div><time class="small dim">${fmtShort(e.d)}</time></li>`).join('')||'<li class="dim">Nothing yet.</li>'}</ol>${evs.length>C.act?`<div class="adders"><button class="btn sm ghost" data-act="crm-more">Show more</button></div>`:''}`;
+  // outcomes
+  const why={};lost.forEach(b=>{const k=b.lost_reason||'Not given';why[k]=(why[k]||0)+1});const wmax=Math.max(1,...Object.values(why));
+  const oc=(a,w)=>a.sort((x,y)=>crmDecDate(y).localeCompare(crmDecDate(x))).slice(0,8).map(b=>`<li class="click" data-act="open-bid" data-id="${b.id}"><div><b>${esc(b.name)}</b><div class="small dim">${esc(crmGcs(b).map(clientName).join(', '))}${!w&&b.awarded_to?' · went to '+esc(b.awarded_to):''}${!w&&b.lost_reason?' · '+esc(b.lost_reason):''}</div></div><span class="num">${moneyK(w?(num(b.awarded_amount)||bidValue(b)):bidValue(b))}</span></li>`).join('')||'<li class="dim">None yet.</li>';
+  const outH=`<div class="crm-oc"><div><h3>🏆 Won <span class="small dim">${won.length} · ${moneyK(wonV)}</span></h3><ul class="crm-ol">${oc(won,1)}</ul></div><div><h3>✖️ Lost <span class="small dim">${lost.length} · ${moneyK(sum(lost))}</span></h3><ul class="crm-ol">${oc(lost,0)}</ul>
+    ${lost.length?`<div class="crm-why"><b class="small">Why we lose</b>${Object.entries(why).sort((a,b)=>b[1]-a[1]).map(([k,v])=>`<div class="crm-wr"><span class="small">${esc(k)}</span><i style="width:${Math.round(v/wmax*100)}%"></i><b class="small">${v}</b></div>`).join('')}</div>`:''}</div></div>`;
+  const gcName=C.gc?clientName(C.gc):'';
+  return `<div class="small dim rp-bnote">Proposals, follow-ups and outcomes, from a client standpoint. Counts are for ${Y}; "out for decision" is right now. Click any row to open the bid.</div>${kpis}
+    <div class="crm-grid"><div class="sec"><div class="sec-h"><h2>Out for decision</h2><span>${gcName?`${esc(gcName)} · <button class="btn sm ghost" data-act="crm-gc" data-id="">Show all GCs</button>`:'Follow-ups due first'}</span></div>${outT}</div>
+      <div class="sec"><div class="sec-h"><h2>Recent activity</h2><span>Follow-ups, proposals, revisions, outcomes</span></div><div class="panel pad">${actH}</div></div></div>
+    <div class="sec"><div class="sec-h"><h2>By GC / client</h2><span>Click a GC to see its open proposals and activity</span></div>${gcT}</div>
+    <div class="sec"><div class="sec-h"><h2>Outcomes</h2><span>${Y}</span></div><div class="panel pad">${outH}</div></div>`}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('crm-'))return;const C=S.crm=S.crm||{gc:'',act:15};
+  if(a==='crm-gc'){C.gc=C.gc===t.dataset.id?'':t.dataset.id;render()}if(a==='crm-more'){C.act+=20;render()}if(a==='crm-allgc'){C.allGc=!C.allGc;render()}
+  if(a==='crm-mode'){try{localStorage.setItem('bp-board-mode',t.dataset.v)}catch(er){}render()}});
