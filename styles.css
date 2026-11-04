@@ -3028,3 +3028,6 @@ div.tw-pgh{cursor:default}
 .ct-box .f{display:block;margin:10px 0}.ct-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:520px){.ct-two{grid-template-columns:1fr}}
 .ct-fl{font-size:13px;margin:4px 0 0;padding-left:18px}.ct-err{background:#fdecea;color:#8a1c12;border-radius:8px;padding:8px 10px;margin:8px 0;font-size:14px}
 .ct-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}.ct-done{text-align:center;padding:20px 0}.ct-done h3{color:#2e6b45}
+/* vendor quote portal */
+.vq-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.vq-rfq{margin-top:12px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px}.vq-need{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}

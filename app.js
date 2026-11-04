@@ -973,7 +973,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal,airate:aiRateModal,aiinstr:aiInstrModal,aitko:atkModal,aitkr:atkReportModal}[M.kind]();
+  const html={tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal,airate:aiRateModal,aiinstr:aiInstrModal,vqlink:vqLinkModal,aitko:atkModal,aitkr:atkReportModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='bid'?' bidpage':''}${['rpcard','rpdrill','airate','aitko','aitkr','import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -6157,6 +6157,7 @@ async function checkConfig(){
   render();
 }
 async function start(){
+  const VQ=new URLSearchParams(location.search).get('vq');if(VQ&&sb){S.tracker=true;setTimeout(()=>vqPage(VQ),0);return}
   const VP=new URLSearchParams(location.search).get('vp');if(VP&&sb){S.tracker=true;setTimeout(()=>vpPage(VP),0);return}
   const TRK=new URLSearchParams(location.search).get('track');if(TRK&&sb){S.tracker=true;setTimeout(()=>trackPage(TRK),0);return}
   render();
@@ -10851,7 +10852,7 @@ function vVendor(){vxNeed();const v=byId(S.vendors,S.vendorId);if(!v)return `<di
   const rAge=s.lastRated?vxDays(s.lastRated):null;const pAge=s.priceOld?vxDays(s.priceOld):null;
   return `<div class="head vx-head"><div><button class="linkbtn" data-act="nav" data-v="vendors">← Vendors & subs</button><h1>${esc(v.company)} ${v.preferred?pill('Preferred','hot'):''}</h1>
       <p>${[v.vendor_type,v.trade,v.base?'based in '+v.base:''].filter(Boolean).map(esc).join(' · ')}${vxRegions(v).length?`<span class="vx-regs">${vxRegions(v).map(r=>`<span class="pill">${esc(r)}</span>`).join('')}</span>`:v.area?` · ${esc(v.area)}`:''}</p></div>
-    <div class="tools">${vxBadge(s,true)}<button class="btn primary" data-act="vx-rate" data-id="${v.id}">★ Rate</button>${ed?`<button class="btn" data-act="vx-link" data-id="${v.id}">✉ Send price link</button><button class="btn" data-act="open-vendor" data-id="${v.id}">Edit details</button><button class="btn" data-act="vc-open" data-id="${v.id}" title="Clear this vendor’s ratings, prices and history, or delete it">🧹</button>`:''}</div></div>
+    <div class="tools">${vxBadge(s,true)}<button class="btn primary" data-act="vx-rate" data-id="${v.id}">★ Rate</button>${ed?`<button class="btn" data-act="vq-open" data-id="${v.id}" title="Their private link to upload quotes for the jobs you send them">📑 Quote portal</button><button class="btn" data-act="vx-link" data-id="${v.id}">✉ Send price link</button><button class="btn" data-act="open-vendor" data-id="${v.id}">Edit details</button><button class="btn" data-act="vc-open" data-id="${v.id}" title="Clear this vendor’s ratings, prices and history, or delete it">🧹</button>`:''}</div></div>
   ${X.missing?'<div class="notice">Rankings and price lists need a one-time database update: run <b>supabase/update-37-vendor-rankings.sql</b> in the Supabase SQL Editor.</div>':''}
   ${rAge==null&&(s.n.asked||v.preferred)?`<div class="notice">Nobody has rated ${esc(v.company)} yet. <button class="linkbtn" data-act="vx-rate" data-id="${v.id}">Rate them now</button></div>`:rAge>c.rateDays?`<div class="notice">⏰ This ranking hasn’t been updated in ${rAge} days. <button class="linkbtn" data-act="vx-rate" data-id="${v.id}">Rate them now</button></div>`:''}
   ${pAge>c.priceDays?`<div class="notice">⏰ ${s.priceStale===s.prices?`This pricing is ${pAge} days old.`:`${s.priceStale} of ${s.prices} prices are over ${c.priceDays} days old (the oldest ${pAge} days).`} ${ed?`<button class="linkbtn" data-act="vx-link" data-id="${v.id}">Send them the update link</button> or <button class="linkbtn" data-act="vx-tab" data-v="prices">update it here</button>.`:''}</div>`:''}
@@ -11320,7 +11321,7 @@ Thank you for your participation in this bid. We look forward to receiving your 
 Sincerely,
 
 Dogwood Estimating Team`};
-const RFQ_KEYS=[['project','Project name'],['location','Location'],['quotes_due','Quotes due date'],['quotes_due_time','Quotes due time'],['note','Note for this RFQ, e.g. Phase 1 & 2 only'],['start_date','Anticipated start'],['plans_link','Plans link'],['details_table','Project address / description / engineer table'],['plan_date','Plan date'],['scopes','Scopes, comma separated'],['engineer','Engineer'],['gc','Who you’re bidding to'],['bid_due','Bid due date'],['walk_date','Site walk'],['rfi_date','RFI deadline'],['estimator','Lead estimator'],['company','Your company']];
+const RFQ_KEYS=[['project','Project name'],['location','Location'],['quotes_due','Quotes due date'],['quotes_due_time','Quotes due time'],['note','Note for this RFQ, e.g. Phase 1 & 2 only'],['start_date','Anticipated start'],['plans_link','Plans link'],['details_table','Project address / description / engineer table'],['plan_date','Plan date'],['scopes','Scopes, comma separated'],['engineer','Engineer'],['gc','Who you’re bidding to'],['bid_due','Bid due date'],['walk_date','Site walk'],['rfi_date','RFI deadline'],['estimator','Lead estimator'],['company','Your company'],['quote_portal','Quote portal line (upload quotes on your portal)']];
 const rfqTpl=()=>({...RFQ_DEF,...(S.settings.rfq_email||{})});
 const rfqDate=d=>d?new Date(d+'T12:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}):'TBD';
 const rfqD=d=>{if(!d)return 'TBD';const x=new Date(d+'T12:00:00');return `${x.getMonth()+1}/${x.getDate()}/${x.getFullYear()}`};
@@ -11333,7 +11334,7 @@ const vEmail=v=>(/[^\s<>(),;]+@[^\s<>(),;]+/.exec(String(v&&v.email||''))||[''])
 // scopes on this RFQ; ones you self perform go out as "(material)"
 function rfqScopes(b,qs){const ord=n=>{const i=b.scope_items.findIndex(x=>x.name.toLowerCase()===String(n).toLowerCase());return i<0?999:i};const names=[...new Set(qs.flatMap(qScopes))].sort((x,y)=>ord(x)-ord(y));return names.map(n=>{const it=b.scope_items.find(x=>x.name.toLowerCase()===String(n).toLowerCase());const P=partsOf(it);return {n:n+(P.length?` (${P.join(', ')})`:''),mat:it&&performOf(it)==='Self perform'}})}
 function rfqMap(b,qs){const r=rfqOf(b);const lead=byId(S.estimators,b.lead_estimator_id)||{};const co=S.settings.general?.companyName||CFG.companyName||'Dogwood Site Contractors';const sc=rfqScopes(b,qs);
-  return {project:b.name||'',location:b.location||'',quotes_due:rfqD(rfqDue(b)),quotes_due_time:r.time||'5PM',note:r.note||'',note_short:r.note?' '+r.note.replace(/^\W+|\W+$/g,'').replace(/^(pricing and quotes needed are for )?only /i,''):'',start_date:r.start||'TBD',plans_link:'\u0001plans\u0001',details_table:'\u0001table\u0001',
+  return {project:b.name||'',location:b.location||'',quotes_due:rfqD(rfqDue(b)),quotes_due_time:r.time||'5PM',note:r.note||'',note_short:r.note?' '+r.note.replace(/^\W+|\W+$/g,'').replace(/^(pricing and quotes needed are for )?only /i,''):'',start_date:r.start||'TBD',plans_link:'\u0001plans\u0001',details_table:'\u0001table\u0001',quote_portal:'You can upload your quote, ask questions or decline this RFQ on your quote portal (the private link we emailed you; reply if you need it again).',
     scopes:sc.map(x=>x.n+(x.mat?' (material)':'')).join(', '),plan_date:r.planDate?rfqD(r.planDate):'',engineer:r.engineer||'',gc:propIds(b).map(clientName).join(', '),bid_due:rfqD(b.due_date),walk_date:b.walk_date?rfqD(b.walk_date):'',rfi_date:b.rfi_date?rfqD(b.rfi_date):'',estimator:lead.name||myName(),company:co,
     _sc:sc,_desc:r.desc||`This is a ${String(b.project_type||'Commercial')} Development which includes the following:`,_plans:r.plans||'',_plansLabel:r.plansLabel||(r.planDate?`${r.planDate.replace(/-/g,'')} - ${b.name||'Plans'} Civil Set.pdf`:'')}}
 // fill the template: drop a line when its fields came out empty and nothing else is on it
@@ -11376,7 +11377,7 @@ function rfqView(){const b=M.draft;const R=M.rfq;const T=rfqTpl();const r=rfqOf(
      ${f('desc','Description line',`This is a ${b.project_type||'Commercial'} Development which includes the following:`,'s2')}
    </div><p class="hint">Saved with the bid, so the next RFQ for this project starts filled in. Scopes you self perform are listed as “(material)”.</p></fieldset>
    <fieldset><legend>Who it goes to</legend><div class="rfq-list">${rows||'<div class="dim small">Add vendors and subs on the Scopes & RFQs tab first.</div>'}</div>
-     ${noMail.length?`<p class="hint bad">${noMail.map(v=>esc(v.company)).join(', ')} ${noMail.length===1?'has':'have'} no email on file and will be left off. Add it on the Vendors page.</p>`:''}</fieldset>
+     ${noMail.length?`<p class="hint bad">${noMail.map(v=>esc(v.company)).join(', ')} ${noMail.length===1?'has':'have'} no email on file and will be left off. Add it on the Vendors page.</p>`:''}${vqRfqHtml(vs)}</fieldset>
    </div><div>
    <fieldset><legend>Email</legend>
      <div class="rfq-hdr"><span>Cc</span><div><b>${esc(T.cc||'—')}</b></div>
@@ -14921,6 +14922,8 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   if(a==='crm-mode'){try{localStorage.setItem('bp-board-mode',t.dataset.v)}catch(er){}render()}});
 
 
+
+
 /* ===================================================================================================
    CLIENT UPLOADS. GCs send plans, addenda, revisions and questions from their bid tracker link
    (update 49). Files go to the private client-inbox bucket; the estimator downloads them, files them
@@ -14928,36 +14931,38 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
    =================================================================================================== */
 const CU_BUCKET='client-inbox';
 const CU_KINDS=[['plans','📐','Plans or drawings'],['addendum','📄','Addendum'],['revision','🔁','Revised sheets'],['question','❓','Question'],['other','📎','Something else']];
+const CU_VKINDS={quote:['quote','📑','Vendor quote'],decline:['decline','🚫','Not bidding']};
 const CU_EXT=/\.(pdf|dwg|dxf|xml|zip|png|jpe?g|tif?f|docx?|xlsx?|csv|txt|msg|eml)$/i;
 const CU_MAX=1024*1024*1024;
-const cuKind=k=>CU_KINDS.find(x=>x[0]===k)||CU_KINDS[4];
+const cuKind=k=>CU_VKINDS[k]||CU_KINDS.find(x=>x[0]===k)||CU_KINDS[4];
+const cuFrom=u=>u.vendor_id?((byId(S.vendors,u.vendor_id)||{}).company||'Vendor')+(u.from_name?' ('+u.from_name+')':''):(u.from_name||clientName(u.client_id)||'the GC');
 const cuSize=n=>n>=1e9?(n/1e9).toFixed(1)+' GB':n>=1e6?(n/1e6).toFixed(1)+' MB':Math.max(1,Math.round(n/1e3))+' KB';
 const cuSafe=s=>String(s||'file').replace(/[\\/#?%*:|"<>]+/g,'-').replace(/\s+/g,' ').trim().slice(0,150)||'file';
 async function cuLoad(){if(!sb||!S.session||S.cuBusy)return;S.cuBusy=true;try{const {data,error}=await sb.from('client_uploads').select('*').order('created_at',{ascending:false}).limit(1000);if(error)throw error;const was=(S.cu||[]).filter(u=>u.status==='new').length;S.cu=data||[];S.cuMissing=false;
-    const now=S.cu.filter(u=>u.status==='new').length;if(S.cuSeen&&now>was)toast(`📥 ${now-was} new from a client`);S.cuSeen=true;schedule()}catch(e){S.cuMissing=/client_uploads|relation|schema cache|does not exist/i.test(e.message||'');S.cu=S.cu||[]}S.cuBusy=false}
+    const now=S.cu.filter(u=>u.status==='new').length;if(S.cuSeen&&now>was){toast(`📥 ${now-was} new from a client or vendor`);if(S.cu.some(u=>u.vendor_id&&u.status==='new'))loadTable('quotes')}S.cuSeen=true;schedule()}catch(e){S.cuMissing=/client_uploads|relation|schema cache|does not exist/i.test(e.message||'');S.cu=S.cu||[]}S.cuBusy=false}
 setInterval(()=>{if(S.session&&!document.hidden&&!S.cuMissing&&can('bids','view'))cuLoad()},60000);
 const cuFor=id=>(S.cu||[]).filter(u=>u.bid_id===id);
 const cuNew=()=>(S.cu||[]).filter(u=>u.status==='new'&&byId(S.bids,u.bid_id));
 const cuAge=u=>Math.round((Date.now()-new Date(u.created_at).getTime())/864e5);
-const cuWhat=u=>{const k=cuKind(u.kind);return `${k[1]} ${u.kind==='addendum'&&u.number?`Addendum ${u.number}`:k[2]}`};
+const cuWhat=u=>{const k=cuKind(u.kind);return `${k[1]} ${u.kind==='addendum'&&u.number?`Addendum ${u.number}`:u.kind==='quote'&&u.number?`Vendor quote (${u.number})`:k[2]}`};
 
 /* ----- staff: dashboard panel, bid banner, inbox view ----- */
 function cuPanel(){if(S.cu==null&&!S.cuMissing&&S.session){cuLoad();return ''}const L=cuNew().filter(u=>{const b=byId(S.bids,u.bid_id);return b&&(!onlyMine()||canWork(b))});if(!L.length)return '';
-  return `<div class="panel pad cu-panel"><b>📥 ${L.length} item${L.length===1?'':'s'} from clients to file</b><div class="list" style="margin-top:8px">${L.slice(0,8).map(u=>{const b=byId(S.bids,u.bid_id);return `<div class="li"><span>${esc(cuWhat(u))} for <button class="linkbtn" data-act="cu-open" data-id="${b.id}">${esc(b.name)}</button> <span class="small dim">from ${esc(u.from_name||clientName(u.client_id)||'the GC')}${u.files.length?` · ${u.files.length} file${u.files.length===1?'':'s'}`:''} · ${cuAge(u)?cuAge(u)+'d ago':'today'}</span>${cuAge(u)>=7?' '+pill('Still in the inbox','warn'):''}</span><button class="btn sm" data-act="cu-open" data-id="${b.id}">Open</button></div>`}).join('')}${L.length>8?`<div class="small dim">+${L.length-8} more</div>`:''}</div>
+  return `<div class="panel pad cu-panel"><b>📥 ${L.length} item${L.length===1?'':'s'} from clients and vendors to file</b><div class="list" style="margin-top:8px">${L.slice(0,8).map(u=>{const b=byId(S.bids,u.bid_id);return `<div class="li"><span>${esc(cuWhat(u))} for <button class="linkbtn" data-act="cu-open" data-id="${b.id}">${esc(b.name)}</button> <span class="small dim">from ${esc(cuFrom(u))}${u.files.length?` · ${u.files.length} file${u.files.length===1?'':'s'}`:''} · ${cuAge(u)?cuAge(u)+'d ago':'today'}</span>${cuAge(u)>=7?' '+pill('Still in the inbox','warn'):''}</span><button class="btn sm" data-act="cu-open" data-id="${b.id}">Open</button></div>`}).join('')}${L.length>8?`<div class="small dim">+${L.length-8} more</div>`:''}</div>
     <p class="hint">Download them, put them in the project’s SharePoint folder, then click <b>Filed to SharePoint</b>. That clears the files out of the app and keeps the record.</p></div>`}
 function cuBanner(b){if(!b||b._new)return '';const L=cuFor(b.id).filter(u=>u.status==='new');if(!L.length)return '';
-  return `<div class="notice cu-banner"><div><b>📥 ${L.length} new from ${esc([...new Set(L.map(u=>u.from_name||clientName(u.client_id)).filter(Boolean))].join(', ')||'the GC')}</b> <span class="small">${L.map(u=>esc(cuWhat(u))).join(' · ')}</span></div><button class="btn sm primary" data-act="cu-view">Open the inbox</button></div>`}
+  return `<div class="notice cu-banner"><div><b>📥 ${L.length} new from ${esc([...new Set(L.map(cuFrom))].join(', '))}</b> <span class="small">${L.map(u=>esc(cuWhat(u))).join(' · ')}</span></div><button class="btn sm primary" data-act="cu-view">Open the inbox</button></div>`}
 function cuView(){const b=M.draft;const L=cuFor(b.id);const work=canWork(b);const sel=M.cu||{};
   const item=u=>{const k=cuKind(u.kind);const live=u.status==='new';const nf=u.files.filter(f=>!f.removed);
-    return `<div class="cu-item ${u.status}"><div class="cu-ih"><b>${esc(cuWhat(u))}</b>${live?pill('New','info'):u.status==='filed'?pill('Filed to SharePoint','good'):pill('Dismissed','na')}<span class="small dim">${esc(u.from_name||'')}${u.from_email?` · <a href="mailto:${esc(u.from_email)}">${esc(u.from_email)}</a>`:''} · ${esc(clientName(u.client_id)||'')} · ${new Date(u.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</span></div>
+    return `<div class="cu-item ${u.status}"><div class="cu-ih"><b>${esc(cuWhat(u))}</b>${live?pill('New','info'):u.kind==='decline'?pill('Logged','na'):u.status==='filed'?pill(u.files.length?'Filed to SharePoint':'Handled','good'):pill('Dismissed','na')}<span class="small dim">${esc(cuFrom(u))}${u.from_email?` · <a href="mailto:${esc(u.from_email)}">${esc(u.from_email)}</a>`:''}${!u.vendor_id&&u.from_name?` · ${esc(clientName(u.client_id)||'')}`:''}${(()=>{const sc=u.vendor_id&&u.quote_ids?(S.quotes||[]).filter(q=>u.quote_ids.includes(q.id)).map(q=>q.scope).filter(Boolean):[];return sc.length?` · ${esc(sc.join(', '))}`:''})()} · ${new Date(u.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</span></div>
       ${u.note?`<p class="cu-note">${esc(u.note).replace(/\n/g,'<br>')}</p>`:''}${u.link?`<p class="small">🔗 <a href="${esc(u.link)}" target="_blank" rel="noopener">${esc(u.link.slice(0,90))}</a></p>`:''}
       ${u.files.length?`<ul class="cu-files">${u.files.map((f,i)=>`<li>${f.removed?`<span class="dim">📄 ${esc(f.name)} · ${cuSize(num(f.size)||0)} · cleared from the app</span>`:`<button class="linkbtn" data-act="cu-dl" data-id="${u.id}" data-i="${i}">📄 ${esc(f.name)}</button> <span class="small dim">${cuSize(num(f.size)||0)}</span>`}</li>`).join('')}</ul>${nf.length>1?`<button class="btn sm" data-act="cu-dlall" data-id="${u.id}">⬇ Download all ${nf.length}</button>`:''}`:''}
-      ${u.status!=='new'?`<p class="small dim">${u.status==='filed'?'Filed':'Dismissed'} by ${esc(u.handled_by_name||'')} ${u.handled_at?fmtShort(String(u.handled_at).slice(0,10)):''}${u.sp_link?` · <a href="${esc(u.sp_link)}" target="_blank" rel="noopener">Open in SharePoint</a>`:''}</p>`:''}
+      ${u.status!=='new'&&u.kind!=='decline'?`<p class="small dim">${u.status==='filed'?(u.files.length?'Filed':'Handled'):'Dismissed'} by ${esc(u.handled_by_name||'')} ${u.handled_at?fmtShort(String(u.handled_at).slice(0,10)):''}${u.sp_link?` · <a href="${esc(u.sp_link)}" target="_blank" rel="noopener">Open in SharePoint</a>`:''}</p>`:''}
       ${live&&work?`<div class="cu-act">${sel.id===u.id?`<label class="f"><span class="f-lab">SharePoint link (optional)</span><input class="field" data-cusp value="${esc(sel.sp||'')}" placeholder="Paste the folder or file link so anyone can find it later"></label>
           <div class="adders"><button class="btn primary" data-act="cu-file" data-id="${u.id}"${sel.busy?' disabled':''}>${sel.busy?'Clearing…':'✓ Filed to SharePoint: clear the files'}</button><button class="btn ghost" data-act="cu-cancel">Cancel</button></div>`
-        :`<div class="adders"><button class="btn primary" data-act="cu-pick" data-id="${u.id}">Filed to SharePoint…</button>${u.kind==='addendum'?`<button class="btn" data-act="cu-addad" data-id="${u.id}" title="Add it to this bid’s addenda list">Log as addendum${u.number?' #'+esc(u.number):''}</button>`:''}<button class="btn ghost" data-act="cu-dismiss" data-id="${u.id}" title="Delete the files without filing them (duplicates, wrong job)">Dismiss</button></div>`}</div>`:''}</div>`};
-  return `<div class="bp-head"><button class="btn ghost bp-back" data-act="cu-back">← Back to the bid</button><div class="bp-title"><h2>📥 From the client</h2><p>${esc(b.name)}</p></div></div>
-    <div class="mbody bp-body"><div class="cu-pane"><p class="small">What GCs sent from their bid tracker link. Download the files, put them in the project’s SharePoint folder, then mark them filed. That deletes them from the app; the record, the note and your SharePoint link stay here.</p>
+        :!u.files.length?`<div class="adders"><button class="btn primary" data-act="cu-done" data-id="${u.id}">✓ Handled</button></div>`:`<div class="adders"><button class="btn primary" data-act="cu-pick" data-id="${u.id}">Filed to SharePoint…</button>${u.kind==='addendum'?`<button class="btn" data-act="cu-addad" data-id="${u.id}" title="Add it to this bid’s addenda list">Log as addendum${u.number?' #'+esc(u.number):''}</button>`:''}<button class="btn ghost" data-act="cu-dismiss" data-id="${u.id}" title="Delete the files without filing them (duplicates, wrong job)">Dismiss</button></div>`}</div>`:''}</div>`};
+  return `<div class="bp-head"><button class="btn ghost bp-back" data-act="cu-back">← Back to the bid</button><div class="bp-title"><h2>📥 From clients and vendors</h2><p>${esc(b.name)}</p></div></div>
+    <div class="mbody bp-body"><div class="cu-pane"><p class="small">What GCs sent from their tracker link and vendors sent from their quote portal. Download the files, put them in the project’s SharePoint folder, then mark them filed. That deletes them from the app; the record, the note and your SharePoint link stay here.</p>
     ${L.length?L.map(item).join(''):'<p class="dim">Nothing from the client yet. They can send plans, addenda and questions from their tracker link.</p>'}</div></div>
     <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="cu-back">Done</button></div></div>`}
 async function cuDownload(u,i){const f=u.files[i];if(!f||f.removed)return;const {data,error}=await sb.storage.from(CU_BUCKET).createSignedUrl(f.path,600,{download:f.name});if(error)throw error;const a=document.createElement('a');a.href=data.signedUrl;a.download=f.name;document.body.appendChild(a);a.click();a.remove()}
@@ -14973,6 +14978,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
     case 'cu-pick':M.cu={id:u.id,sp:''};renderModal();break;
     case 'cu-cancel':M.cu={};renderModal();break;
     case 'cu-file':{const sp=String(M.cu.sp||'').trim();if(sp&&!/^https?:\/\//i.test(sp)){toast('That link should start with https://');return}M.cu.busy=true;renderModal();await cuClear(u,'filed',sp);M.cu={};renderModal();toast('Filed. The files are cleared from the app.');break}
+    case 'cu-done':await cuClear(u,'filed','');renderModal();toast('Marked handled');break;
     case 'cu-dismiss':if(!M.cuArm||M.cuArm!==u.id){M.cuArm=u.id;t.textContent='Click again to delete the files';return}M.cuArm=null;await cuClear(u,'dismissed','');renderModal();toast('Dismissed and cleared');break;
     case 'cu-addad':{const l=M.draft.addenda;const n=num(u.number)||l.reduce((m,x)=>Math.max(m,+x.number||0),0)+1;if(l.some(x=>+x.number===n)){toast(`Addendum ${n} is already on the list`);return}
       l.push({id:newId(),number:n,date:String(u.created_at).slice(0,10),description:(u.note||'').slice(0,200),priced:false,acknowledged:false});renderModal();toast(`Addendum ${n} added to the bid’s addenda. It saves with the bid.`);break}}
@@ -15016,3 +15022,80 @@ document.addEventListener('click',e=>{const t=e.target;if(t.closest&&t.closest('
   if(t.closest&&t.closest('[data-ctclose]')){window.__ctF=null;ctDraw();return}if(t.closest&&t.closest('[data-ctsend]')){ctSend();return}
   if(t.classList&&t.classList.contains('ct-modal')&&!window.__ctF?.busy){window.__ctF=null;ctDraw()}});
 document.addEventListener('change',e=>{const F=window.__ctF;if(!F)return;const t=e.target;if(t.name==='ctkind'){ctRead();F.kind=t.value;ctDraw()}if(t.id==='ct-files'){ctRead();F.files=[...F.files,...t.files].slice(0,30);ctDraw()}});
+/* ===================================================================================================
+   VENDOR QUOTE PORTAL (update 50). One permanent private link per vendor (?vq=token). It lists only
+   the jobs we've sent THAT vendor an RFQ for: scopes, quote due dates, addenda, who to call, and what
+   they've already sent. They upload a quote file, ask a question, or decline, per job. Uploads land in
+   the same inbox as client uploads (filed to SharePoint by hand, then cleared).
+   =================================================================================================== */
+const vqUrl=t=>`${location.origin}${location.pathname}?vq=${t}`;
+async function vqToken(vid,fresh){const {data,error}=await sb.rpc('vendor_quote_link',{p_vendor:vid,p_new:!!fresh});if(error)throw error;const v=byId(S.vendors,vid);if(v)v.quote_token=data;return data}
+function vqMail(v,url){const co=S.settings.general?.companyName||CFG.companyName||'Dogwood Site Contractors';const first=String(v.contact_name||'').split(/\s+/)[0];
+  const body=`${first?'Hi '+first:'Hello'},\n\nThis is your private quote portal with ${co}:\n\n${url}\n\nEvery job we send you an RFQ for shows up there with the scope, the quote due date and any addenda. Open a job to upload your quote (PDF, Excel, whatever you use), ask a question, or let us know you’re not bidding it. No login needed. The link is just for ${v.company}, so please keep it within your team and bookmark it.\n\nThank you,\n${myName()}\n${co}`;
+  return `mailto:${encodeURIComponent(vEmail(v))}?subject=${encodeURIComponent(`${co}: your quote portal link`)}&body=${encodeURIComponent(body)}`}
+function vqLinkModal(){const x=M;const v=byId(S.vendors,x.vendor_id);if(!v)return mhead('Quote portal','')+'<div class="mbody">Vendor not found.</div>';const url=x.token?vqUrl(x.token):'';
+  return mhead('📑 Quote portal link',v.company)+`<div class="mbody"><p>${esc(v.company)}’s private link. It lists only the jobs you send them an RFQ for: they upload quotes, ask questions or decline right there, and quotes show up in the bid’s inbox and mark their quote <b>Received</b>. They never see other vendors.</p>
+    ${x.err?`<div class="notice bad">${esc(x.err)}</div>`:!url?`<p class="dim">${x.busy?'Getting the link…':''}</p>`:`<label class="f"><span class="f-lab">Link</span><input class="field" readonly value="${esc(url)}" onclick="this.select()"></label>
+    <div class="adders"><button class="btn primary" data-act="vq-mail"${vEmail(v)?'':' disabled title="No email on file"'}>✉ Email it to ${esc(v.contact_name||v.company)}</button><button class="btn" data-act="vq-copy">Copy link</button><button class="btn ghost" data-act="vq-new" title="The old link stops working">Replace link…</button></div>
+    <p class="small dim">${v.quote_link_sent_at?`Last sent ${fmtDate(String(v.quote_link_sent_at).slice(0,10))}.`:'Not sent yet.'} Send it once; every new RFQ shows up on the same link.</p>`}</div>
+    <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Done</button></div></div>`}
+async function vqOpen(vid){M={kind:'vqlink',vendor_id:vid,token:null,busy:true};showModal();try{M.token=await vqToken(vid,false)}catch(e){M.err=/vendor_quote_link|function|does not exist/i.test(e.message||'')?'Run supabase/update-50-vendor-quote-portal.sql first.':errMsg(e)}M.busy=false;renderModal()}
+async function vqMarkSent(vid){const v=byId(S.vendors,vid);try{await run(sb.from('vendors').update({quote_link_sent_at:new Date().toISOString()}).eq('id',vid));if(v)v.quote_link_sent_at=new Date().toISOString()}catch(e){}}
+// on the RFQ: who still needs their portal link
+function vqRfqHtml(vs){if(!vs.length)return '';const need=vs.filter(v=>!v.quote_link_sent_at);
+  return `<div class="vq-rfq"><b>📑 Quote portal</b> <span class="small dim">${need.length?`${need.length} of ${vs.length} haven’t been sent their portal link yet. Send it once and they can upload this quote (and every future one) there.`:'Everyone on this RFQ has their portal link. Their quotes will land in this bid’s inbox.'}</span>
+    ${need.length?`<div class="vq-need">${need.map(v=>`<button class="btn sm" data-act="vq-rfqsend" data-id="${v.id}"${vEmail(v)?'':' disabled title="No email on file"'}>✉ ${esc(v.company)}</button>`).join('')}</div>`:''}</div>`}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('vq-'))return;
+  try{if(a==='vq-open'){vqOpen(t.dataset.id);return}
+    if(a==='vq-rfqsend'){const v=byId(S.vendors,t.dataset.id);const tk=await vqToken(v.id,false);window.location.href=vqMail(v,vqUrl(tk));await vqMarkSent(v.id);renderModal();return}
+    if(!M||M.kind!=='vqlink')return;const v=byId(S.vendors,M.vendor_id);
+    if(a==='vq-copy'){await navigator.clipboard.writeText(vqUrl(M.token));toast('Link copied');await vqMarkSent(v.id);renderModal()}
+    if(a==='vq-mail'){window.location.href=vqMail(v,vqUrl(M.token));await vqMarkSent(v.id);renderModal()}
+    if(a==='vq-new'){if(!M.arm){M.arm=true;t.textContent='Click again: the old link stops working';return}M.arm=false;M.token=await vqToken(v.id,true);toast('New link made. The old one no longer works.');renderModal()}
+  }catch(er){toast(errMsg(er))}});
+
+/* ----- the vendor's page ----- */
+async function vqPage(tk){const main=$('#main'),top=$('#topwrap');if(top)top.hidden=true;await coLoadPublic();const co0=CFG.companyName||APP_NAME;let D=null;
+  const shell=inner=>extShell('Quote portal',inner,'This page is private to your company. It only shows the jobs we’ve asked you to quote.');
+  const load=async()=>{try{const r=await sb.rpc('vendor_quotes',{p_token:tk});if(r.error)throw r.error;D=r.data;return true}catch(x){main.innerHTML=shell('<div class="ct-msg"><h1>We couldn’t load your quote portal</h1><p>Please try again in a few minutes.</p></div>');return false}};
+  const today=todayStr();
+  const job=j=>{const due=j.due;const late=due&&due<today;const left=due?daysUntil(due):null;const sc=j.scopes||[];const sent=j.sent||[];const anyRec=sc.some(s=>s.status==='Received');const allDec=sc.every(s=>s.status==='Declined');
+    return `<article class="ct-card vq-job"><header><div><h2>${esc(j.name)}</h2>${j.location?`<p>${esc(j.location)}</p>`:''}</div><div class="ct-now ${late&&!anyRec?'hold':''}">${anyRec?'Quote received':allDec?'Not bidding':due?(late?'Quote was due':'Quote due'):'Quote requested'}<small>${due?fmtDate(due)+(anyRec||allDec?'':left===0?' · today':left>0?` · in ${left} day${left===1?'':'s'}`:''):''}</small></div></header>
+      <div class="ct-facts"><div><span>Scope${sc.length===1?'':'s'}</span><b>${sc.map(s=>esc(s.scope)).join(', ')||'—'}</b></div>
+        <div><span>Addenda</span>${(j.addenda||[]).length?`<b>${j.addenda.map(a=>'#'+esc(a.number)).join(', ')}</b><small>${esc(j.addenda.map(a=>a.description).filter(Boolean).slice(-1)[0]||'Please include them in your price')}</small>`:'<b>None so far</b>'}</div>
+        <div><span>Questions</span>${j.estimator&&j.estimator.name?`<b>${esc(j.estimator.name)}</b><small>${j.estimator.email?`<a href="mailto:${esc(j.estimator.email)}">${esc(j.estimator.email)}</a>`:''}${j.estimator.phone?` · <a href="tel:${esc(j.estimator.phone)}">${esc(j.estimator.phone)}</a>`:''}</small>`:'<b>Use the button below</b>'}</div></div>
+      ${sent.length?`<ul class="ct-sent">${sent.map(x=>`<li>${x.kind==='quote'?'📑 Quote'+(x.number?' ('+esc(x.number)+')':''):x.kind==='decline'?'🚫 Not bidding':'❓ Question'}${x.files?` · ${x.files} file${x.files===1?'':'s'}`:''} · ${new Date(x.at).toLocaleDateString('en-US',{month:'short',day:'numeric'})} <span class="ct-ok">✓ ${x.kind==='decline'?'Noted':'Received'}</span></li>`).join('')}</ul>`:''}
+      <div class="vq-acts"><button class="btn primary" data-vqup="${j.bid_id}">⬆ ${anyRec?'Send a revised quote':'Upload your quote'}</button><button class="btn" data-vqq="${j.bid_id}">❓ Ask a question</button>${anyRec||allDec?'':`<button class="btn ghost" data-vqno="${j.bid_id}">Not bidding this one</button>`}</div></article>`};
+  const draw=()=>{const J=D.jobs||[];main.innerHTML=shell(`<div class="ct-title"><div class="ct-eyebrow">Quote requests for</div><h1>${esc(D.vendor)}</h1><p>${J.length} open request${J.length===1?'':'s'} from ${esc(D.company||co0)} · updated ${new Date(D.as_of||Date.now()).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</p></div>
+    <div id="vq-list">${J.map(job).join('')||'<div class="ct-msg"><p>No open quote requests right now. New ones will show up here.</p></div>'}</div>`)};
+  if(!await load())return;if(!D){main.innerHTML=shell(`<div class="ct-msg"><h1>This link isn’t active</h1><p>It may have been replaced. Please ask your contact at ${esc(co0)} for a new one.</p></div>`);return}
+  document.title=`Quote portal: ${D.vendor}`;draw();window.__vq={tk,reload:async()=>{if(await load())draw()},D:()=>D};
+  setInterval(async()=>{if(!document.hidden&&!window.__vqF&&await load())draw()},90000)}
+function vqFormHtml(j,F){const me=(()=>{try{return JSON.parse(localStorage.getItem('bp-vq-me')||'{}')}catch(e){return {}}})();const title=F.kind==='quote'?'Upload your quote':F.kind==='question'?'Ask a question':'Not bidding this one';
+  return `<div class="ct-modal" role="dialog" aria-modal="true"><div class="ct-box"><div class="ct-bh"><h2>${title}</h2><button class="x" data-vqclose aria-label="Close">×</button></div><p class="small">${esc(j.name)} · ${esc((j.scopes||[]).map(s=>s.scope).join(', '))}</p>
+    ${F.done?`<div class="ct-done"><h3>✓ ${F.kind==='decline'?'Got it. Thanks for letting us know.':'Sent. Thank you.'}</h3><button class="btn primary" data-vqclose>Close</button></div>`:`
+    ${F.kind==='quote'?`<label class="f">Your quote file(s) <small class="dim">PDF, Excel, Word, images, ZIP · up to 1 GB each</small><input type="file" id="vq-files" multiple></label>
+      ${F.files.length?`<ul class="ct-fl">${F.files.map((f,i)=>`<li>${esc(f.name)} <span class="dim">${cuSize(f.size)}</span>${F.prog&&F.prog[i]?` <b>${esc(F.prog[i])}</b>`:''}</li>`).join('')}</ul>`:''}`:''}
+    ${F.kind==='decline'?`<div class="ct-kinds">${['Too busy right now','Not our scope','Too far away','Schedule doesn’t work','Other'].map(r=>`<label class="${F.reason===r?'on':''}"><input type="radio" name="vqr" value="${esc(r)}"${F.reason===r?' checked':''}> ${esc(r)}</label>`).join('')}</div>`:''}
+    <label class="f">${F.kind==='question'?'Your question':F.kind==='decline'?'Anything else (optional)':'Note (optional)'}<textarea class="field" id="vq-note" rows="3" placeholder="${F.kind==='quote'?'Exclusions, alternates, anything we should know':''}">${esc(F.note||'')}</textarea></label>
+    <label class="f">Your name<input class="field" id="vq-name" value="${esc(F.name??me.name??'')}"></label>
+    ${F.err?`<div class="ct-err">${esc(F.err)}</div>`:''}
+    <div class="ct-foot"><button class="btn" data-vqclose>Cancel</button><button class="btn primary" data-vqsend${F.busy?' disabled':''}>${F.busy?'Sending…':F.kind==='decline'?'Send':'Send'}</button></div>`}</div></div>`}
+function vqDraw(){let el=document.getElementById('vq-modal');const F=window.__vqF;if(!F){if(el)el.remove();return}const j=(window.__vq.D().jobs||[]).find(x=>x.bid_id===F.bid);if(!j)return;
+  if(!el){el=document.createElement('div');el.id='vq-modal';document.body.appendChild(el)}el.innerHTML=vqFormHtml(j,F)}
+const vqRead=()=>{const F=window.__vqF;if(!F)return;const n=document.getElementById('vq-note'),m=document.getElementById('vq-name');if(n)F.note=n.value;if(m)F.name=m.value};
+async function vqSend(){const F=window.__vqF;const tk=window.__vq.tk;vqRead();F.err='';try{localStorage.setItem('bp-vq-me',JSON.stringify({name:F.name||''}))}catch(e){}
+  if(F.kind==='quote'&&!F.files.length){F.err='Attach your quote file.';vqDraw();return}if(F.kind==='question'&&!String(F.note||'').trim()){F.err='Type your question.';vqDraw();return}
+  const bad=F.files.find(f=>!CU_EXT.test(f.name)||f.size>CU_MAX);if(bad){F.err=`${bad.name}: ${bad.size>CU_MAX?'over 1 GB':'that kind of file isn’t accepted'}.`;vqDraw();return}
+  F.busy=true;F.prog={};vqDraw();
+  try{if(F.kind==='decline'){const {error}=await sb.rpc('vendor_quote_decline',{p_token:tk,p_bid:F.bid,p_reason:[F.reason,F.note].filter(Boolean).join(': ')||null,p_name:F.name||null});if(error)throw error}
+    else{const run1=Math.random().toString(36).slice(2,10)+Date.now().toString(36);const up=[];
+      for(let i=0;i<F.files.length;i++){const f=F.files[i];F.prog[i]=f.size>2e7?'uploading… (big file, this can take a few minutes)':'uploading…';vqDraw();const path=`${tk}/${F.bid}/${run1}/${cuSafe(f.name)}`;
+        const {error}=await sb.storage.from(CU_BUCKET).upload(path,f,{contentType:f.type||'application/octet-stream',upsert:false});if(error)throw new Error(`${f.name}: ${error.message||'upload failed'}`);F.prog[i]='✓';up.push({path,name:f.name,size:f.size,type:f.type||''});vqDraw()}
+      const {error}=await sb.rpc('vendor_quote_send',{p_token:tk,p_bid:F.bid,p_kind:F.kind,p_note:F.note||null,p_name:F.name||null,p_files:up});if(error)throw error}
+    F.busy=false;F.done=true;vqDraw();window.__vq.reload()}catch(er){F.busy=false;F.err=(er&&er.message)||'Something went wrong. Please try again, or email the estimator.';vqDraw()}}
+document.addEventListener('click',e=>{const t=e.target.closest?e.target:null;if(!t||!window.__vq)return;
+  const up=t.closest('[data-vqup]'),q=t.closest('[data-vqq]'),no=t.closest('[data-vqno]');
+  if(up||q||no){window.__vqF={bid:(up||q||no).dataset[up?'vqup':q?'vqq':'vqno'],kind:up?'quote':q?'question':'decline',files:[],reason:no?'Too busy right now':''};vqDraw();return}
+  if(t.closest('[data-vqclose]')){window.__vqF=null;vqDraw();return}if(t.closest('[data-vqsend]')){vqSend();return}});
+document.addEventListener('change',e=>{const F=window.__vqF;if(!F)return;const t=e.target;if(t.id==='vq-files'){vqRead();F.files=[...F.files,...t.files].slice(0,20);vqDraw()}if(t.name==='vqr'){vqRead();F.reason=t.value;vqDraw()}});

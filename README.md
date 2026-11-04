@@ -1088,3 +1088,14 @@ On our side:
 - Security: uploads go to a private `client-inbox` bucket; the database only accepts a file for an open bid of the GC whose tracker link sent it, and GCs can't see or download anything. Later, with Microsoft 365 admin access, the filing step can be made automatic.
 
 Setup: run **update-49-client-uploads.sql**, then in Supabase → **Storage → Settings** raise the **upload file size limit** to 1 GB (Pro plan) so big plan sets go through.
+
+## Vendor quote portal
+
+Each vendor gets **one permanent private link** (vendor page → **📑 Quote portal**: email it, copy it, or replace it). It lists **only the jobs you've sent that vendor an RFQ for** (quote rows marked Requested, Received, Declined or No response on a live bid): the scope(s), quote due date (and "was due" when late), addenda, and who to ask. On each job they can:
+- **Upload your quote** (PDF, Excel, Word, images, ZIP; up to 1 GB each). It lands in the bid's 📥 inbox and their quote row flips to **Received** with today's date. A second upload shows as **Rev 1**, and so on.
+- **Ask a question** (goes to the inbox; click **✓ Handled** when answered).
+- **Not bidding this one** with a reason. Their quote rows go to **Declined**, and it's logged in the inbox.
+
+They never see other vendors, other quotes or amounts: the database only returns that vendor's own rows, and only accepts files for jobs they actually have an RFQ on.
+
+RFQs go out as one BCC email, so the email can't carry each vendor's link. Instead each vendor gets their link once and bookmarks it. The RFQ screen shows **who hasn't been sent their portal link yet** with a one-click email for each, and the RFQ template has a `{quote_portal}` line to remind vendors to upload there. Filing works like client uploads: download, file to SharePoint, **Filed to SharePoint** clears the file. Needs **update-50-vendor-quote-portal.sql** (after update 49).
