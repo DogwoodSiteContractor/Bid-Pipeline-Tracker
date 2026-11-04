@@ -1076,3 +1076,15 @@ Dashboard → **Board** now opens on a **CRM view**: only the last two stages of
 - **By GC / client:** open proposals and dollars, sent this year, won, lost, win rate and last contact for each GC. Click a GC to filter the lists to it.
 - **Outcomes:** this year's wins and losses with who it went to, plus **Why we lose** by lost reason.
 - The year picker sets the yearly counts; "out for decision" is always right now. Click any row to open the bid (right-click works too).
+
+## Client uploads (from the bid tracker)
+
+GCs can now send **plans, addenda, revised sheets, questions or anything else** from their bid tracker link: pick what it is, add a note (and an addendum number), attach files (PDF, DWG, DXF, images, Office, ZIP; up to 1 GB each, 30 at a time) and/or paste a plan room link. Their tracker shows what they've sent and that we received it.
+
+On our side:
+- **Dashboard** shows "📥 items from clients to file" (anything over 7 days old is flagged). The **bid page** shows a banner; **Open the inbox** lists everything that client sent with download buttons.
+- **Filing:** download the files, put them in the project's SharePoint folder, then click **Filed to SharePoint** (paste the SharePoint link if you like). The app **deletes the files** from its storage and keeps the record, the note and the link. **Dismiss** deletes files that don't need filing (duplicates, wrong job).
+- **Log as addendum** adds an uploaded addendum to the bid's addenda list.
+- Security: uploads go to a private `client-inbox` bucket; the database only accepts a file for an open bid of the GC whose tracker link sent it, and GCs can't see or download anything. Later, with Microsoft 365 admin access, the filing step can be made automatic.
+
+Setup: run **update-49-client-uploads.sql**, then in Supabase → **Storage → Settings** raise the **upload file size limit** to 1 GB (Pro plan) so big plan sets go through.

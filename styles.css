@@ -3014,3 +3014,17 @@ div.tw-pgh{cursor:default}
 .crm-ol{list-style:none;margin:0;padding:0}.crm-ol li{display:flex;justify-content:space-between;gap:10px;padding:7px 4px;border-bottom:1px solid var(--line)}
 .crm-why{margin-top:12px}.crm-wr{display:grid;grid-template-columns:150px 1fr 24px;gap:8px;align-items:center;margin-top:5px}.crm-wr i{display:block;height:10px;border-radius:3px;background:var(--s8)}
 .click{cursor:pointer}
+/* client uploads */
+.cu-panel{margin-bottom:14px;border-left:4px solid var(--info)}
+.cu-banner{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.cu-pane{max-width:900px}.cu-item{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:10px 0;background:var(--surface)}.cu-item.filed,.cu-item.dismissed{opacity:.75}
+.cu-ih{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.cu-note{margin:8px 0;white-space:normal}.cu-files{margin:6px 0;padding-left:4px;list-style:none}.cu-files li{margin:3px 0}.cu-act{margin-top:8px}
+.ct-up{margin-top:14px;padding-top:12px;border-top:1px solid rgba(0,0,0,.08)}.ct-up-h{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+.ct-sent{list-style:none;margin:8px 0 0;padding:0;font-size:14px}.ct-sent li{padding:3px 0}.ct-ok{color:#2e7d4f;font-weight:600;margin-left:6px}
+.ct-modal{position:fixed;inset:0;background:rgba(0,0,0,.45);display:grid;place-items:center;z-index:9999;padding:16px}
+.ct-box{background:#fff;color:#1d2420;border-radius:14px;max-width:560px;width:100%;max-height:92vh;overflow:auto;padding:18px 20px;box-shadow:0 20px 50px rgba(0,0,0,.3)}
+.ct-box .field{width:100%}.ct-bh{display:flex;justify-content:space-between;align-items:center}.ct-bh h2{margin:0;font-size:20px}.ct-bh .x{position:static}
+.ct-kinds{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}.ct-kinds label{border:1px solid #d5d9d3;border-radius:999px;padding:6px 12px;cursor:pointer;font-size:14px}.ct-kinds label.on{border-color:#2e6b45;background:#e4f1e8;font-weight:600}.ct-kinds input{display:none}
+.ct-box .f{display:block;margin:10px 0}.ct-two{display:grid;grid-template-columns:1fr 1fr;gap:10px}@media(max-width:520px){.ct-two{grid-template-columns:1fr}}
+.ct-fl{font-size:13px;margin:4px 0 0;padding-left:18px}.ct-err{background:#fdecea;color:#8a1c12;border-radius:8px;padding:8px 10px;margin:8px 0;font-size:14px}
+.ct-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}.ct-done{text-align:center;padding:20px 0}.ct-done h3{color:#2e6b45}

@@ -446,13 +446,13 @@ function vDashboard(){
   const d=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
   if(S.dash==='reports'&&tabOff('reports'))S.dash=role()==='board'?'board':'precon';
   if(S.dash==='reports')return vReports(true);
-  if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+crPanel()+bidReqPanel()+reviewPanel()+fuPanel()+mine();
-  if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+crPanel()+bidReqPanel()+fuPanel()+precon();
+  if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+cuPanel()+crPanel()+bidReqPanel()+reviewPanel()+fuPanel()+mine();
+  if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+cuPanel()+crPanel()+bidReqPanel()+fuPanel()+precon();
   if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}${dashSeg()}</div></div>`+board();
   return `<div class="head"><div><h1>${S.dash==='precon'?'Bid pipeline dashboard':'Board dashboard'}</h1><p>${d}${S.lastLoaded?` · <span class="dim">Last updated ${S.lastLoaded.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>`:''}</p></div>
   <div class="tools">${S.dash==='board'?yearSelect()+(S.bids.some(b=>b.archived_at)?`<label class="check small" title="Archived bids are left out of the numbers unless this is on"><input type="checkbox" data-inclarch${S.inclArch?' checked':''}> Include archived</label>`:'')+`<div class="seg" title="What the board sees is the CRM view"><button class="${crmMode()==='crm'?'on':''}" data-act="crm-mode" data-v="crm">CRM</button><button class="${crmMode()==='charts'?'on':''}" data-act="crm-mode" data-v="charts">Charts</button></div>`+(crmMode()==='charts'?'<button class="btn" data-act="board-custom">Customize view</button><button class="btn" data-act="rp-board-copy" title="Copy these charts to a report page you can change">Copy to Reports</button>':''):'<button class="btn" data-act="refresh">↻ Refresh</button>'}
   ${dashSeg()}</div></div>`
-  +(S.dash==='precon'?vxUpkeepHtml():'')+crPanel()+bidReqPanel()+reviewPanel()+fuPanel()+(S.dash==='precon'?precon():board());
+  +(S.dash==='precon'?vxUpkeepHtml()+cuPanel():'')+crPanel()+bidReqPanel()+reviewPanel()+fuPanel()+(S.dash==='precon'?precon():board());
 }
 function yearSelect(){const ys=new Set([new Date().getFullYear()]);S.bids.filter(statOk).forEach(b=>ys.add(yearOf(b)));return `<select class="field" data-act="year" style="width:auto">${[...ys].sort((a,b)=>b-a).map(y=>`<option${y===S.year?' selected':''}>${y}</option>`).join('')}</select>`}
 function kpi(l,v,s,cls,filter){const tag=filter?'button':'div';return `<${tag} class="kpi ${cls||''}"${filter?` data-act="kpi-filter" data-v="${filter}"`:''}><div class="l">${l}</div><div class="v">${v}</div><div class="s">${esc(s)}</div></${tag}>`}
@@ -1075,6 +1075,7 @@ function bpProgress(b,key){const Q=b.quotes||[];
 
 function bidModal(){
   if(M.ai)return aiSubView();
+  if(M.cuOpen)return cuView();
   if(M.picker)return pickerView();
   if(M.sup)return supView();
   if(M.rfq)return rfqView();
@@ -1099,7 +1100,7 @@ function bidModal(){
       <label class="bp-status" title="Set the stage by hand, or put the bid on hold"><select class="field" data-bf="status"${DIS()}>${BID_ST.map(o=>`<option value="${esc(o)}"${o===b.status?' selected':''}>${esc(stLabel(o)==='Submitted'?'Proposal sent':o==='Quotes Received'?'Quotes':stLabel(o))}</option>`).join('')}</select></label>
       ${isNew&&work?'<button class="btn primary" data-act="save">Create bid</button>':''}</div></div>
   <div class="bp-tabs" role="tablist">${tabs}${b.status==='On Hold'?'<span class="bp-hold">'+pill('On hold','warn')+'</span>':''}</div>
-  <div class="mbody bp-body"><div class="bp-grid"><div class="bp-main">${archNote}${supBanner(b)}${bidReqBanner(b)}${trkStrip(b)}${body}</div><aside class="bp-aside">${bpAside(b,work,admin,isNew)}</aside></div></div>
+  <div class="mbody bp-body"><div class="bp-grid"><div class="bp-main">${archNote}${cuBanner(b)}${supBanner(b)}${bidReqBanner(b)}${trkStrip(b)}${body}</div><aside class="bp-aside">${bpAside(b,work,admin,isNew)}</aside></div></div>
   <div class="mfoot bp-foot"><div style="display:flex;gap:8px;flex-wrap:wrap">${b.status==='Awarded'&&!isNew&&!b._sample&&can('awards')?`<button class="btn" data-act="aw-frombid" data-id="${b.id}">🏗️ Open on the Awarded tab</button>`:''}${b._sample?'<span class="pill info">Practice bid · nothing is saved</span>':''}${work&&!isNew&&!b._sample?'<button class="btn" data-act="sup-start" title="Same project, new name or details — keeps everything and records the change">↻ Supersede</button>':''}${admin&&!isNew&&!b._sample?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button><button class="btn" data-act="${b.archived_at?'bid-restore':'bid-archive'}">${b.archived_at?'Restore':'Archive'}</button>${b.status==='Awarded'?`<button class="btn" data-act="create-job">${S.jobs.some(j=>j.bid_id===b.id)?'Open job':'Create job'}</button>`:''}`:''}</div>
   <div class="r">${bpAdvanceHtml(b,work,isNew)}</div></div>`;
 }
@@ -8015,13 +8016,13 @@ function trackCard(b){const st=trackStage(b);const e=b.estimator;const ad=b.adde
     <div class="ct-facts"><div><span>Bid due</span><b>${b.due_date?fmtDate(b.due_date):'Not set'}</b>${b.due_time?`<small>${esc(fuTime(b.due_time))}</small>`:''}</div>
       <div><span>${b.sent?'Proposal sent':'Proposal expected by'}</span><b>${b.sent?(b.sent_date?fmtDate(b.sent_date):'Sent'):b.proposal_eta?fmtDate(b.proposal_eta):'To be confirmed'}</b></div>
       <div><span>Addenda acknowledged</span>${ad.length?`<div class="ct-ad">${ad.map(a=>`<i class="${a.acknowledged?'ok':''}" title="${a.acknowledged?'Acknowledged':'Received, not yet acknowledged'}${a.date?' · issued '+fmtShort(a.date):''}">${a.acknowledged?'✓ ':''}#${esc(a.number)}</i>`).join('')}</div>`:'<b>None so far</b>'}</div>
-      <div><span>Your estimator</span>${e&&e.name?`<b>${esc(e.name)}</b>${e.title?`<small>${esc(e.title)}</small>`:''}<small>${e.phone?`<a href="tel:${esc(e.phone)}">${esc(e.phone)}</a>`:''}${e.phone&&e.email?' · ':''}${e.email?`<a href="mailto:${esc(e.email)}">${esc(e.email)}</a>`:''}</small>`:'<b>To be assigned</b>'}</div></div></article>`}
-async function trackPage(tk){const main=$('#main'),top=$('#topwrap');if(top)top.hidden=true;await coLoadPublic();document.title=`${COMPANY.name||CFG.companyName||APP_NAME} · Bid tracker`;const co=CFG.companyName||APP_NAME;const logo=BRAND.loginLogo||'';
+      <div><span>Your estimator</span>${e&&e.name?`<b>${esc(e.name)}</b>${e.title?`<small>${esc(e.title)}</small>`:''}<small>${e.phone?`<a href="tel:${esc(e.phone)}">${esc(e.phone)}</a>`:''}${e.phone&&e.email?' · ':''}${e.email?`<a href="mailto:${esc(e.email)}">${esc(e.email)}</a>`:''}</small>`:'<b>To be assigned</b>'}</div></div>${b.id?ctUpHtml(b):''}</article>`}
+async function trackPage(tk){window.__ctTok=tk;const main=$('#main'),top=$('#topwrap');if(top)top.hidden=true;await coLoadPublic();document.title=`${COMPANY.name||CFG.companyName||APP_NAME} · Bid tracker`;const co=CFG.companyName||APP_NAME;const logo=BRAND.loginLogo||'';
   void logo;const shell=inner=>extShell('Bid tracker',inner,'This page is private to your company. It updates on its own as our estimating team moves each bid along.');
   const draw=async first=>{let d=null,err=null;try{const r=await sb.rpc('client_tracker',{p_token:tk});if(r.error)err=r.error;else d=r.data}catch(e){err=e}
     if(err){if(first)main.innerHTML=shell(`<div class="ct-msg"><h1>We couldn’t load the tracker</h1><p>Please try again in a few minutes.</p></div>`);return}
     if(!d){main.innerHTML=shell(`<div class="ct-msg"><h1>This link isn’t active</h1><p>It may have been replaced. Please ask your contact at ${esc(co)} for a new one.</p></div>`);return}
-    data=d;if(!$('#ct-list'))main.innerHTML=shell(`<div class="ct-title"><div class="ct-eyebrow">Bids prepared for</div><h1>${esc(d.client||'Your projects')}</h1><p id="ct-count"></p></div>
+    data=d;window.__ctData=d;window.__ctRedraw=()=>draw(false);if(!$('#ct-list'))main.innerHTML=shell(`<div class="ct-title"><div class="ct-eyebrow">Bids prepared for</div><h1>${esc(d.client||'Your projects')}</h1><p id="ct-count"></p></div>
       <div class="ct-bar"><input class="field" id="ct-q" type="search" placeholder="Search projects or locations" aria-label="Search"><select class="field" id="ct-stage" aria-label="Stage"><option value="">All stages</option>${TRACK_STEPS.slice(0,4).map(([l],i)=>`<option value="${i+1}">${l}</option>`).join('')}<option value="hold">On hold</option></select>
         <select class="field" id="ct-sort" aria-label="Sort"><option value="due">Bid due date</option><option value="name">Project name</option><option value="stage">Stage</option><option value="new">Newest first</option></select></div><div id="ct-list"></div>`);
     list()};
@@ -14918,3 +14919,100 @@ function crmBoard(){const Y=S.year||new Date().getFullYear();const today=todaySt
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('crm-'))return;const C=S.crm=S.crm||{gc:'',act:15};
   if(a==='crm-gc'){C.gc=C.gc===t.dataset.id?'':t.dataset.id;render()}if(a==='crm-more'){C.act+=20;render()}if(a==='crm-allgc'){C.allGc=!C.allGc;render()}
   if(a==='crm-mode'){try{localStorage.setItem('bp-board-mode',t.dataset.v)}catch(er){}render()}});
+
+
+/* ===================================================================================================
+   CLIENT UPLOADS. GCs send plans, addenda, revisions and questions from their bid tracker link
+   (update 49). Files go to the private client-inbox bucket; the estimator downloads them, files them
+   to SharePoint by hand, and clicks "Filed to SharePoint", which deletes the files and keeps the log.
+   =================================================================================================== */
+const CU_BUCKET='client-inbox';
+const CU_KINDS=[['plans','📐','Plans or drawings'],['addendum','📄','Addendum'],['revision','🔁','Revised sheets'],['question','❓','Question'],['other','📎','Something else']];
+const CU_EXT=/\.(pdf|dwg|dxf|xml|zip|png|jpe?g|tif?f|docx?|xlsx?|csv|txt|msg|eml)$/i;
+const CU_MAX=1024*1024*1024;
+const cuKind=k=>CU_KINDS.find(x=>x[0]===k)||CU_KINDS[4];
+const cuSize=n=>n>=1e9?(n/1e9).toFixed(1)+' GB':n>=1e6?(n/1e6).toFixed(1)+' MB':Math.max(1,Math.round(n/1e3))+' KB';
+const cuSafe=s=>String(s||'file').replace(/[\\/#?%*:|"<>]+/g,'-').replace(/\s+/g,' ').trim().slice(0,150)||'file';
+async function cuLoad(){if(!sb||!S.session||S.cuBusy)return;S.cuBusy=true;try{const {data,error}=await sb.from('client_uploads').select('*').order('created_at',{ascending:false}).limit(1000);if(error)throw error;const was=(S.cu||[]).filter(u=>u.status==='new').length;S.cu=data||[];S.cuMissing=false;
+    const now=S.cu.filter(u=>u.status==='new').length;if(S.cuSeen&&now>was)toast(`📥 ${now-was} new from a client`);S.cuSeen=true;schedule()}catch(e){S.cuMissing=/client_uploads|relation|schema cache|does not exist/i.test(e.message||'');S.cu=S.cu||[]}S.cuBusy=false}
+setInterval(()=>{if(S.session&&!document.hidden&&!S.cuMissing&&can('bids','view'))cuLoad()},60000);
+const cuFor=id=>(S.cu||[]).filter(u=>u.bid_id===id);
+const cuNew=()=>(S.cu||[]).filter(u=>u.status==='new'&&byId(S.bids,u.bid_id));
+const cuAge=u=>Math.round((Date.now()-new Date(u.created_at).getTime())/864e5);
+const cuWhat=u=>{const k=cuKind(u.kind);return `${k[1]} ${u.kind==='addendum'&&u.number?`Addendum ${u.number}`:k[2]}`};
+
+/* ----- staff: dashboard panel, bid banner, inbox view ----- */
+function cuPanel(){if(S.cu==null&&!S.cuMissing&&S.session){cuLoad();return ''}const L=cuNew().filter(u=>{const b=byId(S.bids,u.bid_id);return b&&(!onlyMine()||canWork(b))});if(!L.length)return '';
+  return `<div class="panel pad cu-panel"><b>📥 ${L.length} item${L.length===1?'':'s'} from clients to file</b><div class="list" style="margin-top:8px">${L.slice(0,8).map(u=>{const b=byId(S.bids,u.bid_id);return `<div class="li"><span>${esc(cuWhat(u))} for <button class="linkbtn" data-act="cu-open" data-id="${b.id}">${esc(b.name)}</button> <span class="small dim">from ${esc(u.from_name||clientName(u.client_id)||'the GC')}${u.files.length?` · ${u.files.length} file${u.files.length===1?'':'s'}`:''} · ${cuAge(u)?cuAge(u)+'d ago':'today'}</span>${cuAge(u)>=7?' '+pill('Still in the inbox','warn'):''}</span><button class="btn sm" data-act="cu-open" data-id="${b.id}">Open</button></div>`}).join('')}${L.length>8?`<div class="small dim">+${L.length-8} more</div>`:''}</div>
+    <p class="hint">Download them, put them in the project’s SharePoint folder, then click <b>Filed to SharePoint</b>. That clears the files out of the app and keeps the record.</p></div>`}
+function cuBanner(b){if(!b||b._new)return '';const L=cuFor(b.id).filter(u=>u.status==='new');if(!L.length)return '';
+  return `<div class="notice cu-banner"><div><b>📥 ${L.length} new from ${esc([...new Set(L.map(u=>u.from_name||clientName(u.client_id)).filter(Boolean))].join(', ')||'the GC')}</b> <span class="small">${L.map(u=>esc(cuWhat(u))).join(' · ')}</span></div><button class="btn sm primary" data-act="cu-view">Open the inbox</button></div>`}
+function cuView(){const b=M.draft;const L=cuFor(b.id);const work=canWork(b);const sel=M.cu||{};
+  const item=u=>{const k=cuKind(u.kind);const live=u.status==='new';const nf=u.files.filter(f=>!f.removed);
+    return `<div class="cu-item ${u.status}"><div class="cu-ih"><b>${esc(cuWhat(u))}</b>${live?pill('New','info'):u.status==='filed'?pill('Filed to SharePoint','good'):pill('Dismissed','na')}<span class="small dim">${esc(u.from_name||'')}${u.from_email?` · <a href="mailto:${esc(u.from_email)}">${esc(u.from_email)}</a>`:''} · ${esc(clientName(u.client_id)||'')} · ${new Date(u.created_at).toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})}</span></div>
+      ${u.note?`<p class="cu-note">${esc(u.note).replace(/\n/g,'<br>')}</p>`:''}${u.link?`<p class="small">🔗 <a href="${esc(u.link)}" target="_blank" rel="noopener">${esc(u.link.slice(0,90))}</a></p>`:''}
+      ${u.files.length?`<ul class="cu-files">${u.files.map((f,i)=>`<li>${f.removed?`<span class="dim">📄 ${esc(f.name)} · ${cuSize(num(f.size)||0)} · cleared from the app</span>`:`<button class="linkbtn" data-act="cu-dl" data-id="${u.id}" data-i="${i}">📄 ${esc(f.name)}</button> <span class="small dim">${cuSize(num(f.size)||0)}</span>`}</li>`).join('')}</ul>${nf.length>1?`<button class="btn sm" data-act="cu-dlall" data-id="${u.id}">⬇ Download all ${nf.length}</button>`:''}`:''}
+      ${u.status!=='new'?`<p class="small dim">${u.status==='filed'?'Filed':'Dismissed'} by ${esc(u.handled_by_name||'')} ${u.handled_at?fmtShort(String(u.handled_at).slice(0,10)):''}${u.sp_link?` · <a href="${esc(u.sp_link)}" target="_blank" rel="noopener">Open in SharePoint</a>`:''}</p>`:''}
+      ${live&&work?`<div class="cu-act">${sel.id===u.id?`<label class="f"><span class="f-lab">SharePoint link (optional)</span><input class="field" data-cusp value="${esc(sel.sp||'')}" placeholder="Paste the folder or file link so anyone can find it later"></label>
+          <div class="adders"><button class="btn primary" data-act="cu-file" data-id="${u.id}"${sel.busy?' disabled':''}>${sel.busy?'Clearing…':'✓ Filed to SharePoint: clear the files'}</button><button class="btn ghost" data-act="cu-cancel">Cancel</button></div>`
+        :`<div class="adders"><button class="btn primary" data-act="cu-pick" data-id="${u.id}">Filed to SharePoint…</button>${u.kind==='addendum'?`<button class="btn" data-act="cu-addad" data-id="${u.id}" title="Add it to this bid’s addenda list">Log as addendum${u.number?' #'+esc(u.number):''}</button>`:''}<button class="btn ghost" data-act="cu-dismiss" data-id="${u.id}" title="Delete the files without filing them (duplicates, wrong job)">Dismiss</button></div>`}</div>`:''}</div>`};
+  return `<div class="bp-head"><button class="btn ghost bp-back" data-act="cu-back">← Back to the bid</button><div class="bp-title"><h2>📥 From the client</h2><p>${esc(b.name)}</p></div></div>
+    <div class="mbody bp-body"><div class="cu-pane"><p class="small">What GCs sent from their bid tracker link. Download the files, put them in the project’s SharePoint folder, then mark them filed. That deletes them from the app; the record, the note and your SharePoint link stay here.</p>
+    ${L.length?L.map(item).join(''):'<p class="dim">Nothing from the client yet. They can send plans, addenda and questions from their tracker link.</p>'}</div></div>
+    <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="cu-back">Done</button></div></div>`}
+async function cuDownload(u,i){const f=u.files[i];if(!f||f.removed)return;const {data,error}=await sb.storage.from(CU_BUCKET).createSignedUrl(f.path,600,{download:f.name});if(error)throw error;const a=document.createElement('a');a.href=data.signedUrl;a.download=f.name;document.body.appendChild(a);a.click();a.remove()}
+async function cuClear(u,status,sp){const live=u.files.filter(f=>!f.removed).map(f=>f.path);if(live.length){const {error}=await sb.storage.from(CU_BUCKET).remove(live);if(error)throw error}
+  const files=u.files.map(f=>({...f,removed:true}));await run(sb.from('client_uploads').update({status,files,sp_link:sp||null,handled_by_name:myName(),handled_at:new Date().toISOString()}).eq('id',u.id));await cuLoad()}
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('cu-'))return;const u=t.dataset.id&&(S.cu||[]).find(x=>x.id===t.dataset.id);
+  try{switch(a){
+    case 'cu-open':openBid(t.dataset.id);if(M&&M.kind==='bid'){M.cuOpen=true;M.cu={};renderModal()}break;
+    case 'cu-view':if(M&&M.kind==='bid'){M.cuOpen=true;M.cu={};renderModal()}break;
+    case 'cu-back':if(M){M.cuOpen=false;renderModal()}break;
+    case 'cu-dl':await cuDownload(u,+t.dataset.i);break;
+    case 'cu-dlall':for(let i=0;i<u.files.length;i++){if(!u.files[i].removed){await cuDownload(u,i);await new Promise(r=>setTimeout(r,600))}}break;
+    case 'cu-pick':M.cu={id:u.id,sp:''};renderModal();break;
+    case 'cu-cancel':M.cu={};renderModal();break;
+    case 'cu-file':{const sp=String(M.cu.sp||'').trim();if(sp&&!/^https?:\/\//i.test(sp)){toast('That link should start with https://');return}M.cu.busy=true;renderModal();await cuClear(u,'filed',sp);M.cu={};renderModal();toast('Filed. The files are cleared from the app.');break}
+    case 'cu-dismiss':if(!M.cuArm||M.cuArm!==u.id){M.cuArm=u.id;t.textContent='Click again to delete the files';return}M.cuArm=null;await cuClear(u,'dismissed','');renderModal();toast('Dismissed and cleared');break;
+    case 'cu-addad':{const l=M.draft.addenda;const n=num(u.number)||l.reduce((m,x)=>Math.max(m,+x.number||0),0)+1;if(l.some(x=>+x.number===n)){toast(`Addendum ${n} is already on the list`);return}
+      l.push({id:newId(),number:n,date:String(u.created_at).slice(0,10),description:(u.note||'').slice(0,200),priced:false,acknowledged:false});renderModal();toast(`Addendum ${n} added to the bid’s addenda. It saves with the bid.`);break}}
+  }catch(er){if(M&&M.cu)M.cu.busy=false;toast(errMsg(er));renderModal()}});
+document.addEventListener('input',e=>{if(e.target.dataset&&e.target.dataset.cusp!=null&&M&&M.cu)M.cu.sp=e.target.value});
+FOCUS_ATTRS.push('data-cusp');
+
+/* ----- client side: the tracker page ----- */
+function ctUpHtml(b){const U=b.uploads||[];
+  return `<div class="ct-up"><div class="ct-up-h"><b>Send us plans, an addendum or a question</b><button class="btn sm primary" data-ctup="${esc(b.id||'')}">📎 Send files or a note</button></div>
+    ${U.length?`<ul class="ct-sent">${U.map(x=>`<li>${esc(cuKind(x.kind)[1])} ${esc(x.kind==='addendum'&&x.number?'Addendum '+x.number:cuKind(x.kind)[2])}${x.files?` · ${x.files} file${x.files===1?'':'s'}`:''} · ${new Date(x.at).toLocaleDateString('en-US',{month:'short',day:'numeric'})} <span class="ct-ok">✓ ${x.status==='new'?'Received':'Received and filed'}</span></li>`).join('')}</ul>`:''}</div>`}
+function ctFormHtml(b,F){const me=(()=>{try{return JSON.parse(localStorage.getItem('bp-ct-me')||'{}')}catch(e){return {}}})();
+  return `<div class="ct-modal" role="dialog" aria-modal="true"><div class="ct-box"><div class="ct-bh"><h2>Send to our estimating team</h2><button class="x" data-ctclose aria-label="Close">×</button></div><p class="small">${esc(b.name)}</p>
+    ${F.done?`<div class="ct-done"><h3>✓ Sent. Thank you.</h3><p>${esc((b.estimator&&b.estimator.name)||'Our estimator')} has it now.</p><button class="btn primary" data-ctclose>Close</button></div>`:`
+    <div class="ct-kinds">${CU_KINDS.map(([k,ic,l])=>`<label class="${F.kind===k?'on':''}"><input type="radio" name="ctkind" value="${k}"${F.kind===k?' checked':''}> ${ic} ${l}</label>`).join('')}</div>
+    ${F.kind==='addendum'?`<label class="f">Addendum number<input class="field" id="ct-num" inputmode="numeric" value="${esc(F.num||'')}" style="max-width:120px"></label>`:''}
+    <label class="f">Note${F.kind==='question'?' (your question)':''}<textarea class="field" id="ct-note" rows="3" placeholder="${F.kind==='question'?'What would you like to ask?':'Anything we should know (what changed, what’s due)'}">${esc(F.note||'')}</textarea></label>
+    <label class="f">Files <small class="dim">PDF, DWG, DXF, images, Office, ZIP · up to 1 GB each, 30 at a time</small><input type="file" id="ct-files" multiple></label>
+    ${F.files&&F.files.length?`<ul class="ct-fl">${F.files.map((f,i)=>`<li>${esc(f.name)} <span class="dim">${cuSize(f.size)}</span>${F.prog&&F.prog[i]?` <b>${esc(F.prog[i])}</b>`:''}</li>`).join('')}</ul>`:''}
+    <label class="f">Or a link <small class="dim">(plan room, Dropbox, SharePoint…)</small><input class="field" id="ct-link" value="${esc(F.link||'')}" placeholder="https://"></label>
+    <div class="ct-two"><label class="f">Your name<input class="field" id="ct-name" value="${esc(F.name??me.name??'')}"></label><label class="f">Your email<input class="field" id="ct-email" type="email" value="${esc(F.email??me.email??'')}"></label></div>
+    ${F.err?`<div class="ct-err">${esc(F.err)}</div>`:''}
+    <div class="ct-foot"><button class="btn" data-ctclose>Cancel</button><button class="btn primary" data-ctsend${F.busy?' disabled':''}>${F.busy?'Sending…':'Send'}</button></div>`}</div></div>`}
+function ctOpen(bid){const d=window.__ctData;const b=d&&d.bids.find(x=>x.id===bid);if(!b)return;window.__ctF={bid,kind:'addendum',files:[]};ctDraw()}
+function ctDraw(){let el=document.getElementById('ct-up-modal');const F=window.__ctF;if(!F){if(el)el.remove();return}const d=window.__ctData;const b=d&&d.bids.find(x=>x.id===F.bid);if(!b)return;
+  if(!el){el=document.createElement('div');el.id='ct-up-modal';document.body.appendChild(el)}el.innerHTML=ctFormHtml(b,F)}
+const ctRead=()=>{const F=window.__ctF;if(!F)return;const v=id=>{const e=document.getElementById(id);return e?e.value:undefined};['note','link','name','email'].forEach(k=>{const x=v('ct-'+k);if(x!==undefined)F[k]=x});const n=v('ct-num');if(n!==undefined)F.num=n};
+async function ctSend(){const F=window.__ctF;const tk=window.__ctTok;ctRead();F.err='';
+  if(!F.files.length&&!String(F.note||'').trim()&&!String(F.link||'').trim()){F.err='Add a file, a link or a note.';ctDraw();return}
+  if(F.link&&!/^https?:\/\//i.test(F.link.trim())){F.err='Links need to start with https://';ctDraw();return}
+  const bad=F.files.find(f=>!CU_EXT.test(f.name)||f.size>CU_MAX);if(bad){F.err=`${bad.name}: ${bad.size>CU_MAX?'over 1 GB, please send a link instead':'that kind of file isn’t accepted'}.`;ctDraw();return}
+  try{localStorage.setItem('bp-ct-me',JSON.stringify({name:F.name||'',email:F.email||''}))}catch(e){}
+  F.busy=true;F.prog={};ctDraw();const run1=Math.random().toString(36).slice(2,10)+Date.now().toString(36);const up=[];
+  try{for(let i=0;i<F.files.length;i++){const f=F.files[i];F.prog[i]=f.size>2e7?'uploading… (big file, this can take a few minutes)':'uploading…';ctDraw();
+      const path=`${tk}/${F.bid}/${run1}/${cuSafe(f.name)}`;const {error}=await sb.storage.from(CU_BUCKET).upload(path,f,{contentType:f.type||'application/octet-stream',upsert:false});if(error)throw new Error(`${f.name}: ${error.message||'upload failed'}`);
+      F.prog[i]='✓';up.push({path,name:f.name,size:f.size,type:f.type||''});ctDraw()}
+    const {error}=await sb.rpc('client_upload_add',{p_token:tk,p_bid:F.bid,p_kind:F.kind,p_note:F.note||null,p_name:F.name||null,p_email:F.email||null,p_link:(F.link||'').trim()||null,p_files:up,p_number:F.kind==='addendum'?(F.num||null):null});if(error)throw error;
+    F.busy=false;F.done=true;ctDraw();if(window.__ctRedraw)window.__ctRedraw()}
+  catch(er){F.busy=false;F.err=(er&&er.message)||'Something went wrong. Please try again, or email your estimator.';ctDraw()}}
+document.addEventListener('click',e=>{const t=e.target;if(t.closest&&t.closest('[data-ctup]')){ctOpen(t.closest('[data-ctup]').dataset.ctup);return}
+  if(t.closest&&t.closest('[data-ctclose]')){window.__ctF=null;ctDraw();return}if(t.closest&&t.closest('[data-ctsend]')){ctSend();return}
+  if(t.classList&&t.classList.contains('ct-modal')&&!window.__ctF?.busy){window.__ctF=null;ctDraw()}});
+document.addEventListener('change',e=>{const F=window.__ctF;if(!F)return;const t=e.target;if(t.name==='ctkind'){ctRead();F.kind=t.value;ctDraw()}if(t.id==='ct-files'){ctRead();F.files=[...F.files,...t.files].slice(0,30);ctDraw()}});
