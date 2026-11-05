@@ -3060,3 +3060,7 @@ div.tw-pgh{cursor:default}
 .actm-ic{width:18px;text-align:center;flex:none}.actm-sep{height:1px;background:var(--line,#ddd);margin:4px 6px}
 .actm-tip{font-size:11px;opacity:.55;padding:5px 10px 2px}
 .apk-rep{outline:2px solid var(--accent,#4a7c59)}
+.qf-addvw{display:flex;gap:6px;align-items:center}
+.qh-tabs{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}.qh-wrap{max-height:420px;overflow:auto}
+.qh-tbl{width:100%}.qh-tbl td,.qh-tbl th{padding:6px 8px}
+.qh-foot{flex-wrap:wrap;gap:10px}.qh-avg{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.qh-own{display:inline-flex;gap:6px;align-items:center;margin-right:6px}.qh-own input{width:100px}
