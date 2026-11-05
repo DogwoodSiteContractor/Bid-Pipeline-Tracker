@@ -5363,21 +5363,64 @@ function apkList(){const A=APK;const fid=MATL(A.book)?'':rfCtx(A.book);const f=r
   if(q.length)L=L.filter(x=>{const h=[x.code,x.description,x.category,cbD(x).old_code].join(' ').toLowerCase();return q.every(w=>h.includes(w))});
   return {L:L.sort((a,b)=>String(a.code||a.description).localeCompare(String(b.code||b.description),undefined,{numeric:true})),f,all}}
 function apkHtml(p){const A=APK;const {L,f}=apkList();const cats=[...new Set(cbList(A.book).filter(x=>x.active!==false).map(x=>x.category).filter(Boolean))].sort();const show=L.slice(0,300);
-  const nm={material:'materials',labor:'labor',equipment:'equipment',sub:'subs'}[A.book];
-  return `<div class="apk panel"><div class="apk-top"><b>Add ${nm}</b><input class="field" id="apk-q" data-apkq placeholder="Search ${nm} by code or name" value="${esc(A.q||'')}" autocomplete="off">
+  const nm={material:'materials',labor:'labor',equipment:'equipment',sub:'subs'}[A.book];const repx=A.rep&&epGet(EC().root,A.rep);
+  return `<div class="apk panel${A.rep?' apk-rep':''}"><div class="apk-top"><b>${repx?`Replace “${esc(repx.desc||'')}” with`:`Add ${nm}`}</b><input class="field" id="apk-q" data-apkq placeholder="Search ${nm} by code or name" value="${esc(A.q||'')}" autocomplete="off">
     ${cats.length?`<select class="field" data-apkcat><option value="">All categories</option>${cats.map(c=>`<option${A.cat===c?' selected':''}>${esc(c)}</option>`).join('')}</select>`:''}
     ${f?`<label class="check small"><input type="checkbox" data-apkall${A.all?' checked':''}> Show all, not just ${esc(f.name)}</label>`:''}<span class="small dim">${L.length>show.length?`First ${show.length} of ${L.length}. Search to narrow it down.`:`${L.length} shown`}</span></div>
     <div class="apk-list">${show.map(x=>{const on=A.sel.has(x.id);const op=eqOpr(x);const per=A.book==='labor'&&lPer(x)!=='HR';return `<label class="apk-it${on?' on':''}"><input type="checkbox" data-apkx="${x.id}"${on?' checked':''}><span class="num dim">${esc(x.code||'')}</span><span>${esc(x.description)}${op?` <span class="small dim">+ ${esc(op.it.description)}</span>`:''}${MATL(A.book)?` <span class="small dim">📁 ${esc(qFolderFor({cb:x.id,kind:resKindOf(x)}))}</span>`:''}${A.book==='sub'&&x.vendor_id?` <span class="small dim">· ${esc(vendorOf(x.vendor_id)?.company||'')}</span>`:''}</span><span class="small dim">${esc(x.category||'')}</span><span class="r num">${money2(cbCost(x))}<span class="small dim">/${MATL(A.book)?esc(x.unit||'unit'):'hr'}</span>${per?`<div class="small dim">${money2((cbLabor(rfData(x))||{}).st)}/${LPER[lPer(x)][1]}</div>`:''}</span></label>`}).join('')||`<div class="empty small">No ${nm} match.</div>`}</div>
-    <div class="apk-foot"><button class="btn" data-act="apk-x">Close</button><button class="btn primary" data-act="apk-add" data-p="${esc(p)}"${A.sel.size?'':' disabled'}>Add ${A.sel.size||''} ${A.sel.size===1?'item':'items'}</button></div></div>`}
+    <div class="apk-foot"><button class="btn" data-act="apk-x">Close</button><button class="btn primary" data-act="apk-add" data-p="${esc(p)}"${A.sel.size?'':' disabled'}>${A.rep?'Replace':`Add ${A.sel.size||''} ${A.sel.size===1?'item':'items'}`}</button></div></div>`}
+/* ---------- right-click menu on activity cost lines ---------- */
+const BOOK_OF={material:'material',sub:'sub',labor:'labor',equipment:'equipment'};
+function actmClose(){document.getElementById('actm')?.remove()}
+function actmFire(act,ds){const b=document.createElement('button');b.dataset.act=act;Object.assign(b.dataset,ds);b.style.display='none';document.body.appendChild(b);b.click();b.remove()}
+function actmItems(kind,p){const ec=EC();const root=ec.root;const it=[];const sep=()=>it.push(null);
+  const actP=kind==='res'?p.replace(/\.res\.\d+$/,''):p;const a=epGet(root,actP);if(!a)return it;
+  if(kind==='res'){const x=epGet(root,p);if(!x)return it;const bk=BOOK_OF[x.kind];const cb=x.cb&&cbById(x.cb);const L=COST_LABEL[x.kind]||'cost';
+    if(bk)it.push(['🔁',`Replace with another ${L.toLowerCase()}…`,()=>{APK={p:actP,book:bk,q:'',cat:cb?.category||'',all:false,sel:new Set(),rep:p};ec.redraw();setTimeout(()=>{document.getElementById('apk-q')?.focus();document.querySelector('.apk')?.scrollIntoView({block:'nearest',behavior:'smooth'})},0)}]);
+    if(x.kind==='material'||x.kind==='sub')it.push(['🔁',x.kind==='sub'?'Replace with a material…':'Replace with a sub…',()=>{APK={p:actP,book:x.kind==='sub'?'material':'sub',q:'',cat:'',all:false,sel:new Set(),rep:p};ec.redraw();setTimeout(()=>document.getElementById('apk-q')?.focus(),0)}]);
+    if(cb){const st=estStale({act:a}).filter(s=>s.r===x);it.push(['↻',st.length?`Update price to ${money2(st[0].price)}`:'Price matches the codebook',st.length?()=>{estApplyStale(st);ec.redraw();toast('Price updated from the codebook')}:null]);
+      if(!ec.tpl&&cbEditable())it.push(['✎','Open in codebook',()=>cbOpen(cb.id)])}
+    sep();it.push(['⧉','Duplicate line',()=>actmFire('ep-dup',{p})]);
+    it.push(['↑','Move up',()=>actmFire('ep-mv',{p,d:'-1'})]);it.push(['↓','Move down',()=>actmFire('ep-mv',{p,d:'1'})]);
+    sep();it.push(['×','Remove line',()=>{S.epArm=p;actmFire('ep-del',{p})},'danger']);return it}
+  if(kind==='crew'){const cr=a.crew&&cbById(a.crew.id);const st=estStale({act:a}).filter(s=>s.crew);
+    it.push(['👥','Change crew…',()=>{const el=document.querySelector(`[data-epcrew="${p}"]`);el?.scrollIntoView({block:'center'});el?.focus();try{el?.showPicker()}catch(e){}}]);
+    if(cr)it.push(['↻',st.length?'Update crew rates from the codebook':'Crew rates match the codebook',st.length?()=>{estApplyStale(st);ec.redraw();toast('Crew rates updated')}:null]);
+    if(cr)it.push(['⏱','Use the crew’s production rate',()=>{crewProdTo(a,cr);ec.redraw();toast('Production rate set from the crew')}]);
+    if(cr&&!ec.tpl&&cbEditable())it.push(['✎','Open crew in codebook',()=>cbOpen(cr.id)]);
+    sep();it.push(['×','Remove crew',()=>{a.crew=null;ec.redraw()},'danger']);return it}
+  [['material','📦','material'],['sub','🤝','sub'],['labor','👷','labor'],['equipment','🚜','equipment']].forEach(([b,ic,l])=>it.push([ic,`Add ${l}…`,()=>actmFire('apk-open',{p:actP,v:b})]));
+  const st=estStale({act:a});if(st.length)it.push(['↻',`Update ${st.length} price${st.length===1?'':'s'} from the codebook`,()=>{estApplyStale(st);ec.redraw();toast('Prices updated')}]);
+  if(ec.tpl)return it;
+  sep();it.push(['⧉','Duplicate activity',()=>actmFire('ep-dup',{p})]);it.push(['↑','Move up',()=>actmFire('ep-mv',{p,d:'-1'})]);it.push(['↓','Move down',()=>actmFire('ep-mv',{p,d:'1'})]);
+  if(cbEditable())it.push(['→','Save to Activities codebook',()=>actmFire('ep-tocb',{p,k:'activity'})]);
+  sep();it.push(['×','Delete activity',()=>{if(!confirm(`Delete the activity “${a.desc||'Untitled'}” and its ${(a.res||[]).length} cost line${(a.res||[]).length===1?'':'s'}?`))return;S.epArm=p;actmFire('ep-del',{p})},'danger']);return it}
+document.addEventListener('contextmenu',e=>{actmClose();if(e.shiftKey)return;const t=e.target.closest('[data-ctx]');if(!t)return;
+  if(e.target.closest('input,textarea,select,[contenteditable]'))return; // typing fields keep the browser menu (copy/paste)
+  const ec=EC();if(!ec||!ec.root||ec.ro)return;const items=actmItems(t.dataset.ctx,t.dataset.p);if(!items.length)return;e.preventDefault();
+  const m=document.createElement('div');m.id='actm';m.className='actm';m.setAttribute('role','menu');
+  m.innerHTML=items.map((x,i)=>x?`<button role="menuitem" class="actm-i${x[3]?' '+x[3]:''}" data-ci="${i}"${x[2]?'':' disabled'}><span class="actm-ic">${x[0]}</span>${esc(x[1])}</button>`:'<div class="actm-sep"></div>').join('')+'<div class="actm-tip">Shift + right-click for the browser menu</div>';
+  document.body.appendChild(m);const W=m.offsetWidth,H=m.offsetHeight;m.style.left=Math.max(4,Math.min(e.clientX,innerWidth-W-6))+'px';m.style.top=Math.max(4,Math.min(e.clientY,innerHeight-H-6))+'px';
+  m.addEventListener('click',ev=>{const b=ev.target.closest('[data-ci]');if(!b||b.disabled)return;ev.stopPropagation();const fn=items[+b.dataset.ci][2];actmClose();fn&&fn()});
+  m.querySelector('.actm-i:not([disabled])')?.focus()});
+document.addEventListener('mousedown',e=>{if(!e.target.closest('#actm'))actmClose()},true);
+document.addEventListener('keydown',e=>{const m=document.getElementById('actm');if(!m)return;if(e.key==='Escape'){actmClose();e.stopPropagation();return}
+  if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();const B=[...m.querySelectorAll('.actm-i:not([disabled])')];const i=B.indexOf(document.activeElement);B[(i+(e.key==='ArrowDown'?1:-1)+B.length)%B.length]?.focus()}},true);
+window.addEventListener('scroll',actmClose,true);window.addEventListener('resize',actmClose);
 function apkRedraw(){const ec=EC();const el=document.getElementById('apk-q');const pos=el&&document.activeElement===el?el.selectionStart:null;ec.redraw();if(pos!=null){const n=document.getElementById('apk-q');if(n){n.focus();n.setSelectionRange(pos,pos)}}}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
   if(a==='apk-open'){const p=t.dataset.p,b=t.dataset.v;APK=APK&&APK.p===p&&APK.book===b?null:{p,book:b,q:'',cat:'',all:false,sel:new Set()};EC().redraw();if(APK)setTimeout(()=>document.getElementById('apk-q')?.focus(),0);return}
   if(a==='apk-x'){APK=null;EC().redraw();return}
+  if(a==='apk-add'&&APK&&APK.rep){const ec=EC();if(ec.ro)return;const x=cbById([...APK.sel][0]);const {arr,i}=epParent(ec.root,APK.rep);const old=arr&&arr[i];if(!x||!old){APK=null;ec.redraw();return}
+    const r=resFromCb(x);r.factor=old.factor??r.factor;if(old.basis&&old.kind===r.kind)r.basis=old.basis;if(old.waste!=null&&r.kind==='material')r.waste=old.waste;r.id=old.id;arr[i]=r;
+    // the old equipment's operator goes; the new one's comes in
+    for(let k=arr.length-1;k>=0;k--)if(arr[k].with===old.id&&k!==i)arr.splice(k,1);const op=eqOpr(x);if(op){const lr=resFromCb(op.it);lr.factor=op.qty;lr.with=r.id;arr.splice(arr.indexOf(r)+1,0,lr)}
+    APK=null;ec.redraw();toast(`Replaced ${old.desc||'line'} with ${x.description}`);return}
   if(a==='apk-add'&&APK){const ec=EC();if(ec.ro)return;const act=epGet(ec.root,t.dataset.p);if(!act)return;act.res=act.res||[];let n=0,ops=0;
     [...APK.sel].map(cbById).filter(Boolean).forEach(x=>{const r=resFromCb(x);act.res.push(r);n++;const op=eqOpr(x);if(op){const lr=resFromCb(op.it);lr.factor=op.qty;lr.with=r.id;act.res.push(lr);ops++}});
     APK=null;ec.redraw();toast(`${n} added${ops?` with ${ops} operator${ops===1?'':'s'}`:''}`);return}});
 document.addEventListener('change',e=>{const t=e.target;if(!APK)return;
-  if(t.dataset.apkx!=null){t.checked?APK.sel.add(t.dataset.apkx):APK.sel.delete(t.dataset.apkx);t.closest('.apk-it')?.classList.toggle('on',t.checked);const b=document.querySelector('[data-act=apk-add]');if(b){b.disabled=!APK.sel.size;b.textContent=`Add ${APK.sel.size||''} ${APK.sel.size===1?'item':'items'}`}return}
+  if(t.dataset.apkx!=null){if(APK.rep&&t.checked){APK.sel.clear();document.querySelectorAll('[data-apkx]').forEach(c=>{if(c!==t){c.checked=false;c.closest('.apk-it')?.classList.remove('on')}})}t.checked?APK.sel.add(t.dataset.apkx):APK.sel.delete(t.dataset.apkx);t.closest('.apk-it')?.classList.toggle('on',t.checked);const b=document.querySelector('[data-act=apk-add]');if(b){b.disabled=!APK.sel.size;b.textContent=APK.rep?'Replace':`Add ${APK.sel.size||''} ${APK.sel.size===1?'item':'items'}`}return}
   if(t.dataset.apkcat!=null){APK.cat=t.value;apkRedraw();return}
   if(t.dataset.apkall!=null){APK.all=t.checked;apkRedraw();return}});
 document.addEventListener('input',e=>{const t=e.target;if(!APK||t.dataset.apkq==null)return;APK.q=t.value;clearTimeout(apkRedraw._t);apkRedraw._t=setTimeout(apkRedraw,160)});
@@ -5975,7 +6018,7 @@ function actCardHtml(a,p,r,itemQty,o={}){const ec=EC();const ro=ec.ro;const crew
       ${PROD_SHIFT.has(a.mode)?`<label>Shift ${epIn(p+'.shift',a.shift,{n:1,ph:fmtN(ec.ctx.hpd||10,1),cls:'est-shift',aria:'Shift length in hours',title:'Hours in a shift — blank uses the schedule’s hours per day'})} hrs</label>`:''}
       <span class="est-hrs">${r.hrs?`${PROD_RATE.has(a.mode||'uph')&&q?`${qtyFmt(q)} ${esc(unit)} ÷ ${fmtN(num(a.prod),2)} ${esc(prodLabel(a.mode||'uph',unit))} = `:''}<b>${fmtN(r.hrs,1)}</b> crew hrs · <b>${fmtN(r.days,2)}</b> days${PROD_SHIFT.has(a.mode)?` · <b>${fmtN(r.shifts,2)}</b> shifts`:''}${r.mh?` · <b>${fmtN(r.mh,1)}</b> MH`:''}${q&&!PROD_RATE.has(a.mode||'uph')?` · ${fmtN(r.uph,2)} ${esc(unit)}/hr`:''}`:'<span class="dim">Set a production rate (or time) to get hours — every “per crew hr” cost below runs off them</span>'}</span></div>`;
   const resRow=(x,i)=>{const rp=`${p}.res.${i}`;const rr=r.res[i]||{qty:0,cost:0,tax:0};const kind=RES_KINDS.find(k=>k[0]===x.kind)||RES_KINDS[5];const cb=x.cb?cbById(x.cb):null;
-    return `<tr><td><span class="est-tag k-${x.kind}">${kind[2]}</span></td>
+    return `<tr data-ctx="res" data-p="${rp}"><td><span class="est-tag k-${x.kind}">${kind[2]}</span></td>
       <td class="sh-desc">${x.cb?`<div class="est-cbname">${esc(x.desc)}${x.code?` <span class="dim small">${esc(x.code)}</span>`:''}${!cb?' <span class="pill bad">removed from codebook</span>':''}</div>`:g(rp+'.desc',x.desc,'desc',{ph:`${kind[1]} description`,aria:'Description'})}${x.src?(x.src.vp?`<div><span class="pill ok est-src" title="From ${esc(x.src.v)}’s price list${x.src.at?', updated '+fmtDate(String(x.src.at).slice(0,10)):''}. Type a new price to replace it.">Price list · ${esc(x.src.v)}${x.src.at&&vxDays(x.src.at)>vxCfg().priceDays?` · <b>${vxDays(x.src.at)}d old</b>`:''}</span></div>`:`<div><span class="pill info est-src" title="Price from a vendor quote — type a new price to replace it">Quote · ${esc(x.src.v)}</span></div>`):''}</td>
       <td>${g(rp+'.factor',x.factor,'f',{n:1,cls:'sh-n',aria:'Quantity'})}</td><td>${epSel(rp+'.basis',x.basis,BASIS,{aria:'Basis',cls:'sh-basis'})}</td>
       <td class="r num">${qtyFmt(rr.qty)}</td><td>${x.cb?`<span class="small">${esc(x.unit||(x.basis==='hour'?'HR':''))}</span>`:g(rp+'.unit',x.unit,'u',{cls:'sh-u',ph:'unit',aria:'Unit',list:'cb-units'})}</td>
@@ -5983,11 +6026,11 @@ function actCardHtml(a,p,r,itemQty,o={}){const ec=EC();const ro=ec.ro;const crew
       <td class="sh-p">${g(rp+'.price',x.price,'p',{n:1,cls:'sh-n'+(stale.has(x)?' est-stale':''),ph:'0.00',aria:'Unit price'})}${stale.has(x)?`<span class="est-stale-dot" title="Codebook price is now ${money2(cbCost(cb))}">●</span>`:''}</td>
       <td class="r num"><b>${money(rr.cost+rr.tax)}</b>${rr.tax?`<div class="dim small">incl. ${money(rr.tax)} tax</div>`:''}</td>
       <td>${ro?'':`<button class="rm" data-act="ep-del" data-p="${rp}" aria-label="Remove">×</button>`}</td></tr>`};
-  const crewRow=a.crew?`<tr class="sh-crew"><td><span class="est-tag k-crew">CREW</span></td><td class="sh-desc"><div class="est-cbname">${esc(a.crew.name)}</div><div class="dim small">${fmtN(+a.crew.men||0,2)} people · labor ${money2(a.crew.labor)}/hr · equipment ${money2(a.crew.equip)}/hr</div></td><td></td><td class="small dim">crew hrs</td><td class="r num">${fmtN(r.hrs,1)}</td><td class="small">HR</td><td></td><td class="r num">${money2(crewRate)}</td><td class="r num"><b>${money(crewRate*r.hrs)}</b></td><td></td></tr>`:'';
+  const crewRow=a.crew?`<tr class="sh-crew" data-ctx="crew" data-p="${p}"><td><span class="est-tag k-crew">CREW</span></td><td class="sh-desc"><div class="est-cbname">${esc(a.crew.name)}</div><div class="dim small">${fmtN(+a.crew.men||0,2)} people · labor ${money2(a.crew.labor)}/hr · equipment ${money2(a.crew.equip)}/hr</div></td><td></td><td class="small dim">crew hrs</td><td class="r num">${fmtN(r.hrs,1)}</td><td class="small">HR</td><td></td><td class="r num">${money2(crewRate)}</td><td class="r num"><b>${money(crewRate*r.hrs)}</b></td><td></td></tr>`:'';
   const grid=`<div class="sh-wrap"><table class="sh"><thead><tr><th></th><th>Cost</th><th>Qty</th><th>Basis</th><th class="r">Total qty</th><th>Unit</th><th>Waste %</th><th>$ / unit</th><th class="r">Total</th><th></th></tr></thead>
     <tbody>${crewRow}${a.res.map(resRow).join('')}${ro?'':`<tr class="sh-add"><td></td><td colspan="9"><div class="apk-btns">${[['material','📦 Material'],['labor','👷 Labor'],['equipment','🚜 Equipment'],['sub','🤝 Sub']].map(([b,l])=>`<button class="btn sm${APK&&APK.p===p&&APK.book===b?' primary':''}" data-act="apk-open" data-p="${esc(p)}" data-v="${b}">+ ${l}</button>`).join('')}</div><div class="est-addres"><input class="field" list="est-cbl" data-epadd="${p}" data-grid="sh" data-col="add" placeholder="+ Type a code or name to add labor, equipment or material from the codebook" aria-label="Add a cost from the codebook"><select class="field" data-epcustom="${p}" aria-label="Add a custom cost"><option value="">+ Custom…</option>${RES_KINDS.map(([k,l])=>`<option value="${k}">${l}</option>`).join('')}</select>${ec.tpl?'':`<button class="btn sm" data-act="vpick-open" data-p="${esc(p)}" title="Pick a material or sub price from your vendors’ price lists">🏷️ Vendor prices</button>`}${ec.tpl?'':'<button class="btn sm" data-act="cbpick-open" data-v="material">🔍 Search codebook</button>'}</div></td></tr>${APK&&APK.p===p?`<tr class="apk-row"><td></td><td colspan="9">${apkHtml(p)}</td></tr>`:''}`}</tbody>
     <tfoot><tr><td colspan="10"><div class="est-act-f">${COST_KEYS.filter(k=>r.c[k]).map(k=>`<span>${COST_LABEL[k]} <b>${money(r.c[k])}</b></span>`).join('')}${r.c.tax?`<span>Tax <b>${money(r.c.tax)}</b></span>`:''}<span class="est-tot">Activity <b>${money(r.total)}</b>${q?` · <b>${money2(r.unit)}</b>/${esc(unit)}`:''}</span></div></td></tr></tfoot></table></div>`;
-  return `<div class="est-act sheet" id="act-${a.id}">${head}${estFold('ap','Crew & production',prod)}${estFold('ac','Costs',grid)}</div>`}
+  return `<div class="est-act sheet" id="act-${a.id}" data-ctx="act" data-p="${p}">${head}${estFold('ap','Crew & production',prod)}${estFold('ac','Costs',grid)}</div>`}
 
 /* ---------- right-click menu ---------- */
 function estCtxMenu(d){const c=S.est&&S.est.ctx;if(!c)return '';const ro=EC().ro;if(ro)return '';const admin=cbEditable()&&!S.est.tpl;
