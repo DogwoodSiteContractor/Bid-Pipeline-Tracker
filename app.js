@@ -12487,6 +12487,15 @@ function peqPanel(b,work){const L=peSheet();if(!L.length)return peCanEdit()?`<di
   const n=peFilled(b).length;
   return `<div class="panel pad peq-panel"><div class="peq-ph"><div><b>Bid item quantities</b><div class="small dim">${n?`${n} of ${L.length} bid items have a quantity`:`${L.length} bid items to choose from`}</div></div>
     <div class="adders" style="margin:0"><button class="btn primary" data-act="peq-open">${n?'Open the sheet':'Fill in quantities'}</button>${n?`<button class="btn" data-act="peq-export">⬇ Export</button>`:''}</div></div></div>`}
+async function peqApply(){const m=M;const b=m&&m.draft;if(!b||!m.peq||m.peq.applying)return;if(!peFilled(b).length){toast('Type a quantity on at least one bid item first.');return}
+  m.peq.applying=true;renderModal();
+  try{for(let i=0;i<50&&BPA.saving;i++)await new Promise(r=>setTimeout(r,100));
+    if(bpCanAuto()&&bpSig(b)!==m.bpSig){await saveBid({auto:true},m);m.bpSig=bpSig(b)}}
+  catch(e){m.peq.applying=false;renderModal();toast('Couldn’t save the bid first: '+errMsg(e));return}
+  const live=byId(S.bids,b.id);if(live&&live!==b)live.rfq=clone(rfqOf(b));const bid=b;await estOpen(b.id,'pipeline');
+  if(!S.est||S.est.bidId!==b.id||S.est.err){toast(S.est&&S.est.err==='missing'?'The estimates table isn’t set up yet.':'Couldn’t open the estimate.');return}
+  if(!S.est.data){await estCreate('peq');if(S.est&&S.est.data){S.est.tab='build';render();toast(`Estimate started with ${peFilled(bid).length} bid item${peFilled(bid).length===1?'':'s'} from the quantities sheet`)}return}
+  peqToEst(bid)}
 function peqView(){const b=M.draft;const X=M.peq;const work=canWork(b);const q=peQ(b);const L=peList(b);const qs=X.q.trim().toLowerCase();
   const show=x=>(!qs||(x.d+' '+pePay(x.p)+' '+x.c+' '+x.g).toLowerCase().includes(qs))&&(!X.only||num(q[x.id])!=null)&&(!X.cat||x.g===X.cat);
   const cats=[...peCats(),...peX(b).map(x=>x.g).filter(g=>g&&!peCats().includes(g))].filter((g,i,a)=>a.indexOf(g)===i);const filled=peFilled(b);const byCat=c=>filled.filter(x=>x.g===c).length;
@@ -12497,7 +12506,7 @@ function peqView(){const b=M.draft;const X=M.peq;const work=canWork(b);const q=p
       const dcell=M.peq.ed===x.id?`<input class="field sm" id="peq-ed" data-peqd="${x.id}" value="${esc(x.d)}" style="width:100%" aria-label="Description on this bid">`
         :`<span class="peq-desc${work?' can':''}"${work?` data-act="peq-ed" data-id="${x.id}" title="Click to change the description on this bid" tabindex="0" role="button"`:''}>${esc(x.d)}</span>${x.d0?` <span class="peq-tag" title="List says: ${esc(x.d0)}">changed</span>${work?` <button class="linkbtn small" data-act="peq-dreset" data-id="${x.id}" title="Back to: ${esc(x.d0)}">↺ undo</button>`:''}`:''}`;
       return `<tr class="${num(v)!=null?'has':''}${peqHl().has(x.id)?' hl':''}" data-peqrow="${x.id}"><td class="num dim">${esc(pePay(x.p))}</td><td>${dcell}</td><td class="peq-q"><input class="field sm num" data-peq="${x.id}" inputmode="decimal" data-nomoney value="${v==null?'':esc(String(v))}"${work?'':' disabled'} aria-label="Quantity for ${esc(x.d)}"></td><td class="dim">${esc(x.u)}</td><td class="dim small">${esc(String(x.c))}</td></tr>`}).join('')}</tbody>`}).join('');
-  return `<div class="mhead peq-head"><div><h2>Bid item quantities</h2><p>${esc(b.name||'This bid')} · ${filled.length} item${filled.length===1?'':'s'} with a quantity</p></div><div class="r" style="display:flex;gap:8px;align-items:center"><button class="btn primary" data-act="peq-export"${filled.length?'':' disabled'}>⬇ Export</button><button class="btn" data-act="peq-x">Back to the bid</button></div></div>
+  return `<div class="mhead peq-head"><div><h2>Bid item quantities</h2><p>${esc(b.name||'This bid')} · ${filled.length} item${filled.length===1?'':'s'} with a quantity</p></div><div class="r" style="display:flex;gap:8px;align-items:center">${work&&!b._new?`<button class="btn primary" data-act="peq-apply"${filled.length&&!X.applying?'':' disabled'} title="Bring every bid item with a quantity into this bid's estimate, with codebook activities and prices where the pay item matches">${X.applying?'Applying…':'→ Apply to estimate'}</button>`:''}<button class="btn" data-act="peq-export"${filled.length?'':' disabled'}>⬇ Export</button><button class="btn" data-act="peq-x">Back to the bid</button></div></div>
    <div class="mbody peq">
      <div class="peq-bar"><input class="field" id="peq-q" data-peqq placeholder="Search bid items, pay item numbers…" value="${esc(X.q)}"><select class="field" data-peqcat><option value="">All categories</option>${cats.map(c=>`<option${X.cat===c?' selected':''}>${esc(c)}${byCat(c)?` (${byCat(c)})`:''}</option>`).join('')}</select>
        <label class="check"><input type="checkbox" data-peqonly${X.only?' checked':''}> Only items with quantities</label><span style="flex:1"></span><button class="linkbtn" data-act="peq-all" data-v="${groups.every(([c])=>X.shut.has(c))?'open':'shut'}">${groups.every(([c])=>X.shut.has(c))?'▾ Expand all':'▸ Collapse all'}</button>${work&&filled.length?'<button class="linkbtn danger-t" data-act="peq-clear">Clear all quantities</button>':''}</div>
@@ -12512,6 +12521,7 @@ async function peqExport(b){const items=peFilled(b);if(!items.length){toast('No 
   const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Bid Import');X.writeFile(wb,`${(b.name||'Bid')} - Bid Import.xlsx`.replace(/[\\/:*?"<>|]/g,'-'));toast(`Exported ${items.length} bid item${items.length===1?'':'s'}.`)}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='bid'||t.tagName==='SELECT')return;const a=t.dataset.act;if(!a.startsWith('peq-'))return;const b=M.draft;
   if(a==='peq-open'){M.peq={q:'',cat:'',only:false,shut:new Set(),arm:false};const f=peFilled(b);if(f.length){peCats().forEach(c=>{if(!f.some(x=>x.g===c))M.peq.shut.add(c)})}renderModal();setTimeout(()=>{const i=document.querySelector('[data-peq]');if(i&&canWork(b))i.focus()},50);return}
+  if(a==='peq-apply'){peqApply();return}
   if(a==='peq-x'){M.peq=null;renderModal();return}
   if(a==='peq-export'){peqExport(b);return}
   if(a==='peq-tog'){const s=M.peq.shut;const c=t.dataset.v;s.has(c)?s.delete(c):s.add(c);renderModal();return}
@@ -12524,7 +12534,7 @@ document.addEventListener('input',e=>{const t=e.target;if(!M||!M.peq)return;
 document.addEventListener('change',e=>{const t=e.target;if(!M||!M.peq)return;
   if(t.dataset.peqcat!=null){M.peq.cat=t.value;if(t.value)M.peq.shut.delete(t.value);renderModal();return}
   if(t.dataset.peqonly!=null){M.peq.only=t.checked;renderModal();return}
-  if(t.dataset.peq!=null){const p=document.querySelector('.peq-head p');if(p){const n=peFilled(M.draft).length;p.textContent=`${M.draft.name||'This bid'} · ${n} item${n===1?'':'s'} with a quantity`}}});
+  if(t.dataset.peq!=null){const p=document.querySelector('.peq-head p');if(p){const n=peFilled(M.draft).length;p.textContent=`${M.draft.name||'This bid'} · ${n} item${n===1?'':'s'} with a quantity`}const n2=peFilled(M.draft).length;document.querySelectorAll('[data-act=peq-export],[data-act=peq-apply]').forEach(x=>{if(!(M.peq&&M.peq.applying))x.disabled=!n2})}});
 // keep the count and the Export button in step while typing (without redrawing the sheet)
 function peqCount(){if(!M||!M.peq)return;const n=peFilled(M.draft).length;document.querySelectorAll('[data-act=peq-export]').forEach(x=>x.disabled=!n);const p=document.querySelector('.peq-head p');if(p)p.textContent=`${M.draft.name||'This bid'} · ${n} item${n===1?'':'s'} with a quantity`}
 document.addEventListener('keydown',e=>{const t=e.target;if(!t.dataset||t.dataset.peq==null)return;
@@ -12644,9 +12654,11 @@ function peqEstModal(){const x=M;const b=byId(S.bids,S.est.bidId);const s=peqEst
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button>${s.n?`<button class="btn primary" data-act="peqe-go"${x.busy?' disabled':''}>${already?'Update the estimate':'Import them'}</button>`:''}</div></div>`}
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
   if(a==='peqe-open'){if(!S.est||!S.est.bidId)return;M={kind:'peqest'};showModal();return}
-  if(a==='peqe-go'&&M&&M.kind==='peqest'){const b=byId(S.bids,S.est.bidId);const d=S.est.data;const r=peqFill(d,b);estOpenSave&&estOpenSave();estTouch();closeModal();S.est.tab='build';
+  if(a==='peqe-go'&&M&&M.kind==='peqest'){const b=byId(S.bids,S.est.bidId);closeModal();peqToEst(b)}});
+// fill the open estimate from the bid's quantities sheet: new items added, quantities updated, nothing duplicated or deleted
+function peqToEst(b){const d=S.est.data;const r=peqFill(d,b);estOpenSave&&estOpenSave();estTouch();S.est.tab='build';
     S.est.tkoNote=r.changed.length||r.gone.length?{moved:r.changed,gone:r.gone}:null;render();
-    toast(`${r.added?`${r.added} bid item${r.added===1?'':'s'} added (${r.linked} with codebook activities)`:''}${r.added&&r.changed.length?', ':''}${r.changed.length?`${r.changed.length} quantit${r.changed.length===1?'y':'ies'} updated`:''}${!r.added&&!r.changed.length?'Nothing changed':''}${r.gone.length?` · ${r.gone.length} earlier item${r.gone.length===1?' is':'s are'} no longer on the sheet`:''}`)}});
+    toast(`${r.added?`${r.added} bid item${r.added===1?'':'s'} added (${r.linked} with codebook activities)`:''}${r.added&&r.changed.length?', ':''}${r.changed.length?`${r.changed.length} quantit${r.changed.length===1?'y':'ies'} updated`:''}${!r.added&&!r.changed.length?'Nothing changed':''}${r.gone.length?` · ${r.gone.length} earlier item${r.gone.length===1?' is':'s are'} no longer on the sheet`:''}`)}
 
 // tick / untick GC / client and Developer / owner on a company (one of them always stays ticked)
 document.addEventListener('change',e=>{const t=e.target;if(!t.dataset||t.dataset.crole==null||!M||M.kind!=='bid'||!canWork(M.draft))return;const [id,k]=t.dataset.crole.split('.');const b=M.draft;
