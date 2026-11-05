@@ -4678,9 +4678,15 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
       for(const r of R){let id=r.hit&&r.hit.id;
         if(!id){const it={id:newId(),book:'labor',code:r.code||'',description:r.name,category:'',unit:r.per||'HR',cost:null,data:{base:r.base,fringe:nf(r.fringe),burden:nf(r.burden),ot:r.ot??1.5},vendor_id:null,price_date:todayStr(),price_history:[],active:true,notes:`Added from rate file ${name}`};add.push(it);id=it.id}
         const o={base:r.base};if(r.fringe!=null)o.fringe=r.fringe;if(r.burden!=null)o.burden=r.burden;o.ot=r.ot??1.5;rates[id]=o}
-      if(add.length){await cbUpsert(add.map(cbRow));await loadTable('codebook')}
+      const moved=[];
+      if(add.length){try{await cbUpsert(add.map(cbRow))}
+        catch(er){if(!/codebook_code_uniq|duplicate key/i.test(errMsg(er)))throw er;
+          // one at a time: a craft whose code is already taken gets -2, -3… so nothing blocks the import
+          for(const it of add){const c0=it.code;for(let k=1;k<9;k++){try{await run(sb.from('codebook').upsert(cbRow(it)));if(k>1)moved.push(`${it.description}: ${c0} → ${it.code}`);break}
+            catch(e2){if(!/codebook_code_uniq|duplicate key/i.test(errMsg(e2))||k===8)throw e2;it.code=`${c0}-${k+1}`}}}}
+        await loadTable('codebook')}
       const st=rfState();const id=newId();st.files.push({id,name,rates,updated_at:new Date().toISOString(),by:myName(),src:M.imp.file});
-      closeModal();S.cb.book='labor';S.cb.rf=id;await rfSave(st,true);toast(`${name} imported · ${R.length} craft${R.length===1?'':'s'}${add.length?`, ${add.length} added to the labor codebook`:''}`)}
+      closeModal();S.cb.book='labor';S.cb.rf=id;await rfSave(st,true);toast(`${name} imported · ${R.length} craft${R.length===1?'':'s'}${add.length?`, ${add.length} added to the labor codebook`:''}`);if(moved.length)setTimeout(()=>alert(`These codes were already taken, so they got a new code:\n\n${moved.join('\n')}\n\nYou can change them in the labor codebook.`),300)}
     catch(er){M.busy=false;renderModal();toast(cbErr(er))}}});
 document.addEventListener('input',e=>{const t=e.target;if(!M||M.kind!=='rfnew')return;if(t.dataset.rfn!=null)M.name=t.value;if(t.dataset.rff!=null)M.from=t.value});
 document.addEventListener('change',e=>{const t=e.target;if(M&&M.kind==='rfnew'&&t.dataset.rff!=null)M.from=t.value});
