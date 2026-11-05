@@ -4461,6 +4461,8 @@ const CB_FIELDS={
     {k:'data.own',l:'Owned / rented',t:'sel',opts:CB_OWN,al:['ownedrented','ownership','owned','rented','rental','ownrent']},
     {k:'data.rate',l:'Rate $/hr',t:'money',m:1,al:['ratehr','rate','hourlyrate','ownershiprate','ownership','ownershipcost','rentalrate','rent','costperhour','hourly','perhour','hrrate','ownershiphr']},
     {k:'data.op',l:'Operating $/hr',t:'money',m:1,al:['operatinghr','operating','operatingcost','operatingrate','opcost','fuel','fuelrepairs','fuelandrepairs','fog','operatingcostperhour']},
+    {k:'data.opr',l:'Operator (from labor)',t:'labor',al:['operator','operatorcraft','operatorlabor','operatorcode']},
+    {k:'data.oprq',l:'Operators per machine',t:'num',al:['operators','operatorqty','operatorsper']},
     {k:'notes',l:'Notes',t:'text',al:['notes','note','comment','comments']}],
   crew:[
     {k:'code',l:'Code',t:'text',al:['code']},
@@ -4488,16 +4490,24 @@ function cbCrew(x){let labor=0,equip=0,men=0,missing=0;const lines=[];
   return {labor,equip,total:labor+equip,men,missing,lines}}
 /* ---- labor rate files: named sets of rates (like ProEstimate rate files). The codebook's own rates are "Codebook rates". */
 const RF_FIELDS=[['base','Base $/hr'],['fringe','Fringe $/hr'],['burden','Burden %'],['ot','OT factor']];
-const rfAll=()=>{const v=S.settings&&S.settings.labor_rates;return v&&Array.isArray(v.files)?v.files:[]};
-const rfGet=id=>id?rfAll().find(f=>f.id===id)||null:null;
-const rfDefault=()=>{const v=S.settings&&S.settings.labor_rates;return v&&rfGet(v.dflt)?v.dflt:''};
+const RF_EQ=[['rate','Rate $/hr'],['op','Operating $/hr']];
+const rfFields=book=>book==='equipment'?RF_EQ:RF_FIELDS;
+const rfBk=book=>book==='equipment'?'equipment':'labor';
+const rfAllAny=()=>{const v=S.settings&&S.settings.labor_rates;return v&&Array.isArray(v.files)?v.files:[]};
+const rfAll=(book='labor')=>rfAllAny().filter(f=>(f.book||'labor')===book);
+const rfGet=id=>id?rfAllAny().find(f=>f.id===id)||null:null;
+const rfDefault=(book='labor')=>{const v=S.settings&&S.settings.labor_rates;const id=v&&(book==='equipment'?v.dfltEq:v.dflt);return rfGet(id)?id:''};
 const rfName=id=>{const f=rfGet(id);return f?f.name:'Codebook rates'};
-// which rate file prices labor right now: the open estimate's, else the one picked on the codebook
-function rfCtx(){if(S.view==='estimate'&&S.est){const id=S.est.data?(S.est.data.settings||{}).rateFile:S.est.pendRF;return rfGet(id)?id:''}return rfGet(S.cb&&S.cb.rf)?S.cb.rf:''}
-function rfData(x,fid){const d=cbD(x);const f=rfGet(fid===undefined?rfCtx():fid);const o=f&&f.rates&&f.rates[x.id];if(!o)return d;const m={...d};RF_FIELDS.forEach(([k])=>{if(o[k]!=null&&o[k]!=='')m[k]=o[k]});return m}
+const rfSetKey=book=>book==='equipment'?'eqRateFile':'rateFile';
+const rfCbKey=book=>book==='equipment'?'rfE':'rf';
+// which rate file prices this book right now: the open estimate's, else the one picked on the codebook
+function rfCtx(book='labor'){if(S.view==='estimate'&&S.est){const id=S.est.data?(S.est.data.settings||{})[rfSetKey(book)]:(book==='equipment'?S.est.pendEQ:S.est.pendRF);return rfGet(id)?id:''}const id=S.cb&&S.cb[rfCbKey(book)];return rfGet(id)?id:''}
+function rfData(x,fid){const d=cbD(x);const f=rfGet(fid===undefined?rfCtx(x.book):fid);const o=f&&f.rates&&f.rates[x.id];if(!o)return d;const m={...d};rfFields(x.book).forEach(([k])=>{if(o[k]!=null&&o[k]!=='')m[k]=o[k]});return m}
+// the operator a machine brings with it (from the labor codebook)
+const eqOpr=x=>{if(!x||x.book!=='equipment')return null;const d=cbD(x);const L=d.opr&&cbById(d.opr);return L&&L.book==='labor'?{it:L,qty:num(d.oprq)||1}:null};
 function cbCost(x){if(!x)return null;const d=cbD(x);
   if(x.book==='labor'){const L=cbLabor(rfData(x));return L?L.st:num(x.cost)}
-  if(x.book==='equipment'){const r=num(d.rate),o=num(d.op);return r==null&&o==null?num(x.cost):(r||0)+(o||0)}
+  if(x.book==='equipment'){const e=rfData(x);const r=num(e.rate),o=num(e.op);return r==null&&o==null?num(x.cost):(r||0)+(o||0)}
   if(x.book==='crew')return cbCrew(x).total;
   if(CB_TPL.has(x.book)){const r=tplCalc(x);return r?r.unit:null}
   return num(x.cost)}
@@ -4536,7 +4546,7 @@ function vCb(){
     const cells={
       material:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}${d.old_code&&d.old_code!==x.code?`<div class="small dim" title="Code before the recode">was ${esc(d.old_code)}</div>`:''}</td><td class="proj cb-desc">${esc(x.description)}${inact}${d.type&&d.type!=='Material'?` <span class="pill cb-type">${esc(d.type)}</span>`:''}</td><td class="small">${esc(x.category)}${d.qfolder?`<div class="dim cb-qf" title="Quote folder">📁 ${esc(d.qfolder)}</div>`:''}</td><td class="small">${esc(x.unit)}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${esc(vendorOf(x.vendor_id)?.company||'')}</td><td class="small">${pd(x)}</td>`,
       labor:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="r num">${money2(num(d.base))}</td><td class="r num">${num(d.fringe)?money2(d.fringe):'<span class="dim">—</span>'}</td><td class="r num">${num(d.burden)!=null?fmtN(d.burden,1)+'%':'<span class="dim">—</span>'}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${pd(x)}</td>`,
-      equipment:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="small">${esc(d.own||'Owned')}</td><td class="r num">${money2(num(d.rate))}</td><td class="r num">${num(d.op)?money2(d.op):'<span class="dim">—</span>'}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${pd(x)}</td>`,
+      equipment:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}${eqOpr(x)?`<div class="small dim">+ ${eqOpr(x).qty!==1?eqOpr(x).qty+' × ':''}${esc(eqOpr(x).it.description)}</div>`:''}</td><td class="small">${esc(x.category)}</td><td class="small">${esc(d.own||'Owned')}</td><td class="r num">${money2(num(d.rate))}</td><td class="r num">${num(d.op)?money2(d.op):'<span class="dim">—</span>'}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${pd(x)}</td>`,
       activity:()=>{const a=d.act||{};const r=tplCalc(x)||{};const pm=PROD_MODES.find(m=>m[0]===(a.mode||'uph'));const kinds=[...new Set((a.res||[]).map(z=>(RES_KINDS.find(k=>k[0]===z.kind)||RES_KINDS[5])[1]))];
         return `<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="small">${a.crew?esc(a.crew.name):'<span class="dim">—</span>'}</td><td class="small">${num(a.prod)?`${fmtN(a.prod,2)} ${esc(prodLabel(a.mode||'uph',d.unit||a.unit))}`:'<span class="dim">—</span>'}</td><td class="small">${kinds.join(', ')||'<span class="dim">—</span>'}</td><td class="r num"><b>${r.unit!=null?money2(r.unit):'—'}</b>${d.unit?`<span class="dim small">/${esc(d.unit)}</span>`:''}</td>`},
       biditem:()=>{const it=d.item||{};const r=tplCalc(x)||{};return `<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="small">${esc(d.unit||'')}</td><td class="small cb-mem">${(it.acts||[]).map(a=>esc(a.desc||'Activity')).slice(0,4).join(', ')||'<span class="dim">None</span>'}${(it.acts||[]).length>4?` <span class="dim">+${it.acts.length-4}</span>`:''}</td><td class="r num"><b>${r.unit!=null?money2(r.unit):'—'}</b>${d.unit?`<span class="dim small">/${esc(d.unit)}</span>`:''}</td>`},
@@ -4564,53 +4574,78 @@ function vCb(){
     ${bk==='material'?`<select class="field" data-cbf="vendor"><option value="">All vendors</option>${vendors.map(v=>`<option value="${v.id}"${c.vendor===v.id?' selected':''}>${esc(v.company)}</option>`).join('')}<option value="none"${c.vendor==='none'?' selected':''}>No vendor</option></select>`:''}
     <label class="check small"><input type="checkbox" data-cbf="inactive"${c.inactive?' checked':''}> Show inactive</label>
     <span class="dim small cb-count">${list.length===all.length?`${all.length} ${all.length===1?'item':'items'}`:`${list.length} of ${all.length}`}</span>
-    ${admin&&!sel.length&&list.length&&massFields.length&&!(bk==='labor'&&rfGet(c.rf))?`<button class="btn sm" data-act="cb-mass" data-all="1" title="Change prices on everything shown">Mass update ${list.length===all.length?'all':list.length+' shown'}</button>`:''}</div>
+    ${admin&&!sel.length&&list.length&&massFields.length&&!((bk==='labor'||bk==='equipment')&&rfGet(c[rfCbKey(bk)]))?`<button class="btn sm" data-act="cb-mass" data-all="1" title="Change prices on everything shown">Mass update ${list.length===all.length?'all':list.length+' shown'}</button>`:''}</div>
   ${bulk}
-  ${bk==='labor'||bk==='crew'?rfBar(bk,admin):''}
-  ${bk==='labor'&&rfGet(c.rf)?rfGrid(list,admin):''}<div class="panel scroll"${bk==='labor'&&rfGet(c.rf)?' hidden':''}><table class="cb-table cb-${bk}"><thead><tr>${admin?`<th class="cb-ck"><input type="checkbox" data-cbselall aria-label="Select all shown"${allOn?' checked':''}></th>`:''}${cols.join('')}</tr></thead><tbody>
+  ${bk==='labor'||bk==='equipment'?rfBar(bk,admin):bk==='crew'?rfBar('crew',admin):''}
+  ${(bk==='labor'||bk==='equipment')&&rfGet(c[rfCbKey(bk)])?rfGrid(list,admin,bk):''}<div class="panel scroll"${(bk==='labor'||bk==='equipment')&&rfGet(c[rfCbKey(bk)])?' hidden':''}><table class="cb-table cb-${bk}"><thead><tr>${admin?`<th class="cb-ck"><input type="checkbox" data-cbselall aria-label="Select all shown"${allOn?' checked':''}></th>`:''}${cols.join('')}</tr></thead><tbody>
   ${shown.map(row).join('')||`<tr><td colspan="${cols.length+1}">${empty}</td></tr>`}</tbody></table></div>
   ${list.length>shown.length?`<div class="adders"><button class="btn" data-act="cb-more">Show ${Math.min(400,list.length-shown.length)} more (${list.length-shown.length} not shown)</button></div>`:''}`;
 }
 
-function rfBar(bk,admin){const c=S.cb;const F=rfAll();const cur=rfGet(c.rf);const dflt=rfDefault();
-  return `<div class="rf-bar panel pad"><label class="f rf-pick">Rate file<select class="field" data-rfsel>${[['','Codebook rates'],...F.map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${(cur?cur.id:'')===v?' selected':''}>${esc(l)}${v===dflt?' (default)':''}</option>`).join('')}</select></label>
-    <span class="small dim rf-note">${cur?`Updated ${fmtShort(String(cur.updated_at||'').slice(0,10))}${cur.by?' by '+esc(cur.by):''} · ${bk==='crew'?'crew costs below use this file':'blank cells use the codebook rate'}`:bk==='crew'?'Crew costs below use the codebook rates. Pick a rate file to see them at its rates.':'The rates on each craft. Rate files are other sets of rates an estimate can use instead.'}</span>
-    ${admin?`<span class="rf-tools"><button class="btn sm" data-act="rf-new">+ New rate file</button>${cur?`<button class="btn sm ghost" data-act="rf-ren">Rename</button><button class="btn sm ghost" data-act="rf-dflt"${dflt===cur.id?' disabled':''}>${dflt===cur.id?'Default for new estimates':'Make default'}</button><button class="btn sm ghost danger" data-act="rf-del">Delete</button>`:dflt?`<button class="btn sm ghost" data-act="rf-dflt">Make default</button>`:''}</span>`:''}</div>`}
-function rfGrid(all,admin){const f=rfGet(S.cb.rf);const R=f.rates||{};const list=all.filter(x=>R[x.id]);const others=cbList('labor').filter(x=>x.active!==false&&!R[x.id]).sort((a,b)=>String(a.description).localeCompare(String(b.description)));
-  const cell=(x,k)=>{const o=R[x.id]||{};const v=o[k];const base=cbD(x)[k];return admin?`<input class="field sm num" data-rfx="${x.id}.${k}" value="${v==null?'':esc(String(v))}" placeholder="${base==null||base===''?'':esc(String(base))}" inputmode="decimal">`:(v!=null&&v!==''?esc(String(v)):`<span class="dim">${base==null?'—':esc(String(base))}</span>`)};
+function rfPick(book,lbl){const cur=rfGet(S.cb[rfCbKey(book)]);const dflt=rfDefault(book);
+  return `<label class="f rf-pick">${lbl}<select class="field" data-rfsel="${book}">${[['','Codebook rates'],...rfAll(book).map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${(cur?cur.id:'')===v?' selected':''}>${esc(l)}${v===dflt?' (default)':''}</option>`).join('')}</select></label>`}
+function rfBar(bk,admin){const c=S.cb;
+  if(bk==='crew')return `<div class="rf-bar panel pad">${rfPick('labor','Labor rate file')}${rfPick('equipment','Equipment rate file')}<span class="small dim rf-note">Crew costs below use these rate files. Estimates pick their own on Project info.</span></div>`;
+  const cur=rfGet(c[rfCbKey(bk)]);const dflt=rfDefault(bk);const eq=bk==='equipment';
+  return `<div class="rf-bar panel pad">${rfPick(bk,'Rate file')}
+    <span class="small dim rf-note">${cur?`Updated ${fmtShort(String(cur.updated_at||'').slice(0,10))}${cur.by?' by '+esc(cur.by):''} · blank cells use the codebook rate`:eq?'The rates on each machine. Rate files are other sets of equipment rates an estimate can use instead.':'The rates on each craft. Rate files are other sets of rates an estimate can use instead.'}</span>
+    ${admin?`<span class="rf-tools"><button class="btn sm" data-act="rf-new" data-book="${bk}">+ New rate file</button>${cur?`<button class="btn sm ghost" data-act="rf-ren" data-book="${bk}">Rename</button><button class="btn sm ghost" data-act="rf-dflt" data-book="${bk}"${dflt===cur.id?' disabled':''}>${dflt===cur.id?'Default for new estimates':'Make default'}</button><button class="btn sm ghost danger" data-act="rf-del" data-book="${bk}">Delete</button>`:dflt?`<button class="btn sm ghost" data-act="rf-dflt" data-book="${bk}">Make default</button>`:''}</span>`:''}</div>`}
+function rfGrid(all,admin,book='labor'){const f=rfGet(S.cb[rfCbKey(book)]);const R=f.rates||{};const list=all.filter(x=>R[x.id]);const others=cbList(book).filter(x=>x.active!==false&&!R[x.id]).sort((a,b)=>String(a.description).localeCompare(String(b.description)));
+  if(book==='equipment')return rfGridEq(f,list,others,admin);
+  const cell=(x,k)=>{const o=R[x.id]||{};const v=o[k];const base=cbD(x)[k];return admin?`<input class="field sm num" data-rfx="${x.id}.${k}" data-book="${book}" value="${v==null?'':esc(String(v))}" placeholder="${base==null||base===''?'':esc(String(base))}" inputmode="decimal">`:(v!=null&&v!==''?esc(String(v)):`<span class="dim">${base==null?'—':esc(String(base))}</span>`)};
   const rows=list.map(x=>{const L=cbLabor(rfData(x,f.id))||{};const B=cbLabor(cbD(x))||{};const dif=L.st!=null&&B.st!=null?L.st-B.st:null;
-    return `<tr><td class="num">${esc(x.code||'')}</td><td class="proj"><b>${esc(x.description)}</b></td>${RF_FIELDS.map(([k])=>`<td class="r">${cell(x,k)}</td>`).join('')}<td class="r num"><b>${L.st!=null?money2(L.st):'—'}</b>${x.unit&&x.unit!=='HR'?`<span class="small dim">/${esc(String(x.unit).toLowerCase())}</span>`:''}</td><td class="r num">${L.ot!=null?money2(L.ot):'—'}</td><td class="r num small ${dif>0?'bad-t':dif<0?'good-t':'dim'}">${dif==null||Math.abs(dif)<.005?'same':(dif>0?'+':'')+money2(dif)}</td>${admin?`<td><button class="linkbtn small" data-act="rf-rm" data-id="${x.id}" title="Take ${esc(x.description)} out of this rate file">✕</button></td>`:''}</tr>`}).join('');
+    return `<tr><td class="num">${esc(x.code||'')}</td><td class="proj"><b>${esc(x.description)}</b></td>${RF_FIELDS.map(([k])=>`<td class="r">${cell(x,k)}</td>`).join('')}<td class="r num"><b>${L.st!=null?money2(L.st):'—'}</b>${x.unit&&x.unit!=='HR'?`<span class="small dim">/${esc(String(x.unit).toLowerCase())}</span>`:''}</td><td class="r num">${L.ot!=null?money2(L.ot):'—'}</td><td class="r num small ${dif>0?'bad-t':dif<0?'good-t':'dim'}">${dif==null||Math.abs(dif)<.005?'same':(dif>0?'+':'')+money2(dif)}</td>${admin?`<td><button class="linkbtn small" data-act="rf-rm" data-book="labor" data-id="${x.id}" title="Take ${esc(x.description)} out of this rate file">✕</button></td>`:''}</tr>`}).join('');
   return `<div class="panel scroll"><table class="cb-table rf-grid"><thead><tr><th>Code</th><th>Craft</th>${RF_FIELDS.map(([,l])=>`<th class="r">${l}</th>`).join('')}<th class="r">Loaded ST</th><th class="r">Loaded OT</th><th class="r">vs codebook</th>${admin?'<th></th>':''}</tr></thead><tbody>${rows||`<tr><td colspan="10"><div class="empty"><b>No crafts in this rate file${list.length<Object.keys(R).length?' match the search':''}.</b>${admin&&others.length?'Add one below.':''}</div></td></tr>`}</tbody></table>
-    ${admin&&others.length?`<div class="adders" style="padding:10px 12px"><select class="field sm" data-rfadd><option value="">+ Add a craft to this rate file…</option>${others.map(x=>`<option value="${x.id}">${esc(x.description)}${x.code?' · '+esc(x.code):''}</option>`).join('')}</select><span class="small dim">${list.length} of ${cbList('labor').length} crafts are in this file. A craft that isn’t uses its codebook rate on estimates.</span></div>`:''}</div>`}
+    ${admin&&others.length?`<div class="adders" style="padding:10px 12px"><select class="field sm" data-rfadd="labor"><option value="">+ Add a craft to this rate file…</option>${others.map(x=>`<option value="${x.id}">${esc(x.description)}${x.code?' · '+esc(x.code):''}</option>`).join('')}</select><span class="small dim">${list.length} of ${cbList('labor').length} crafts are in this file. A craft that isn’t uses its codebook rate on estimates.</span></div>`:''}</div>`}
+function rfGridEq(f,list,others,admin){const R=f.rates||{};
+  const cell=(x,k)=>{const o=R[x.id]||{};const v=o[k];const base=cbD(x)[k];return admin?`<input class="field sm num" data-rfx="${x.id}.${k}" data-book="equipment" value="${v==null?'':esc(String(v))}" placeholder="${base==null||base===''?'':esc(String(base))}" inputmode="decimal">`:(v!=null&&v!==''?esc(String(v)):`<span class="dim">${base==null?'—':esc(String(base))}</span>`)};
+  const tot=(d)=>{const r=num(d.rate),o=num(d.op);return r==null&&o==null?null:(r||0)+(o||0)};
+  const rows=list.map(x=>{const T=tot(rfData(x,f.id)),B=tot(cbD(x));const dif=T!=null&&B!=null?T-B:null;const op=eqOpr(x);
+    return `<tr><td class="num">${esc(x.code||'')}</td><td class="proj"><b>${esc(x.description)}</b>${op?`<div class="small dim">+ ${op.qty!==1?op.qty+' × ':''}${esc(op.it.description)}</div>`:''}</td>${RF_EQ.map(([k])=>`<td class="r">${cell(x,k)}</td>`).join('')}<td class="r num"><b>${T!=null?money2(T):'—'}</b></td><td class="r num small ${dif>0?'bad-t':dif<0?'good-t':'dim'}">${dif==null||Math.abs(dif)<.005?'same':(dif>0?'+':'')+money2(dif)}</td>${admin?`<td><button class="linkbtn small" data-act="rf-rm" data-book="equipment" data-id="${x.id}" title="Take ${esc(x.description)} out of this rate file">✕</button></td>`:''}</tr>`}).join('');
+  return `<div class="panel scroll"><table class="cb-table rf-grid"><thead><tr><th>Code</th><th>Equipment</th>${RF_EQ.map(([,l])=>`<th class="r">${l}</th>`).join('')}<th class="r">Total $/hr</th><th class="r">vs codebook</th>${admin?'<th></th>':''}</tr></thead><tbody>${rows||`<tr><td colspan="7"><div class="empty"><b>No equipment in this rate file${list.length<Object.keys(R).length?' matches the search':''}.</b>${admin&&others.length?'Add some below.':''}</div></td></tr>`}</tbody></table>
+    ${admin&&others.length?`<div class="adders" style="padding:10px 12px"><select class="field sm" data-rfadd="equipment"><option value="">+ Add equipment to this rate file…</option>${others.map(x=>`<option value="${x.id}">${esc(x.description)}${x.code?' · '+esc(x.code):''}</option>`).join('')}</select><span class="small dim">${list.length} of ${cbList('equipment').length} machines are in this file. A machine that isn’t uses its codebook rate on estimates. The operator is priced from the labor rate file.</span></div>`:''}</div>`}
 async function rfSave(next,quiet){const old=S.settings.labor_rates;S.settings.labor_rates=next;render();
   try{await run(sb.from('settings').upsert({key:'labor_rates',value:next}));if(!quiet)toast('Saved')}
   catch(e){S.settings.labor_rates=old;render();toast(/row-level|policy|permission/i.test(errMsg(e))?'Run supabase/update-52-labor-rate-files.sql first.':'Couldn’t save: '+errMsg(e))}}
 const rfState=()=>clone(S.settings.labor_rates||{files:[],dflt:''});
 document.addEventListener('change',e=>{const t=e.target;
-  if(t.dataset.rfsel!=null){S.cb.rf=t.value||'';render();return}
-  if(t.dataset.rfadd!=null&&t.value){const x=cbById(t.value);const st=rfState();const f=st.files.find(y=>y.id===S.cb.rf);if(!x||!f)return;const d=cbD(x);const o={};RF_FIELDS.forEach(([k])=>{if(d[k]!=null&&d[k]!=='')o[k]=num(d[k])});if(!Object.keys(o).length)o.base=0;f.rates=f.rates||{};f.rates[x.id]=o;f.updated_at=new Date().toISOString();f.by=myName();rfSave(st,true);toast(`${x.description} added with its codebook rates. Change them in the grid.`);return}
-  if(t.dataset.rfx!=null){const [id,k]=t.dataset.rfx.split('.');const st=rfState();const f=st.files.find(x=>x.id===S.cb.rf);if(!f)return;f.rates=f.rates||{};const o=f.rates[id]=f.rates[id]||{};
+  if(t.dataset.rfsel!=null){S.cb[rfCbKey(t.dataset.rfsel||'labor')]=t.value||'';render();return}
+  if(t.dataset.rfadd!=null&&t.value){const bk=rfBk(t.dataset.rfadd);const x=cbById(t.value);const st=rfState();const f=st.files.find(y=>y.id===S.cb[rfCbKey(bk)]);if(!x||!f)return;const d=cbD(x);const o={};rfFields(bk).forEach(([k])=>{if(d[k]!=null&&d[k]!=='')o[k]=num(d[k])});if(!Object.keys(o).length)o[rfFields(bk)[0][0]]=0;f.rates=f.rates||{};f.rates[x.id]=o;f.updated_at=new Date().toISOString();f.by=myName();rfSave(st,true);toast(`${x.description} added with its codebook rates. Change them in the grid.`);return}
+  if(t.dataset.rfx!=null){const [id,k]=t.dataset.rfx.split('.');const st=rfState();const f=st.files.find(x=>x.id===S.cb[rfCbKey(rfBk(t.dataset.book))]);if(!f)return;f.rates=f.rates||{};const o=f.rates[id]=f.rates[id]||{};
     const v=t.value.trim();if(v===''){delete o[k]}else{const n=num(v);if(n==null){toast('Type a number');return}o[k]=n}if(!Object.keys(o).length)delete f.rates[id];
     f.updated_at=new Date().toISOString();f.by=myName();rfSave(st,true)}});
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('rf-')||!cbEditable())return;
-  if(a==='rf-new'){M={kind:'rfnew',name:'',from:S.cb.rf||''};showModal();return}
-  if(a==='rf-rm'){const st=rfState();const f=st.files.find(y=>y.id===S.cb.rf);const x=cbById(t.dataset.id);if(!f||!f.rates)return;delete f.rates[t.dataset.id];f.updated_at=new Date().toISOString();f.by=myName();rfSave(st,true);toast(`${x?x.description:'Craft'} taken out of ${f.name}`);return}
-  if(a==='rf-ren'){const f=rfGet(S.cb.rf);if(!f)return;const n=prompt('Rename this rate file',f.name);if(!n||!n.trim())return;const st=rfState();st.files.find(x=>x.id===f.id).name=n.trim();rfSave(st);return}
-  if(a==='rf-dflt'){const st=rfState();st.dflt=S.cb.rf||'';rfSave(st);toast(`New estimates start with ${rfName(st.dflt)}`);return}
-  if(a==='rf-del'){const f=rfGet(S.cb.rf);if(!f)return;if(!confirm(`Delete the rate file “${f.name}”?\n\nEstimates that use it go back to the codebook rates the next time they’re opened, and their labor prices show as changed.`))return;const st=rfState();st.files=st.files.filter(x=>x.id!==f.id);if(st.dflt===f.id)st.dflt='';S.cb.rf='';rfSave(st);return}
-  if(a==='rf-go'&&M&&M.kind==='rfnew'){const name=String(M.name||'').trim();if(!name){toast('Give it a name');return}if(rfAll().some(x=>normH(x.name)===normH(name))){toast('A rate file with that name already exists');return}
-    const src=rfGet(M.from);const rates={};cbList('labor').forEach(x=>{const d=rfData(x,src?src.id:'');const o={};RF_FIELDS.forEach(([k])=>{if(d[k]!=null&&d[k]!=='')o[k]=num(d[k])});if(Object.keys(o).length)rates[x.id]=o});
-    const st=rfState();const id=newId();st.files.push({id,name,rates,updated_at:new Date().toISOString(),by:myName()});const fromName=rfName(M.from);closeModal();S.cb.rf=id;rfSave(st,true);toast(`${name} created from ${fromName}`);return}});
+  const bk=rfBk(t.dataset.book||(M&&M.kind==='rfnew'?M.book:S.cb.book));const ck=rfCbKey(bk);
+  if(a==='rf-new'){M={kind:'rfnew',book:bk,name:'',from:S.cb[ck]||''};showModal();return}
+  if(a==='rf-rm'){const st=rfState();const f=st.files.find(y=>y.id===S.cb[ck]);const x=cbById(t.dataset.id);if(!f||!f.rates)return;delete f.rates[t.dataset.id];f.updated_at=new Date().toISOString();f.by=myName();rfSave(st,true);toast(`${x?x.description:'Craft'} taken out of ${f.name}`);return}
+  if(a==='rf-ren'){const f=rfGet(S.cb[ck]);if(!f)return;const n=prompt('Rename this rate file',f.name);if(!n||!n.trim())return;const st=rfState();st.files.find(x=>x.id===f.id).name=n.trim();rfSave(st);return}
+  if(a==='rf-dflt'){const st=rfState();st[bk==='equipment'?'dfltEq':'dflt']=S.cb[ck]||'';rfSave(st);toast(`New estimates start with ${rfName(S.cb[ck])} for ${bk==='equipment'?'equipment':'labor'}`);return}
+  if(a==='rf-del'){const f=rfGet(S.cb[ck]);if(!f)return;if(!confirm(`Delete the rate file “${f.name}”?\n\nEstimates that use it go back to the codebook rates the next time they’re opened, and their ${bk==='equipment'?'equipment':'labor'} prices show as changed.`))return;const st=rfState();st.files=st.files.filter(x=>x.id!==f.id);if(st.dflt===f.id)st.dflt='';if(st.dfltEq===f.id)st.dfltEq='';S.cb[ck]='';rfSave(st);return}
+  if(a==='rf-go'&&M&&M.kind==='rfnew'){const name=String(M.name||'').trim();if(!name){toast('Give it a name');return}if(rfAll(bk).some(x=>normH(x.name)===normH(name))){toast('A rate file with that name already exists');return}
+    const src=rfGet(M.from);const rates={};cbList(bk).forEach(x=>{if(src&&!(src.rates||{})[x.id])return;const d=rfData(x,src?src.id:'');const o={};rfFields(bk).forEach(([k])=>{if(d[k]!=null&&d[k]!=='')o[k]=num(d[k])});if(Object.keys(o).length)rates[x.id]=o});
+    const st=rfState();const id=newId();st.files.push({id,name,book:bk,rates,updated_at:new Date().toISOString(),by:myName()});const fromName=rfName(M.from);closeModal();S.cb[ck]=id;rfSave(st,true);toast(`${name} created from ${fromName}`);return}});
 function rfNewModal(){const imp=M.mode==='imp';
-  return mhead('New rate file','A full set of labor rates an estimate can use')+`<div class="mbody">
+  const eq=M.book==='equipment';return mhead(eq?'New equipment rate file':'New rate file',eq?'A set of equipment rates an estimate can use':'A full set of labor rates an estimate can use')+`<div class="mbody">
   <div class="seg" style="margin-bottom:12px"><button class="${imp?'':'on'}" data-act="rfm" data-v="copy">Copy an existing file</button><button class="${imp?'on':''}" data-act="rfm" data-v="imp">⬆ Import a file</button></div>
-  <label class="f">Name<input class="field" data-rfn value="${esc(M.name||'')}" placeholder="e.g. 2026 Night Work Labor" autofocus></label>
-  ${imp?rfImpBody():`<label class="f">Start from<select class="field" data-rff>${[['','Codebook rates'],...rfAll().map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${M.from===v?' selected':''}>${esc(l)}</option>`).join('')}</select></label>
-  <p class="hint">It copies every craft's rates from that file. Then change only the ones that differ.</p>`}</div>
+  <label class="f">Name<input class="field" data-rfn value="${esc(M.name||'')}" placeholder="${eq?'e.g. 2026 Rental Rates':'e.g. 2026 Night Work Labor'}" autofocus></label>
+  ${imp?rfImpBody():`<label class="f">Start from<select class="field" data-rff>${[['','Codebook rates'],...rfAll(M.book).map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${M.from===v?' selected':''}>${esc(l)}</option>`).join('')}</select></label>
+  <p class="hint">It copies every ${eq?'machine':'craft'}'s rates from that file. Then change only the ones that differ.</p>`}</div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button>${imp?`<button class="btn primary" data-act="rf-imp-go"${M.imp&&M.imp.rows.length&&!M.busy?'':' disabled'}>${M.busy?'Importing…':'Import rate file'}</button>`:'<button class="btn primary" data-act="rf-go">Create rate file</button>'}</div></div>`}
 /* importing a rate file: Excel or CSV, one row per craft. Columns are found by their headers and can be changed. */
 const RFI_COLS=[['code','Code'],['name','Craft / description'],['period','Period (hourly / monthly)'],['base','Base rate'],['ot','OT (factor, or OT rate)'],['total','Total rate (to check against)'],['fringe','Fringe $ (adds up every column ticked)'],['burden','Burden % (adds up every column ticked)']];
-function rfiGuess(H){const g={code:-1,name:-1,base:-1,fringe:[],burden:[],ot:-1,total:-1,period:-1};const h=H.map(x=>String(x||'').toLowerCase().trim());
+const RFI_EQ=[['code','Code'],['name','Equipment / description'],['rate','Rate $/hr (ownership or rental)'],['total','Total rate (to check against)'],['op','Operating $ (adds up every column ticked)']];
+function rfiGuessEq(H){const g={code:-1,name:-1,rate:-1,op:[],total:-1};const h=H.map(x=>String(x||'').toLowerCase().trim());
+  // a ProEstimate equipment export: Ownership + Tires + FuelCost × (1 + OilGreasePercentage) = Total, Operator = labor craft
+  const ix=k=>H.findIndex(x=>normH(x)===k);if(ix('ownership')>=0&&ix('fuelcost')>=0){g.pe={own:ix('ownership'),tires:ix('tires'),ft:ix('fueltype'),gal:ix('fuelgallonsperhour'),fc:ix('fuelcost'),og:ix('oilgreasepercentage'),rent:ix('outsiderental'),opr:ix('operator')};g.code=ix('equipmentid');g.name=ix('description');g.total=ix('total')}
+  if(g.pe)return g;
+  h.forEach((t,i)=>{if(!t)return;
+    if(g.code<0&&/\bcode\b|equip(ment)? ?id|unit ?(no|#|number)|asset|^id$|equipid/.test(t))g.code=i;
+    else if(g.total<0&&/total|loaded/.test(t))g.total=i;
+    else if(g.name<0&&/desc|equipment|machine|name|model/.test(t)&&!/rate|\$|cost/.test(t))g.name=i;
+    else if(/operat|fuel|repair|maint|tire|wear|lube|\bfog\b/.test(t))g.op.push(i);
+    else if(g.rate<0&&/rate|rent|own|hourly|cost/.test(t))g.rate=i});
+  return g}
+function rfiGuess(H){if(M&&M.book==='equipment')return rfiGuessEq(H);const g={code:-1,name:-1,base:-1,fringe:[],burden:[],ot:-1,total:-1,period:-1};const h=H.map(x=>String(x||'').toLowerCase().trim());
   h.forEach((t,i)=>{if(!t)return;
     if(g.code<0&&/\bcode\b|craft ?id|class(ification)? ?(code|#)|labor ?id|laborid|^id$/.test(t))g.code=i;
     else if(g.period<0&&/period|per$|frequency|pay ?basis/.test(t))g.period=i;
@@ -4622,7 +4657,7 @@ function rfiGuess(H){const g={code:-1,name:-1,base:-1,fringe:[],burden:[],ot:-1,
     else if(/fringe|benefit|h&w|health|pension|annuity|vacation/.test(t)&&!/%/.test(t))g.fringe.push(i);
     else if(/%|pct|percent|tax|fica|futa|suta|insur|comp|burden|liab/.test(t)&&!/total|loaded/.test(t))g.burden.push(i)});
   return g}
-function rfiRows(){const I=M.imp;if(!I)return [];const rows=I.data.slice(I.hdr+1);const C=I.col;const cell=(r,i)=>i>=0?r[i]:'';
+function rfiRows(){const I=M.imp;if(!I)return [];if(M.book==='equipment')return rfiRowsEq();const rows=I.data.slice(I.hdr+1);const C=I.col;const cell=(r,i)=>i>=0?r[i]:'';
   const n=v=>{const x=num(String(v??'').replace(/[$,%\s]/g,''));return x};
   // percent columns given as fractions (0.0765) become percents (7.65)
   const frac=new Set(C.burden.filter(i=>{const vs=rows.map(r=>n(r[i])).filter(v=>v);return vs.length&&vs.every(v=>Math.abs(v)<=1)}));
@@ -4644,7 +4679,16 @@ function rfiRows(){const I=M.imp;if(!I)return [];const rows=I.data.slice(I.hdr+1
       if(same&&normH(same.name)===normH(r.name)){same.twice=true;return acc}
       if(same){let i=2;while(acc.some(x=>normH(x.code)===normH(r.code+'-'+i))||labor.some(x=>normH(x.code)===normH(r.code+'-'+i)))i++;r.code0=r.code;r.code=r.code+'-'+i;r.hit=labor.find(x=>normH(x.description)===normH(r.name))||null;r.renamed=true}
       acc.push(r);return acc},[])}
-function rfImpBody(){const I=M.imp;
+function rfiRowsEq(){const I=M.imp;const rows=I.data.slice(I.hdr+1);const C=I.col;const n=v=>num(String(v??'').replace(/[$,\s]/g,''));const eqs=cbList('equipment');const seen=new Set();const P=C.pe;const labor=cbList('labor');
+  return rows.map(r=>{const code=String(C.code>=0?r[C.code]??'':'').trim(),name=String(C.name>=0?r[C.name]??'':'').trim();let rate=P?n(r[P.own]):C.rate>=0?n(r[C.rate]):null;
+    if(!name&&!code||rate==null&&!(P||C.op.length))return null;let op=C.op.length?+C.op.reduce((s,i)=>s+(n(r[i])||0),0).toFixed(4):null;let fuel=null,rented=false,opr=null,oprName='';
+    if(P){const gal=n(r[P.gal])||0,fc=n(r[P.fc])||0,og=n(r[P.og])||0;op=+((n(r[P.tires])||0)+fc*(1+og/100)).toFixed(4);rented=(n(r[P.rent])||0)>0;
+      const ftx=String(r[P.ft]||'').toLowerCase();const ft=/diesel/.test(ftx)?'diesel':/gas/.test(ftx)?'gas':'';if(ft&&gal>0)fuel={ft,fgal:+(gal*(1+og/100)).toFixed(4),fp:+(fc/gal).toFixed(4)};
+      oprName=String(P.opr>=0?r[P.opr]??'':'').trim();if(oprName){opr=labor.find(x=>normH(x.description)===normH(oprName))||labor.find(x=>normH(x.code)===normH(oprName))||null}}const tot=C.total>=0?n(r[C.total]):null;const st=(rate||0)+(op||0);
+    const hit=(code&&eqs.find(x=>normH(x.code)===normH(code)))||(name&&eqs.find(x=>normH(x.description)===normH(name)))||null;
+    let c2=code;if(c2&&!hit){let i=2;while(seen.has(normH(c2))||eqs.some(x=>normH(x.code)===normH(c2)))c2=code+'-'+i++}if(c2)seen.add(normH(c2));
+    return {code:c2,code0:code,renamed:c2!==code,name:name||code,rate,op,tot,st,okT:tot==null||Math.abs(tot-st)<.011,hit,fuel,rented,opr,oprName}}).filter(Boolean)}
+function rfImpBody(){const I=M.imp;if(I&&M.book==='equipment')return rfImpBodyEq();
   if(!I)return `<label class="f">Rate file (Excel or CSV)<input type="file" class="field" data-rfifile accept=".xlsx,.xls,.csv"></label>
     ${M.reading?'<p class="hint">Reading…</p>':''}${M.error?`<div class="notice">${esc(M.error)}</div>`:''}
     <p class="hint">One row per craft with its base rate. Fringe, burden or tax percentages, and OT columns come in too if the file has them. A ProEstimate rate file export works as is.</p>`;
@@ -4657,6 +4701,15 @@ function rfImpBody(){const I=M.imp;
     ${R.some(r=>r.renamed)?`<div class="notice">${R.filter(r=>r.renamed).map(r=>`<b>${esc(r.name)}</b> uses code ${esc(r.code0)}, same as another craft in the file`).join('; ')}. ${R.filter(r=>r.renamed).length===1?'It comes':'They come'} in as ${R.filter(r=>r.renamed).map(r=>esc(r.code)).join(', ')} (codes have to be unique). You can change codes in the labor codebook afterward.</div>`:''}
     <p class="hint">${R.some(r=>r.tot!=null)?(R.every(r=>r.okT)?'<b class="good-t">Every total matches the file.</b> ':`<b class="bad-t">${R.filter(r=>!r.okT).length} total${R.filter(r=>!r.okT).length===1?' doesn’t':'s don’t'} match the file.</b> Check which columns are ticked. `):''}${R.length} craft${R.length===1?'':'s'} found.${nNew?` <b>${nNew}</b> ${nNew===1?'isn’t':'aren’t'} in the labor codebook yet and will be added to it with these rates.`:' Every craft matched one in the codebook.'}</p>`
     :`<div class="notice">No crafts found yet. Check that Craft and Base point at the right columns, and the header row is right.</div>`}`}
+function rfImpBodyEq(){const I=M.imp;const H=I.data[I.hdr]||[];const opts=v=>`<option value="-1">Not in file</option>`+H.map((h,i)=>`<option value="${i}"${v===i?' selected':''}>${esc(String(h||'Column '+(i+1)))}</option>`).join('');
+  const R=rfiRows();I.rows=R;const nNew=R.filter(r=>!r.hit).length;const P=I.col.pe;const miss=[...new Set(R.filter(r=>r.oprName&&!r.opr).map(r=>r.oprName))];
+  return `<div class="small dim" style="margin:-4px 0 8px">${esc(I.file)}${I.names.length>1?` · sheet <select class="field sm" data-rfisheet>${I.names.map(n=>`<option${n===I.sheet?' selected':''}>${esc(n)}</option>`).join('')}</select>`:''} · <button class="linkbtn" data-act="rfi-reset">Pick a different file</button></div>
+    ${P?`<div class="notice">ProEstimate equipment export. Rate = Ownership. Operating = Tires + Fuel cost × (1 + Oil & grease %). Fuel type, gallons and $/gal come in for the fuel price adjustment, rentals are marked Rented, and each machine’s Operator is matched to the labor codebook.</div>`:''}
+    <div class="fg rfi-map"${P?' hidden':''}>${RFI_EQ.map(([k,l])=>k==='op'?`<div class="f s4 rfi-bur"><span>${l}</span><div class="rfi-chk">${H.map((h,i)=>String(h||'').trim()&&![I.col.code,I.col.name,I.col.rate,I.col.total].includes(i)?`<label class="check small"><input type="checkbox" data-rfib="op.${i}"${I.col.op.includes(i)?' checked':''}> ${esc(String(h))}</label>`:'').join('')||'<span class="small dim">No other columns</span>'}</div></div>`:`<label class="f">${l}<select class="field" data-rfic="${k}">${opts(I.col[k])}</select></label>`).join('')}
+    <label class="f">Header row<input class="field num" type="number" min="1" data-rfihdr value="${I.hdr+1}"></label></div>
+    ${R.length?`<div class="scroll rfi-prev"><table class="rp-tbl"><thead><tr><th>Equipment</th><th>In codebook</th>${P?'<th>Operator</th>':''}<th class="r">Rate</th><th class="r">Operating</th><th class="r">Total $/hr</th></tr></thead><tbody>${R.slice(0,300).map(r=>`<tr><td><b>${esc(r.name)}</b>${r.code?` <span class="small ${r.renamed?'bad-t':'dim'}">${esc(r.code)}</span>`:''}${r.rented?' <span class="small dim">rented</span>':''}</td><td>${r.hit?pill('Matched','good'):pill('New')}</td>${P?`<td class="small">${r.opr?esc(r.opr.description):r.oprName?`<span class="bad-t" title="Not in the labor codebook">${esc(r.oprName)} ✕</span>`:'<span class="dim">—</span>'}</td>`:''}<td class="r num">${r.rate!=null?money2(r.rate):'—'}</td><td class="r num">${r.op!=null?money2(r.op):'—'}</td><td class="r num"><b>${money2(r.st)}</b>${r.tot!=null?` <span class="${r.okT?'good-t':'bad-t'}" title="File says ${money2(r.tot)}">${r.okT?'✓':'≠ '+money2(r.tot)}</span>`:''}</td></tr>`).join('')}</tbody></table></div>
+    <p class="hint">${R.some(r=>r.tot!=null)?(R.every(r=>r.okT)?'<b class="good-t">Every total matches the file.</b> ':`<b class="bad-t">${R.filter(r=>!r.okT).length} total(s) don’t match the file.</b> Check which columns are ticked. `):''}${R.length} machine${R.length===1?'':'s'} found.${nNew?` <b>${nNew}</b> ${nNew===1?'isn’t':'aren’t'} in the equipment codebook yet and will be added with these rates. ${P?'':' Set each one’s operator in the codebook afterward.'}`:''}${miss.length?` <b class="bad-t">Operator not in the labor codebook: ${miss.map(esc).join(', ')}.</b> Those machines come in without an operator; import the labor rate file first or set it later.`:''}</p>`
+    :`<div class="notice">No equipment found yet. Check that Equipment and Rate point at the right columns, and the header row is right.</div>`}`}
 async function rfiRead(file){const X=await loadXLSX();const wb=X.read(await file.arrayBuffer(),{type:'array'});const sheets={};
   wb.SheetNames.forEach(n=>{const rows=X.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''});if(rows.some(r=>r.some(c=>String(c).trim()!=='')))sheets[n]=rows});
   const names=Object.keys(sheets);if(!names.length)throw new Error('That file doesn’t have anything in it.');
@@ -4665,7 +4718,8 @@ async function rfiRead(file){const X=await loadXLSX();const wb=X.read(await file
 function rfiSheet(n){const I=M.imp;I.sheet=n;I.data=I.sheets[n];
   // the header is the row (in the first 20) with the most cells that look like rate-file headings
   const score=r=>r.filter(c=>{const x=String(c).toLowerCase().trim();return x&&x.length<40&&/base|wage|rate|desc|craft|class|trade|labor|code|fringe|tax|insur|burden|\bot\b|overtime|%/.test(x)}).length;
-  let h=0,best=0;I.data.slice(0,20).forEach((r,i)=>{const sc=score(r);if(sc>best){best=sc;h=i}});I.hdr=h;I.col=rfiGuess(I.data[h]||[])}
+  const score2=M.book==='equipment'?r=>r.filter(c=>{const x=String(c).toLowerCase().trim();return x&&x.length<40&&/rate|desc|equip|code|operat|fuel|rent|own|total|machine/.test(x)}).length:score;
+  let h=0,best=0;I.data.slice(0,20).forEach((r,i)=>{const sc=score2(r);if(sc>best){best=sc;h=i}});I.hdr=h;I.col=rfiGuess(I.data[h]||[])}
 document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='rfnew')return;
   if(t.dataset.rfifile!=null){const file=t.files[0];if(!file)return;M.reading=true;M.error=null;renderModal();rfiRead(file).then(()=>{M.reading=false;renderModal()}).catch(err=>{M.reading=false;M.error=errMsg(err);renderModal()});return}
   if(t.dataset.rfisheet!=null){rfiSheet(t.value);renderModal();return}
@@ -4675,6 +4729,17 @@ document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='rfnew')
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='rfnew')return;const a=t.dataset.act;
   if(a==='rfm'){M.mode=t.dataset.v;renderModal();return}
   if(a==='rfi-reset'){M.imp=null;renderModal();return}
+  if(a==='rf-imp-go'&&M.book==='equipment'){const name=String(M.name||'').trim();if(!name){toast('Give it a name');return}if(rfAll('equipment').some(x=>normH(x.name)===normH(name))){toast('A rate file with that name already exists');return}
+    const R=rfiRows();if(!R.length)return;M.busy=true;renderModal();
+    try{const add=[];const rates={};for(const r of R){let id=r.hit&&r.hit.id;
+        const extra={...(r.fuel||{}),...(r.opr?{opr:r.opr.id,oprq:1}:{})};
+        if(!id){const it={id:newId(),book:'equipment',code:r.code||'',description:r.name,category:'',unit:'HR',cost:null,data:{own:r.rented?'Rented':'Owned',rate:r.rate,op:r.op,...extra},vendor_id:null,price_date:todayStr(),price_history:[],active:true,notes:`Added from rate file ${name}`};add.push(it);id=it.id}
+        else if(r.opr&&!cbD(r.hit).opr){const y=clone(r.hit);y.data={...cbD(y),opr:r.opr.id,oprq:1};add.push(y)}
+        const o={};if(r.rate!=null)o.rate=r.rate;if(r.op!=null)o.op=r.op;rates[id]=o}
+      if(add.length){for(let i=0;i<add.length;i+=200){try{await cbUpsert(add.slice(i,i+200).map(cbRow))}catch(er){if(!/codebook_code_uniq|duplicate key/i.test(errMsg(er)))throw er;for(const it of add.slice(i,i+200)){const c0=it.code;for(let k=1;k<9;k++){try{await run(sb.from('codebook').upsert(cbRow(it)));break}catch(e2){if(!/codebook_code_uniq|duplicate key/i.test(errMsg(e2))||k===8)throw e2;it.code=`${c0}-${k+1}`}}}}}await loadTable('codebook')}
+      const st=rfState();const id=newId();st.files.push({id,name,book:'equipment',rates,updated_at:new Date().toISOString(),by:myName(),src:M.imp.file});
+      closeModal();S.cb.book='equipment';S.cb.rfE=id;await rfSave(st,true);toast(`${name} imported · ${R.length} machine${R.length===1?'':'s'}${add.length?`, ${add.length} added to the equipment codebook`:''}`)}
+    catch(er){M.busy=false;renderModal();toast(cbErr(er))}return}
   if(a==='rf-imp-go'){const name=String(M.name||'').trim();if(!name){toast('Give it a name');return}if(rfAll().some(x=>normH(x.name)===normH(name))){toast('A rate file with that name already exists');return}
     const R=rfiRows();if(!R.length)return;M.busy=true;renderModal();
     try{const add=[];const rates={};const nf=v=>v==null?null:v;
@@ -4688,7 +4753,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
           for(const it of add){const c0=it.code;for(let k=1;k<9;k++){try{await run(sb.from('codebook').upsert(cbRow(it)));if(k>1)moved.push(`${it.description}: ${c0} → ${it.code}`);break}
             catch(e2){if(!/codebook_code_uniq|duplicate key/i.test(errMsg(e2))||k===8)throw e2;it.code=`${c0}-${k+1}`}}}}
         await loadTable('codebook')}
-      const st=rfState();const id=newId();st.files.push({id,name,rates,updated_at:new Date().toISOString(),by:myName(),src:M.imp.file});
+      const st=rfState();const id=newId();st.files.push({id,name,book:'labor',rates,updated_at:new Date().toISOString(),by:myName(),src:M.imp.file});
       closeModal();S.cb.book='labor';S.cb.rf=id;await rfSave(st,true);toast(`${name} imported · ${R.length} craft${R.length===1?'':'s'}${add.length?`, ${add.length} added to the labor codebook`:''}`);if(moved.length)setTimeout(()=>alert(`These codes were already taken, so they got a new code:\n\n${moved.join('\n')}\n\nYou can change them in the labor codebook.`),300)}
     catch(er){M.busy=false;renderModal();toast(cbErr(er))}}});
 document.addEventListener('input',e=>{const t=e.target;if(!M||M.kind!=='rfnew')return;if(t.dataset.rfn!=null)M.name=t.value;if(t.dataset.rff!=null)M.from=t.value});
@@ -4702,6 +4767,7 @@ function cbOpen(id){const x=cbById(id);if(!x)return;const d=clone(x);d.data=cbD(
   if(CB_TPL.has(d.book)){if(d.book==='activity'){d.data.act=d.data.act||estNewAct();d.data.act.res=d.data.act.res||[]}else{d.data.item=d.data.item||estNewItem({items:[]},{code:''});d.data.item.acts=(d.data.item.acts||[]).map(a=>({...a,res:a.res||[]}))}estApplyStale(estStale(d.data));M={kind:'cbtpl',draft:d,orig:clone(x)};showModal();return}if(d.book==='crew')d.data.members=(d.data.members||[]).map(m=>({...m}));M={kind:'cbitem',draft:d,orig:clone(x)};showModal()}
 function cbFieldHtml(f,d,dis){const v=cbGet(d,f.k);const id='cbe-'+f.k.replace('.','-');const a=`id="${id}" data-cbe="${f.k}"${dis}`;
   if(f.t==='sel')return `<label class="f">${f.l}<select class="field" ${a}>${f.opts.map(o=>`<option${(v||f.opts[0])===o?' selected':''}>${o}</option>`).join('')}</select></label>`;
+  if(f.t==='labor')return `<label class="f s2">${f.l}<select class="field" ${a}><option value="">No operator</option>${cbList('labor').filter(x=>x.active!==false||x.id===v).sort((x,y)=>String(x.description).localeCompare(String(y.description))).map(o=>`<option value="${o.id}"${v===o.id?' selected':''}>${esc(o.description)}${o.code?' · '+esc(o.code):''}</option>`).join('')}</select><small class="dim">Comes in with this machine when you add it to an estimate or a crew.</small></label>`;
   if(f.t==='bool')return `<label class="check cb-bool"><input type="checkbox" ${a}${v!==false?' checked':''}> ${f.l}</label>`;
   if(f.t==='vendor')return `<label class="f">${f.l}<select class="field" ${a}><option value="">None</option>${S.vendors.slice().sort((x,y)=>x.company.localeCompare(y.company)).map(o=>`<option value="${o.id}"${v===o.id?' selected':''}>${esc(o.company)}</option>`).join('')}</select></label>`;
   if(f.k==='data.qfolder')return `<label class="f">${f.l}<input class="field" ${a} list="cb-qfolders" value="${esc(v||'')}" placeholder="e.g. Aggregates" title="Where this item goes when you generate quote folders on an estimate"><datalist id="cb-qfolders">${qFolders().map(o=>`<option value="${esc(o)}">`).join('')}</datalist></label>`;
@@ -4713,7 +4779,7 @@ function cbFieldHtml(f,d,dis){const v=cbGet(d,f.k);const id='cbe-'+f.k.replace('
   return `<label class="f${f.k==='description'?' s2':''}">${f.l}${f.req?' *':''}<span class="cb-inp${pre?' has-pre':''}${post?' has-post':''}">${pre}<input class="field${n?' num':''}" ${n?'type="number" step="any" inputmode="decimal"':''} ${a} value="${esc(v??'')}"${f.k==='data.ot'?' placeholder="1.5"':''}>${post}</span></label>`}
 function cbCalcHtml(d){
   if(d.book==='labor'){const L=cbLabor(cbD(d));return L?`<div class="cb-calc"><div><span>Loaded rate</span><b>${money2(L.st)}/hr</b></div><div><span>Overtime</span><b>${money2(L.ot)}/hr</b></div><p class="hint">Base × (1 + burden %) + fringe. Overtime = base × OT factor × (1 + burden %) + fringe.</p></div>`:'<div class="cb-calc dim small">Enter a base wage to see the loaded rate.</div>'}
-  if(d.book==='equipment'){const c=cbCost(d);return `<div class="cb-calc"><div><span>Total</span><b>${money2(c)}/hr</b></div><p class="hint">${cbD(d).own==='Rented'?'Rental rate':'Ownership rate'} + operating cost (fuel, repairs, wear). Operators are priced from labor in crews.</p></div>`}
+  if(d.book==='equipment'){const c=cbCost(d);return `<div class="cb-calc"><div><span>Total</span><b>${money2(c)}/hr</b></div><p class="hint">${cbD(d).own==='Rented'?'Rental rate':'Ownership rate'} + operating cost (fuel, repairs, wear). ${eqOpr(d)?` The operator (${esc(eqOpr(d).it.description)}) comes in as its own labor line.`:' Pick an operator below to bring one in with the machine.'}</p></div>`}
   if(d.book==='material'){const c=num(d.cost),w=num(cbD(d).waste)||0;return c!=null&&w?`<div class="cb-calc"><div><span>With ${fmtN(w,2)}% waste</span><b>${money2(c*(1+w/100))}/${esc(d.unit||'unit')}</b></div></div>`:''}
   return ''}
 function cbCrewHtml(d,dis){const C=cbCrew(d);const mem=cbD(d).members||[];
@@ -4847,6 +4913,7 @@ function cbParse(f,v,X){if(v==null)return '';if(typeof v==='string'){v=v.trim();
     case 'date':{const d=xDate(v,X);return d===null?undefined:d}
     case 'sel':{const t=normH(v);if(f.opts===CB_OWN){if(/rent|leas/.test(t))return 'Rented';if(/own|company|co/.test(t))return 'Owned';return undefined}
       const hit=f.opts.find(o=>normH(o)===t)||(/sub/.test(t)?'Subcontract':/truck|haul/.test(t)?'Trucking':/mat|perm|const/.test(t)?'Material':null);return hit||undefined}
+    case 'labor':{const t=normH(v);const L=cbList('labor').find(x=>normH(x.code)===t||normH(x.description)===t);return L?L.id:''}
     case 'vendor':{const t=normH(v);const vd=S.vendors.find(x=>normH(x.company)===t)||S.vendors.find(x=>t.length>3&&(normH(x.company).startsWith(t)||t.startsWith(normH(x.company))));return vd?vd.id:{miss:String(v)}}
     case 'unit':{const u=String(v).trim().replace(/\.$/,'');const A={each:'EA',ea:'EA',ft:'LF',lf:'LF',lft:'LF',tn:'TON',tons:'TON',ton:'TON',yd:'CY',cy:'CY',cuyd:'CY',sy:'SY',sqyd:'SY',sf:'SF',sqft:'SF',gal:'GAL',gals:'GAL',ls:'LS',lb:'LB',lbs:'LB',hr:'HR',hrs:'HR',load:'LOAD',loads:'LOAD',ac:'AC',acre:'AC',bag:'BAG',bags:'BAG',day:'DAY',roll:'ROLL'};return A[normH(u)]||u}
     default:return String(v).trim()}}
@@ -4980,7 +5047,7 @@ document.addEventListener('change',e=>{const t=e.target;const c=S.cb;
   if(t.dataset.cbbulk){let v=t.value;const k=t.dataset.cbbulk;if(!v)return;if(v==='__new'||v==='__newf'){v=(prompt(v==='__newf'?'New quote folder name':'New category name')||'').trim();if(!v){render();return}}if(v==='__none')v=null;cbBulkSet(k,v);return}
   if(M&&(M.kind==='cbitem'||M.kind==='cbtpl')&&t.dataset.cbe&&(t.type==='checkbox'||t.tagName==='SELECT'||t.type==='date')){const k=t.dataset.cbe;cbSet(M.draft,k,t.type==='checkbox'?t.checked:t.value||(k==='vendor_id'?null:''));renderModal();return}
   if(M&&M.kind==='cbitem'&&t.dataset.cbm&&t.tagName==='SELECT'){const [i]=t.dataset.cbm.split('.');M.draft.data.members[+i].id=t.value;renderModal();return}
-  if(M&&M.kind==='cbitem'&&t.dataset.cbmadd!=null){if(t.value){const mem=M.draft.data.members=M.draft.data.members||[];const ex=mem.find(m=>m.id===t.value);if(ex)ex.qty=(num(ex.qty)||0)+1;else mem.push({id:t.value,qty:1})}renderModal();return}
+  if(M&&M.kind==='cbitem'&&t.dataset.cbmadd!=null){if(t.value){const mem=M.draft.data.members=M.draft.data.members||[];const add=(id,q)=>{const ex=mem.find(m=>m.id===id);if(ex)ex.qty=(num(ex.qty)||0)+q;else mem.push({id,qty:q})};add(t.value,1);const op=eqOpr(cbById(t.value));if(op){add(op.it.id,op.qty);toast(`${op.it.description} added with it`)}}renderModal();return}
   if(M&&M.kind==='cbmass'&&t.dataset.cbmass&&(t.tagName==='SELECT'||t.type==='date')){M[t.dataset.cbmass]=t.value;if(t.dataset.cbmass==='field'){const f=CB_FIELDS[M.book].find(x=>x.k===t.value);if(f.t==='pct'&&M.op==='pct')M.op='add'}renderModal();return}
   if(M&&M.kind==='cbimp'){
     if(t.dataset.cbfile!=null){const file=t.files[0];if(!file)return;M.reading=true;M.error=null;renderModal();cbImpRead(file).then(()=>{M.reading=false;renderModal()}).catch(err=>{M.reading=false;M.error=errMsg(err);renderModal()});return}
@@ -5033,7 +5100,7 @@ function estDefaultsRaw(){const D=S.settings.est_settings||{};const sch=Array.is
   return {markup:{mode:'simple',oh:10,profit:10,compound:true,bond:0,tax:0,ret:5,spreadInd:'cost',spreadMu:'cost',byType:Object.fromEntries(MK_TYPES.map(k=>[k,{oh:10,mu:10}])),...(D.markup||{})},
     ind:Array.isArray(D.ind)?D.ind:IND_DEFAULT,schedules:sch,defSched:D.defSched||sch.find(s=>s.name==='5 × 10s')?.id||sch[0].id,crews:num(D.crews)||2}}
 function estBlank(){const D=estDefaultsRaw();const sched=D.schedules.find(s=>s.id===D.defSched)||D.schedules[0];
-  return {v:3,settings:{hpd:10,sched:clone(sched),crews:D.crews,durDays:null,rateFile:rfDefault()},markup:clone(D.markup),ind:D.ind.map(l=>({...l,id:newId(),qty:null})),items:[]}}
+  return {v:3,settings:{hpd:10,sched:clone(sched),crews:D.crews,durDays:null,rateFile:rfDefault(),eqRateFile:rfDefault('equipment')},markup:clone(D.markup),ind:D.ind.map(l=>({...l,id:newId(),qty:null})),items:[]}}
 
 /* ---------- calendar & overtime ---------- */
 function schedCalc(s){const h=(s&&Array.isArray(s.days)?s.days:[10,10,10,10,10,0,0]).map(x=>Math.max(0,num(x)||0));const H=h.reduce((a,b)=>a+b,0);const days=h.filter(x=>x>0).length;
@@ -5224,7 +5291,7 @@ function estResView(d,R){const map=new Map();const crews=new Map();
     ${[...crews.values()].sort((a,b)=>b.cost-a.cost).map(c=>`<tr><td>${esc(c.name)}</td><td class="r num">${fmtN(c.hrs,1)}</td><td class="r num">${fmtN(c.hrs/(num(d.settings.hpd)||10),1)}</td><td class="r num"><b>${money(c.cost)}</b></td></tr>`).join('')||'<tr><td colspan="4"><div class="empty">No crews used yet.</div></td></tr>'}</tbody></table></div>
     <div class="panel pad" style="margin-top:14px"><div class="est-isum"><div><span>Man-hours</span><b>${fmtN(R.mh,0)}</b></div><div><span>Labor</span><b>${money(R.c.labor)}</b></div><div><span>Equipment</span><b>${money(R.c.equipment)}</b></div></div></div></div></div>`}
 /* ---------- actions ---------- */
-function epAddRes(p,res){const ec=EC();const a=epGet(ec.root,p);a.res.push(res);ec.redraw();setTimeout(()=>{const i=a.res.length-1;const el=document.getElementById(epId(`${p}.res.${i}.${res.cb?'factor':'desc'}`));if(el){el.focus();el.select?.()}},0)}
+function epAddRes(p,res){const ec=EC();const a=epGet(ec.root,p);a.res.push(res);const op=res.cb&&eqOpr(cbById(res.cb));if(op){const lr=resFromCb(op.it);lr.factor=op.qty;lr.with=res.id;a.res.push(lr);toast(`${op.it.description} came in with ${res.desc}`)}ec.redraw();setTimeout(()=>{const i=a.res.length-1;const el=document.getElementById(epId(`${p}.res.${i}.${res.cb?'factor':'desc'}`));if(el){el.focus();el.select?.()}},0)}
 async function epToCodebook(p,k){const ec=EC();const src=epGet(ec.root,p);if(!src)return;const ctx=ec.ctx;
   try{let row;if(k==='activity'){const a=clone(src);a.id=newId();a.qty=null;a.res.forEach(r=>r.id=newId());const pi=p.split('.acts.')[0];const it=epGet(ec.root,pi);const q=actCalc(src,it?.qty,ctx).q||1;
       row=cbRow({...cbNew('activity'),code:src.code||'',description:src.desc||'Activity',data:{act:a,qty:q,unit:src.unit||it?.unit||''}})}
@@ -5581,7 +5648,7 @@ document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data||
    item.sec; d.sections sets the section order. Codes auto-number
    (400 / 410 / 410.10) and can be typed over.
    ===================================================================== */
-function estNorm(d){d=d&&typeof d==='object'?d:{};const old=!(d.v>=3),hadSched=!!(d.settings&&d.settings.sched),hadRF=!!(d.settings&&'rateFile' in d.settings);const b=estBlank();d.settings={...b.settings,...(d.settings||{})};if(!hadRF)d.settings.rateFile='';if(old&&!hadSched){d.settings.sched=null;d.settings.crews=d.settings.crews||1}d.markup={...b.markup,...(d.markup||{})};
+function estNorm(d){d=d&&typeof d==='object'?d:{};const old=!(d.v>=3),hadSched=!!(d.settings&&d.settings.sched),hadRF=!!(d.settings&&'rateFile' in d.settings),hadEQ=!!(d.settings&&'eqRateFile' in d.settings);const b=estBlank();d.settings={...b.settings,...(d.settings||{})};if(!hadRF)d.settings.rateFile='';if(!hadEQ)d.settings.eqRateFile='';if(old&&!hadSched){d.settings.sched=null;d.settings.crews=d.settings.crews||1}d.markup={...b.markup,...(d.markup||{})};
   d.markup.byType={...b.markup.byType,...(d.markup.byType||{})};MK_TYPES.forEach(k=>{d.markup.byType[k]={oh:null,mu:null,...(d.markup.byType[k]||{})}});d.ind=Array.isArray(d.ind)?d.ind:[];if(old&&!d.markup.mode)d.markup.mode='simple';d.items=Array.isArray(d.items)?d.items:[];
   d.items.forEach(it=>{it.acts=Array.isArray(it.acts)?it.acts:[];it.acts.forEach(a=>{a.res=Array.isArray(a.res)?a.res:[]})});
   // v1 → v2: items were grouped by their Scope text; that becomes the section
@@ -5616,7 +5683,7 @@ function estFromTpl(tpl){const D=cbD(tpl);const d=estNorm(clone(tpl.book==='sect
   const idm={};d.items.forEach(it=>{const nid=newId();idm[it.id]=nid;it.id=nid;it.acts.forEach(a=>{a.id=newId();a.res.forEach(r=>{r.id=newId();delete r.src})})});
   ['carry','adj'].forEach(k=>{const o=d.markup[k]||{};d.markup[k]=Object.fromEntries(Object.entries(o).filter(([id])=>idm[id]).map(([id,v])=>[idm[id],v]))});
   (d.ind||[]).forEach(l=>l.id=newId());estApplyStale(estStale(d));delete d.pkgs;delete d.prop;delete d.gantt;delete d.takeoff;return d}
-async function estCreate(mode,src){const b=byId(S.bids,S.est.bidId);if(!b)return;let d=estNorm(estBlank());S.est.pendRF=d.settings.rateFile;
+async function estCreate(mode,src){const b=byId(S.bids,S.est.bidId);if(!b)return;let d=estNorm(estBlank());S.est.pendRF=d.settings.rateFile;S.est.pendEQ=d.settings.eqRateFile;
   try{if(mode==='scopes'){scopeItems(b).forEach((s,k)=>d.sections.push({id:newId(),code:String((k+1)*100),name:s.name,notes:partsOf(s).length?'Includes '+partsOf(s).join(', '):''}))}
     if(mode==='copy'){if(!src)throw new Error('Pick an estimate to copy.');const r=await run(sb.from('estimates').select('data').eq('id',src).maybeSingle());if(!r)throw new Error('That estimate isn’t available.');d=estNorm(clone(r.data));delete d.prop}
     if(mode==='tpl'){const t=cbById(src);if(!t)throw new Error('Pick a master template.');d=estFromTpl(t)}
@@ -6139,7 +6206,7 @@ function pickAdd(ids){const E=S.est,d=E.data;const T=pickTarget(d);const book=M.
   else if(book==='section')items.forEach(tp=>{const D=estFromTpl(tp);D.sections.forEach(s=>{const ns=estAddSection(d,s,itemsOf(D,s.id));open.add(ns.id);last={t:'sec',id:ns.id}})});
   else if(book==='activity')items.forEach(tp=>{const src=cbD(tp).act;if(!src)return;const a=actFromTpl(src);a.code=estNextActCode(T.item);a.desc=tp.description||a.desc;if(!a.unit)a.unit=cbD(tp).unit||'';T.item.acts.push(a);open.add(T.item.id);open.add(T.item.sec);last={t:'act',id:a.id}});
   else if(book==='crew'){T.act.crew=crewSnap(items[0]);last={t:'act',id:T.act.id}}
-  else items.forEach(x=>{T.act.res.push(resFromCb(x));last={t:'act',id:T.act.id}});
+  else items.forEach(x=>{const r=resFromCb(x);T.act.res.push(r);const op=eqOpr(x);if(op){const lr=resFromCb(op.it);lr.factor=op.qty;lr.with=r.id;T.act.res.push(lr)}last={t:'act',id:T.act.id}});
   estOpenSave();if(last)E.sel=last;closeModal();estTouch();render();toast(`Added ${items.length} from the ${PICK_TABS.find(t=>t[0]===book)[1].toLowerCase()} codebook`)}
 FOCUS_ATTRS.push('data-pickq2');
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;
@@ -8880,6 +8947,7 @@ function estInfoView(d,b,ro){const I=estInfo(d,b);const dis=ro?' disabled':'';co
       <label class="f">Plan rev. date${dt('info.planRev',I.planRev)}</label><label class="f">Plan rev. note${epIn('info.planRevNote',I.planRevNote)}</label><label class="f">Est. start date${dt('info.start',I.start)}</label><label class="f">Est. completion date${dt('info.finish',I.finish)}</label>
       ${fixed('Project status',b.status||'')}${fixed('Pay item database','Codebook · Bid items')}
       <label class="f s2">Labor rate file<select class="field" data-estrf${dis}>${[['','Codebook rates'],...rfAll().map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${(rfGet((d.settings||{}).rateFile)?d.settings.rateFile:'')===v?' selected':''}>${esc(l)}</option>`).join('')}</select></label>
+      <label class="f s2">Equipment rate file<select class="field" data-estrfe${dis}>${[['','Codebook rates'],...rfAll('equipment').map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${(rfGet((d.settings||{}).eqRateFile)?d.settings.eqRateFile:'')===v?' selected':''}>${esc(l)}</option>`).join('')}</select></label>
       <label class="f s4">Project notes<textarea class="field" id="${epId('info.notes')}" data-ep="info.notes" rows="4"${dis}>${esc(I.notes||'')}</textarea></label></div>
       <p class="hint">Bid date, estimator and status come from the bid. Change them on the bid itself.</p></fieldset>
     <div class="info-parties">${INFO_PARTIES.map(party).join('')}</div>
@@ -8887,9 +8955,9 @@ function estInfoView(d,b,ro){const I=estInfo(d,b);const dis=ro?' disabled':'';co
       <label class="f s4">Address notes<textarea class="field" id="${epId('info.addr.notes')}" data-ep="info.addr.notes" rows="2"${dis}>${esc(I.addr.notes||'')}</textarea></label></div></fieldset></div>`}
 // picking a company from Contacts fills in what Contacts knows; picking one of its people fills their phone and email
 document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data||S.view!=='estimate'||EC().ro)return;const d=S.est.data;
-  if(t.dataset.estrf!=null){d.settings=d.settings||{};d.settings.rateFile=t.value||'';
-    const L=estStale(d).filter(x=>x.crew||(x.r&&cbById(x.r.cb)?.book==='labor'));estApplyStale(L);estTouch();render();
-    const nr=L.filter(x=>!x.crew).length,nc=L.filter(x=>x.crew).length;toast(`Labor priced from ${rfName(d.settings.rateFile)}${L.length?` · ${[nr?`${nr} labor line${nr===1?'':'s'}`:'',nc?`${nc} crew${nc===1?'':'s'}`:''].filter(Boolean).join(' and ')} updated`:''}`);return}
+  if(t.dataset.estrf!=null||t.dataset.estrfe!=null){const bk=t.dataset.estrfe!=null?'equipment':'labor';d.settings=d.settings||{};d.settings[rfSetKey(bk)]=t.value||'';
+    const L=estStale(d).filter(x=>x.crew||(x.r&&cbById(x.r.cb)?.book===bk));estApplyStale(L);estTouch();render();
+    const nr=L.filter(x=>!x.crew).length,nc=L.filter(x=>x.crew).length;toast(`${bk==='equipment'?'Equipment':'Labor'} priced from ${rfName(d.settings[rfSetKey(bk)])}${L.length?` · ${[nr?`${nr} ${bk==='equipment'?'equipment':'labor'} line${nr===1?'':'s'}`:'',nc?`${nc} crew${nc===1?'':'s'}`:''].filter(Boolean).join(' and ')} updated`:''}`);return}
   if(t.dataset.infoparty){const P=estInfo(d,{})[t.dataset.infoparty];const c=infoClient(t.value);if(c){P.name=c.company;if(c.address&&!P.address)P.address=c.address;if(c.phone&&!P.phone)P.phone=c.phone;if(c.email&&!P.email)P.email=c.email;const one=(c.contacts||[])[0];if(one&&!P.contact&&(c.contacts||[]).length===1){P.contact=one.name||'';if(one.phone&&!P.mobile)P.mobile=one.phone;if(one.email&&!P.email)P.email=one.email}}estTouch();render();return}
   if(t.dataset.infocontact){const P=estInfo(d,{})[t.dataset.infocontact];const c=infoClient(P.name);const x=c&&(c.contacts||[]).find(o=>normH(o.name)===normH(t.value));if(x){if(x.phone)P.mobile=x.phone;if(x.email)P.email=x.email;estTouch();render()}}});
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
