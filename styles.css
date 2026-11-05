@@ -3052,3 +3052,4 @@ div.tw-pgh{cursor:default}
 .apk-it.on{background:var(--sel,rgba(60,120,80,.10))}
 .apk-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
 @media (max-width:700px){.apk-it{grid-template-columns:22px 1fr 90px}.apk-it>span:nth-child(2),.apk-it>span:nth-child(4){display:none}}
+.tps-sum{margin:0 0 10px 18px}.tps-log{max-height:300px;overflow:auto;border:1px solid var(--line,#ddd);border-radius:8px;padding:8px 10px;line-height:1.6}
