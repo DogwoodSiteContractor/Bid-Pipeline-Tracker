@@ -4587,7 +4587,7 @@ function vCb(){
   const missing=S.tableErr&&S.tableErr.codebook;
   const empty=missing?'':`<div class="empty"><b>${all.length?`No ${Label.toLowerCase()} match`:`No ${Label.toLowerCase()} yet`}</b>${all.length?'Try another search or filter.':admin?(bk==='crew'?'Add labor and equipment first, then build crews from them.':CB_TPL.has(bk)?`Build one here, or save one from an estimate with <b>→ Codebook</b>.`:`Add them one at a time, or bring in your list with <b>Import from Excel</b>.`):'An admin sets these up.'}</div>`;
   return `<div class="head"><div><h1>Codebooks</h1><p>The materials, labor, equipment and crews your estimates are built from${admin?'':' · view only'}</p></div>
-    <div class="tools">${admin?'<button class="btn" data-act="pe-open" title="Bring in ProEstimate exports: materials, labor, equipment, crews, and the master project with its pay items and activities">Import from ProEstimate</button>':''}${admin&&CB_IMPORTABLE.has(bk)?'<button class="btn" data-act="cb-imp">Import from Excel</button>':''}<button class="btn" data-act="cb-export">Export to Excel</button>${admin?`<button class="btn primary" data-act="cb-new">+ Add ${esc(one)}</button>`:''}</div></div>
+    <div class="tools">${admin?'<button class="btn" data-act="pe-open" title="Bring in ProEstimate exports: materials, labor, equipment, crews, and the master project with its pay items and activities">Import from ProEstimate</button>':''}${admin&&CB_IMPORTABLE.has(bk)?'<button class="btn" data-act="cb-imp">Import from Excel</button>':''}${admin&&CB_TPL.has(bk)?`<button class="btn" data-act="cb-tplref" title="Re-price every ${bk==='activity'?'activity':'bid item'} from today’s crews, labor, equipment, materials and subs">↻ Refresh prices</button>`:''}<button class="btn" data-act="cb-export">Export to Excel</button>${admin?`<button class="btn primary" data-act="cb-new">+ Add ${esc(one)}</button>`:''}</div></div>
   ${missing?`<div class="notice"><b>One setup step:</b> run <b>update-13-codebooks.sql</b> in Supabase (SQL Editor → New query → paste → Run), then refresh this page.</div>`:''}
   ${tabs}
   <div class="bar cb-bar"><input id="q-cb" class="field search" data-q="cb" placeholder="Search ${esc(Label.toLowerCase())}" value="${esc(S.q.cb||'')}">
@@ -4786,6 +4786,14 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
     catch(er){M.busy=false;renderModal();toast(cbErr(er))}}});
 document.addEventListener('input',e=>{const t=e.target;if(!M||M.kind!=='rfnew')return;if(t.dataset.rfn!=null)M.name=t.value;if(t.dataset.rff!=null)M.from=t.value});
 document.addEventListener('change',e=>{const t=e.target;if(M&&M.kind==='rfnew'&&t.dataset.rff!=null)M.from=t.value});
+
+// re-price every activity or bid item template from the codebook as it is today (crews, labor, equipment, materials, subs)
+async function cbTplRefresh(book){const L=cbList(book);let n=0;const rows=[];
+  L.forEach(x=>{const y=clone(x);y.data=cbD(y);const st=estStale(y.data);if(!st.length)return;estApplyStale(st);n+=st.length;y.updated_at=new Date().toISOString();rows.push(cbRow(y))});
+  if(!rows.length){toast(`Every ${book==='activity'?'activity':'bid item'} is already priced from today’s codebook`);return}
+  try{toast(`Re-pricing ${rows.length}…`);await cbUpsert(rows);await loadTable('codebook');render();toast(`${rows.length} ${book==='activity'?'activit'+(rows.length===1?'y':'ies'):'bid item'+(rows.length===1?'':'s')} re-priced (${n} line${n===1?'':'s'})`)}
+  catch(e){toast(cbErr(e))}}
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act=cb-tplref]');if(t&&cbEditable()){t.disabled=true;cbTplRefresh(S.cb.book).finally(()=>{t.disabled=false})}});
 
 /* ---------- item editor ---------- */
 function cbNew(book){const c=S.cb;const d={id:newId(),book,code:'',description:'',category:c.cat||'',unit:MATL(book)?'':'HR',cost:null,data:{},vendor_id:MATL(book)&&c.vendor&&c.vendor!=='none'?c.vendor:null,price_date:todayStr(),price_history:[],active:true,notes:''};
