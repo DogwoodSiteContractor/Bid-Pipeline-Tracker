@@ -5958,7 +5958,7 @@ async function estTplSave(){const x=M;const E=S.est,d=E.data;if(!String(x.name||
 
 /* ---------- Estimates page ---------- */
 // Estimates page tabs: the list, master templates, and (admins) the bid-building settings
-function estsTabs(on){return `<div class="subnav">${[...(can('estimates')?[['list','Estimates'],['tw','Takeoff']]:[]),...(can('estimates')||can('codebook')?[['tpl','Master templates']]:[]),...(can('estimates')?[['hist','Cost history']]:[]),...(can('codebook')?[['cb','Codebooks']]:[]),...(can('codebook','edit')?[['scopes','Scopes & templates'],['set','Bid settings']]:[])].map(([k,l])=>`<button class="${on===k?'on':''}" data-act="ests-tab" data-v="${k}">${l}</button>`).join('')}</div>`}
+function estsTabs(on){return `<div class="subnav">${[...(can('estimates')?[['list','Estimates'],...(isDev()?[['tw','🔧 Takeoff']]:[])]:[]),...(can('estimates')||can('codebook')?[['tpl','Master templates']]:[]),...(can('estimates')?[['hist','Cost history']]:[]),...(can('codebook')?[['cb','Codebooks']]:[]),...(can('codebook','edit')?[['scopes','Scopes & templates'],['set','Bid settings']]:[])].map(([k,l])=>`<button class="${on===k?'on':''}" data-act="ests-tab" data-v="${k}">${l}</button>`).join('')}</div>`}
 const estsTabFor=()=>({estimates:S.estsTab==='tpl'?'tpl':S.estsTab==='hist'?'hist':'list',settings:'set',cb:'cb',scopes:'scopes',tw:S.twBid&&!byId(S.bids,S.twBid)?undefined:'tw'})[S.view];
 function vEstimates(){const tab=S.estsTab||'list';const canNew=can('bids','edit')&&can('estimates','edit');
   const tabs='';
