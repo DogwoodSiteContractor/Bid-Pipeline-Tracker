@@ -3041,3 +3041,14 @@ div.tw-pgh{cursor:default}
 .rfi-bur .rfi-chk{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 10px;border:1px solid var(--line,#ddd);border-radius:8px;margin-top:4px}
 .rfi-prev{max-height:340px;margin-top:8px}
 .cb-mrow.cb-notin select{border-color:var(--warn,#c9a227)}
+/* activity: pick costs from a codebook */
+.apk-btns{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px}
+.apk{padding:10px 12px;margin:4px 0 8px}
+.apk-top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.apk-top #apk-q{flex:1;min-width:220px}
+.apk-list{max-height:320px;overflow:auto;border:1px solid var(--line,#ddd);border-radius:8px}
+.apk-it{display:grid;grid-template-columns:22px 90px 1fr 150px 120px;gap:8px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--line,#eee);cursor:pointer;font-size:13px}
+.apk-it:hover{background:var(--hover,rgba(0,0,0,.03))}
+.apk-it.on{background:var(--sel,rgba(60,120,80,.10))}
+.apk-foot{display:flex;justify-content:flex-end;gap:8px;margin-top:8px}
+@media (max-width:700px){.apk-it{grid-template-columns:22px 1fr 90px}.apk-it>span:nth-child(2),.apk-it>span:nth-child(4){display:none}}
