@@ -4598,11 +4598,76 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   if(a==='rf-go'&&M&&M.kind==='rfnew'){const name=String(M.name||'').trim();if(!name){toast('Give it a name');return}if(rfAll().some(x=>normH(x.name)===normH(name))){toast('A rate file with that name already exists');return}
     const src=rfGet(M.from);const rates={};cbList('labor').forEach(x=>{const d=rfData(x,src?src.id:'');const o={};RF_FIELDS.forEach(([k])=>{if(d[k]!=null&&d[k]!=='')o[k]=num(d[k])});if(Object.keys(o).length)rates[x.id]=o});
     const st=rfState();const id=newId();st.files.push({id,name,rates,updated_at:new Date().toISOString(),by:myName()});const fromName=rfName(M.from);closeModal();S.cb.rf=id;rfSave(st,true);toast(`${name} created from ${fromName}`);return}});
-function rfNewModal(){return mhead('New rate file','A full set of labor rates an estimate can use')+`<div class="mbody">
+function rfNewModal(){const imp=M.mode==='imp';
+  return mhead('New rate file','A full set of labor rates an estimate can use')+`<div class="mbody">
+  <div class="seg" style="margin-bottom:12px"><button class="${imp?'':'on'}" data-act="rfm" data-v="copy">Copy an existing file</button><button class="${imp?'on':''}" data-act="rfm" data-v="imp">⬆ Import a file</button></div>
   <label class="f">Name<input class="field" data-rfn value="${esc(M.name||'')}" placeholder="e.g. 2026 Night Work Labor" autofocus></label>
-  <label class="f">Start from<select class="field" data-rff>${[['','Codebook rates'],...rfAll().map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${M.from===v?' selected':''}>${esc(l)}</option>`).join('')}</select></label>
-  <p class="hint">It copies every craft's rates from that file. Then change only the ones that differ.</p></div>
-  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="rf-go">Create rate file</button></div></div>`}
+  ${imp?rfImpBody():`<label class="f">Start from<select class="field" data-rff>${[['','Codebook rates'],...rfAll().map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${M.from===v?' selected':''}>${esc(l)}</option>`).join('')}</select></label>
+  <p class="hint">It copies every craft's rates from that file. Then change only the ones that differ.</p>`}</div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button>${imp?`<button class="btn primary" data-act="rf-imp-go"${M.imp&&M.imp.rows.length&&!M.busy?'':' disabled'}>${M.busy?'Importing…':'Import rate file'}</button>`:'<button class="btn primary" data-act="rf-go">Create rate file</button>'}</div></div>`}
+/* importing a rate file: Excel or CSV, one row per craft. Columns are found by their headers and can be changed. */
+const RFI_COLS=[['code','Code'],['name','Craft / description'],['base','Base $/hr'],['fringe','Fringe $/hr'],['burden','Burden % (adds up every column picked)'],['ot','OT (factor, or OT $/hr)']];
+function rfiGuess(H){const g={code:-1,name:-1,base:-1,fringe:-1,burden:[],ot:-1};const h=H.map(x=>String(x||'').toLowerCase().trim());
+  h.forEach((t,i)=>{if(!t)return;
+    if(g.code<0&&/\bcode\b|craft ?id|class(ification)? ?(code|#)|labor ?id/.test(t))g.code=i;
+    else if(g.name<0&&/desc|craft|classification|trade|labor|name|position/.test(t)&&!/rate|\$|%/.test(t))g.name=i;
+    else if(/\b(ot|overtime)\b/.test(t)){if(g.ot<0)g.ot=i}
+    else if(g.base<0&&/base|wage|straight|\bst\b|hourly|pay ?rate|^rate$/.test(t)&&!/total|loaded|burden|%/.test(t))g.base=i;
+    else if(g.fringe<0&&/fringe|benefit \$|h&w|health|pension/.test(t)&&!/%/.test(t))g.fringe=i;
+    else if(/%|pct|percent|tax|fica|futa|suta|insur|comp|burden|liab/.test(t)&&!/total|loaded/.test(t))g.burden.push(i)});
+  return g}
+function rfiRows(){const I=M.imp;if(!I)return [];const rows=I.data.slice(I.hdr+1);const C=I.col;const cell=(r,i)=>i>=0?r[i]:'';
+  const n=v=>{const x=num(String(v??'').replace(/[$,%\s]/g,''));return x};
+  // percent columns given as fractions (0.0765) become percents (7.65)
+  const frac=new Set(C.burden.filter(i=>{const vs=rows.map(r=>n(r[i])).filter(v=>v);return vs.length&&vs.every(v=>Math.abs(v)<=1)}));
+  const otDollar=C.ot>=0&&(()=>{const vs=rows.map(r=>n(r[C.ot])).filter(v=>v);return vs.length&&vs.some(v=>v>4)})();
+  const labor=cbList('labor');
+  return rows.map(r=>{const code=String(cell(r,C.code)??'').trim(),name=String(cell(r,C.name)??'').trim();const base=n(cell(r,C.base));
+    if(!name&&!code||base==null)return null;
+    const fringe=n(cell(r,C.fringe));const burden=C.burden.length?C.burden.reduce((s,i)=>s+(n(r[i])||0)*(frac.has(i)?100:1),0):null;
+    let ot=C.ot>=0?n(r[C.ot]):null;if(ot!=null&&otDollar)ot=base?+(ot/base).toFixed(3):null;
+    const hit=(code&&labor.find(x=>normH(x.code)===normH(code)))||(name&&labor.find(x=>normH(x.description)===normH(name)))||null;
+    return {code,name:name||code,base,fringe,burden:burden!=null?+burden.toFixed(3):null,ot,hit}}).filter(Boolean)}
+function rfImpBody(){const I=M.imp;
+  if(!I)return `<label class="f">Rate file (Excel or CSV)<input type="file" class="field" data-rfifile accept=".xlsx,.xls,.csv"></label>
+    ${M.reading?'<p class="hint">Reading…</p>':''}${M.error?`<div class="notice">${esc(M.error)}</div>`:''}
+    <p class="hint">One row per craft with its base rate. Fringe, burden or tax percentages, and OT columns come in too if the file has them. A ProEstimate rate file export works as is.</p>`;
+  const H=I.data[I.hdr]||[];const opts=(v,multi)=>`<option value="-1">${multi?'—':'Not in file'}</option>`+H.map((h,i)=>`<option value="${i}"${(multi?v.includes(i):v===i)?' selected':''}>${esc(String(h||'Column '+(i+1)))}</option>`).join('');
+  const R=rfiRows();I.rows=R;const nNew=R.filter(r=>!r.hit).length;
+  return `<div class="small dim" style="margin:-4px 0 8px">${esc(I.file)}${I.names.length>1?` · sheet <select class="field sm" data-rfisheet>${I.names.map(n=>`<option${n===I.sheet?' selected':''}>${esc(n)}</option>`).join('')}</select>`:''} · <button class="linkbtn" data-act="rfi-reset">Pick a different file</button></div>
+    <div class="fg rfi-map">${RFI_COLS.map(([k,l])=>k==='burden'?`<div class="f s4 rfi-bur"><span>${l}</span><div class="rfi-chk">${H.map((h,i)=>String(h||'').trim()&&![I.col.code,I.col.name,I.col.base,I.col.fringe,I.col.ot].includes(i)?`<label class="check small"><input type="checkbox" data-rfib="${i}"${I.col.burden.includes(i)?' checked':''}> ${esc(String(h))}</label>`:'').join('')||'<span class="small dim">No other columns</span>'}</div></div>`:`<label class="f">${l}<select class="field" data-rfic="${k}">${opts(I.col[k])}</select></label>`).join('')}
+    <label class="f">Header row<input class="field num" type="number" min="1" data-rfihdr value="${I.hdr+1}"></label></div>
+    ${R.length?`<div class="scroll rfi-prev"><table class="rp-tbl"><thead><tr><th>Craft</th><th>In codebook</th><th class="r">Base</th><th class="r">Fringe</th><th class="r">Burden %</th><th class="r">OT</th><th class="r">Loaded ST</th></tr></thead><tbody>${R.slice(0,200).map(r=>{const L=cbLabor({base:r.base,fringe:r.fringe,burden:r.burden,ot:r.ot})||{};return `<tr><td><b>${esc(r.name)}</b>${r.code?` <span class="small dim">${esc(r.code)}</span>`:''}</td><td>${r.hit?pill('Matched','good'):pill('New craft')}</td><td class="r num">${money2(r.base)}</td><td class="r num">${r.fringe!=null?money2(r.fringe):'—'}</td><td class="r num">${r.burden!=null?fmtN(r.burden,2)+'%':'—'}</td><td class="r num">${r.ot!=null?r.ot:'1.5'}</td><td class="r num"><b>${L.st!=null?money2(L.st):'—'}</b></td></tr>`}).join('')}</tbody></table></div>
+    <p class="hint">${R.length} craft${R.length===1?'':'s'} found.${nNew?` <b>${nNew}</b> ${nNew===1?'isn’t':'aren’t'} in the labor codebook yet and will be added to it with these rates.`:' Every craft matched one in the codebook.'}</p>`
+    :`<div class="notice">No crafts found yet. Check that Craft and Base point at the right columns, and the header row is right.</div>`}`}
+async function rfiRead(file){const X=await loadXLSX();const wb=X.read(await file.arrayBuffer(),{type:'array'});const sheets={};
+  wb.SheetNames.forEach(n=>{const rows=X.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''});if(rows.some(r=>r.some(c=>String(c).trim()!=='')))sheets[n]=rows});
+  const names=Object.keys(sheets);if(!names.length)throw new Error('That file doesn’t have anything in it.');
+  M.imp={file:file.name,sheets,names};rfiSheet(names[0]);
+  if(!String(M.name||'').trim()){const I=M.imp;const t=I.data.slice(0,I.hdr).map(r=>r.filter(c=>String(c).trim()!=='')).find(r=>r.length===1&&typeof r[0]==='string'&&r[0].trim().length>2);M.name=(t?t[0]:file.name.replace(/\.[^.]+$/,'').replace(/[_]+/g,' ')).trim()}}
+function rfiSheet(n){const I=M.imp;I.sheet=n;I.data=I.sheets[n];
+  // the header is the row (in the first 20) with the most cells that look like rate-file headings
+  const score=r=>r.filter(c=>{const x=String(c).toLowerCase().trim();return x&&x.length<40&&/base|wage|rate|desc|craft|class|trade|labor|code|fringe|tax|insur|burden|\bot\b|overtime|%/.test(x)}).length;
+  let h=0,best=0;I.data.slice(0,20).forEach((r,i)=>{const sc=score(r);if(sc>best){best=sc;h=i}});I.hdr=h;I.col=rfiGuess(I.data[h]||[])}
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='rfnew')return;
+  if(t.dataset.rfifile!=null){const file=t.files[0];if(!file)return;M.reading=true;M.error=null;renderModal();rfiRead(file).then(()=>{M.reading=false;renderModal()}).catch(err=>{M.reading=false;M.error=errMsg(err);renderModal()});return}
+  if(t.dataset.rfisheet!=null){rfiSheet(t.value);renderModal();return}
+  if(t.dataset.rfihdr!=null){const v=Math.max(1,parseInt(t.value)||1)-1;M.imp.hdr=Math.min(v,M.imp.data.length-1);M.imp.col=rfiGuess(M.imp.data[M.imp.hdr]||[]);renderModal();return}
+  if(t.dataset.rfib!=null){const i=+t.dataset.rfib;const B=new Set(M.imp.col.burden);t.checked?B.add(i):B.delete(i);M.imp.col.burden=[...B].sort((a,b)=>a-b);renderModal();return}
+  if(t.dataset.rfic!=null){M.imp.col[t.dataset.rfic]=+t.value;renderModal()}});
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='rfnew')return;const a=t.dataset.act;
+  if(a==='rfm'){M.mode=t.dataset.v;renderModal();return}
+  if(a==='rfi-reset'){M.imp=null;renderModal();return}
+  if(a==='rf-imp-go'){const name=String(M.name||'').trim();if(!name){toast('Give it a name');return}if(rfAll().some(x=>normH(x.name)===normH(name))){toast('A rate file with that name already exists');return}
+    const R=rfiRows();if(!R.length)return;M.busy=true;renderModal();
+    try{const add=[];const rates={};const nf=v=>v==null?null:v;
+      for(const r of R){let id=r.hit&&r.hit.id;
+        if(!id){const it={id:newId(),book:'labor',code:r.code||'',description:r.name,category:'',unit:'HR',cost:null,data:{base:r.base,fringe:nf(r.fringe),burden:nf(r.burden),ot:r.ot??1.5},vendor_id:null,price_date:todayStr(),price_history:[],active:true,notes:`Added from rate file ${name}`};add.push(it);id=it.id}
+        const o={base:r.base};if(r.fringe!=null)o.fringe=r.fringe;if(r.burden!=null)o.burden=r.burden;o.ot=r.ot??1.5;rates[id]=o}
+      if(add.length){await cbUpsert(add.map(cbRow));await loadTable('codebook')}
+      const st=rfState();const id=newId();st.files.push({id,name,rates,updated_at:new Date().toISOString(),by:myName(),src:M.imp.file});
+      closeModal();S.cb.book='labor';S.cb.rf=id;await rfSave(st,true);toast(`${name} imported · ${R.length} craft${R.length===1?'':'s'}${add.length?`, ${add.length} added to the labor codebook`:''}`)}
+    catch(er){M.busy=false;renderModal();toast(cbErr(er))}}});
 document.addEventListener('input',e=>{const t=e.target;if(!M||M.kind!=='rfnew')return;if(t.dataset.rfn!=null)M.name=t.value;if(t.dataset.rff!=null)M.from=t.value});
 document.addEventListener('change',e=>{const t=e.target;if(M&&M.kind==='rfnew'&&t.dataset.rff!=null)M.from=t.value});
 
