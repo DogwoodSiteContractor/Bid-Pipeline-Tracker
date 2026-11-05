@@ -6004,7 +6004,7 @@ function estBuildView(d,R,ro){const E=S.est;if(!E.tpl&&!S.ch.rows&&can('estimate
         <td class="r num">${money(x.total)}</td><td class="r num">${x.q?money2(x.unitPrice):''}</td><td class="r num"><b>${money(x.price)}</b></td><td class="eo-more">${dots('item',it.id)}</td></tr>`;
       if(!io)return;
       it.acts.forEach((a,j)=>{const ar=x.acts[j];const ap=`${ip}.acts.${j}`;
-        rows+=`<tr class="eo-act${sel.id===a.id?' sel':''}" data-act="eo-sel" data-t="act" data-id="${a.id}"><td class="eo-code">${g(ap+'.code',a.code,'code',{cls:'eo-c',aria:'Activity code'})}</td>
+        rows+=`<tr class="eo-act${sel.id===a.id?' sel':''}" data-act="eo-sel" data-t="act" data-id="${a.id}"><td class="eo-code">${ro?'':'<span class="eo-grip" title="Drag onto another bid item to copy this activity there">⠿</span>'}${g(ap+'.code',a.code,'code',{cls:'eo-c',aria:'Activity code'})}</td>
           <td class="eo-dc">${g(ap+'.desc',a.desc,'desc',{cls:'eo-d',ph:'Activity',aria:'Activity description'})}</td><td>${g(ap+'.qty',a.qty,'qty',{n:1,cls:'eo-q',ph:it.qty!=null&&it.qty!==''?qtyFmt(it.qty):'',aria:'Activity quantity'})}</td>
           <td>${g(ap+'.unit',a.unit,'unit',{cls:'eo-u',ph:it.unit||'',list:'cb-units',aria:'Unit'})}</td><td class="r num">${money(ar.total)}</td><td class="r num small dim">${ar.q?money2(ar.unit):''}</td><td class="r num small dim">${ar.hrs?fmtN(ar.hrs,1)+' hr':''}</td><td class="eo-more">${dots('act',a.id)}</td></tr>`})})});
   const secT=cbList('section').filter(t=>t.active!==false).sort((a,c)=>String(a.description).localeCompare(c.description));
@@ -6079,7 +6079,7 @@ function estCtxMenu(d){const c=S.est&&S.est.ctx;if(!c)return '';const ro=EC().ro
   const del=c.arm?it('del','Click again to delete','danger-t arm'):it('del','Delete…','danger-t');
   const items=c.t==='sec'?[it('additem','+ Bid item'),it('dup','Duplicate section'),it('up','Move up'),it('down','Move down'),admin?it('tpl','Save as section template'):'',del]
     :c.t==='item'&&c.mv?[`<div class="eo-ctx-h">Move to section</div>`,...d.sections.map(s=>{const cur=(d.items.find(i=>i.id===c.id)||{}).sec===s.id;return `<button data-act="eo-mvsec" data-v="${s.id}"${cur?' disabled':''}>${esc((s.code?s.code+' · ':'')+(s.name||'Untitled section'))}${cur?' <span class="dim small">(here now)</span>':''}</button>`}),`<button data-act="eo-mvback">‹ Back</button>`]
-    :c.t==='item'?[it('addact','+ Activity'),it('dup','Duplicate'),it('up','Move up'),it('down','Move down'),d.sections.length>1?`<button data-act="eo-mvopen">Move to another section ›</button>`:'',it('alt',(()=>{const x=d.items.find(i=>i.id===c.id);return x&&x.alt?'Not an alternate':'Make it an alternate'})()),admin?it('tocb','Save to bid item codebook'):'',del]
+    :c.t==='item'?[it('addact','+ New activity (not from the codebook)'),it('addactcb','+ Activity from the codebook…'),it('dup','Duplicate'),it('up','Move up'),it('down','Move down'),d.sections.length>1?`<button data-act="eo-mvopen">Move to another section ›</button>`:'',it('alt',(()=>{const x=d.items.find(i=>i.id===c.id);return x&&x.alt?'Not an alternate':'Make it an alternate'})()),admin?it('tocb','Save to bid item codebook'):'',del]
     :[it('dup','Duplicate'),it('up','Move up'),it('down','Move down'),admin?it('tocb','Save to activity codebook'):'',del];
   return `<div class="eo-ctx" id="eo-ctx" style="left:${Math.min(c.x,window.innerWidth-230)}px;top:${Math.min(c.y,window.innerHeight-300)}px">${items.join('')}</div>`}
 function estFind(d,t,id){if(t==='sec'){const k=d.sections.findIndex(s=>s.id===id);return k<0?null:{k,o:d.sections[k]}}
@@ -6088,6 +6088,7 @@ function estFind(d,t,id){if(t==='sec'){const k=d.sections.findIndex(s=>s.id===id
 function estOp(op,t,id){const E=S.est,d=E.data;const f=estFind(d,t,id);if(!f)return;const open=estOpenSet();
   const sel=(tt,ii)=>{E.sel={t:tt,id:ii}};
   if(op==='additem'){const it=estAddItem(d,id);open.add(id);sel('item',it.id);estOpenSave();focusSoon(`items.${d.items.indexOf(it)}.desc`)}
+  else if(op==='addactcb'){sel('item',id);open.add(id);open.add(f.o.sec);estOpenSave();render();setTimeout(()=>pickOpen('activity'),0);return}
   else if(op==='addact'){const it=f.o;const a=estNewAct({code:estNextActCode(it),unit:''});it.acts.push(a);open.add(it.id);open.add(it.sec);sel('act',a.id);estOpenSave();focusSoon(`items.${f.i}.acts.${it.acts.length-1}.desc`)}
   else if(op==='dup'){if(t==='sec'){const s=estAddSection(d,{name:f.o.name+' (copy)',notes:f.o.notes},itemsOf(d,f.o.id),f.k);open.add(s.id);sel('sec',s.id)}
     else if(t==='item'){const c=clone(f.o);c.id=newId();c.code=estNextItemCode(d,c.sec);c.acts.forEach(a=>{a.id=newId();a.res.forEach(r=>r.id=newId())});d.items.splice(f.i+1,0,c);sel('item',c.id)}
@@ -6226,6 +6227,20 @@ document.addEventListener('click',e=>{
   }});
 document.addEventListener('contextmenu',e=>{const tr=e.target.closest('tr[data-act=eo-sel]');if(!tr||!S.est||EC().ro)return;if(e.target.tagName==='INPUT'&&e.target.selectionStart!==e.target.selectionEnd)return; // keep the normal copy/paste menu when text is selected
   e.preventDefault();S.est.ctx={x:e.clientX,y:e.clientY,t:tr.dataset.t,id:tr.dataset.id};S.est.sel={t:tr.dataset.t,id:tr.dataset.id};render()});
+// drag an activity onto a bid item (or onto one of its activities) to copy it there
+(()=>{let drag=null;const ok=()=>S.est&&S.view==='estimate'&&!EC().ro;const clear=()=>document.querySelectorAll('.eo-drop-c,.eo-dragging').forEach(x=>x.classList.remove('eo-drop-c','eo-dragging'));
+  document.addEventListener('mousedown',e=>{const tr=e.target.closest?.('tr.eo-act[data-act=eo-sel]');if(!tr||!ok())return;tr.draggable=!e.target.closest('input,select,textarea')});
+  document.addEventListener('dragstart',e=>{const tr=e.target.closest?.('tr.eo-act[data-act=eo-sel]');if(!tr||!ok())return;drag=tr.dataset.id;tr.classList.add('eo-dragging');e.dataTransfer.effectAllowed='copy';try{e.dataTransfer.setData('text/plain','act:'+drag)}catch(_){}});
+  const target=e=>drag&&e.target.closest?.('tr.eo-item[data-act=eo-sel],tr.eo-act[data-act=eo-sel]');
+  document.addEventListener('dragover',e=>{const tr=target(e);if(!tr||tr.dataset.id===drag)return;e.preventDefault();e.dataTransfer.dropEffect='copy';if(!tr.classList.contains('eo-drop-c')){document.querySelectorAll('.eo-drop-c').forEach(x=>x.classList.remove('eo-drop-c'));tr.classList.add('eo-drop-c')}});
+  document.addEventListener('drop',e=>{const tr=target(e);if(!tr)return;e.preventDefault();e.stopPropagation();const d=S.est.data,id=drag;drag=null;clear();
+    const src=estFind(d,'act',id);if(!src)return;let it,at;
+    if(tr.dataset.t==='item'){it=d.items.find(i=>i.id===tr.dataset.id);at=it?it.acts.length:0}else{const f=estFind(d,'act',tr.dataset.id);if(!f)return;it=f.it;at=f.j+1}
+    if(!it)return;const c=clone(src.o);c.id=newId();const ids={};(c.res||[]).forEach(r=>{const n=newId();ids[r.id]=n;r.id=n});(c.res||[]).forEach(r=>{if(r.with&&ids[r.with])r.with=ids[r.with]});
+    c.code=estNextActCode(it);if(it===src.it)c.desc=(c.desc||'')+' (copy)';it.acts=it.acts||[];it.acts.splice(at,0,c);
+    estOpenSet().add(it.id);estOpenSet().add(it.sec);estOpenSave();S.est.sel={t:'act',id:c.id};estTouch();render();toast(`Copied “${src.o.desc||'activity'}” to ${it.code?it.code+' ':''}${it.desc||'bid item'}`);
+    focusSoon(`items.${d.items.indexOf(it)}.acts.${it.acts.indexOf(c)}.desc`)},true);
+  document.addEventListener('dragend',()=>{if(drag){drag=null;clear()}})})();
 // drag a bid item onto a section (or onto another bid item) to move it
 (()=>{let dragId=null;const clear=()=>document.querySelectorAll('.eo-drop,.eo-dragging').forEach(x=>x.classList.remove('eo-drop','eo-dragging'));
   const ok=()=>S.est&&S.view==='estimate'&&!EC().ro;
