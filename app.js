@@ -4449,8 +4449,10 @@ const CB_FIELDS={
     {k:'code',l:'Code',t:'text',al:['code','laborcode','craftcode','classcode','no','number','id']},
     {k:'description',l:'Craft / classification',t:'text',req:1,al:['craftclassification','craft','classification','description','desc','trade','position','name','title','jobtitle']},
     {k:'category',l:'Category',t:'cat',al:['category','group','class']},
-    {k:'data.base',l:'Base wage $/hr',t:'money',m:1,al:['basewagehr','basewage','base','wage','hourlyrate','basepay','payrate','straighttime','st','basehourly','rate','hourlywage','basewageperhour']},
-    {k:'data.fringe',l:'Fringe $/hr',t:'money',m:1,al:['fringehr','fringe','fringes','benefits','fringebenefits','fringeperhour']},
+    {k:'data.per',l:'Paid by',t:'per',al:['period','payperiod','paidby','per']},
+    {k:'data.pph',l:'Hours per period',t:'num',al:['hoursperperiod','hours']},
+    {k:'data.base',l:'Base wage',t:'money',m:1,al:['basewagehr','basewage','base','wage','hourlyrate','basepay','payrate','straighttime','st','basehourly','rate','hourlywage','basewageperhour']},
+    {k:'data.fringe',l:'Fringe',t:'money',m:1,al:['fringehr','fringe','fringes','benefits','fringebenefits','fringeperhour']},
     {k:'data.burden',l:'Burden %',t:'pct',m:1,al:['burden','burdenpct','burdenpercent','laborburden','payrollburden','taxesinsurance','taxesandinsurance']},
     {k:'data.ot',l:'OT factor',t:'num',al:['otfactor','overtime','ot','otmultiplier','overtimefactor']},
     {k:'notes',l:'Notes',t:'text',al:['notes','note','comment','comments']}],
@@ -4492,6 +4494,9 @@ function cbCrew(x){let labor=0,equip=0,men=0,missing=0;const lines=[];
   (cbD(x).members||[]).forEach(m=>{const it=cbById(m.id);const q=num(m.qty)||0;if(!it||it.book==='crew'||it.book==='material'){missing++;return}const c=cbCost(it,crewFile(x,it.book))||0;lines.push({it,q,c,ext:c*q});if(it.book==='labor'){labor+=c*q;men+=q}else equip+=c*q});
   return {labor,equip,total:labor+equip,men,missing,lines}}
 /* ---- labor rate files: named sets of rates (like ProEstimate rate files). The codebook's own rates are "Codebook rates". */
+const LPER={HR:['Hour','hr',1],DAY:['Day','day',10],WK:['Week','wk',50],MO:['Month','mo',216.5]};
+const lPer=x=>{const d=cbD(x);const p=d.per||(x&&x.unit&&LPER[x.unit]?x.unit:'HR');return LPER[p]?p:'HR'};
+const lHrs=x=>{const p=lPer(x);return p==='HR'?1:(num(cbD(x).pph)||LPER[p][2])};
 const RF_FIELDS=[['base','Base $/hr'],['fringe','Fringe $/hr'],['burden','Burden %'],['ot','OT factor']];
 const RF_EQ=[['rate','Rate $/hr'],['op','Operating $/hr']];
 const rfFields=book=>book==='equipment'?RF_EQ:RF_FIELDS;
@@ -4509,7 +4514,7 @@ function rfData(x,fid){const d=cbD(x);const f=rfGet(fid===undefined?rfCtx(x.book
 // the operator a machine brings with it (from the labor codebook)
 const eqOpr=x=>{if(!x||x.book!=='equipment')return null;const d=cbD(x);const L=d.opr&&cbById(d.opr);return L&&L.book==='labor'?{it:L,qty:num(d.oprq)||1}:null};
 function cbCost(x,fid){if(!x)return null;const d=cbD(x);
-  if(x.book==='labor'){const L=cbLabor(rfData(x,fid));return L?L.st:num(x.cost)}
+  if(x.book==='labor'){const L=cbLabor(rfData(x,fid));return L?L.st/lHrs(x):num(x.cost)}
   if(x.book==='equipment'){const e=rfData(x,fid);const r=num(e.rate),o=num(e.op);return r==null&&o==null?num(x.cost):(r||0)+(o||0)}
   if(x.book==='crew')return cbCrew(x).total;
   if(CB_TPL.has(x.book)){const r=tplCalc(x);return r?r.unit:null}
@@ -4539,7 +4544,7 @@ function vCb(){
   const stale=x=>{const a=cbAge(x);return a!=null&&a>180};
   const cols={
     material:[th('code','Code'),th('description','Description'),th('category','Category'),th('unit','Unit'),th('cost','Unit cost',1),th('vendor','Vendor'),th('price_date','Price date')],
-    labor:[th('code','Code'),th('description','Craft'),th('category','Category'),th('data.base','Base',1),th('data.fringe','Fringe',1),th('data.burden','Burden',1),th('cost','Loaded $/hr',1),th('price_date','Updated')],
+    labor:[th('code','Code'),th('description','Craft'),th('category','Category'),th('data.base','Base',1),th('data.fringe','Fringe',1),th('data.burden','Burden',1),th('cost','Loaded rate',1),th('price_date','Updated')],
     equipment:[th('code','Code'),th('description','Description'),th('category','Category'),th('data.own','Owned / rented'),th('data.rate','Rate',1),th('data.op','Operating',1),th('cost','Total $/hr',1),th('price_date','Updated')],
     crew:[th('code','Code'),th('description','Crew'),th('category','Category'),'<th>Members</th>',th('men','Crew size',1),'<th class="r">Labor $/hr</th>','<th class="r">Equip $/hr</th>',th('cost','Crew $/hr',1)],
     activity:[th('code','Code'),th('description','Activity'),th('category','Category'),'<th>Crew</th>','<th>Production</th>','<th>Costs</th>',th('cost','Unit cost',1)],
@@ -4548,7 +4553,7 @@ function vCb(){
   const row=x=>{const d=cbD(x);const inact=x.active===false?' '+pill('Inactive','na'):'';
     const cells={
       material:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}${d.old_code&&d.old_code!==x.code?`<div class="small dim" title="Code before the recode">was ${esc(d.old_code)}</div>`:''}</td><td class="proj cb-desc">${esc(x.description)}${inact}${d.type&&d.type!=='Material'?` <span class="pill cb-type">${esc(d.type)}</span>`:''}</td><td class="small">${esc(x.category)}${d.qfolder?`<div class="dim cb-qf" title="Quote folder">📁 ${esc(d.qfolder)}</div>`:''}</td><td class="small">${esc(x.unit)}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${esc(vendorOf(x.vendor_id)?.company||'')}</td><td class="small">${pd(x)}</td>`,
-      labor:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="r num">${money2(num(d.base))}</td><td class="r num">${num(d.fringe)?money2(d.fringe):'<span class="dim">—</span>'}</td><td class="r num">${num(d.burden)!=null?fmtN(d.burden,1)+'%':'<span class="dim">—</span>'}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${pd(x)}</td>`,
+      labor:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="r num">${money2(num(d.base))}</td><td class="r num">${num(d.fringe)?money2(d.fringe):'<span class="dim">—</span>'}</td><td class="r num">${num(d.burden)!=null?fmtN(d.burden,1)+'%':'<span class="dim">—</span>'}</td><td class="r num"><b>${money2((cbLabor(rfData(x,''))||{}).st??cbCost(x))}</b>${lPer(x)!=='HR'?`<span class="small dim">/${LPER[lPer(x)][1]}</span><div class="small dim">${money2(cbCost(x,''))}/hr</div>`:''}</td><td class="small">${pd(x)}</td>`,
       equipment:()=>`<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}${eqOpr(x)?`<div class="small dim">+ ${eqOpr(x).qty!==1?eqOpr(x).qty+' × ':''}${esc(eqOpr(x).it.description)}</div>`:''}</td><td class="small">${esc(x.category)}</td><td class="small">${esc(d.own||'Owned')}</td><td class="r num">${money2(num(d.rate))}</td><td class="r num">${num(d.op)?money2(d.op):'<span class="dim">—</span>'}</td><td class="r num"><b>${money2(cbCost(x))}</b></td><td class="small">${pd(x)}</td>`,
       activity:()=>{const a=d.act||{};const r=tplCalc(x)||{};const pm=PROD_MODES.find(m=>m[0]===(a.mode||'uph'));const kinds=[...new Set((a.res||[]).map(z=>(RES_KINDS.find(k=>k[0]===z.kind)||RES_KINDS[5])[1]))];
         return `<td class="num">${esc(x.code)||'<span class="dim">—</span>'}</td><td class="proj cb-desc">${esc(x.description)}${inact}</td><td class="small">${esc(x.category)}</td><td class="small">${a.crew?esc(a.crew.name):'<span class="dim">—</span>'}</td><td class="small">${num(a.prod)?`${fmtN(a.prod,2)} ${esc(prodLabel(a.mode||'uph',d.unit||a.unit))}`:'<span class="dim">—</span>'}</td><td class="small">${kinds.join(', ')||'<span class="dim">—</span>'}</td><td class="r num"><b>${r.unit!=null?money2(r.unit):'—'}</b>${d.unit?`<span class="dim small">/${esc(d.unit)}</span>`:''}</td>`},
@@ -4597,7 +4602,7 @@ function rfGrid(all,admin,book='labor'){const f=rfGet(S.cb[rfCbKey(book)]);const
   if(book==='equipment')return rfGridEq(f,list,others,admin);
   const cell=(x,k)=>{const o=R[x.id]||{};const v=o[k];const base=cbD(x)[k];return admin?`<input class="field sm num" data-rfx="${x.id}.${k}" data-book="${book}" value="${v==null?'':esc(String(v))}" placeholder="${base==null||base===''?'':esc(String(base))}" inputmode="decimal">`:(v!=null&&v!==''?esc(String(v)):`<span class="dim">${base==null?'—':esc(String(base))}</span>`)};
   const rows=list.map(x=>{const L=cbLabor(rfData(x,f.id))||{};const B=cbLabor(cbD(x))||{};const dif=L.st!=null&&B.st!=null?L.st-B.st:null;
-    return `<tr><td class="num">${esc(x.code||'')}</td><td class="proj"><b>${esc(x.description)}</b></td>${RF_FIELDS.map(([k])=>`<td class="r">${cell(x,k)}</td>`).join('')}<td class="r num"><b>${L.st!=null?money2(L.st):'—'}</b>${x.unit&&x.unit!=='HR'?`<span class="small dim">/${esc(String(x.unit).toLowerCase())}</span>`:''}</td><td class="r num">${L.ot!=null?money2(L.ot):'—'}</td><td class="r num small ${dif>0?'bad-t':dif<0?'good-t':'dim'}">${dif==null||Math.abs(dif)<.005?'same':(dif>0?'+':'')+money2(dif)}</td>${admin?`<td><button class="linkbtn small" data-act="rf-rm" data-book="labor" data-id="${x.id}" title="Take ${esc(x.description)} out of this rate file">✕</button></td>`:''}</tr>`}).join('');
+    return `<tr><td class="num">${esc(x.code||'')}</td><td class="proj"><b>${esc(x.description)}</b></td>${RF_FIELDS.map(([k])=>`<td class="r">${cell(x,k)}</td>`).join('')}<td class="r num"><b>${L.st!=null?money2(L.st):'—'}</b>${lPer(x)!=='HR'?`<span class="small dim">/${LPER[lPer(x)][1]}</span><div class="small dim">${money2(L.st/lHrs(x))}/hr</div>`:''}</td><td class="r num">${L.ot!=null?money2(L.ot):'—'}</td><td class="r num small ${dif>0?'bad-t':dif<0?'good-t':'dim'}">${dif==null||Math.abs(dif)<.005?'same':(dif>0?'+':'')+money2(dif)}</td>${admin?`<td><button class="linkbtn small" data-act="rf-rm" data-book="labor" data-id="${x.id}" title="Take ${esc(x.description)} out of this rate file">✕</button></td>`:''}</tr>`}).join('');
   return `<div class="panel scroll"><table class="cb-table rf-grid"><thead><tr><th>Code</th><th>Craft</th>${RF_FIELDS.map(([,l])=>`<th class="r">${l}</th>`).join('')}<th class="r">Loaded ST</th><th class="r">Loaded OT</th><th class="r">vs codebook</th>${admin?'<th></th>':''}</tr></thead><tbody>${rows||`<tr><td colspan="10"><div class="empty"><b>No crafts in this rate file${list.length<Object.keys(R).length?' match the search':''}.</b>${admin&&others.length?'Add one below.':''}</div></td></tr>`}</tbody></table>
     ${admin&&others.length?`<div class="adders" style="padding:10px 12px"><select class="field sm" data-rfadd="labor"><option value="">+ Add a craft to this rate file…</option>${others.map(x=>`<option value="${x.id}">${esc(x.description)}${x.code?' · '+esc(x.code):''}</option>`).join('')}</select><span class="small dim">${list.length} of ${cbList('labor').length} crafts are in this file. A craft that isn’t uses its codebook rate on estimates.</span></div>`:''}</div>`}
 function rfGridEq(f,list,others,admin){const R=f.rates||{};
@@ -4747,7 +4752,8 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
     const R=rfiRows();if(!R.length)return;M.busy=true;renderModal();
     try{const add=[];const rates={};const nf=v=>v==null?null:v;
       for(const r of R){let id=r.hit&&r.hit.id;
-        if(!id){const it={id:newId(),book:'labor',code:r.code||'',description:r.name,category:'',unit:r.per||'HR',cost:null,data:{base:r.base,fringe:nf(r.fringe),burden:nf(r.burden),ot:r.ot??1.5},vendor_id:null,price_date:todayStr(),price_history:[],active:true,notes:`Added from rate file ${name}`};add.push(it);id=it.id}
+        if(!id){const it={id:newId(),book:'labor',code:r.code||'',description:r.name,category:'',unit:r.per||'HR',cost:null,data:{per:r.per||'HR',base:r.base,fringe:nf(r.fringe),burden:nf(r.burden),ot:r.ot??1.5},vendor_id:null,price_date:todayStr(),price_history:[],active:true,notes:`Added from rate file ${name}`};add.push(it);id=it.id}
+        else if(r.per&&r.per!=='HR'&&!cbD(r.hit).per){const y=clone(r.hit);y.data={...cbD(y),per:r.per};add.push(y)}
         const o={base:r.base};if(r.fringe!=null)o.fringe=r.fringe;if(r.burden!=null)o.burden=r.burden;o.ot=r.ot??1.5;rates[id]=o}
       const moved=[];
       if(add.length){try{await cbUpsert(add.map(cbRow))}
@@ -4770,6 +4776,8 @@ function cbOpen(id){const x=cbById(id);if(!x)return;const d=clone(x);d.data=cbD(
   if(CB_TPL.has(d.book)){if(d.book==='activity'){d.data.act=d.data.act||estNewAct();d.data.act.res=d.data.act.res||[]}else{d.data.item=d.data.item||estNewItem({items:[]},{code:''});d.data.item.acts=(d.data.item.acts||[]).map(a=>({...a,res:a.res||[]}))}estApplyStale(estStale(d.data));M={kind:'cbtpl',draft:d,orig:clone(x)};showModal();return}if(d.book==='crew')d.data.members=(d.data.members||[]).map(m=>({...m}));M={kind:'cbitem',draft:d,orig:clone(x)};showModal()}
 function cbFieldHtml(f,d,dis){const v=cbGet(d,f.k);const id='cbe-'+f.k.replace('.','-');const a=`id="${id}" data-cbe="${f.k}"${dis}`;
   if(f.t==='sel')return `<label class="f">${f.l}<select class="field" ${a}>${f.opts.map(o=>`<option${(v||f.opts[0])===o?' selected':''}>${o}</option>`).join('')}</select></label>`;
+  if(f.t==='per')return `<label class="f">${f.l}<select class="field" ${a}>${Object.entries(LPER).map(([k,[l]])=>`<option value="${k}"${(v||lPer(d))===k?' selected':''}>${l}</option>`).join('')}</select></label>`;
+  if(f.k==='data.pph'){const p=cbD(d).per||lPer(d);if(p==='HR')return '';return `<label class="f">Hours per ${LPER[p][0].toLowerCase()}<input class="field num" type="number" step="any" ${a} value="${esc(v??'')}" placeholder="${LPER[p][2]}"><small class="dim">Turns the ${LPER[p][0].toLowerCase()}ly rate into an hourly cost for crews and estimates.</small></label>`}
   if(f.t==='labor')return `<label class="f s2">${f.l}<select class="field" ${a}><option value="">No operator</option>${cbList('labor').filter(x=>x.active!==false||x.id===v).sort((x,y)=>String(x.description).localeCompare(String(y.description))).map(o=>`<option value="${o.id}"${v===o.id?' selected':''}>${esc(o.description)}${o.code?' · '+esc(o.code):''}</option>`).join('')}</select><small class="dim">Comes in with this machine when you add it to an estimate or a crew.</small></label>`;
   if(f.t==='bool')return `<label class="check cb-bool"><input type="checkbox" ${a}${v!==false?' checked':''}> ${f.l}</label>`;
   if(f.t==='vendor')return `<label class="f">${f.l}<select class="field" ${a}><option value="">None</option>${S.vendors.slice().sort((x,y)=>x.company.localeCompare(y.company)).map(o=>`<option value="${o.id}"${v===o.id?' selected':''}>${esc(o.company)}</option>`).join('')}</select></label>`;
@@ -4781,7 +4789,7 @@ function cbFieldHtml(f,d,dis){const v=cbGet(d,f.k);const id='cbe-'+f.k.replace('
   if(f.k==='notes')return `<label class="f s2">${f.l}<textarea class="field" rows="2" ${a}>${esc(v||'')}</textarea></label>`;
   return `<label class="f${f.k==='description'?' s2':''}">${f.l}${f.req?' *':''}<span class="cb-inp${pre?' has-pre':''}${post?' has-post':''}">${pre}<input class="field${n?' num':''}" ${n?'type="number" step="any" inputmode="decimal"':''} ${a} value="${esc(v??'')}"${f.k==='data.ot'?' placeholder="1.5"':''}>${post}</span></label>`}
 function cbCalcHtml(d){
-  if(d.book==='labor'){const L=cbLabor(cbD(d));return L?`<div class="cb-calc"><div><span>Loaded rate</span><b>${money2(L.st)}/hr</b></div><div><span>Overtime</span><b>${money2(L.ot)}/hr</b></div><p class="hint">Base × (1 + burden %) + fringe. Overtime = base × OT factor × (1 + burden %) + fringe.</p></div>`:'<div class="cb-calc dim small">Enter a base wage to see the loaded rate.</div>'}
+  if(d.book==='labor'){const L=cbLabor(cbD(d));const p=lPer(d),h=lHrs(d),u=LPER[p][1];return L?`<div class="cb-calc"><div><span>Loaded rate</span><b>${money2(L.st)}/${u}</b></div>${p==='HR'?`<div><span>Overtime</span><b>${money2(L.ot)}/hr</b></div>`:`<div><span>Hourly cost</span><b>${money2(L.st/h)}/hr</b></div>`}<p class="hint">Base × (1 + burden %) + fringe.${p==='HR'?' Overtime = base × OT factor × (1 + burden %) + fringe.':` Paid by the ${LPER[p][0].toLowerCase()}: no overtime; crews and estimates use ${money2(L.st)} ÷ ${fmtN(h,1)} hours = ${money2(L.st/h)}/hr.`}</p></div>`:'<div class="cb-calc dim small">Enter a base wage to see the loaded rate.</div>'}
   if(d.book==='equipment'){const c=cbCost(d);return `<div class="cb-calc"><div><span>Total</span><b>${money2(c)}/hr</b></div><p class="hint">${cbD(d).own==='Rented'?'Rental rate':'Ownership rate'} + operating cost (fuel, repairs, wear). ${eqOpr(d)?` The operator (${esc(eqOpr(d).it.description)}) comes in as its own labor line.`:' Pick an operator below to bring one in with the machine.'}</p></div>`}
   if(d.book==='material'){const c=num(d.cost),w=num(cbD(d).waste)||0;return c!=null&&w?`<div class="cb-calc"><div><span>With ${fmtN(w,2)}% waste</span><b>${money2(c*(1+w/100))}/${esc(d.unit||'unit')}</b></div></div>`:''}
   return ''}
@@ -4809,6 +4817,7 @@ function cbCrewHtml(d,dis){const C=cbCrew(d);const D=cbD(d);const mem=D.members|
     ${!cbList('labor').length&&!cbList('equipment').length?'<p class="hint">Add labor rates and equipment on their tabs first — crews are built from them.</p>':''}
     <div class="cb-calc" id="cb-crewtot"><div><span>Crew size</span><b>${fmtN(C.men,2)} ${C.men===1?'person':'people'}</b></div><div><span>Labor</span><b>${money2(C.labor)}/hr</b></div><div><span>Equipment</span><b>${money2(C.equip)}/hr</b></div><div><span>Crew cost</span><b>${money2(C.total)}/hr</b></div></div>
     <p class="hint">Crew cost updates automatically when a rate changes in the codebook or in these rate files.</p></fieldset>`}
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='cbitem'||!M.draft||M.draft.book!=='labor'||t.dataset.cbe!=='data.per')return;const D=M.draft.data=cbD(M.draft);D.per=t.value;if(t.value!=='HR'){if(D.ot==null||num(D.ot)===1.5)D.ot=1}else if(num(D.ot)===1)D.ot=1.5;M.draft.unit=t.value;setTimeout(renderModal,0)});
 document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='cbitem'||!M.draft||M.draft.book!=='crew'||t.dataset.crewf==null)return;const D=M.draft.data=cbD(M.draft);const k=t.dataset.crewf;const v=t.value;const hpd=num(D.hpd)||10;
   if(k==='rfL'||k==='rfE'||k==='mode'){const old=D.mode||'uph';const nr=num(D.prod);const uph=nr?(old==='uph'?nr:old==='upd'?nr/hpd:1/nr):null;D[k]=v;if(k==='mode'&&uph)D.prod=+(v==='uph'?uph:v==='upd'?uph*hpd:1/uph).toFixed(6)}
   else if(k==='hpd'){const nr=num(D.prod);const uph=nr?((D.mode||'uph')==='uph'?nr:(D.mode==='upd'?nr/hpd:1/nr)):null;D.hpd=num(v)||10;if(uph&&D.mode==='upd')D.prod=+(uph*D.hpd).toFixed(6)}
@@ -5133,8 +5142,8 @@ function schedCalc(s){const h=(s&&Array.isArray(s.days)?s.days:[10,10,10,10,10,0
 const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 function schedText(s){const c=schedCalc(s);return `${fmtN(c.H,1)} hrs/week over ${c.days} day${c.days===1?'':'s'} · ${fmtN(c.st,1)} straight${c.ot?` · ${fmtN(c.ot,1)} OT ×${c.otf}`:''}${c.dt?` · ${fmtN(c.dt,1)} DT ×${c.dtf}`:''}${c.mult?` · labor +${fmtN(c.mult*100,1)}% premium`:''}`}
 // straight-time base used for the overtime premium (base wage × burden, no fringe)
-function cbOtp(x){if(!x)return 0;if(x.book==='labor'){const d=rfData(x);return (num(d.base)||0)*(1+(num(d.burden)||0)/100)}
-  if(x.book==='crew')return (cbD(x).members||[]).reduce((s,m)=>{const it=cbById(m.id);if(!(it&&it.book==='labor'))return s;const d=rfData(it,crewFile(x,'labor'));return s+(num(d.base)||0)*(1+(num(d.burden)||0)/100)*(num(m.qty)||0)},0);return 0}
+function cbOtp(x){if(!x)return 0;if(x.book==='labor'){if(lPer(x)!=='HR')return 0;const d=rfData(x);return (num(d.base)||0)*(1+(num(d.burden)||0)/100)}
+  if(x.book==='crew')return (cbD(x).members||[]).reduce((s,m)=>{const it=cbById(m.id);if(!(it&&it.book==='labor')||lPer(it)!=='HR')return s;const d=rfData(it,crewFile(x,'labor'));return s+(num(d.base)||0)*(1+(num(d.burden)||0)/100)*(num(m.qty)||0)},0);return 0}
 const crewOtp=cr=>cr.otp!=null?num(cr.otp)||0:cbById(cr.id)?cbOtp(cbById(cr.id)):(num(cr.labor)||0)*0.75;
 const resOtp=r=>r.otp!=null?num(r.otp)||0:r.cb&&cbById(r.cb)?cbOtp(cbById(r.cb)):(num(r.price)||0)*0.75;
 
