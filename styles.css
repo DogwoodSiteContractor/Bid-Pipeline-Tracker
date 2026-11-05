@@ -3070,3 +3070,5 @@ tr.eo-drop-c>td:first-child::before{content:"+ copy here";position:absolute;righ
 tr.eo-drop-c{position:relative}
 .eo-grip{display:inline-block;width:14px;margin-left:-2px;color:var(--muted,#888);cursor:grab;opacity:.35;font-size:13px;user-select:none;vertical-align:middle}
 tr.eo-act:hover .eo-grip,tr.eo-act.sel .eo-grip{opacity:.9}
+.cbb-h{margin:12px 0 6px}.cbb-h:first-child{margin-top:0}.cbb-list{max-height:260px;overflow:auto;border:1px solid var(--border,#ddd);border-radius:8px}
+.cbb-it{display:flex;gap:10px;align-items:center;padding:6px 10px;border-bottom:1px solid var(--border,#eee);cursor:pointer}.cbb-it:last-child{border-bottom:0}.cbb-it>span:nth-child(2){flex:1}
