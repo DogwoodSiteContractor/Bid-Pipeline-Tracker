@@ -4579,7 +4579,7 @@ function rfBar(bk,admin){const c=S.cb;const F=rfAll();const cur=rfGet(c.rf);cons
 function rfGrid(list,admin){const f=rfGet(S.cb.rf);const R=f.rates||{};
   const cell=(x,k)=>{const o=R[x.id]||{};const v=o[k];const base=cbD(x)[k];return admin?`<input class="field sm num" data-rfx="${x.id}.${k}" value="${v==null?'':esc(String(v))}" placeholder="${base==null||base===''?'':esc(String(base))}" inputmode="decimal">`:(v!=null&&v!==''?esc(String(v)):`<span class="dim">${base==null?'—':esc(String(base))}</span>`)};
   const rows=list.map(x=>{const L=cbLabor(rfData(x,f.id))||{};const B=cbLabor(cbD(x))||{};const dif=L.st!=null&&B.st!=null?L.st-B.st:null;
-    return `<tr><td class="num">${esc(x.code||'')}</td><td class="proj"><b>${esc(x.description)}</b></td>${RF_FIELDS.map(([k])=>`<td class="r">${cell(x,k)}</td>`).join('')}<td class="r num"><b>${L.st!=null?money2(L.st):'—'}</b></td><td class="r num">${L.ot!=null?money2(L.ot):'—'}</td><td class="r num small ${dif>0?'bad-t':dif<0?'good-t':'dim'}">${dif==null||Math.abs(dif)<.005?'same':(dif>0?'+':'')+money2(dif)}</td></tr>`}).join('');
+    return `<tr><td class="num">${esc(x.code||'')}</td><td class="proj"><b>${esc(x.description)}</b></td>${RF_FIELDS.map(([k])=>`<td class="r">${cell(x,k)}</td>`).join('')}<td class="r num"><b>${L.st!=null?money2(L.st):'—'}</b>${x.unit&&x.unit!=='HR'?`<span class="small dim">/${esc(String(x.unit).toLowerCase())}</span>`:''}</td><td class="r num">${L.ot!=null?money2(L.ot):'—'}</td><td class="r num small ${dif>0?'bad-t':dif<0?'good-t':'dim'}">${dif==null||Math.abs(dif)<.005?'same':(dif>0?'+':'')+money2(dif)}</td></tr>`}).join('');
   return `<div class="panel scroll"><table class="cb-table rf-grid"><thead><tr><th>Code</th><th>Craft</th>${RF_FIELDS.map(([,l])=>`<th class="r">${l}</th>`).join('')}<th class="r">Loaded ST</th><th class="r">Loaded OT</th><th class="r">vs codebook</th></tr></thead><tbody>${rows||`<tr><td colspan="9"><div class="empty"><b>No labor crafts yet.</b>Add crafts to the labor codebook; each one gets a row here.</div></td></tr>`}</tbody></table></div>`}
 async function rfSave(next,quiet){const old=S.settings.labor_rates;S.settings.labor_rates=next;render();
   try{await run(sb.from('settings').upsert({key:'labor_rates',value:next}));if(!quiet)toast('Saved')}
@@ -4606,14 +4606,17 @@ function rfNewModal(){const imp=M.mode==='imp';
   <p class="hint">It copies every craft's rates from that file. Then change only the ones that differ.</p>`}</div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button>${imp?`<button class="btn primary" data-act="rf-imp-go"${M.imp&&M.imp.rows.length&&!M.busy?'':' disabled'}>${M.busy?'Importing…':'Import rate file'}</button>`:'<button class="btn primary" data-act="rf-go">Create rate file</button>'}</div></div>`}
 /* importing a rate file: Excel or CSV, one row per craft. Columns are found by their headers and can be changed. */
-const RFI_COLS=[['code','Code'],['name','Craft / description'],['base','Base $/hr'],['fringe','Fringe $/hr'],['burden','Burden % (adds up every column picked)'],['ot','OT (factor, or OT $/hr)']];
-function rfiGuess(H){const g={code:-1,name:-1,base:-1,fringe:-1,burden:[],ot:-1};const h=H.map(x=>String(x||'').toLowerCase().trim());
+const RFI_COLS=[['code','Code'],['name','Craft / description'],['period','Period (hourly / monthly)'],['base','Base rate'],['ot','OT (factor, or OT rate)'],['total','Total rate (to check against)'],['fringe','Fringe $ (adds up every column ticked)'],['burden','Burden % (adds up every column ticked)']];
+function rfiGuess(H){const g={code:-1,name:-1,base:-1,fringe:[],burden:[],ot:-1,total:-1,period:-1};const h=H.map(x=>String(x||'').toLowerCase().trim());
   h.forEach((t,i)=>{if(!t)return;
-    if(g.code<0&&/\bcode\b|craft ?id|class(ification)? ?(code|#)|labor ?id/.test(t))g.code=i;
+    if(g.code<0&&/\bcode\b|craft ?id|class(ification)? ?(code|#)|labor ?id|laborid|^id$/.test(t))g.code=i;
+    else if(g.period<0&&/period|per$|frequency|pay ?basis/.test(t))g.period=i;
+    else if(/blend/.test(t))return;
+    else if(g.total<0&&/total|loaded/.test(t)&&!/^ot|\bot\b|overtime/.test(t))g.total=i;
     else if(g.name<0&&/desc|craft|classification|trade|labor|name|position/.test(t)&&!/rate|\$|%/.test(t))g.name=i;
-    else if(/\b(ot|overtime)\b/.test(t)){if(g.ot<0)g.ot=i}
-    else if(g.base<0&&/base|wage|straight|\bst\b|hourly|pay ?rate|^rate$/.test(t)&&!/total|loaded|burden|%/.test(t))g.base=i;
-    else if(g.fringe<0&&/fringe|benefit \$|h&w|health|pension/.test(t)&&!/%/.test(t))g.fringe=i;
+    else if(/\b(ot|overtime)|^ot/.test(t)){if(g.ot<0)g.ot=i}
+    else if(g.base<0&&/base|wage|straight|\bst\b|pay ?rate|^rate$/.test(t)&&!/total|loaded|burden|%/.test(t))g.base=i;
+    else if(/fringe|benefit|h&w|health|pension|annuity|vacation/.test(t)&&!/%/.test(t))g.fringe.push(i);
     else if(/%|pct|percent|tax|fica|futa|suta|insur|comp|burden|liab/.test(t)&&!/total|loaded/.test(t))g.burden.push(i)});
   return g}
 function rfiRows(){const I=M.imp;if(!I)return [];const rows=I.data.slice(I.hdr+1);const C=I.col;const cell=(r,i)=>i>=0?r[i]:'';
@@ -4624,10 +4627,14 @@ function rfiRows(){const I=M.imp;if(!I)return [];const rows=I.data.slice(I.hdr+1
   const labor=cbList('labor');
   return rows.map(r=>{const code=String(cell(r,C.code)??'').trim(),name=String(cell(r,C.name)??'').trim();const base=n(cell(r,C.base));
     if(!name&&!code||base==null)return null;
-    const fringe=n(cell(r,C.fringe));const burden=C.burden.length?C.burden.reduce((s,i)=>s+(n(r[i])||0)*(frac.has(i)?100:1),0):null;
-    let ot=C.ot>=0?n(r[C.ot]):null;if(ot!=null&&otDollar)ot=base?+(ot/base).toFixed(3):null;
+    const fringe=C.fringe.length?+C.fringe.reduce((s,i)=>s+(n(r[i])||0),0).toFixed(4):null;const burden=C.burden.length?C.burden.reduce((s,i)=>s+(n(r[i])||0)*(frac.has(i)?100:1),0):null;
+    const per=/month/i.test(String(cell(r,C.period)||''))?'MO':/week/i.test(String(cell(r,C.period)||''))?'WK':/day|daily/i.test(String(cell(r,C.period)||''))?'DAY':'HR';
+    const bu=1+(burden||0)/100,fr=fringe||0;let ot=C.ot>=0?n(r[C.ot]):null;const otRate=otDollar?ot:null;
+    // an OT rate in dollars becomes the factor on base × burden (fringe isn't time-and-a-half)
+    if(ot!=null&&otDollar)ot=base?+((ot-fr)/(base*bu)).toFixed(3):null;if(ot!=null&&ot<1)ot=1;
+    const tot=C.total>=0?n(cell(r,C.total)):null;const st=base*bu+fr;
     const hit=(code&&labor.find(x=>normH(x.code)===normH(code)))||(name&&labor.find(x=>normH(x.description)===normH(name)))||null;
-    return {code,name:name||code,base,fringe,burden:burden!=null?+burden.toFixed(3):null,ot,hit}}).filter(Boolean)}
+    return {code,name:name||code,base,fringe,burden:burden!=null?+burden.toFixed(3):null,ot:per==='HR'?ot:(ot??1),per,hit,tot,st,okT:tot==null||Math.abs(tot-st)<.011,otRate}}).filter(Boolean)}
 function rfImpBody(){const I=M.imp;
   if(!I)return `<label class="f">Rate file (Excel or CSV)<input type="file" class="field" data-rfifile accept=".xlsx,.xls,.csv"></label>
     ${M.reading?'<p class="hint">Reading…</p>':''}${M.error?`<div class="notice">${esc(M.error)}</div>`:''}
@@ -4635,10 +4642,10 @@ function rfImpBody(){const I=M.imp;
   const H=I.data[I.hdr]||[];const opts=(v,multi)=>`<option value="-1">${multi?'—':'Not in file'}</option>`+H.map((h,i)=>`<option value="${i}"${(multi?v.includes(i):v===i)?' selected':''}>${esc(String(h||'Column '+(i+1)))}</option>`).join('');
   const R=rfiRows();I.rows=R;const nNew=R.filter(r=>!r.hit).length;
   return `<div class="small dim" style="margin:-4px 0 8px">${esc(I.file)}${I.names.length>1?` · sheet <select class="field sm" data-rfisheet>${I.names.map(n=>`<option${n===I.sheet?' selected':''}>${esc(n)}</option>`).join('')}</select>`:''} · <button class="linkbtn" data-act="rfi-reset">Pick a different file</button></div>
-    <div class="fg rfi-map">${RFI_COLS.map(([k,l])=>k==='burden'?`<div class="f s4 rfi-bur"><span>${l}</span><div class="rfi-chk">${H.map((h,i)=>String(h||'').trim()&&![I.col.code,I.col.name,I.col.base,I.col.fringe,I.col.ot].includes(i)?`<label class="check small"><input type="checkbox" data-rfib="${i}"${I.col.burden.includes(i)?' checked':''}> ${esc(String(h))}</label>`:'').join('')||'<span class="small dim">No other columns</span>'}</div></div>`:`<label class="f">${l}<select class="field" data-rfic="${k}">${opts(I.col[k])}</select></label>`).join('')}
+    <div class="fg rfi-map">${RFI_COLS.map(([k,l])=>k==='burden'||k==='fringe'?`<div class="f s4 rfi-bur"><span>${l}</span><div class="rfi-chk">${H.map((h,i)=>String(h||'').trim()&&![I.col.code,I.col.name,I.col.base,I.col.ot,I.col.total,I.col.period].includes(i)&&!(k==='burden'?I.col.fringe:I.col.burden).includes(i)?`<label class="check small"><input type="checkbox" data-rfib="${k}.${i}"${I.col[k].includes(i)?' checked':''}> ${esc(String(h))}</label>`:'').join('')||'<span class="small dim">No other columns</span>'}</div></div>`:`<label class="f">${l}<select class="field" data-rfic="${k}">${opts(I.col[k])}</select></label>`).join('')}
     <label class="f">Header row<input class="field num" type="number" min="1" data-rfihdr value="${I.hdr+1}"></label></div>
-    ${R.length?`<div class="scroll rfi-prev"><table class="rp-tbl"><thead><tr><th>Craft</th><th>In codebook</th><th class="r">Base</th><th class="r">Fringe</th><th class="r">Burden %</th><th class="r">OT</th><th class="r">Loaded ST</th></tr></thead><tbody>${R.slice(0,200).map(r=>{const L=cbLabor({base:r.base,fringe:r.fringe,burden:r.burden,ot:r.ot})||{};return `<tr><td><b>${esc(r.name)}</b>${r.code?` <span class="small dim">${esc(r.code)}</span>`:''}</td><td>${r.hit?pill('Matched','good'):pill('New craft')}</td><td class="r num">${money2(r.base)}</td><td class="r num">${r.fringe!=null?money2(r.fringe):'—'}</td><td class="r num">${r.burden!=null?fmtN(r.burden,2)+'%':'—'}</td><td class="r num">${r.ot!=null?r.ot:'1.5'}</td><td class="r num"><b>${L.st!=null?money2(L.st):'—'}</b></td></tr>`}).join('')}</tbody></table></div>
-    <p class="hint">${R.length} craft${R.length===1?'':'s'} found.${nNew?` <b>${nNew}</b> ${nNew===1?'isn’t':'aren’t'} in the labor codebook yet and will be added to it with these rates.`:' Every craft matched one in the codebook.'}</p>`
+    ${R.length?`<div class="scroll rfi-prev"><table class="rp-tbl"><thead><tr><th>Craft</th><th>In codebook</th><th>Per</th><th class="r">Base</th><th class="r">Fringe</th><th class="r">Burden %</th><th class="r">OT factor</th><th class="r">Total</th><th class="r">OT rate</th></tr></thead><tbody>${R.slice(0,200).map(r=>{const L=cbLabor({base:r.base,fringe:r.fringe,burden:r.burden,ot:r.ot??1.5})||{};const okO=r.otRate==null||Math.abs(r.otRate-L.ot)<.011;return `<tr><td><b>${esc(r.name)}</b>${r.code?` <span class="small dim">${esc(r.code)}</span>`:''}</td><td>${r.hit?pill('Matched','good'):pill('New craft')}</td><td class="small">${{HR:'Hour',MO:'Month',WK:'Week',DAY:'Day'}[r.per]}</td><td class="r num">${money2(r.base)}</td><td class="r num">${r.fringe!=null?money2(r.fringe):'—'}</td><td class="r num">${r.burden!=null?fmtN(r.burden,2)+'%':'—'}</td><td class="r num">${r.ot!=null?r.ot:'1.5'}</td><td class="r num"><b>${money2(L.st)}</b>${r.tot!=null?` <span class="${r.okT?'good-t':'bad-t'}" title="File says ${money2(r.tot)}">${r.okT?'✓':'≠ '+money2(r.tot)}</span>`:''}</td><td class="r num">${money2(L.ot)}${r.otRate!=null?` <span class="${okO?'good-t':'bad-t'}" title="File says ${money2(r.otRate)}">${okO?'✓':'≠ '+money2(r.otRate)}</span>`:''}</td></tr>`}).join('')}</tbody></table></div>
+    <p class="hint">${R.some(r=>r.tot!=null)?(R.every(r=>r.okT)?'<b class="good-t">Every total matches the file.</b> ':`<b class="bad-t">${R.filter(r=>!r.okT).length} total${R.filter(r=>!r.okT).length===1?' doesn’t':'s don’t'} match the file.</b> Check which columns are ticked. `):''}${R.length} craft${R.length===1?'':'s'} found.${nNew?` <b>${nNew}</b> ${nNew===1?'isn’t':'aren’t'} in the labor codebook yet and will be added to it with these rates.`:' Every craft matched one in the codebook.'}</p>`
     :`<div class="notice">No crafts found yet. Check that Craft and Base point at the right columns, and the header row is right.</div>`}`}
 async function rfiRead(file){const X=await loadXLSX();const wb=X.read(await file.arrayBuffer(),{type:'array'});const sheets={};
   wb.SheetNames.forEach(n=>{const rows=X.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:''});if(rows.some(r=>r.some(c=>String(c).trim()!=='')))sheets[n]=rows});
@@ -4653,7 +4660,7 @@ document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='rfnew')
   if(t.dataset.rfifile!=null){const file=t.files[0];if(!file)return;M.reading=true;M.error=null;renderModal();rfiRead(file).then(()=>{M.reading=false;renderModal()}).catch(err=>{M.reading=false;M.error=errMsg(err);renderModal()});return}
   if(t.dataset.rfisheet!=null){rfiSheet(t.value);renderModal();return}
   if(t.dataset.rfihdr!=null){const v=Math.max(1,parseInt(t.value)||1)-1;M.imp.hdr=Math.min(v,M.imp.data.length-1);M.imp.col=rfiGuess(M.imp.data[M.imp.hdr]||[]);renderModal();return}
-  if(t.dataset.rfib!=null){const i=+t.dataset.rfib;const B=new Set(M.imp.col.burden);t.checked?B.add(i):B.delete(i);M.imp.col.burden=[...B].sort((a,b)=>a-b);renderModal();return}
+  if(t.dataset.rfib!=null){const [k,ix]=t.dataset.rfib.split('.');const i=+ix;const B=new Set(M.imp.col[k]);t.checked?B.add(i):B.delete(i);M.imp.col[k]=[...B].sort((a,b)=>a-b);renderModal();return}
   if(t.dataset.rfic!=null){M.imp.col[t.dataset.rfic]=+t.value;renderModal()}});
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='rfnew')return;const a=t.dataset.act;
   if(a==='rfm'){M.mode=t.dataset.v;renderModal();return}
@@ -4662,7 +4669,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
     const R=rfiRows();if(!R.length)return;M.busy=true;renderModal();
     try{const add=[];const rates={};const nf=v=>v==null?null:v;
       for(const r of R){let id=r.hit&&r.hit.id;
-        if(!id){const it={id:newId(),book:'labor',code:r.code||'',description:r.name,category:'',unit:'HR',cost:null,data:{base:r.base,fringe:nf(r.fringe),burden:nf(r.burden),ot:r.ot??1.5},vendor_id:null,price_date:todayStr(),price_history:[],active:true,notes:`Added from rate file ${name}`};add.push(it);id=it.id}
+        if(!id){const it={id:newId(),book:'labor',code:r.code||'',description:r.name,category:'',unit:r.per||'HR',cost:null,data:{base:r.base,fringe:nf(r.fringe),burden:nf(r.burden),ot:r.ot??1.5},vendor_id:null,price_date:todayStr(),price_history:[],active:true,notes:`Added from rate file ${name}`};add.push(it);id=it.id}
         const o={base:r.base};if(r.fringe!=null)o.fringe=r.fringe;if(r.burden!=null)o.burden=r.burden;o.ot=r.ot??1.5;rates[id]=o}
       if(add.length){await cbUpsert(add.map(cbRow));await loadTable('codebook')}
       const st=rfState();const id=newId();st.files.push({id,name,rates,updated_at:new Date().toISOString(),by:myName(),src:M.imp.file});
@@ -5022,7 +5029,7 @@ function schedCalc(s){const h=(s&&Array.isArray(s.days)?s.days:[10,10,10,10,10,0
 const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 function schedText(s){const c=schedCalc(s);return `${fmtN(c.H,1)} hrs/week over ${c.days} day${c.days===1?'':'s'} · ${fmtN(c.st,1)} straight${c.ot?` · ${fmtN(c.ot,1)} OT ×${c.otf}`:''}${c.dt?` · ${fmtN(c.dt,1)} DT ×${c.dtf}`:''}${c.mult?` · labor +${fmtN(c.mult*100,1)}% premium`:''}`}
 // straight-time base used for the overtime premium (base wage × burden, no fringe)
-function cbOtp(x){if(!x)return 0;if(x.book==='labor'){const d=cbD(x);return (num(d.base)||0)*(1+(num(d.burden)||0)/100)}
+function cbOtp(x){if(!x)return 0;if(x.book==='labor'){const d=rfData(x);return (num(d.base)||0)*(1+(num(d.burden)||0)/100)}
   if(x.book==='crew')return (cbD(x).members||[]).reduce((s,m)=>{const it=cbById(m.id);return s+(it&&it.book==='labor'?cbOtp(it)*(num(m.qty)||0):0)},0);return 0}
 const crewOtp=cr=>cr.otp!=null?num(cr.otp)||0:cbById(cr.id)?cbOtp(cbById(cr.id)):(num(cr.labor)||0)*0.75;
 const resOtp=r=>r.otp!=null?num(r.otp)||0:r.cb&&cbById(r.cb)?cbOtp(cbById(r.cb)):(num(r.price)||0)*0.75;
