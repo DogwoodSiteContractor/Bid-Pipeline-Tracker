@@ -3031,3 +3031,10 @@ div.tw-pgh{cursor:default}
 /* vendor quote portal */
 .vq-acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
 .vq-rfq{margin-top:12px;padding:10px 12px;border:1px dashed var(--line);border-radius:10px}.vq-need{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+/* labor rate files */
+.rf-bar{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin:8px 0}
+.rf-bar .rf-pick{min-width:280px;margin:0}
+.rf-bar .rf-note{padding-bottom:9px;flex:1;min-width:200px}
+.rf-bar .rf-tools{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:2px}
+.rf-grid input.field{width:96px;text-align:right}
+.rf-grid input.field::placeholder{color:var(--muted,#999);opacity:.7}

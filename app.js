@@ -973,7 +973,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal,airate:aiRateModal,aiinstr:aiInstrModal,vqlink:vqLinkModal,aitko:atkModal,aitkr:atkReportModal}[M.kind]();
+  const html={rfnew:rfNewModal,tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal,airate:aiRateModal,aiinstr:aiInstrModal,vqlink:vqLinkModal,aitko:atkModal,aitkr:atkReportModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='bid'?' bidpage':''}${['rpcard','rpdrill','airate','aitko','aitkr','import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -4486,8 +4486,17 @@ function cbLabor(d){const b=num(d.base);if(b==null)return null;const bu=(num(d.b
 function cbCrew(x){let labor=0,equip=0,men=0,missing=0;const lines=[];
   (cbD(x).members||[]).forEach(m=>{const it=cbById(m.id);const q=num(m.qty)||0;if(!it||it.book==='crew'||it.book==='material'){missing++;return}const c=cbCost(it)||0;lines.push({it,q,c,ext:c*q});if(it.book==='labor'){labor+=c*q;men+=q}else equip+=c*q});
   return {labor,equip,total:labor+equip,men,missing,lines}}
+/* ---- labor rate files: named sets of rates (like ProEstimate rate files). The codebook's own rates are "Codebook rates". */
+const RF_FIELDS=[['base','Base $/hr'],['fringe','Fringe $/hr'],['burden','Burden %'],['ot','OT factor']];
+const rfAll=()=>{const v=S.settings&&S.settings.labor_rates;return v&&Array.isArray(v.files)?v.files:[]};
+const rfGet=id=>id?rfAll().find(f=>f.id===id)||null:null;
+const rfDefault=()=>{const v=S.settings&&S.settings.labor_rates;return v&&rfGet(v.dflt)?v.dflt:''};
+const rfName=id=>{const f=rfGet(id);return f?f.name:'Codebook rates'};
+// which rate file prices labor right now: the open estimate's, else the one picked on the codebook
+function rfCtx(){if(S.view==='estimate'&&S.est){const id=S.est.data?(S.est.data.settings||{}).rateFile:S.est.pendRF;return rfGet(id)?id:''}return rfGet(S.cb&&S.cb.rf)?S.cb.rf:''}
+function rfData(x,fid){const d=cbD(x);const f=rfGet(fid===undefined?rfCtx():fid);const o=f&&f.rates&&f.rates[x.id];if(!o)return d;const m={...d};RF_FIELDS.forEach(([k])=>{if(o[k]!=null&&o[k]!=='')m[k]=o[k]});return m}
 function cbCost(x){if(!x)return null;const d=cbD(x);
-  if(x.book==='labor'){const L=cbLabor(d);return L?L.st:num(x.cost)}
+  if(x.book==='labor'){const L=cbLabor(rfData(x));return L?L.st:num(x.cost)}
   if(x.book==='equipment'){const r=num(d.rate),o=num(d.op);return r==null&&o==null?num(x.cost):(r||0)+(o||0)}
   if(x.book==='crew')return cbCrew(x).total;
   if(CB_TPL.has(x.book)){const r=tplCalc(x);return r?r.unit:null}
@@ -4555,12 +4564,47 @@ function vCb(){
     ${bk==='material'?`<select class="field" data-cbf="vendor"><option value="">All vendors</option>${vendors.map(v=>`<option value="${v.id}"${c.vendor===v.id?' selected':''}>${esc(v.company)}</option>`).join('')}<option value="none"${c.vendor==='none'?' selected':''}>No vendor</option></select>`:''}
     <label class="check small"><input type="checkbox" data-cbf="inactive"${c.inactive?' checked':''}> Show inactive</label>
     <span class="dim small cb-count">${list.length===all.length?`${all.length} ${all.length===1?'item':'items'}`:`${list.length} of ${all.length}`}</span>
-    ${admin&&!sel.length&&list.length&&massFields.length?`<button class="btn sm" data-act="cb-mass" data-all="1" title="Change prices on everything shown">Mass update ${list.length===all.length?'all':list.length+' shown'}</button>`:''}</div>
+    ${admin&&!sel.length&&list.length&&massFields.length&&!(bk==='labor'&&rfGet(c.rf))?`<button class="btn sm" data-act="cb-mass" data-all="1" title="Change prices on everything shown">Mass update ${list.length===all.length?'all':list.length+' shown'}</button>`:''}</div>
   ${bulk}
-  <div class="panel scroll"><table class="cb-table cb-${bk}"><thead><tr>${admin?`<th class="cb-ck"><input type="checkbox" data-cbselall aria-label="Select all shown"${allOn?' checked':''}></th>`:''}${cols.join('')}</tr></thead><tbody>
+  ${bk==='labor'||bk==='crew'?rfBar(bk,admin):''}
+  ${bk==='labor'&&rfGet(c.rf)?rfGrid(list,admin):''}<div class="panel scroll"${bk==='labor'&&rfGet(c.rf)?' hidden':''}><table class="cb-table cb-${bk}"><thead><tr>${admin?`<th class="cb-ck"><input type="checkbox" data-cbselall aria-label="Select all shown"${allOn?' checked':''}></th>`:''}${cols.join('')}</tr></thead><tbody>
   ${shown.map(row).join('')||`<tr><td colspan="${cols.length+1}">${empty}</td></tr>`}</tbody></table></div>
   ${list.length>shown.length?`<div class="adders"><button class="btn" data-act="cb-more">Show ${Math.min(400,list.length-shown.length)} more (${list.length-shown.length} not shown)</button></div>`:''}`;
 }
+
+function rfBar(bk,admin){const c=S.cb;const F=rfAll();const cur=rfGet(c.rf);const dflt=rfDefault();
+  return `<div class="rf-bar panel pad"><label class="f rf-pick">Rate file<select class="field" data-rfsel>${[['','Codebook rates'],...F.map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${(cur?cur.id:'')===v?' selected':''}>${esc(l)}${v===dflt?' (default)':''}</option>`).join('')}</select></label>
+    <span class="small dim rf-note">${cur?`Updated ${fmtShort(String(cur.updated_at||'').slice(0,10))}${cur.by?' by '+esc(cur.by):''} · ${bk==='crew'?'crew costs below use this file':'blank cells use the codebook rate'}`:bk==='crew'?'Crew costs below use the codebook rates. Pick a rate file to see them at its rates.':'The rates on each craft. Rate files are other sets of rates an estimate can use instead.'}</span>
+    ${admin?`<span class="rf-tools"><button class="btn sm" data-act="rf-new">+ New rate file</button>${cur?`<button class="btn sm ghost" data-act="rf-ren">Rename</button><button class="btn sm ghost" data-act="rf-dflt"${dflt===cur.id?' disabled':''}>${dflt===cur.id?'Default for new estimates':'Make default'}</button><button class="btn sm ghost danger" data-act="rf-del">Delete</button>`:dflt?`<button class="btn sm ghost" data-act="rf-dflt">Make default</button>`:''}</span>`:''}</div>`}
+function rfGrid(list,admin){const f=rfGet(S.cb.rf);const R=f.rates||{};
+  const cell=(x,k)=>{const o=R[x.id]||{};const v=o[k];const base=cbD(x)[k];return admin?`<input class="field sm num" data-rfx="${x.id}.${k}" value="${v==null?'':esc(String(v))}" placeholder="${base==null||base===''?'':esc(String(base))}" inputmode="decimal">`:(v!=null&&v!==''?esc(String(v)):`<span class="dim">${base==null?'—':esc(String(base))}</span>`)};
+  const rows=list.map(x=>{const L=cbLabor(rfData(x,f.id))||{};const B=cbLabor(cbD(x))||{};const dif=L.st!=null&&B.st!=null?L.st-B.st:null;
+    return `<tr><td class="num">${esc(x.code||'')}</td><td class="proj"><b>${esc(x.description)}</b></td>${RF_FIELDS.map(([k])=>`<td class="r">${cell(x,k)}</td>`).join('')}<td class="r num"><b>${L.st!=null?money2(L.st):'—'}</b></td><td class="r num">${L.ot!=null?money2(L.ot):'—'}</td><td class="r num small ${dif>0?'bad-t':dif<0?'good-t':'dim'}">${dif==null||Math.abs(dif)<.005?'same':(dif>0?'+':'')+money2(dif)}</td></tr>`}).join('');
+  return `<div class="panel scroll"><table class="cb-table rf-grid"><thead><tr><th>Code</th><th>Craft</th>${RF_FIELDS.map(([,l])=>`<th class="r">${l}</th>`).join('')}<th class="r">Loaded ST</th><th class="r">Loaded OT</th><th class="r">vs codebook</th></tr></thead><tbody>${rows||`<tr><td colspan="9"><div class="empty"><b>No labor crafts yet.</b>Add crafts to the labor codebook; each one gets a row here.</div></td></tr>`}</tbody></table></div>`}
+async function rfSave(next,quiet){const old=S.settings.labor_rates;S.settings.labor_rates=next;render();
+  try{await run(sb.from('settings').upsert({key:'labor_rates',value:next}));if(!quiet)toast('Saved')}
+  catch(e){S.settings.labor_rates=old;render();toast(/row-level|policy|permission/i.test(errMsg(e))?'Run supabase/update-52-labor-rate-files.sql first.':'Couldn’t save: '+errMsg(e))}}
+const rfState=()=>clone(S.settings.labor_rates||{files:[],dflt:''});
+document.addEventListener('change',e=>{const t=e.target;
+  if(t.dataset.rfsel!=null){S.cb.rf=t.value||'';render();return}
+  if(t.dataset.rfx!=null){const [id,k]=t.dataset.rfx.split('.');const st=rfState();const f=st.files.find(x=>x.id===S.cb.rf);if(!f)return;f.rates=f.rates||{};const o=f.rates[id]=f.rates[id]||{};
+    const v=t.value.trim();if(v===''){delete o[k]}else{const n=num(v);if(n==null){toast('Type a number');return}o[k]=n}if(!Object.keys(o).length)delete f.rates[id];
+    f.updated_at=new Date().toISOString();f.by=myName();rfSave(st,true)}});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('rf-')||!cbEditable())return;
+  if(a==='rf-new'){M={kind:'rfnew',name:'',from:S.cb.rf||''};showModal();return}
+  if(a==='rf-ren'){const f=rfGet(S.cb.rf);if(!f)return;const n=prompt('Rename this rate file',f.name);if(!n||!n.trim())return;const st=rfState();st.files.find(x=>x.id===f.id).name=n.trim();rfSave(st);return}
+  if(a==='rf-dflt'){const st=rfState();st.dflt=S.cb.rf||'';rfSave(st);toast(`New estimates start with ${rfName(st.dflt)}`);return}
+  if(a==='rf-del'){const f=rfGet(S.cb.rf);if(!f)return;if(!confirm(`Delete the rate file “${f.name}”?\n\nEstimates that use it go back to the codebook rates the next time they’re opened, and their labor prices show as changed.`))return;const st=rfState();st.files=st.files.filter(x=>x.id!==f.id);if(st.dflt===f.id)st.dflt='';S.cb.rf='';rfSave(st);return}
+  if(a==='rf-go'&&M&&M.kind==='rfnew'){const name=String(M.name||'').trim();if(!name){toast('Give it a name');return}if(rfAll().some(x=>normH(x.name)===normH(name))){toast('A rate file with that name already exists');return}
+    const src=rfGet(M.from);const rates={};cbList('labor').forEach(x=>{const d=rfData(x,src?src.id:'');const o={};RF_FIELDS.forEach(([k])=>{if(d[k]!=null&&d[k]!=='')o[k]=num(d[k])});if(Object.keys(o).length)rates[x.id]=o});
+    const st=rfState();const id=newId();st.files.push({id,name,rates,updated_at:new Date().toISOString(),by:myName()});const fromName=rfName(M.from);closeModal();S.cb.rf=id;rfSave(st,true);toast(`${name} created from ${fromName}`);return}});
+function rfNewModal(){return mhead('New rate file','A full set of labor rates an estimate can use')+`<div class="mbody">
+  <label class="f">Name<input class="field" data-rfn value="${esc(M.name||'')}" placeholder="e.g. 2026 Night Work Labor" autofocus></label>
+  <label class="f">Start from<select class="field" data-rff>${[['','Codebook rates'],...rfAll().map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${M.from===v?' selected':''}>${esc(l)}</option>`).join('')}</select></label>
+  <p class="hint">It copies every craft's rates from that file. Then change only the ones that differ.</p></div>
+  <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="rf-go">Create rate file</button></div></div>`}
+document.addEventListener('input',e=>{const t=e.target;if(!M||M.kind!=='rfnew')return;if(t.dataset.rfn!=null)M.name=t.value;if(t.dataset.rff!=null)M.from=t.value});
+document.addEventListener('change',e=>{const t=e.target;if(M&&M.kind==='rfnew'&&t.dataset.rff!=null)M.from=t.value});
 
 /* ---------- item editor ---------- */
 function cbNew(book){const c=S.cb;const d={id:newId(),book,code:'',description:'',category:c.cat||'',unit:book==='material'?'':'HR',cost:null,data:{},vendor_id:book==='material'&&c.vendor&&c.vendor!=='none'?c.vendor:null,price_date:todayStr(),price_history:[],active:true,notes:''};
@@ -4901,7 +4945,7 @@ function estDefaultsRaw(){const D=S.settings.est_settings||{};const sch=Array.is
   return {markup:{mode:'simple',oh:10,profit:10,compound:true,bond:0,tax:0,ret:5,spreadInd:'cost',spreadMu:'cost',byType:Object.fromEntries(MK_TYPES.map(k=>[k,{oh:10,mu:10}])),...(D.markup||{})},
     ind:Array.isArray(D.ind)?D.ind:IND_DEFAULT,schedules:sch,defSched:D.defSched||sch.find(s=>s.name==='5 × 10s')?.id||sch[0].id,crews:num(D.crews)||2}}
 function estBlank(){const D=estDefaultsRaw();const sched=D.schedules.find(s=>s.id===D.defSched)||D.schedules[0];
-  return {v:3,settings:{hpd:10,sched:clone(sched),crews:D.crews,durDays:null},markup:clone(D.markup),ind:D.ind.map(l=>({...l,id:newId(),qty:null})),items:[]}}
+  return {v:3,settings:{hpd:10,sched:clone(sched),crews:D.crews,durDays:null,rateFile:rfDefault()},markup:clone(D.markup),ind:D.ind.map(l=>({...l,id:newId(),qty:null})),items:[]}}
 
 /* ---------- calendar & overtime ---------- */
 function schedCalc(s){const h=(s&&Array.isArray(s.days)?s.days:[10,10,10,10,10,0,0]).map(x=>Math.max(0,num(x)||0));const H=h.reduce((a,b)=>a+b,0);const days=h.filter(x=>x>0).length;
@@ -5449,7 +5493,7 @@ document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data||
    item.sec; d.sections sets the section order. Codes auto-number
    (400 / 410 / 410.10) and can be typed over.
    ===================================================================== */
-function estNorm(d){d=d&&typeof d==='object'?d:{};const old=!(d.v>=3),hadSched=!!(d.settings&&d.settings.sched);const b=estBlank();d.settings={...b.settings,...(d.settings||{})};if(old&&!hadSched){d.settings.sched=null;d.settings.crews=d.settings.crews||1}d.markup={...b.markup,...(d.markup||{})};
+function estNorm(d){d=d&&typeof d==='object'?d:{};const old=!(d.v>=3),hadSched=!!(d.settings&&d.settings.sched),hadRF=!!(d.settings&&'rateFile' in d.settings);const b=estBlank();d.settings={...b.settings,...(d.settings||{})};if(!hadRF)d.settings.rateFile='';if(old&&!hadSched){d.settings.sched=null;d.settings.crews=d.settings.crews||1}d.markup={...b.markup,...(d.markup||{})};
   d.markup.byType={...b.markup.byType,...(d.markup.byType||{})};MK_TYPES.forEach(k=>{d.markup.byType[k]={oh:null,mu:null,...(d.markup.byType[k]||{})}});d.ind=Array.isArray(d.ind)?d.ind:[];if(old&&!d.markup.mode)d.markup.mode='simple';d.items=Array.isArray(d.items)?d.items:[];
   d.items.forEach(it=>{it.acts=Array.isArray(it.acts)?it.acts:[];it.acts.forEach(a=>{a.res=Array.isArray(a.res)?a.res:[]})});
   // v1 → v2: items were grouped by their Scope text; that becomes the section
@@ -5484,7 +5528,7 @@ function estFromTpl(tpl){const D=cbD(tpl);const d=estNorm(clone(tpl.book==='sect
   const idm={};d.items.forEach(it=>{const nid=newId();idm[it.id]=nid;it.id=nid;it.acts.forEach(a=>{a.id=newId();a.res.forEach(r=>{r.id=newId();delete r.src})})});
   ['carry','adj'].forEach(k=>{const o=d.markup[k]||{};d.markup[k]=Object.fromEntries(Object.entries(o).filter(([id])=>idm[id]).map(([id,v])=>[idm[id],v]))});
   (d.ind||[]).forEach(l=>l.id=newId());estApplyStale(estStale(d));delete d.pkgs;delete d.prop;delete d.gantt;delete d.takeoff;return d}
-async function estCreate(mode,src){const b=byId(S.bids,S.est.bidId);if(!b)return;let d=estNorm(estBlank());
+async function estCreate(mode,src){const b=byId(S.bids,S.est.bidId);if(!b)return;let d=estNorm(estBlank());S.est.pendRF=d.settings.rateFile;
   try{if(mode==='scopes'){scopeItems(b).forEach((s,k)=>d.sections.push({id:newId(),code:String((k+1)*100),name:s.name,notes:partsOf(s).length?'Includes '+partsOf(s).join(', '):''}))}
     if(mode==='copy'){if(!src)throw new Error('Pick an estimate to copy.');const r=await run(sb.from('estimates').select('data').eq('id',src).maybeSingle());if(!r)throw new Error('That estimate isn’t available.');d=estNorm(clone(r.data));delete d.prop}
     if(mode==='tpl'){const t=cbById(src);if(!t)throw new Error('Pick a master template.');d=estFromTpl(t)}
@@ -8747,6 +8791,7 @@ function estInfoView(d,b,ro){const I=estInfo(d,b);const dis=ro?' disabled':'';co
       <label class="f s2">Project type${epIn('info.projectType',I.projectType)}</label>${fixed('Bid date',b.due_date?fmtShort(b.due_date)+(b.due_time?' · '+String(b.due_time).slice(0,5):''):'')}${fixed('Estimator',lead?lead.name:'')}
       <label class="f">Plan rev. date${dt('info.planRev',I.planRev)}</label><label class="f">Plan rev. note${epIn('info.planRevNote',I.planRevNote)}</label><label class="f">Est. start date${dt('info.start',I.start)}</label><label class="f">Est. completion date${dt('info.finish',I.finish)}</label>
       ${fixed('Project status',b.status||'')}${fixed('Pay item database','Codebook · Bid items')}
+      <label class="f s2">Labor rate file<select class="field" data-estrf${dis}>${[['','Codebook rates'],...rfAll().map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${(rfGet((d.settings||{}).rateFile)?d.settings.rateFile:'')===v?' selected':''}>${esc(l)}</option>`).join('')}</select></label>
       <label class="f s4">Project notes<textarea class="field" id="${epId('info.notes')}" data-ep="info.notes" rows="4"${dis}>${esc(I.notes||'')}</textarea></label></div>
       <p class="hint">Bid date, estimator and status come from the bid. Change them on the bid itself.</p></fieldset>
     <div class="info-parties">${INFO_PARTIES.map(party).join('')}</div>
@@ -8754,6 +8799,9 @@ function estInfoView(d,b,ro){const I=estInfo(d,b);const dis=ro?' disabled':'';co
       <label class="f s4">Address notes<textarea class="field" id="${epId('info.addr.notes')}" data-ep="info.addr.notes" rows="2"${dis}>${esc(I.addr.notes||'')}</textarea></label></div></fieldset></div>`}
 // picking a company from Contacts fills in what Contacts knows; picking one of its people fills their phone and email
 document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data||S.view!=='estimate'||EC().ro)return;const d=S.est.data;
+  if(t.dataset.estrf!=null){d.settings=d.settings||{};d.settings.rateFile=t.value||'';
+    const L=estStale(d).filter(x=>x.crew||(x.r&&cbById(x.r.cb)?.book==='labor'));estApplyStale(L);estTouch();render();
+    const nr=L.filter(x=>!x.crew).length,nc=L.filter(x=>x.crew).length;toast(`Labor priced from ${rfName(d.settings.rateFile)}${L.length?` · ${[nr?`${nr} labor line${nr===1?'':'s'}`:'',nc?`${nc} crew${nc===1?'':'s'}`:''].filter(Boolean).join(' and ')} updated`:''}`);return}
   if(t.dataset.infoparty){const P=estInfo(d,{})[t.dataset.infoparty];const c=infoClient(t.value);if(c){P.name=c.company;if(c.address&&!P.address)P.address=c.address;if(c.phone&&!P.phone)P.phone=c.phone;if(c.email&&!P.email)P.email=c.email;const one=(c.contacts||[])[0];if(one&&!P.contact&&(c.contacts||[]).length===1){P.contact=one.name||'';if(one.phone&&!P.mobile)P.mobile=one.phone;if(one.email&&!P.email)P.email=one.email}}estTouch();render();return}
   if(t.dataset.infocontact){const P=estInfo(d,{})[t.dataset.infocontact];const c=infoClient(P.name);const x=c&&(c.contacts||[]).find(o=>normH(o.name)===normH(t.value));if(x){if(x.phone)P.mobile=x.phone;if(x.email)P.email=x.email;estTouch();render()}}});
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
