@@ -5156,6 +5156,9 @@ const resOtp=r=>r.otp!=null?num(r.otp)||0:r.cb&&cbById(r.cb)?cbOtp(cbById(r.cb))
 /* ---------- math ---------- */
 function resFromCb(x){const k=resKindOf(x);const timed=k==='labor'||k==='equipment';
   return {id:newId(),kind:k,cb:x.id,code:x.code||'',desc:x.description,unit:timed?'HR':x.unit||'',basis:timed?'hour':'unit',factor:1,waste:k==='material'?num(cbD(x).waste)||0:0,price:+(cbCost(x)||0).toFixed(4),tax:k==='material'&&cbD(x).tax!==false,...(k==='labor'?{otp:+cbOtp(x).toFixed(4)}:{}),...cbFuel(x)}}
+// a crew's production rate (and unit) goes onto the activity: when the activity has none, or its rate came from a crew
+function crewProdTo(a,x){const D=cbD(x);const pr=num(D.prod);if(!pr)return '';const mine=num(a.prod)&&a.prodSrc!=='crew';if(mine)return `Kept this activity’s own production rate (${x.description} runs ${fmtN(pr,2)} ${prodLabel(D.mode||'uph',D.uom||a.unit||'unit')})`;
+  a.mode=D.mode||'uph';a.prod=pr;a.prodSrc='crew';if(D.uom&&!a.unit)a.unit=D.uom;return `Production from ${x.description}: ${fmtN(pr,2)} ${prodLabel(a.mode,D.uom||a.unit||'unit')}`}
 function crewSnap(x){const C=cbCrew(x);const fu={};C.lines.forEach(l=>{const f=cbFuel(l.it);if(!f.ft)return;const k=f.ft+'|'+f.fp;const o=fu[k]=fu[k]||{ft:f.ft,fp:f.fp,g:0,fg:0};o.g+=f.g*l.q;o.fg+=f.fg*l.q});
   const fuel=Object.values(fu).map(o=>({...o,g:r4(o.g),fg:r4(o.fg)}));return {id:x.id,code:x.code||'',name:x.description,labor:+C.labor.toFixed(4),equip:+C.equip.toFixed(4),men:C.men,otp:+cbOtp(x).toFixed(4),...(fuel.length?{fuel}:{})}}
 // fuel a codebook machine burns (gal/hr), its fuel+lube factor, and the $/gal its rate was built with
@@ -5232,7 +5235,7 @@ function estStale(d){const out=[];const acts=[];(d.items||[]).forEach(it=>(it.ac
     (a.res||[]).forEach(r=>{if(!r.cb||r.src)return;const x=cbById(r.cb);if(!x)return;const c=cbCost(x);const f=cbFuel(x);if(c!=null&&(Math.abs(c-(+r.price||0))>.004||num(f.fp)!==num(r.fp)||num(f.fg)!==num(r.fg)))out.push({r,price:+c.toFixed(4),fuel:f})})});return out}
 function estApplyStale(list){list.forEach(s=>{if(s.crew){s.a.crew={...s.a.crew,...s.crew};if(!s.crew.fuel)delete s.a.crew.fuel}else{s.r.price=s.price;['ft','fp','fg','g'].forEach(k=>{if(s.fuel&&s.fuel[k]!=null)s.r[k]=s.fuel[k];else delete s.r[k]})}})}
 // a fresh copy of a template, with new ids and today's codebook prices
-function actFromTpl(src){const a=clone(src);a.id=newId();a.qty=null;a.res=(a.res||[]).map(r=>({...r,id:newId()}));estApplyStale(estStale({act:a}));return a}
+function actFromTpl(src){const a=clone(src);a.id=newId();a.qty=null;a.res=(a.res||[]).map(r=>({...r,id:newId()}));if(a.crew&&!num(a.prod)){const x=cbById(a.crew.id);if(x)crewProdTo(a,x)}estApplyStale(estStale({act:a}));return a}
 
 /* ---------- loading / saving ---------- */
 const estCanEdit=()=>{if(S.est&&S.est.ver)return false;if(S.est&&S.est.tpl)return cbEditable();const b=byId(S.bids,S.est?.bidId);return !!b&&canWork(b)&&can('estimates','edit')};
@@ -5421,10 +5424,11 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
 document.addEventListener('input',e=>{const t=e.target;if(!t.dataset.ep||t.type==='checkbox')return;const ec=EC();if(!ec.root||ec.ro)return;
   const v=t.dataset.ept==='n'?(t.value.trim()===''?null:num(t.value.replace(/[,$\s]/g,''))):t.value;epSet(ec.root,t.dataset.ep,v);
   if(/\.res\.\d+\.price$/.test(t.dataset.ep)){const r=epGet(ec.root,t.dataset.ep.replace(/\.price$/,''));if(r)delete r.src}
+  if(/(^|\.)prod$/.test(t.dataset.ep)){const o=epGet(ec.root,t.dataset.ep.replace(/\.?prod$/,''))||ec.root;if(o)delete o.prodSrc}
   ec.redraw()});
 document.addEventListener('change',e=>{const t=e.target;const ec=EC();if(!ec.root||ec.ro)return;
   if(t.dataset.ep&&t.type==='checkbox'){epSet(ec.root,t.dataset.ep,t.checked);ec.redraw();return}
-  if(t.dataset.epcrew){const a=epGet(ec.root,t.dataset.epcrew);const x=cbById(t.value);a.crew=x?crewSnap(x):null;ec.redraw();return}
+  if(t.dataset.epcrew){const a=epGet(ec.root,t.dataset.epcrew);const x=cbById(t.value);a.crew=x?crewSnap(x):null;const m=x&&crewProdTo(a,x);ec.redraw();if(m)toast(m);return}
   if(t.dataset.epadd){const id=EST_PICK.map.get(t.value);if(!id){if(t.value.trim())toast('Pick an item from the list, or use “+ Custom…” for something not in the codebook.');return}const x=cbById(id);if(x)epAddRes(t.dataset.epadd,resFromCb(x));return}
   if(t.dataset.epcustom){if(!t.value)return;epAddRes(t.dataset.epcustom,resCustom(t.value));return}
   if(t.dataset.epact){const it=epGet(ec.root,t.dataset.epact);const tp=cbById(t.value);if(tp&&cbD(tp).act){const a=actFromTpl(cbD(tp).act);a.code=tp.code||a.code||'';a.desc=tp.description||a.desc;if(!a.unit)a.unit=cbD(tp).unit||it.unit||'';it.acts.push(a);ec.redraw()}return}
