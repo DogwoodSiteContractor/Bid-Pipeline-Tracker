@@ -4465,9 +4465,11 @@ const CB_FIELDS={
     {k:'data.oprq',l:'Operators per machine',t:'num',al:['operators','operatorqty','operatorsper']},
     {k:'notes',l:'Notes',t:'text',al:['notes','note','comment','comments']}],
   crew:[
-    {k:'code',l:'Code',t:'text',al:['code']},
+    {k:'code',l:'Crew ID',t:'text',al:['code','crewid']},
     {k:'description',l:'Crew name',t:'text',req:1,al:['description','crew','name']},
     {k:'category',l:'Category',t:'cat',al:['category']},
+    {k:'data.uom',l:'Units of measure',t:'unit',al:['units','unitofmeasure','uom','unit']},
+    {k:'data.cc',l:'Cost code',t:'text',al:['costcode','cc']},
     {k:'notes',l:'Notes',t:'text',al:['notes']}],
   activity:[{k:'code',l:'Code',t:'text',al:['code']},{k:'description',l:'Activity',t:'text',req:1,al:['description','activity','name']},{k:'category',l:'Category',t:'cat',al:['category']},{k:'notes',l:'Notes',t:'text',al:['notes']}],
   biditem:[{k:'code',l:'Code',t:'text',al:['code']},{k:'description',l:'Bid item',t:'text',req:1,al:['description','item','name']},{k:'category',l:'Category',t:'cat',al:['category']},{k:'notes',l:'Notes',t:'text',al:['notes']}]};
@@ -4485,8 +4487,9 @@ const cbName=x=>x?[x.code,x.description].filter(Boolean).join(' · '):'Removed i
 const cbEditable=()=>can('codebook','edit');
 // ---- pricing
 function cbLabor(d){const b=num(d.base);if(b==null)return null;const bu=(num(d.burden)||0)/100,f=num(d.fringe)||0;return {st:b*(1+bu)+f,ot:b*(num(d.ot)||1.5)*(1+bu)+f}}
+const crewFile=(x,book)=>{if(S.view==='estimate')return undefined;const d=cbD(x);const k=book==='equipment'?'rfE':'rfL';return d[k]==null?undefined:(rfGet(d[k])?d[k]:'')};
 function cbCrew(x){let labor=0,equip=0,men=0,missing=0;const lines=[];
-  (cbD(x).members||[]).forEach(m=>{const it=cbById(m.id);const q=num(m.qty)||0;if(!it||it.book==='crew'||it.book==='material'){missing++;return}const c=cbCost(it)||0;lines.push({it,q,c,ext:c*q});if(it.book==='labor'){labor+=c*q;men+=q}else equip+=c*q});
+  (cbD(x).members||[]).forEach(m=>{const it=cbById(m.id);const q=num(m.qty)||0;if(!it||it.book==='crew'||it.book==='material'){missing++;return}const c=cbCost(it,crewFile(x,it.book))||0;lines.push({it,q,c,ext:c*q});if(it.book==='labor'){labor+=c*q;men+=q}else equip+=c*q});
   return {labor,equip,total:labor+equip,men,missing,lines}}
 /* ---- labor rate files: named sets of rates (like ProEstimate rate files). The codebook's own rates are "Codebook rates". */
 const RF_FIELDS=[['base','Base $/hr'],['fringe','Fringe $/hr'],['burden','Burden %'],['ot','OT factor']];
@@ -4505,9 +4508,9 @@ function rfCtx(book='labor'){if(S.view==='estimate'&&S.est){const id=S.est.data?
 function rfData(x,fid){const d=cbD(x);const f=rfGet(fid===undefined?rfCtx(x.book):fid);const o=f&&f.rates&&f.rates[x.id];if(!o)return d;const m={...d};rfFields(x.book).forEach(([k])=>{if(o[k]!=null&&o[k]!=='')m[k]=o[k]});return m}
 // the operator a machine brings with it (from the labor codebook)
 const eqOpr=x=>{if(!x||x.book!=='equipment')return null;const d=cbD(x);const L=d.opr&&cbById(d.opr);return L&&L.book==='labor'?{it:L,qty:num(d.oprq)||1}:null};
-function cbCost(x){if(!x)return null;const d=cbD(x);
-  if(x.book==='labor'){const L=cbLabor(rfData(x));return L?L.st:num(x.cost)}
-  if(x.book==='equipment'){const e=rfData(x);const r=num(e.rate),o=num(e.op);return r==null&&o==null?num(x.cost):(r||0)+(o||0)}
+function cbCost(x,fid){if(!x)return null;const d=cbD(x);
+  if(x.book==='labor'){const L=cbLabor(rfData(x,fid));return L?L.st:num(x.cost)}
+  if(x.book==='equipment'){const e=rfData(x,fid);const r=num(e.rate),o=num(e.op);return r==null&&o==null?num(x.cost):(r||0)+(o||0)}
   if(x.book==='crew')return cbCrew(x).total;
   if(CB_TPL.has(x.book)){const r=tplCalc(x);return r?r.unit:null}
   return num(x.cost)}
@@ -4585,7 +4588,7 @@ function vCb(){
 function rfPick(book,lbl){const cur=rfGet(S.cb[rfCbKey(book)]);const dflt=rfDefault(book);
   return `<label class="f rf-pick">${lbl}<select class="field" data-rfsel="${book}">${[['','Codebook rates'],...rfAll(book).map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${(cur?cur.id:'')===v?' selected':''}>${esc(l)}${v===dflt?' (default)':''}</option>`).join('')}</select></label>`}
 function rfBar(bk,admin){const c=S.cb;
-  if(bk==='crew')return `<div class="rf-bar panel pad">${rfPick('labor','Labor rate file')}${rfPick('equipment','Equipment rate file')}<span class="small dim rf-note">Crew costs below use these rate files. Estimates pick their own on Project info.</span></div>`;
+  if(bk==='crew')return `<div class="rf-bar panel pad">${rfPick('labor','Labor rate file')}${rfPick('equipment','Equipment rate file')}<span class="small dim rf-note">New crews start with these rate files. Each crew can pick its own in its editor; estimates use the rate files on Project info.</span></div>`;
   const cur=rfGet(c[rfCbKey(bk)]);const dflt=rfDefault(bk);const eq=bk==='equipment';
   return `<div class="rf-bar panel pad">${rfPick(bk,'Rate file')}
     <span class="small dim rf-note">${cur?`Updated ${fmtShort(String(cur.updated_at||'').slice(0,10))}${cur.by?' by '+esc(cur.by):''} · blank cells use the codebook rate`:eq?'The rates on each machine. Rate files are other sets of equipment rates an estimate can use instead.':'The rates on each craft. Rate files are other sets of rates an estimate can use instead.'}</span>
@@ -4762,7 +4765,7 @@ document.addEventListener('change',e=>{const t=e.target;if(M&&M.kind==='rfnew'&&
 /* ---------- item editor ---------- */
 function cbNew(book){const c=S.cb;const d={id:newId(),book,code:'',description:'',category:c.cat||'',unit:book==='material'?'':'HR',cost:null,data:{},vendor_id:book==='material'&&c.vendor&&c.vendor!=='none'?c.vendor:null,price_date:todayStr(),price_history:[],active:true,notes:''};
   if(book==='activity')d.data={act:estNewAct(),qty:1,unit:''};if(book==='biditem')d.data={item:estNewItem({items:[]},{code:''}),qty:1,unit:'LS'};
-  if(book==='material')d.data={type:'Material',tax:true};if(book==='labor')d.data={ot:1.5,rb:{on:true,ben:true}};if(book==='equipment')d.data={own:'Owned',rb:{on:true,mode:'own',ft:'diesel'}};if(book==='crew')d.data={members:[]};return d}
+  if(book==='material')d.data={type:'Material',tax:true};if(book==='labor')d.data={ot:1.5,rb:{on:true,ben:true}};if(book==='equipment')d.data={own:'Owned',rb:{on:true,mode:'own',ft:'diesel'}};if(book==='crew')d.data={members:[],rfL:rfGet(S.cb.rf)?S.cb.rf:rfDefault(),rfE:rfGet(S.cb.rfE)?S.cb.rfE:rfDefault('equipment'),mode:'uph',hpd:10};return d}
 function cbOpen(id){const x=cbById(id);if(!x)return;const d=clone(x);d.data=cbD(d);
   if(CB_TPL.has(d.book)){if(d.book==='activity'){d.data.act=d.data.act||estNewAct();d.data.act.res=d.data.act.res||[]}else{d.data.item=d.data.item||estNewItem({items:[]},{code:''});d.data.item.acts=(d.data.item.acts||[]).map(a=>({...a,res:a.res||[]}))}estApplyStale(estStale(d.data));M={kind:'cbtpl',draft:d,orig:clone(x)};showModal();return}if(d.book==='crew')d.data.members=(d.data.members||[]).map(m=>({...m}));M={kind:'cbitem',draft:d,orig:clone(x)};showModal()}
 function cbFieldHtml(f,d,dis){const v=cbGet(d,f.k);const id='cbe-'+f.k.replace('.','-');const a=`id="${id}" data-cbe="${f.k}"${dis}`;
@@ -4782,17 +4785,35 @@ function cbCalcHtml(d){
   if(d.book==='equipment'){const c=cbCost(d);return `<div class="cb-calc"><div><span>Total</span><b>${money2(c)}/hr</b></div><p class="hint">${cbD(d).own==='Rented'?'Rental rate':'Ownership rate'} + operating cost (fuel, repairs, wear). ${eqOpr(d)?` The operator (${esc(eqOpr(d).it.description)}) comes in as its own labor line.`:' Pick an operator below to bring one in with the machine.'}</p></div>`}
   if(d.book==='material'){const c=num(d.cost),w=num(cbD(d).waste)||0;return c!=null&&w?`<div class="cb-calc"><div><span>With ${fmtN(w,2)}% waste</span><b>${money2(c*(1+w/100))}/${esc(d.unit||'unit')}</b></div></div>`:''}
   return ''}
-function cbCrewHtml(d,dis){const C=cbCrew(d);const mem=cbD(d).members||[];
-  const opts=b=>cbList(b).filter(x=>x.active!==false||mem.some(m=>m.id===x.id)).sort((a,b)=>String(a.description).localeCompare(b.description));
+const CREW_MODES=[['uph','Units / hour'],['upd','Units / crew day'],['hpu','Hours / unit']];
+function cbCrewHtml(d,dis){const C=cbCrew(d);const D=cbD(d);const mem=D.members||[];
+  const fL=crewFile(d,'labor'),fE=crewFile(d,'equipment');const inF=(x)=>{const fid=x.book==='equipment'?fE:fL;const f=rfGet(fid);return !f||!!(f.rates||{})[x.id]};
+  const cost=x=>cbCost(x,x.book==='equipment'?fE:fL);
+  const opts=b=>cbList(b).filter(x=>(x.active!==false&&inF(x))||mem.some(m=>m.id===x.id)).sort((a,b)=>String(a.description).localeCompare(b.description));
+  const hpd=num(D.hpd)||10,mode=D.mode||'uph',pr=num(D.prod);const uph=pr?(mode==='uph'?pr:mode==='upd'?pr/hpd:mode==='hpu'?1/pr:null):null;const uom=D.uom||'unit';
+  const rfSel=(b,k,l)=>`<label class="f">${l}<select class="field" data-crewf="${k}"${dis}>${[['','Codebook rates'],...rfAll(b).map(f=>[f.id,f.name])].map(([v,n])=>`<option value="${v}"${(D[k]==null?'':(rfGet(D[k])?D[k]:''))===v?' selected':''}>${esc(n)}</option>`).join('')}</select></label>`;
+  const prodBox=`<fieldset><legend>Rate files & production</legend><div class="fg">
+    ${rfSel('labor','rfL','Labor rate file')}${rfSel('equipment','rfE','Equipment rate file')}
+    <label class="f">Production type<select class="field" data-crewf="mode"${dis}>${CREW_MODES.map(([v,l])=>`<option value="${v}"${mode===v?' selected':''}>${l}</option>`).join('')}</select></label>
+    <label class="f">Hours per day<input class="field num" type="number" step="any" data-crewf="hpd" value="${esc(D.hpd??10)}"${dis}></label>
+    <label class="f">Production rate<span class="cb-inp has-post"><input class="field num" type="number" step="any" data-crewf="uph" id="crew-uph" value="${uph!=null?+uph.toFixed(4):''}"${dis}><span class="cb-post">${esc(uom)} / hr</span></span></label>
+    <label class="f">Per day<span class="cb-inp has-post"><input class="field num" type="number" step="any" data-crewf="upd" id="crew-upd" value="${uph!=null?+(uph*hpd).toFixed(2):''}"${dis}><span class="cb-post">${esc(uom)} / day</span></span></label></div>
+    <div class="cb-calc"><div><span>Est L/E cost per hour</span><b>${money2(C.total)}</b></div><div><span>Est cost per unit</span><b>${uph?money2(C.total/uph)+' / '+esc(uom):'—'}</b></div></div>
+    <p class="hint">The member lists below only offer what’s in these rate files. On an estimate the crew is priced from the estimate’s own rate files (Project info).</p></fieldset>`;
   const pick=(i,cur)=>`<select class="field" data-cbm="${i}.id"${dis}>${cur&&!cbById(cur)?'<option value="" selected>Removed item</option>':''}<optgroup label="Labor">${opts('labor').map(x=>`<option value="${x.id}"${x.id===cur?' selected':''}>${esc(x.description)}${x.code?' ('+esc(x.code)+')':''}</option>`).join('')}</optgroup><optgroup label="Equipment">${opts('equipment').map(x=>`<option value="${x.id}"${x.id===cur?' selected':''}>${esc(x.description)}${x.code?' ('+esc(x.code)+')':''}</option>`).join('')}</optgroup></select>`;
-  const addOpts=`<option value="">+ Add a member…</option><optgroup label="Labor">${opts('labor').map(x=>`<option value="${x.id}">${esc(x.description)} — ${money2(cbCost(x))}/hr</option>`).join('')}</optgroup><optgroup label="Equipment">${opts('equipment').map(x=>`<option value="${x.id}">${esc(x.description)} — ${money2(cbCost(x))}/hr</option>`).join('')}</optgroup>`;
-  return `<fieldset><legend>Crew members</legend>
+  const addOpts=`<option value="">+ Add a member…</option><optgroup label="Labor${rfGet(fL)?' · '+esc(rfName(fL)):''}">${opts('labor').filter(x=>!mem.some(m=>m.id===x.id)||true).map(x=>`<option value="${x.id}">${esc(x.description)}${x.code?' ('+esc(x.code)+')':''} — ${money2(cost(x))}/hr</option>`).join('')}</optgroup><optgroup label="Equipment${rfGet(fE)?' · '+esc(rfName(fE)):''}">${opts('equipment').map(x=>`<option value="${x.id}">${esc(x.description)}${x.code?' ('+esc(x.code)+')':''} — ${money2(cost(x))}/hr</option>`).join('')}</optgroup>`;
+  return prodBox+`<fieldset><legend>Crew members</legend>
     ${mem.length?`<div class="cb-mhead"><span>Labor or equipment</span><span class="r">Qty</span><span class="r">$/hr each</span><span class="r">$/hr</span><span></span></div>`:''}
-    <div class="rows">${mem.map((m,i)=>{const it=cbById(m.id);const c=it?cbCost(it)||0:0;return `<div class="cb-mrow"><span class="cb-mtag ${it?.book==='equipment'?'eq':'lab'}">${it?.book==='equipment'?'EQ':'LAB'}</span>${pick(i,m.id)}<input class="field num" type="number" step="any" min="0" data-cbm="${i}.qty" id="cbm-${i}-qty" value="${esc(m.qty??'')}"${dis}><span class="r num small">${money2(c)}</span><span class="r num"><b>${money2(c*(num(m.qty)||0))}</b></span>${dis?'<span></span>':`<button class="rm" data-act="cb-m-rm" data-i="${i}" aria-label="Remove">×</button>`}</div>`}).join('')}</div>
+    <div class="rows">${mem.map((m,i)=>{const it=cbById(m.id);const c=it?cost(it)||0:0;return `<div class="cb-mrow${it&&!inF(it)?' cb-notin':''}"${it&&!inF(it)?` title="Not in ${esc(rfName(it.book==='equipment'?fE:fL))}: priced at its codebook rate"`:''}><span class="cb-mtag ${it?.book==='equipment'?'eq':'lab'}">${it?.book==='equipment'?'EQ':'LAB'}</span>${pick(i,m.id)}<input class="field num" type="number" step="any" min="0" data-cbm="${i}.qty" id="cbm-${i}-qty" value="${esc(m.qty??'')}"${dis}><span class="r num small">${money2(c)}</span><span class="r num"><b>${money2(c*(num(m.qty)||0))}</b></span>${dis?'<span></span>':`<button class="rm" data-act="cb-m-rm" data-i="${i}" aria-label="Remove">×</button>`}</div>`}).join('')}</div>
     ${dis?'':`<select class="field cb-madd" data-cbmadd>${addOpts}</select>`}
     ${!cbList('labor').length&&!cbList('equipment').length?'<p class="hint">Add labor rates and equipment on their tabs first — crews are built from them.</p>':''}
     <div class="cb-calc" id="cb-crewtot"><div><span>Crew size</span><b>${fmtN(C.men,2)} ${C.men===1?'person':'people'}</b></div><div><span>Labor</span><b>${money2(C.labor)}/hr</b></div><div><span>Equipment</span><b>${money2(C.equip)}/hr</b></div><div><span>Crew cost</span><b>${money2(C.total)}/hr</b></div></div>
-    <p class="hint">Crew cost updates automatically when a wage or equipment rate changes in the codebook.</p></fieldset>`}
+    <p class="hint">Crew cost updates automatically when a rate changes in the codebook or in these rate files.</p></fieldset>`}
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='cbitem'||!M.draft||M.draft.book!=='crew'||t.dataset.crewf==null)return;const D=M.draft.data=cbD(M.draft);const k=t.dataset.crewf;const v=t.value;const hpd=num(D.hpd)||10;
+  if(k==='rfL'||k==='rfE'||k==='mode'){const old=D.mode||'uph';const nr=num(D.prod);const uph=nr?(old==='uph'?nr:old==='upd'?nr/hpd:1/nr):null;D[k]=v;if(k==='mode'&&uph)D.prod=+(v==='uph'?uph:v==='upd'?uph*hpd:1/uph).toFixed(6)}
+  else if(k==='hpd'){const nr=num(D.prod);const uph=nr?((D.mode||'uph')==='uph'?nr:(D.mode==='upd'?nr/hpd:1/nr)):null;D.hpd=num(v)||10;if(uph&&D.mode==='upd')D.prod=+(uph*D.hpd).toFixed(6)}
+  else if(k==='uph'||k==='upd'){const n=num(v);const uph=n==null?null:(k==='uph'?n:n/hpd);const m=D.mode||'uph';D.prod=uph==null||!uph?null:+(m==='uph'?uph:m==='upd'?uph*hpd:1/uph).toFixed(6)}
+  renderModal()});
 function cbHistHtml(x){const h=(Array.isArray(x.price_history)?x.price_history:[]).slice().reverse();if(!h.length)return '';const F=Object.fromEntries(CB_FIELDS[x.book].map(f=>[f.k,f]));
   const src={edit:'Edited',mass:'Mass update',import:'Import',quote:'Quote',rates:'Rate sheet'};
   return `<fieldset><legend>Price history</legend><div class="list cb-hist">${h.map(e=>{const f=F[e.f]||{l:e.f,t:'money'};const ch=num(e.o)&&num(e.n)!=null?(e.n-e.o)/e.o*100:null;
@@ -5113,7 +5134,7 @@ const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 function schedText(s){const c=schedCalc(s);return `${fmtN(c.H,1)} hrs/week over ${c.days} day${c.days===1?'':'s'} · ${fmtN(c.st,1)} straight${c.ot?` · ${fmtN(c.ot,1)} OT ×${c.otf}`:''}${c.dt?` · ${fmtN(c.dt,1)} DT ×${c.dtf}`:''}${c.mult?` · labor +${fmtN(c.mult*100,1)}% premium`:''}`}
 // straight-time base used for the overtime premium (base wage × burden, no fringe)
 function cbOtp(x){if(!x)return 0;if(x.book==='labor'){const d=rfData(x);return (num(d.base)||0)*(1+(num(d.burden)||0)/100)}
-  if(x.book==='crew')return (cbD(x).members||[]).reduce((s,m)=>{const it=cbById(m.id);return s+(it&&it.book==='labor'?cbOtp(it)*(num(m.qty)||0):0)},0);return 0}
+  if(x.book==='crew')return (cbD(x).members||[]).reduce((s,m)=>{const it=cbById(m.id);if(!(it&&it.book==='labor'))return s;const d=rfData(it,crewFile(x,'labor'));return s+(num(d.base)||0)*(1+(num(d.burden)||0)/100)*(num(m.qty)||0)},0);return 0}
 const crewOtp=cr=>cr.otp!=null?num(cr.otp)||0:cbById(cr.id)?cbOtp(cbById(cr.id)):(num(cr.labor)||0)*0.75;
 const resOtp=r=>r.otp!=null?num(r.otp)||0:r.cb&&cbById(r.cb)?cbOtp(cbById(r.cb)):(num(r.price)||0)*0.75;
 
@@ -6205,7 +6226,7 @@ function pickAdd(ids){const E=S.est,d=E.data;const T=pickTarget(d);const book=M.
     it.acts=(src.acts||[]).map((a0,j)=>{const a=actFromTpl(a0);a.code=`${it.code}.${(j+1)*10}`;return a});open.add(T.sec.id);last={t:'item',id:it.id}});
   else if(book==='section')items.forEach(tp=>{const D=estFromTpl(tp);D.sections.forEach(s=>{const ns=estAddSection(d,s,itemsOf(D,s.id));open.add(ns.id);last={t:'sec',id:ns.id}})});
   else if(book==='activity')items.forEach(tp=>{const src=cbD(tp).act;if(!src)return;const a=actFromTpl(src);a.code=estNextActCode(T.item);a.desc=tp.description||a.desc;if(!a.unit)a.unit=cbD(tp).unit||'';T.item.acts.push(a);open.add(T.item.id);open.add(T.item.sec);last={t:'act',id:a.id}});
-  else if(book==='crew'){T.act.crew=crewSnap(items[0]);last={t:'act',id:T.act.id}}
+  else if(book==='crew'){T.act.crew=crewSnap(items[0]);const CD=cbD(items[0]);if(num(CD.prod)&&!num(T.act.prod)){T.act.mode=CD.mode||'uph';T.act.prod=num(CD.prod)}if(CD.uom&&!T.act.unit)T.act.unit=CD.uom;last={t:'act',id:T.act.id}}
   else items.forEach(x=>{const r=resFromCb(x);T.act.res.push(r);const op=eqOpr(x);if(op){const lr=resFromCb(op.it);lr.factor=op.qty;lr.with=r.id;T.act.res.push(lr)}last={t:'act',id:T.act.id}});
   estOpenSave();if(last)E.sel=last;closeModal();estTouch();render();toast(`Added ${items.length} from the ${PICK_TABS.find(t=>t[0]===book)[1].toLowerCase()} codebook`)}
 FOCUS_ATTRS.push('data-pickq2');

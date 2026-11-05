@@ -3040,3 +3040,4 @@ div.tw-pgh{cursor:default}
 .rf-grid input.field::placeholder{color:var(--muted,#999);opacity:.7}
 .rfi-bur .rfi-chk{display:flex;flex-wrap:wrap;gap:6px 16px;padding:8px 10px;border:1px solid var(--line,#ddd);border-radius:8px;margin-top:4px}
 .rfi-prev{max-height:340px;margin-top:8px}
+.cb-mrow.cb-notin select{border-color:var(--warn,#c9a227)}
