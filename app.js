@@ -4546,7 +4546,7 @@ function cbShown(){const c=S.cb;const q=(S.q.cb||'').trim().toLowerCase();
   const k=c.sort,dir=c.dir||1;const val=x=>k==='cost'?cbCost(x)??-Infinity:k==='price_date'?x.price_date||'':k==='vendor'?vendorOf(x.vendor_id)?.company||'':k==='men'?cbCrew(x).men:k.startsWith('data.')?(num(cbGet(x,k))??String(cbGet(x,k)||'')):String(x[k]||'');
   const cmp=(a,b)=>{const A=val(a),B=val(b);if(typeof A==='number'&&typeof B==='number')return (A-B)*dir;return String(A).localeCompare(String(B),undefined,{numeric:true,sensitivity:'base'})*dir};
   return list.sort((a,b)=>cmp(a,b)||String(a.code).localeCompare(String(b.code),undefined,{numeric:true}))}
-function cbCats(book){return [...new Set([...cbList(book).map(x=>x.category).filter(Boolean),...(CB_CATS[book]||[])])].sort((a,b)=>a.localeCompare(b))}
+function cbCats(book){return [...new Set([...cbList(book).map(x=>x.category).filter(Boolean),...(book==='sub'&&typeof TRADES!=='undefined'?TRADES:(CB_CATS[book]||[]))])].sort((a,b)=>a.localeCompare(b))}
 function vCb(){
   const c=S.cb;const [bk,Label,one]=cbBook(c.book);const admin=cbEditable();const all=cbList(bk);const list=cbShown();const shown=list.slice(0,c.limit);
   const sel=[...c.sel].filter(id=>cbById(id)?.book===bk);S.cbShownIds=list.map(x=>x.id);
@@ -5533,13 +5533,24 @@ function qApply(pkg,toCb,quiet){const E=S.est,d=E.data;const C=qCalc(d,pkg,estRe
 const QF_DEFAULT=['Aggregates','Storm drainage','Water','Sewer','Erosion control','Concrete','Asphalt','Trucking','Subcontractors'];
 function qFolders(){const d=S.est&&S.est.data;return [...new Set([...S.codebook.map(x=>cbD(x).qfolder).filter(Boolean),...Object.keys((d&&d.pkgs)||{}),...QF_DEFAULT])].sort((a,b)=>a.localeCompare(b))}
 // the folder a line belongs in: the codebook item's folder, then its category, then by cost type
-function qFolderFor(o){const cb=(o.cb||o.hint)&&cbById(o.cb||o.hint);const f=cb&&String(cbD(cb).qfolder||'').trim();if(f)return f;if(cb&&cb.book==='sub')return cb.category?`Subs - ${cb.category}`:'Subcontractors';const c=cb&&String(cb.category||'').trim();if(c)return c;return {sub:'Subcontractors',trucking:'Trucking',material:'Materials',other:'Other'}[o.kind]||'Other'}
+function qFolderFor(o){const cb=(o.cb||o.hint)&&cbById(o.cb||o.hint);const f=cb&&String(cbD(cb).qfolder||'').trim();if(f)return f;if(cb&&cb.book==='sub')return cb.category||'Subcontractors';const c=cb&&String(cb.category||'').trim();if(c)return c;return {sub:'Subcontractors',trucking:'Trucking',material:'Materials',other:'Other'}[o.kind]||'Other'}
 const QF_AUTO=['material','sub','trucking','other'];
 function qUnfiled(d,idx){const inP=new Set(Object.values(d.pkgs||{}).flatMap(P=>P.rows||[]));return [...(idx||estResIndex(d)).values()].filter(o=>QF_AUTO.includes(o.kind)&&!inP.has(o.rk))}
-function qGenerate(d){const L=qUnfiled(d);const made=new Set();L.forEach(o=>{const f=qFolderFor(o);if(!(d.pkgs||{})[f])made.add(f);qPkg(d,f).rows.push(o.rk)});return {lines:L.length,folders:made.size}}
+// the same folder under a slightly different name (case, spacing, an old "Subs - " prefix) is the same folder
+const qfKey=n=>normH(String(n||'').replace(/^\s*subs?\s*[-–:]\s*/i,''));
+function qfCanon(d,name){const b=S.est&&byId(S.bids,S.est.bidId);const have=[...Object.keys(d.pkgs||{}),...(b?S.quotes.filter(q=>q.bid_id===b.id).map(q=>q.scope):[]),...(b?scopeItems(b).map(x=>x.name):[])].filter(Boolean);
+  const k=qfKey(name);return have.find(n=>qfKey(n)===k)||(typeof TRADES!=='undefined'&&TRADES.find(n=>qfKey(n)===k))||String(name).replace(/^\s*subs?\s*[-–:]\s*/i,'')}
+// fold old "Subs - X" (and other near-duplicate) folders into the matching scope folder; quotes are never lost
+function qfMerge(d){const b=S.est&&byId(S.bids,S.est.bidId);if(!b||!d.pkgs)return 0;let n=0;
+  const scopes=[...new Set([...S.quotes.filter(q=>q.bid_id===b.id).map(q=>q.scope),...scopeItems(b).map(x=>x.name),...(typeof TRADES!=='undefined'?TRADES:[])].filter(Boolean))];
+  Object.keys(d.pkgs).forEach(k=>{if(!/^\s*subs?\s*[-–:]/i.test(k))return;if(qQuotes(b.id,k).length)return;
+    const key=qfKey(k);const to=Object.keys(d.pkgs).find(x=>x!==k&&qfKey(x)===key)||scopes.find(x=>qfKey(x)===key)||k.replace(/^\s*subs?\s*[-–:]\s*/i,'');if(!to||to===k)return;
+    const A=d.pkgs[k];const B=qPkg(d,to);(A.rows||[]).forEach(rk=>{if(!B.rows.includes(rk))B.rows.push(rk)});B.pick={...(A.pick||{}),...(B.pick||{})};delete d.pkgs[k];n++});
+  return n}
+function qGenerate(d){const L=qUnfiled(d);const made=new Set();L.forEach(o=>{const f=qfCanon(d,qFolderFor(o));if(!(d.pkgs||{})[f])made.add(f);qPkg(d,f).rows.push(o.rk)});return {lines:L.length,folders:made.size}}
 function qMove(d,rk,from,to,remember){if(!to||to===from)return;const A=qPkg(d,from);A.rows=A.rows.filter(x=>x!==rk);if(A.pick)delete A.pick[rk];const B=qPkg(d,to);if(!B.rows.includes(rk))B.rows.push(rk);if(!A.rows.length&&S.est&&!qQuotes(S.est.bidId,from).length)delete d.pkgs[from];
   if(remember&&cbEditable()){const cb=cbById(rk);if(cb&&MATL(cb.book)&&cbD(cb).qfolder!==to){const r=cbRow(cb);r.data={...r.data,qfolder:to};cbUpsert([r]).then(()=>loadTable('codebook')).catch(e=>toast(cbErr(e)))}}}
-function estQuotesView(d,R,ro){const E=S.est;const b=byId(S.bids,E.bidId);const idx=estResIndex(d,R);
+function estQuotesView(d,R,ro){const E=S.est;const b=byId(S.bids,E.bidId);const idx=estResIndex(d,R);if(!ro&&qfMerge(d)){estTouch();setTimeout(()=>toast('Merged the “Subs - …” folders into your scope folders'),0)}
   const names=[...new Set([...S.quotes.filter(q=>q.bid_id===b.id).map(q=>q.scope),...Object.keys(d.pkgs||{})])].filter(Boolean);
   if(!names.includes(E.pkg))E.pkg=names[0]||null;const pk=E.pkg;
   const inPkg=new Map();Object.entries(d.pkgs||{}).forEach(([n,P])=>(P.rows||[]).forEach(rk=>inPkg.set(rk,n)));
