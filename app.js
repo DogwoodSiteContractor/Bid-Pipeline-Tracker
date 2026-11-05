@@ -5538,7 +5538,8 @@ const QF_AUTO=['material','sub','trucking','other'];
 function qUnfiled(d,idx){const inP=new Set(Object.values(d.pkgs||{}).flatMap(P=>P.rows||[]));return [...(idx||estResIndex(d)).values()].filter(o=>QF_AUTO.includes(o.kind)&&!inP.has(o.rk))}
 // the same folder under a slightly different name (case, spacing, an old "Subs - " prefix) is the same folder
 const qfKey=n=>normH(String(n||'').replace(/^\s*subs?\s*[-–:]\s*/i,''));
-function qfCanon(d,name){const b=S.est&&byId(S.bids,S.est.bidId);const have=[...Object.keys(d.pkgs||{}),...(b?S.quotes.filter(q=>q.bid_id===b.id).map(q=>q.scope):[]),...(b?scopeItems(b).map(x=>x.name):[])].filter(Boolean);
+const qfAliases=()=>{const v=S.settings&&S.settings.est_settings;return v&&v.qfAliases&&typeof v.qfAliases==='object'?v.qfAliases:{}};
+function qfCanon(d,name){const al=qfAliases();const ak=Object.keys(al).find(k=>qfKey(k)===qfKey(name));if(ak)name=al[ak];const b=S.est&&byId(S.bids,S.est.bidId);const have=[...Object.keys(d.pkgs||{}),...(b?S.quotes.filter(q=>q.bid_id===b.id).map(q=>q.scope):[]),...(b?scopeItems(b).map(x=>x.name):[])].filter(Boolean);
   const k=qfKey(name);return have.find(n=>qfKey(n)===k)||(typeof TRADES!=='undefined'&&TRADES.find(n=>qfKey(n)===k))||String(name).replace(/^\s*subs?\s*[-–:]\s*/i,'')}
 // fold old "Subs - X" (and other near-duplicate) folders into the matching scope folder; quotes are never lost
 function qfMerge(d){const b=S.est&&byId(S.bids,S.est.bidId);if(!b||!d.pkgs)return 0;let n=0;
@@ -5547,6 +5548,24 @@ function qfMerge(d){const b=S.est&&byId(S.bids,S.est.bidId);if(!b||!d.pkgs)retur
     const key=qfKey(k);const to=Object.keys(d.pkgs).find(x=>x!==k&&qfKey(x)===key)||scopes.find(x=>qfKey(x)===key)||k.replace(/^\s*subs?\s*[-–:]\s*/i,'');if(!to||to===k)return;
     const A=d.pkgs[k];const B=qPkg(d,to);(A.rows||[]).forEach(rk=>{if(!B.rows.includes(rk))B.rows.push(rk)});B.pick={...(A.pick||{}),...(B.pick||{})};delete d.pkgs[k];n++});
   return n}
+const Q_RANK={Received:4,Requested:3,'Not requested':2,'No response':1,Declined:0};
+async function qfMergeInto(d,from,to,remember){const E=S.est;const b=byId(S.bids,E.bidId);if(!from||!to||from===to)return;
+  const A=qPkg(d,from),B=qPkg(d,to);const remap={};
+  const qa=qQuotes(b.id,from),qb=qQuotes(b.id,to);
+  try{for(const x of qa){const y=qb.find(q=>q.vendor_id&&q.vendor_id===x.vendor_id);
+      if(!y){await run(sb.from('quotes').update({scope:to}).eq('id',x.id));continue}
+      // same vendor in both: keep one quote, with every price either one had
+      const lm=new Map((y.lines||[]).map(l=>[l.rk,l]));(x.lines||[]).forEach(l=>{const h=lm.get(l.rk);if(!h||h.price==null||h.price==='')lm.set(l.rk,l)});
+      const best=(Q_RANK[x.status]??0)>(Q_RANK[y.status]??0)?x:y;
+      const meta={...(x.meta||{}),...(y.meta||{})};if(num((x.meta||{}).extra)&&!num((y.meta||{}).extra))meta.extra=x.meta.extra;
+      await run(sb.from('quotes').update({lines:[...lm.values()],meta,amount:y.amount??x.amount??null,status:best.status,received_date:y.received_date||x.received_date||null,updated_by:S.session.user.id}).eq('id',y.id));
+      await run(sb.from('quotes').delete().eq('id',x.id));remap[x.id]=y.id}
+    (A.rows||[]).forEach(rk=>{if(!B.rows.includes(rk))B.rows.push(rk)});
+    Object.entries(A.pick||{}).forEach(([rk,v])=>{if(B.pick[rk]==null)B.pick[rk]=remap[v]||v});
+    delete d.pkgs[from];E.pkg=to;
+    if(remember&&cbEditable()){const cur=S.settings.est_settings||{};const v={...cur,qfAliases:{...(cur.qfAliases||{}),[from]:to}};await run(sb.from('settings').upsert({key:'est_settings',value:v}));await loadTable('settings')}
+    await loadTable('quotes');estTouch();render();toast(`“${from}” merged into “${to}”${remember?'. New lines from it file there from now on.':''}`)}
+  catch(e){toast(errMsg(e))}}
 function qGenerate(d){const L=qUnfiled(d);const made=new Set();L.forEach(o=>{const f=qfCanon(d,qFolderFor(o));if(!(d.pkgs||{})[f])made.add(f);qPkg(d,f).rows.push(o.rk)});return {lines:L.length,folders:made.size}}
 function qMove(d,rk,from,to,remember){if(!to||to===from)return;const A=qPkg(d,from);A.rows=A.rows.filter(x=>x!==rk);if(A.pick)delete A.pick[rk];const B=qPkg(d,to);if(!B.rows.includes(rk))B.rows.push(rk);if(!A.rows.length&&S.est&&!qQuotes(S.est.bidId,from).length)delete d.pkgs[from];
   if(remember&&cbEditable()){const cb=cbById(rk);if(cb&&MATL(cb.book)&&cbD(cb).qfolder!==to){const r=cbRow(cb);r.data={...r.data,qfolder:to};cbUpsert([r]).then(()=>loadTable('codebook')).catch(e=>toast(cbErr(e)))}}}
@@ -5590,7 +5609,7 @@ function estQuotesView(d,R,ro){const E=S.est;const b=byId(S.bids,E.bidId);const 
     <tr class="qf-t"><td><b>Quoted total</b></td><td></td><td class="r num"><b>${money(C.estTotal)}</b></td>${C.cols.map(c=>`<td class="num qf-vt"><b>${money(c.total)}</b>${c.missing?`<div class="qf-miss">${c.missing} line${c.missing===1?'':'s'} not quoted</div>`:''}</td>`).join('')}${ro?'':'<td></td>'}</tr>
     <tr class="qf-t"><td>Complete total <span class="dim small">(lines not quoted at the estimate price)</span></td><td></td><td></td>${C.cols.map((c,j)=>`<td class="num qf-vt${j===C.lowPkg?' qf-lowpkg':''}">${money(c.complete)}${j===C.lowPkg&&C.cols.length>1?' <span class="pill good">Low</span>':''}</td>`).join('')}${ro?'':'<td></td>'}</tr>`;
   return bar+chips+`<div class="panel pad qf-panel"><div class="qf-top"><div><h2 class="qf-h">${esc(pk)}</h2><div class="dim small">${C.rows.length} line${C.rows.length===1?'':'s'} · ${C.cols.length} vendor${C.cols.length===1?'':'s'} · estimate ${money(C.estTotal)} · your picks ${money(C.sel)}</div></div>
-    ${ro?'':`<div class="qf-actions"><label class="qf-rule"><span>Use</span><select class="field sm" data-qrule${C.cols.length?'':' disabled'}><option value="manual"${RM==='manual'?' selected':''}>Prices I pick by hand</option><option value="low"${RM==='low'?' selected':''}>Lowest price on each line</option><option value="high"${RM==='high'?' selected':''}>Highest price on each line</option>${C.cols.length?`<optgroup label="One vendor’s pricing">${C.cols.map(c=>`<option value="v:${c.q.id}"${RM==='vendor'&&C.rule.q===c.q.id?' selected':''}>${esc(c.v?.company||'Removed vendor')}</option>`).join('')}</optgroup>`:''}</select></label>
+    ${ro?'':`<div class="qf-actions"><select class="field sm qf-merge" data-qfmerge title="Combine this folder with another one: lines and vendor quotes come together"><option value="">Merge into…</option>${names.filter(n=>n!==pk).map(n=>`<option>${esc(n)}</option>`).join('')}</select><label class="qf-rule"><span>Use</span><select class="field sm" data-qrule${C.cols.length?'':' disabled'}><option value="manual"${RM==='manual'?' selected':''}>Prices I pick by hand</option><option value="low"${RM==='low'?' selected':''}>Lowest price on each line</option><option value="high"${RM==='high'?' selected':''}>Highest price on each line</option>${C.cols.length?`<optgroup label="One vendor’s pricing">${C.cols.map(c=>`<option value="v:${c.q.id}"${RM==='vendor'&&C.rule.q===c.q.id?' selected':''}>${esc(c.v?.company||'Removed vendor')}</option>`).join('')}</optgroup>`:''}</select></label>
       ${RM!=='manual'&&RM!=='vendor'&&names.length>1?`<button class="btn sm ghost" data-act="qf-ruleall" title="Set every folder to ${RM==='low'?'lowest':'highest'} price">Use on all folders</button>`:''}<button class="btn sm" data-act="qf-apply" title="Apply just this folder">Apply this folder</button>${cbEditable()?`<label class="check small"><input type="checkbox" id="qf-tocb"${E.qToCb?' checked':''} data-qfcb> Also update codebook prices</label><label class="check small" title="When you move a line, save that folder on its codebook item so it goes there on every bid"><input type="checkbox" data-qfrem${E.qRemember!==false?' checked':''}> Remember moves in the codebook</label>`:''}</div>`}</div>
     ${RM==='manual'?'':`<div class="qf-rulenote">${RM==='low'?'Using the <b>lowest</b> price on each line':RM==='high'?'Using the <b>highest</b> price on each line':`Using <b>${esc(ruleV?.v?.company||'this vendor')}</b>’s pricing on every line`}. The picks update on their own as prices come in.${C.unquoted?` <b>${C.unquoted} line${C.unquoted===1?'':'s'}</b> ${RM==='vendor'?'they didn’t quote':'nobody quoted'} stay${C.unquoted===1?'s':''} at the estimate price.`:''} Click any dot to go back to picking by hand.</div>`}
     ${addRows}
@@ -9052,6 +9071,10 @@ function estInfoView(d,b,ro){const I=estInfo(d,b);const dis=ro?' disabled':'';co
     <fieldset><legend>Project address</legend><div class="fg"><label class="f s2">Street address${epIn('info.addr.street',I.addr.street)}</label><label class="f">City${epIn('info.addr.city',I.addr.city)}</label><label class="f">State${st('info.addr.state',I.addr.state)}</label><label class="f">Zip${epIn('info.addr.zip',I.addr.zip)}</label>
       <label class="f s4">Address notes<textarea class="field" id="${epId('info.addr.notes')}" data-ep="info.addr.notes" rows="2"${dis}>${esc(I.addr.notes||'')}</textarea></label></div></fieldset></div>`}
 // picking a company from Contacts fills in what Contacts knows; picking one of its people fills their phone and email
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset.qfmerge==null||!t.value||!S.est||!S.est.data||EC().ro)return;const from=S.est.pkg,to=t.value;t.value='';
+  if(!confirm(`Merge “${from}” into “${to}”?\n\nIts lines move into “${to}”. A vendor in both keeps one quote with all of their prices.`))return;
+  const rem=confirm(`Always file “${from}” lines into “${to}”?\n\nOK: from now on, Generate folders puts anything with the “${from}” quote folder into “${to}” on every estimate.\nCancel: just this time.`);
+  qfMergeInto(S.est.data,from,to,rem)});
 document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data||S.view!=='estimate'||EC().ro)return;const d=S.est.data;
   if(t.dataset.estrf!=null||t.dataset.estrfe!=null){const bk=t.dataset.estrfe!=null?'equipment':'labor';d.settings=d.settings||{};d.settings[rfSetKey(bk)]=t.value||'';
     const L=estStale(d).filter(x=>x.crew||(x.r&&cbById(x.r.cb)?.book===bk));estApplyStale(L);estTouch();render();
