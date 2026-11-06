@@ -5622,6 +5622,32 @@ function qColName(c){return qIsPlug(c.q)?'🔌 '+(c.q.meta.name||'Plug'):(c.v?.c
 async function qAddPlug(pkg){const E=S.est;const n=qQuotes(E.bidId,pkg).filter(qIsPlug).length;const name=n?`Plug ${n+1}`:'Plug';
   try{await run(sb.from('quotes').insert({id:newId(),bid_id:E.bidId,vendor_id:null,scope:pkg,status:'Not requested',lines:[],meta:{plug:true,name},note:'Plug prices',updated_by:S.session.user.id}));await loadTable('quotes');qPkg(E.data,pkg);estTouch();render();toast(`${name} column added: type your plug prices in it`)}
   catch(e){toast(errMsg(e))}}
+/* ---------- right-click a quote folder ---------- */
+function qfNames(){const E=S.est;return [...new Set([...Object.keys(E.data.pkgs||{}),...S.quotes.filter(q=>q.bid_id===E.bidId).map(q=>q.scope)])].filter(Boolean)}
+async function qfRename(from){const E=S.est,d=E.data;const to=(prompt(`Rename the folder “${from}” to:`,from)||'').trim();if(!to||to===from)return;
+  if(qfNames().includes(to)){if(confirm(`There’s already a folder called “${to}”. Merge “${from}” into it?`))qfMergeInto(d,from,to,false);return}
+  try{const qs=qQuotes(E.bidId,from);for(const q of qs)await run(sb.from('quotes').update({scope:to}).eq('id',q.id));
+    if(d.pkgs&&d.pkgs[from]){d.pkgs[to]=d.pkgs[from];delete d.pkgs[from]}if(E.pkg===from)E.pkg=to;await loadTable('quotes');estTouch();render();toast(`Renamed to “${to}”`)}catch(e){toast(errMsg(e))}}
+async function qfDelete(name){const E=S.est,d=E.data;const qs=qQuotes(E.bidId,name);const rows=(d.pkgs?.[name]?.rows||[]).length;
+  const priced=qs.filter(q=>(qGet(q).lines||[]).some(l=>num(l.price)>0)||num(q.amount)>0);
+  let msg=`Delete the quote folder “${name}”?\n\n`+(rows?`Its ${rows} line${rows===1?'':'s'} go back to “not in a folder” (nothing is removed from the estimate).`:'It has no lines.');
+  if(qs.length)msg+=`\n\nIts ${qs.length} vendor quote${qs.length===1?'':'s'} ${qs.length===1?'is':'are'} deleted too`+(priced.length?`, including the prices from ${priced.map(q=>qColName({q,v:vendorOf(q.vendor_id)})).join(', ')}.`:'.');
+  if(!confirm(msg))return;if(priced.length&&!confirm(`Last check: the typed prices from ${priced.length} vendor${priced.length===1?'':'s'} will be gone for good. Delete anyway?`))return;
+  try{if(qs.length){const r=await sb.from('quotes').delete().in('id',qs.map(q=>q.id)).select('id');if(r.error)throw r.error;if((r.data||[]).length<qs.length){toast('Only an admin can delete vendor quotes. Ask an admin, or remove the vendors from the folder first.');await loadTable('quotes');render();return}qs.forEach(q=>delete QP[q.id])}
+    if(d.pkgs)delete d.pkgs[name];if(E.pkg===name)E.pkg=null;await loadTable('quotes');estTouch();render();toast(`Deleted the folder “${name}”`)}catch(e){toast(errMsg(e))}}
+document.addEventListener('contextmenu',e=>{const t=e.target.closest&&e.target.closest('[data-qfctx]');if(!t||e.shiftKey||!S.est||!S.est.data)return;e.preventDefault();
+  const E=S.est,d=E.data,n=t.dataset.qfctx,ro=EC().ro;const P=d.pkgs?.[n];const rows=(P?.rows||[]).length;const go=()=>{E.pkg=n;E.qAdd=new Set()};
+  const others=qfNames().filter(x=>x!==n);const X=e.clientX,Y=e.clientY;
+  actmOpen(X,Y,[['📂','Open',()=>{go();render()}],
+    ...(ro?[]:[['✎','Rename…',()=>qfRename(n)],
+    ['+','Add estimate lines…',()=>{go();E.qAddOpen=true;render()}],
+    ['🔌','Add a plug column',()=>{go();qAddPlug(n)}],
+    others.length?['⇢','Merge into another folder…',()=>setTimeout(()=>actmOpen(X+20,Y+20,others.map(o=>['📁',o,()=>{if(!confirm(`Merge “${n}” into “${o}”?\n\nIts lines move into “${o}”. A vendor in both keeps one quote with all of their prices.`))return;const rem=confirm(`Always file “${n}” lines into “${o}”?\n\nOK: from now on, Generate folders puts them in “${o}” on every estimate.\nCancel: just this time.`);E.pkg=n;qfMergeInto(d,n,o,rem)}])),0)]:false,
+    null,
+    ['↓','Use the lowest price on each line',()=>{qRuleSet(d,n,{mode:'low'});go();estTouch();render();toast(`“${n}” now uses the lowest price on each line`)}],
+    ['✓','Apply this folder to the estimate',()=>{go();render();qApply(n,false)}],
+    rows?['⤺',`Empty the folder (${rows} line${rows===1?'':'s'} back to “not in a folder”)`,()=>{if(!confirm(`Take all ${rows} lines out of “${n}”? Vendor quotes stay.`))return;P.rows=[];P.pick={};estTouch();render()}]:false,
+    null,['×','Delete folder…',()=>qfDelete(n),'danger']])].filter(x=>x!==false))});
 async function qRemoveVendor(id){try{await run(sb.from('quotes').delete().eq('id',id));delete QP[id];await loadTable('quotes');render()}catch(e){toast(errMsg(e))}}
 function qApply(pkg,toCb,quiet){const E=S.est,d=E.data;const C=qCalc(d,pkg,estResIndex(d));const b=byId(S.bids,E.bidId);const byV=new Map();
   C.rows.forEach((r,i)=>{if(r.missing)return;const pk=C.pick[r.rk];if(!pk||pk==='est')return;const j=C.cols.findIndex(c=>c.q.id===pk);if(j<0)return;const c=C.cols[j];if(!c.lump&&c.cells[i].p==null)return;if(!byV.has(j))byV.set(j,[]);byV.get(j).push(i)});
@@ -5680,7 +5706,7 @@ function estQuotesView(d,R,ro){const E=S.est;const b=byId(S.bids,E.bidId);const 
   if(!names.includes(E.pkg))E.pkg=names[0]||null;const pk=E.pkg;
   const inPkg=new Map();Object.entries(d.pkgs||{}).forEach(([n,P])=>(P.rows||[]).forEach(rk=>inPkg.set(rk,n)));
   const pkgSugg=[...new Set([...scopeItems(b).map(s=>s.name),...QUOTE_EXTRA])].filter(n=>!names.includes(n));
-  const chips=`<div class="qf-pkgs">${names.map(n=>{const qs=qQuotes(b.id,n);const rows=(d.pkgs?.[n]?.rows||[]).length;return `<button class="qf-chip${n===pk?' on':''}" data-act="qf-pkg" data-v="${esc(n)}"><b>${esc(n)}</b><small>${qs.length} vendor${qs.length===1?'':'s'} · ${rows} line${rows===1?'':'s'}</small></button>`}).join('')}
+  const chips=`<div class="qf-pkgs">${names.map(n=>{const qs=qQuotes(b.id,n);const rows=(d.pkgs?.[n]?.rows||[]).length;return `<button class="qf-chip${n===pk?' on':''}" data-act="qf-pkg" data-v="${esc(n)}" data-qfctx="${esc(n)}"><b>${esc(n)}</b><small>${qs.length} vendor${qs.length===1?'':'s'} · ${rows} line${rows===1?'':'s'}</small></button>`}).join('')}
     ${ro?'':`<span class="qf-new"><input class="field" id="qf-newpkg" list="qf-pkgsugg" placeholder="New folder — e.g. Aggregates"><datalist id="qf-pkgsugg">${pkgSugg.map(n=>`<option value="${esc(n)}">`).join('')}</datalist><button class="btn sm" data-act="qf-newpkg">Add</button></span>`}</div>`;
   const unfiled=qUnfiled(d,idx);
   const allL=[...idx.values()].filter(o=>QF_AUTO.includes(o.kind)).sort((a,c)=>a.desc.localeCompare(c.desc));
