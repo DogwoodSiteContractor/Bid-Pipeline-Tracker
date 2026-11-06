@@ -34,6 +34,9 @@ const qAsked=q=>!!q&&!!q.status&&q.status!=='Not requested'&&q.status!==BUD;
 const QUOTE_CLS={'Not requested':'','Budget, no RFQ':'info','Requested':'warn','Received':'good','Declined':'bad','No response':'na'};
 const QUOTE_EXTRA=['Materials','Trucking','Testing','Other'];
 const qScopes=q=>Array.isArray(q?.meta?.scopes)&&q.meta.scopes.length?q.meta.scopes:(q?.scope?[q.scope]:[]);
+// the estimate's quote folder is its own setting: moving a quote between folders never changes its scope on the bid form
+const qFolder=q=>String((q&&q.meta&&q.meta.folder)||q?.scope||'');
+const qInItem=(q,it)=>qHas(q,it.name)||(Array.isArray(it&&it.parts)?it.parts:[]).some(p=>qHas(q,p));
 const qHas=(q,n)=>qScopes(q).some(x=>String(x).toLowerCase()===String(n).toLowerCase());
 const qSetScopes=(q,arr)=>{arr=[...new Set(arr.filter(Boolean))];q.meta={...(q.meta||{}),scopes:arr.length>1?arr:[]};if(arr.length<=1)delete q.meta.scopes;q.scope=arr.join(', ')};
 const qOpen=q=>['Not requested','Requested',BUD].includes(q.status||'Not requested');
@@ -1493,12 +1496,12 @@ function qLows(qs,get=o=>o){const by=new Map();qs.forEach(o=>{const q=get(o);if(
 function quoteGroupsHtml(b,work,admin,mode='rfq'){
   const Q=b.quotes;if(!Q.length&&!b.scope_items.length)return '<div class="dim small">No quote requests yet.</div>';
   const names=b.scope_items.map(x=>x.name);const lc=n=>String(n).toLowerCase();const inBid=n=>names.some(x=>lc(x)===lc(n));
-  const home=q=>{const s=qScopes(q);for(const n of names)if(s.some(x=>lc(x)===lc(n)))return n;return null};
+  const home=q=>{const s=qScopes(q);for(const n of names)if(s.some(x=>lc(x)===lc(n)))return n;const it=b.scope_items.find(x=>qInItem(q,x));return it?it.name:null};
   const vsort=[...S.vendors].sort((a,b2)=>String(a.company).localeCompare(String(b2.company)));
   const block=(title,sub,rows,scope,ctl='',si=null)=>{const shut=si!=null&&qgShut(b).has(scope);const nIt=b.scope_items.length;
     const mv=si!=null&&work&&nIt>1?`<span class="qg-mv"><button class="qg-arr" data-act="qg-mv" data-i="${si}" data-d="-1"${si===0?' disabled':''} aria-label="Move ${esc(title)} up" title="Move up">↑</button><button class="qg-arr" data-act="qg-mv" data-i="${si}" data-d="1"${si===nIt-1?' disabled':''} aria-label="Move ${esc(title)} down" title="Move down">↓</button></span>`:'';
     return `<div class="qg${shut?' shut':''}"><div class="qg-h"><div class="qg-t">${si!=null?`<button class="qg-tog" data-act="qg-tog" data-v="${esc(scope)}" aria-expanded="${!shut}" title="${shut?'Show':'Hide'} vendors">${shut?'▸':'▾'}</button>`:''}<div><b>${esc(title)}</b>${sub}</div></div><div class="qg-ctl">${mv}${ctl}${work&&scope!=null&&mode==='rfq'?`<select class="field sm qg-add" data-act="add-quote-scope" data-scope="${esc(scope)}"><option value="">+ Add vendor or sub…</option>${(()=>{const fit=vsort.filter(v=>vendorFits(v,scope)&&!Q.some(q=>q.vendor_id===v.id&&qHas(q,scope)));const rest=vsort.filter(v=>!fit.includes(v)&&!Q.some(q=>q.vendor_id===v.id&&qHas(q,scope)));return (fit.length?`<optgroup label="Quote ${esc(scope)}">${fit.map(v=>`<option value="${v.id}">${esc(v.company)}${Q.some(q=>q.vendor_id===v.id&&qOpen(q))?' (add to their quote)':''}</option>`).join('')}</optgroup>`:'')+`<optgroup label="Everyone else">${rest.map(v=>`<option value="${v.id}">${esc(v.company)} (${esc(v.trade||'')})${Q.some(q=>q.vendor_id===v.id&&qOpen(q))?' · add to their quote':''}</option>`).join('')}</optgroup>`})()}</select>`:''}</div></div>${shut?'':(rows||`<div class="qg-none">${mode==='rfq'?'No vendors yet':'No quotes requested for this scope'}</div>`)}</div>`};
-  const out=b.scope_items.map((it,si)=>{const qs=Q.map((q,i)=>({q,i})).filter(o=>qHas(o.q,it.name));const rec=qs.filter(o=>o.q.status==='Received').length;
+  const out=b.scope_items.map((it,si)=>{const qs=Q.map((q,i)=>({q,i})).filter(o=>qInItem(o.q,it));const rec=qs.filter(o=>o.q.status==='Received').length;
     const lows=qLows(qs,o=>o.q);const trades=[...new Set(qs.map(o=>qTrade(o.q)))];const multi=trades.length>1;const low=lows.size?[...lows.values()][0]:null;
     const lowOne=o=>`${money(o.q.amount)} — ${esc(vendorOf(o.q.vendor_id)?.company||'')}${qScopes(o.q).length>1?` (covers ${qScopes(o.q).length} scopes)`:''}`;
     const lowTxt=mode==='quotes'&&lows.size?(multi?`<div class="qg-lows">${trades.filter(t=>lows.has(t)).map(t=>`<span class="qg-low"><span class="qg-lt">${esc(t)}</span> low ${lowOne(lows.get(t))}</span>`).join('')}</div>`:` · <span class="qg-low">Low ${lowOne(low)}</span>`):'';
@@ -5582,7 +5585,7 @@ function estResIndex(d,R){R=R||estCalc(d);const m=new Map();
 // quote edits wait here until they're saved, so a refresh doesn't wipe what's being typed
 const QP={};
 const qGet=q=>q&&QP[q.id]?{...q,...QP[q.id]}:q;
-const qQuotes=(bidId,pkg)=>S.quotes.filter(q=>q.bid_id===bidId&&q.scope===pkg).map(qGet).sort((a,b)=>String(vendorOf(a.vendor_id)?.company||'').localeCompare(String(vendorOf(b.vendor_id)?.company||'')));
+const qQuotes=(bidId,pkg)=>S.quotes.filter(q=>q.bid_id===bidId&&qFolder(q)===pkg).map(qGet).sort((a,b)=>String(vendorOf(a.vendor_id)?.company||'').localeCompare(String(vendorOf(b.vendor_id)?.company||'')));
 function qPkg(d,name){d.pkgs=d.pkgs&&typeof d.pkgs==='object'?d.pkgs:{};return d.pkgs[name]=d.pkgs[name]||{rows:[],pick:{}}}
 function qCalc(d,pkg,idx){const P=(d.pkgs||{})[pkg]||{rows:[],pick:{}};
   const rows=(P.rows||[]).map(rk=>idx.get(rk)||{rk,missing:true,desc:'No longer in the estimate',q:0,price:0,cost:0,unit:'',refs:[]});
@@ -5615,18 +5618,21 @@ function qEdit(id,fn){const base=S.quotes.find(x=>x.id===id);if(!base)return;con
 async function qFlush(id){const c=QP[id];if(!c)return;
   try{await run(sb.from('quotes').update({lines:c.lines,meta:c.meta,amount:c.amount,status:c.status,received_date:c.received_date||null,updated_by:S.session.user.id}).eq('id',id));if(QP[id]===c)delete QP[id];await loadTable('quotes')}
   catch(e){toast(/lines|meta|schema cache|column/i.test(errMsg(e))?'Quote prices need a one-time database update (update-15-quote-lines.sql).':errMsg(e))}}
+function qScopeFor(pkg){const b=S.est&&byId(S.bids,S.est.bidId);const lc=x=>String(x||'').toLowerCase();const k=qfKey(pkg);
+  const it=b&&scopeItems(b).find(x=>lc(x.name)===lc(pkg)||qfKey(x.name)===k||partsOf(x).some(p=>lc(p)===lc(pkg)||qfKey(p)===k));return it?it.name:pkg}
+async function qSetFolder(q,to){const meta={...(qGet(q).meta||{}),folder:to};await run(sb.from('quotes').update({meta}).eq('id',q.id));if(QP[q.id]&&QP[q.id].meta)QP[q.id].meta.folder=to}
 async function qAddVendor(pkg,vid){const E=S.est;if(!vid)return;if(qQuotes(E.bidId,pkg).some(q=>q.vendor_id===vid)){toast('That vendor is already in this folder.');return}
-  try{await run(sb.from('quotes').insert({id:newId(),bid_id:E.bidId,vendor_id:vid,scope:pkg,status:'Requested',requested_date:todayStr(),lines:[],meta:{},updated_by:S.session.user.id}));await loadTable('quotes');qPkg(E.data,pkg);estTouch();render()}
+  try{await run(sb.from('quotes').insert({id:newId(),bid_id:E.bidId,vendor_id:vid,scope:qScopeFor(pkg),status:'Requested',requested_date:todayStr(),lines:[],meta:{folder:pkg},updated_by:S.session.user.id}));await loadTable('quotes');qPkg(E.data,pkg);estTouch();render()}
   catch(e){toast(/lines|meta|column/i.test(errMsg(e))?'Quote prices need a one-time database update (update-15-quote-lines.sql).':errMsg(e))}}
 function qColName(c){return qIsPlug(c.q)?'🔌 '+(c.q.meta.name||'Plug'):(c.v?.company||'Removed vendor')}
 async function qAddPlug(pkg){const E=S.est;const n=qQuotes(E.bidId,pkg).filter(qIsPlug).length;const name=n?`Plug ${n+1}`:'Plug';
-  try{await run(sb.from('quotes').insert({id:newId(),bid_id:E.bidId,vendor_id:null,scope:pkg,status:'Not requested',lines:[],meta:{plug:true,name},note:'Plug prices',updated_by:S.session.user.id}));await loadTable('quotes');qPkg(E.data,pkg);estTouch();render();toast(`${name} column added: type your plug prices in it`)}
+  try{await run(sb.from('quotes').insert({id:newId(),bid_id:E.bidId,vendor_id:null,scope:qScopeFor(pkg),status:'Not requested',lines:[],meta:{plug:true,name,folder:pkg},note:'Plug prices',updated_by:S.session.user.id}));await loadTable('quotes');qPkg(E.data,pkg);estTouch();render();toast(`${name} column added: type your plug prices in it`)}
   catch(e){toast(errMsg(e))}}
 /* ---------- right-click a quote folder ---------- */
-function qfNames(){const E=S.est;return [...new Set([...Object.keys(E.data.pkgs||{}),...S.quotes.filter(q=>q.bid_id===E.bidId).map(q=>q.scope)])].filter(Boolean)}
+function qfNames(){const E=S.est;return [...new Set([...Object.keys(E.data.pkgs||{}),...S.quotes.filter(q=>q.bid_id===E.bidId).map(qFolder)])].filter(Boolean)}
 async function qfRename(from){const E=S.est,d=E.data;const to=(prompt(`Rename the folder “${from}” to:`,from)||'').trim();if(!to||to===from)return;
   if(qfNames().includes(to)){if(confirm(`There’s already a folder called “${to}”. Merge “${from}” into it?`))qfMergeInto(d,from,to,false);return}
-  try{const qs=qQuotes(E.bidId,from);for(const q of qs)await run(sb.from('quotes').update({scope:to}).eq('id',q.id));
+  try{const qs=qQuotes(E.bidId,from);for(const q of qs)await qSetFolder(q,to);
     if(d.pkgs&&d.pkgs[from]){d.pkgs[to]=d.pkgs[from];delete d.pkgs[from]}if(E.pkg===from)E.pkg=to;await loadTable('quotes');estTouch();render();toast(`Renamed to “${to}”`)}catch(e){toast(errMsg(e))}}
 async function qfDelete(name){const E=S.est,d=E.data;const qs=qQuotes(E.bidId,name);const rows=(d.pkgs?.[name]?.rows||[]).length;
   const priced=qs.filter(q=>(qGet(q).lines||[]).some(l=>num(l.price)>0)||num(q.amount)>0);
@@ -5671,11 +5677,11 @@ function qUnfiled(d,idx){const inP=new Set(Object.values(d.pkgs||{}).flatMap(P=>
 // the same folder under a slightly different name (case, spacing, an old "Subs - " prefix) is the same folder
 const qfKey=n=>normH(String(n||'').replace(/^\s*subs?\s*[-–:]\s*/i,''));
 const qfAliases=()=>{const v=S.settings&&S.settings.est_settings;return v&&v.qfAliases&&typeof v.qfAliases==='object'?v.qfAliases:{}};
-function qfCanon(d,name){const al=qfAliases();const ak=Object.keys(al).find(k=>qfKey(k)===qfKey(name));if(ak)name=al[ak];const b=S.est&&byId(S.bids,S.est.bidId);const have=[...Object.keys(d.pkgs||{}),...(b?S.quotes.filter(q=>q.bid_id===b.id).map(q=>q.scope):[]),...(b?scopeItems(b).map(x=>x.name):[])].filter(Boolean);
+function qfCanon(d,name){const al=qfAliases();const ak=Object.keys(al).find(k=>qfKey(k)===qfKey(name));if(ak)name=al[ak];const b=S.est&&byId(S.bids,S.est.bidId);const have=[...Object.keys(d.pkgs||{}),...(b?S.quotes.filter(q=>q.bid_id===b.id).map(qFolder):[]),...(b?scopeItems(b).map(x=>x.name):[])].filter(Boolean);
   const k=qfKey(name);return have.find(n=>qfKey(n)===k)||(typeof TRADES!=='undefined'&&TRADES.find(n=>qfKey(n)===k))||String(name).replace(/^\s*subs?\s*[-–:]\s*/i,'')}
 // fold old "Subs - X" (and other near-duplicate) folders into the matching scope folder; quotes are never lost
 function qfMerge(d){const b=S.est&&byId(S.bids,S.est.bidId);if(!b||!d.pkgs)return 0;let n=0;
-  const scopes=[...new Set([...S.quotes.filter(q=>q.bid_id===b.id).map(q=>q.scope),...scopeItems(b).map(x=>x.name),...(typeof TRADES!=='undefined'?TRADES:[])].filter(Boolean))];
+  const scopes=[...new Set([...S.quotes.filter(q=>q.bid_id===b.id).map(qFolder),...scopeItems(b).map(x=>x.name),...(typeof TRADES!=='undefined'?TRADES:[])].filter(Boolean))];
   Object.keys(d.pkgs).forEach(k=>{if(!/^\s*subs?\s*[-–:]/i.test(k))return;if(qQuotes(b.id,k).length)return;
     const key=qfKey(k);const to=Object.keys(d.pkgs).find(x=>x!==k&&qfKey(x)===key)||scopes.find(x=>qfKey(x)===key)||k.replace(/^\s*subs?\s*[-–:]\s*/i,'');if(!to||to===k)return;
     const A=d.pkgs[k];const B=qPkg(d,to);(A.rows||[]).forEach(rk=>{if(!B.rows.includes(rk))B.rows.push(rk)});B.pick={...(A.pick||{}),...(B.pick||{})};delete d.pkgs[k];n++});
@@ -5685,11 +5691,13 @@ async function qfMergeInto(d,from,to,remember){const E=S.est;const b=byId(S.bids
   const A=qPkg(d,from),B=qPkg(d,to);const remap={};
   const qa=qQuotes(b.id,from),qb=qQuotes(b.id,to);
   try{for(const x of qa){const y=qb.find(q=>q.vendor_id&&q.vendor_id===x.vendor_id);
-      if(!y){await run(sb.from('quotes').update({scope:to}).eq('id',x.id));continue}
+      if(!y){await qSetFolder(x,to);continue}
       // same vendor in both: keep one quote, with every price either one had
       const lm=new Map((y.lines||[]).map(l=>[l.rk,l]));(x.lines||[]).forEach(l=>{const h=lm.get(l.rk);if(!h||h.price==null||h.price==='')lm.set(l.rk,l)});
       const best=(Q_RANK[x.status]??0)>(Q_RANK[y.status]??0)?x:y;
-      const meta={...(x.meta||{}),...(y.meta||{})};if(num((x.meta||{}).extra)&&!num((y.meta||{}).extra))meta.extra=x.meta.extra;
+      const meta={...(x.meta||{}),...(y.meta||{}),folder:to};if(num((x.meta||{}).extra)&&!num((y.meta||{}).extra))meta.extra=x.meta.extra;
+      // the kept quote still covers both scopes on the bid form
+      const sc=[...new Set([...qScopes(y),...qScopes(x)])];if(sc.length>1)meta.scopes=sc;
       await run(sb.from('quotes').update({lines:[...lm.values()],meta,amount:y.amount??x.amount??null,status:best.status,received_date:y.received_date||x.received_date||null,updated_by:S.session.user.id}).eq('id',y.id));
       await run(sb.from('quotes').delete().eq('id',x.id));remap[x.id]=y.id}
     (A.rows||[]).forEach(rk=>{if(!B.rows.includes(rk))B.rows.push(rk)});
@@ -5702,7 +5710,7 @@ function qGenerate(d){const L=qUnfiled(d);const made=new Set();L.forEach(o=>{con
 function qMove(d,rk,from,to,remember){if(!to||to===from)return;const A=qPkg(d,from);A.rows=A.rows.filter(x=>x!==rk);if(A.pick)delete A.pick[rk];const B=qPkg(d,to);if(!B.rows.includes(rk))B.rows.push(rk);if(!A.rows.length&&S.est&&!qQuotes(S.est.bidId,from).length)delete d.pkgs[from];
   if(remember&&cbEditable()){const cb=cbById(rk);if(cb&&MATL(cb.book)&&cbD(cb).qfolder!==to){const r=cbRow(cb);r.data={...r.data,qfolder:to};cbUpsert([r]).then(()=>loadTable('codebook')).catch(e=>toast(cbErr(e)))}}}
 function estQuotesView(d,R,ro){const E=S.est;const b=byId(S.bids,E.bidId);const idx=estResIndex(d,R);if(!ro&&qfMerge(d)){estTouch();setTimeout(()=>toast('Merged the “Subs - …” folders into your scope folders'),0)}
-  const names=[...new Set([...S.quotes.filter(q=>q.bid_id===b.id).map(q=>q.scope),...Object.keys(d.pkgs||{})])].filter(Boolean);
+  const names=[...new Set([...S.quotes.filter(q=>q.bid_id===b.id).map(qFolder),...Object.keys(d.pkgs||{})])].filter(Boolean);
   if(!names.includes(E.pkg))E.pkg=names[0]||null;const pk=E.pkg;
   const inPkg=new Map();Object.entries(d.pkgs||{}).forEach(([n,P])=>(P.rows||[]).forEach(rk=>inPkg.set(rk,n)));
   const pkgSugg=[...new Set([...scopeItems(b).map(s=>s.name),...QUOTE_EXTRA])].filter(n=>!names.includes(n));
@@ -5798,7 +5806,7 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'qf-rmpkg':delete d.pkgs[E.pkg];E.pkg=null;estTouch();render();break;
     case 'qf-award':{const P=qPkg(d,E.pkg);if(P.rule&&P.rule.mode==='vendor'&&P.rule.q===t.dataset.q){P.rule={mode:'manual'};P.pick={};toast('Vendor deselected: lines are back to the estimate price')}else qRuleSet(d,E.pkg,{mode:'vendor',q:t.dataset.q});estTouch();render();break}
     case 'qf-low':qRuleSet(d,E.pkg,{mode:'low'});estTouch();render();break;
-    case 'qf-ruleall':{const m=qRule(qPkg(d,E.pkg),[]).mode;if(m==='low'||m==='high'){const names=[...new Set([...S.quotes.filter(q=>q.bid_id===E.bidId).map(q=>q.scope),...Object.keys(d.pkgs||{})])].filter(Boolean);names.forEach(n=>qRuleSet(d,n,{mode:m}));estTouch();render();toast(`Every folder now uses the ${m==='low'?'lowest':'highest'} price on each line`)}break}
+    case 'qf-ruleall':{const m=qRule(qPkg(d,E.pkg),[]).mode;if(m==='low'||m==='high'){const names=[...new Set([...S.quotes.filter(q=>q.bid_id===E.bidId).map(qFolder),...Object.keys(d.pkgs||{})])].filter(Boolean);names.forEach(n=>qRuleSet(d,n,{mode:m}));estTouch();render();toast(`Every folder now uses the ${m==='low'?'lowest':'highest'} price on each line`)}break}
     case 'qf-apply':qApply(E.pkg,!!$('#qf-tocb')?.checked);break;
     case 'qf-goto':E.pkg=t.dataset.v;render();break;
     case 'qf-generate':{const r=qGenerate(d);if(!E.pkg||!(d.pkgs||{})[E.pkg])E.pkg=Object.keys(d.pkgs||{})[0]||null;estTouch();render();toast(r.lines?`Sorted ${r.lines} line${r.lines===1?'':'s'} into folders${r.folders?` (${r.folders} new folder${r.folders===1?'':'s'})`:''}`:'Everything is already in a folder');break}
