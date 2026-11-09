@@ -1245,14 +1245,14 @@ function epSendGo(){const b=M.draft;const X=M.epSend;{const G=frGate(b);if(G.sto
 // one base number for every GC (without site improvements); a "with site improvements" number only when the bid has one
 function baseNumbersHtml(b,work){const hasW=num(b.amount_with)!=null||M.showWith;const both=num(b.amount_with)!=null&&num(b.amount_without)!=null;
   return `<fieldset><legend>Our number</legend><div class="fg bn-fg">
-    <label class="f">${hasW?'Base bid, without site improvements':'Base bid'}<input type="number" step="0.01" min="0" class="field bn-main" ${bf('amount_without','n')} placeholder="$0.00"></label>
-    ${hasW?`<label class="f">With site improvements<span class="bn-with"><input type="number" step="0.01" min="0" class="field" ${bf('amount_with','n')} placeholder="$0.00">${work?'<button class="rm" data-act="with-rm" title="Remove the with-site-improvements number" aria-label="Remove">×</button>':''}</span></label>`
+    <label class="f">${hasW?'Base bid, without site improvements':'Base bid'}<input type="number" step="0.01" min="0" class="field bn-main" ${bf('amount_without','n')} data-commit placeholder="$0.00"></label>
+    ${hasW?`<label class="f">With site improvements<span class="bn-with"><input type="number" step="0.01" min="0" class="field" ${bf('amount_with','n')} data-commit placeholder="$0.00">${work?'<button class="rm" data-act="with-rm" title="Remove the with-site-improvements number" aria-label="Remove">×</button>':''}</span></label>`
       :work?`<div class="f bn-add"><span>&nbsp;</span><button class="btn sm ghost" data-act="with-add">+ Add a number with site improvements</button></div>`:''}
     ${both?`<div class="s2"><div class="small" style="font-weight:500;color:var(--ink-2);margin-bottom:6px">Use for dashboard totals</div><div class="radio">
       <label><input type="radio" name="usefor" data-bf="use_for" value="without"${b.use_for!=='with'?' checked':''}${DIS()}> Without site improvements</label>
       <label><input type="radio" name="usefor" data-bf="use_for" value="with"${b.use_for==='with'?' checked':''}${DIS()}> With</label></div></div>`:''}
     ${SHOW_ODDS?`<label class="f">Estimated margin %<input type="number" step="0.1" class="field" ${bf('margin','n')} placeholder="e.g. 12"></label><label class="f s2">Win probability: <b id="probv">${b.probability??50}%</b><input type="range" min="0" max="100" step="5" data-bf="probability" data-t="n" value="${b.probability??50}"${DIS()}></label>`:''}
-  </div><p class="hint">Every GC gets ${hasW?'these numbers':'this number'}. If one GC gets a different number, change it on their row below.</p></fieldset>`}
+  </div><p class="hint">Press Enter (or click away) to save a number. Every GC gets ${hasW?'these numbers':'this number'}. If one GC gets a different number, change it on their row below.</p></fieldset>`}
 function bpEstProp(b,work){return `${epBar(b,work)}${frHtml(b,work)}${estOn()&&!b._sample?estBidBlock(b,work):''}
   ${baseNumbersHtml(b,work)}${clientsSection(b,work)}${revisionSection(b,work)}`}
 function bpOutcome(b,work){
@@ -1307,7 +1307,12 @@ async function bpSave(){if(!bpCanAuto()||BPA.saving)return;const m=M;const d=m.d
   catch(e){m.bpErr=errMsg(e);m.bpSig=before;if(M===m)bpSaveUI(`<span class="bad" title="${esc(m.bpErr)}">Not saved: ${esc(m.bpErr)}</span>`)}
   finally{BPA.saving=false}}
 setInterval(()=>{if(!bpCanAuto()||BPA.saving)return;if(Date.now()-BPA.typed<900)return;const s=bpSig(M.draft);if(M.bpSig==null){M.bpSig=s;return}if(s!==M.bpSig)bpSave()},700);
-document.addEventListener('input',e=>{if(M&&M.kind==='bid'&&$('#modal')?.contains(e.target)){BPA.typed=Date.now();if(BPA.saving)M.dirtyDuring=true;if(!M.draft._new&&!M.draft._sample&&canWork(M.draft))bpSaveUI('Editing…')}},true);
+document.addEventListener('input',e=>{if(M&&M.kind==='bid'&&$('#modal')?.contains(e.target)){if(e.target.dataset.commit!=null&&!e._commit){bpSaveUI('Press Enter to save the number');return}BPA.typed=Date.now();if(BPA.saving)M.dirtyDuring=true;if(!M.draft._new&&!M.draft._sample&&canWork(M.draft))bpSaveUI('Editing…')}},true);
+// dollar amounts on the bid save only when you press Enter or leave the box; Escape puts the old number back
+document.addEventListener('change',e=>{const t=e.target;if(!t.dataset||t.dataset.commit==null)return;t.classList.remove('uncommitted');t.dataset.was=t.value;const ev=new Event('input',{bubbles:true});ev._commit=true;t.dispatchEvent(ev)},true);
+document.addEventListener('keydown',e=>{const t=e.target;if(!t.dataset||t.dataset.commit==null)return;
+  if(e.key==='Enter'){e.preventDefault();t.blur()}
+  else if(e.key==='Escape'&&t.classList.contains('uncommitted')){e.preventDefault();e.stopPropagation();t.value=t.dataset.was??t.defaultValue;t.classList.remove('uncommitted')}},true);
 // a link to the bid: #bid=<id>
 function bpHash(id){try{const h=id?'#bid='+id:'';if(location.hash!==h)history.replaceState(null,'',location.pathname+location.search+h)}catch(e){}}
 window.addEventListener('hashchange',()=>{const m=/^#bid=([\w-]+)/.exec(location.hash);if(m&&S.session&&(!M||M.draft?.id!==m[1])&&byId(S.bids,m[1]))openBid(m[1])});
@@ -1323,7 +1328,7 @@ function clientsSection(b,work){
   const hasW=num(b.amount_with)!=null||PI.some(id=>num(propOf(b,id).amount_with)!=null);const multi=PI.length>1;
   // a GC's amount: blank shows the base in grey; typing a number gives just that GC a different number
   const amtBox=(id,p,k,label)=>{const own=num(p[k])!=null;const base=num(b[k]);if(!multi&&!own)return '';
-    return `<div class="f gc-amt${own?' own':''}"><label for="gca-${id}-${k}">${label}</label><input id="gca-${id}-${k}" type="number" step="0.01" min="0" class="field" data-cp="${id}.${k}" data-t="n" value="${esc(p[k]??'')}" placeholder="${base!=null?money(base):'$'}" title="${own?'A different number for this GC':'Same as the base bid. Type to give this GC a different number.'}"${d}>${own?`<button class="linkbtn small gc-reset" data-act="cp-reset" data-id="${id}" data-k="${k}" title="Use the base number again">↺ use base</button>`:''}</div>`};
+    return `<div class="f gc-amt${own?' own':''}"><label for="gca-${id}-${k}">${label}</label><input id="gca-${id}-${k}" type="number" step="0.01" min="0" class="field" data-cp="${id}.${k}" data-t="n" data-commit value=""${esc(p[k]??'')}" placeholder="${base!=null?money(base):'$'}" title="${own?'A different number for this GC':'Same as the base bid. Type to give this GC a different number.'}"${d}>${own?`<button class="linkbtn small gc-reset" data-act="cp-reset" data-id="${id}" data-k="${k}" title="Use the base number again">↺ use base</button>`:''}</div>`};
   const rows=PI.map(id=>{
     const c=byId(S.clients,id);const cs=c?.contacts||[];const ct=cs.find(x=>x.name===b.client_contacts?.[id]);const p=propOf(b,id);const ownW=num(p.amount_with)!=null,ownO=num(p.amount_without)!=null;
     const won=b.status==='Awarded'&&b.awarded_client_id===id;
@@ -4300,6 +4305,7 @@ document.addEventListener('focusin',e=>{const r=e.target.closest?.('[data-jtip]'
 document.addEventListener('pointerout',e=>{if(e.target.closest?.('.jchart')&&!e.relatedTarget?.closest?.('.jchart'))hideChartTip()});
 document.addEventListener('input',e=>{
   const t=e.target;
+  if(t.dataset&&t.dataset.commit!=null&&!e._commit){t.classList.toggle('uncommitted',t.value!==(t.dataset.was??t.defaultValue));return} // dollar amounts wait for Enter
   if(M&&t.dataset.jobf){M.draft[t.dataset.jobf]=t.dataset.t==='n'?num(t.value):t.value;return}
   if(M&&t.dataset.itp){M.price=M.price||{};M.price[t.dataset.itp]=num(t.value)??'';syncItemCosts();return}
   if(M&&t.dataset.itf){M.draft[t.dataset.itf]=t.dataset.t==='n'?num(t.value):t.value;if(['overhead_pct','markup_pct'].includes(t.dataset.itf))syncItemCosts();return}
