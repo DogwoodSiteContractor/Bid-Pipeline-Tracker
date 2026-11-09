@@ -449,13 +449,13 @@ function vDashboard(){
   const d=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
   if(S.dash==='reports'&&tabOff('reports'))S.dash=role()==='board'?'board':'precon';
   if(S.dash==='reports')return vReports(true);
-  if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+cuPanel()+crPanel()+bidReqPanel()+reviewPanel()+fuPanel()+mine();
+  if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+cuPanel()+crPanel()+bidReqPanel()+reviewPanel()+tgtPanel()+fuPanel()+mine();
   if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+cuPanel()+crPanel()+bidReqPanel()+fuPanel()+precon();
   if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}${dashSeg()}</div></div>`+board();
   return `<div class="head"><div><h1>${S.dash==='precon'?'Bid pipeline dashboard':'Board dashboard'}</h1><p>${d}${S.lastLoaded?` · <span class="dim">Last updated ${S.lastLoaded.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>`:''}</p></div>
   <div class="tools">${S.dash==='board'?yearSelect()+(S.bids.some(b=>b.archived_at)?`<label class="check small" title="Archived bids are left out of the numbers unless this is on"><input type="checkbox" data-inclarch${S.inclArch?' checked':''}> Include archived</label>`:'')+`<div class="seg" title="What the board sees is the CRM view"><button class="${crmMode()==='crm'?'on':''}" data-act="crm-mode" data-v="crm">CRM</button><button class="${crmMode()==='charts'?'on':''}" data-act="crm-mode" data-v="charts">Charts</button></div>`+(crmMode()==='charts'?'<button class="btn" data-act="board-custom">Customize view</button><button class="btn" data-act="rp-board-copy" title="Copy these charts to a report page you can change">Copy to Reports</button>':''):'<button class="btn" data-act="refresh">↻ Refresh</button>'}
   ${dashSeg()}</div></div>`
-  +(S.dash==='precon'?vxUpkeepHtml()+cuPanel():'')+crPanel()+bidReqPanel()+reviewPanel()+fuPanel()+(S.dash==='precon'?precon():board());
+  +(S.dash==='precon'?vxUpkeepHtml()+cuPanel():'')+crPanel()+bidReqPanel()+reviewPanel()+tgtPanel()+fuPanel()+(S.dash==='precon'?precon():board());
 }
 function yearSelect(){const ys=new Set([new Date().getFullYear()]);S.bids.filter(statOk).forEach(b=>ys.add(yearOf(b)));return `<select class="field" data-act="year" style="width:auto">${[...ys].sort((a,b)=>b-a).map(y=>`<option${y===S.year?' selected':''}>${y}</option>`).join('')}</select>`}
 function kpi(l,v,s,cls,filter){const tag=filter?'button':'div';return `<${tag} class="kpi ${cls||''}"${filter?` data-act="kpi-filter" data-v="${filter}"`:''}><div class="l">${l}</div><div class="v">${v}</div><div class="s">${esc(s)}</div></${tag}>`}
@@ -470,7 +470,7 @@ function dueCell(b){
   else if(d<=7){cls='warn';txt='In '+d+' days'}
   else txt='In '+d+' days';
   const thisYr=String(b.due_date).slice(0,4)===String(new Date().getFullYear());
-  const og=dueOrig(b);return `<div class="due ${cls}">${thisYr?fmtShort(b.due_date):fmtDate(b.due_date)}${b.due_time?' <span class="dim small">'+esc(fmtTime(b.due_time))+'</span>':''}<small>${txt}</small>${og&&og!==b.due_date?`<small class="due-was" title="Bid date moved ${dueHist(b).length} time${dueHist(b).length===1?'':'s'}">↻ was ${fmtShort(og)}</small>`:''}</div>`;
+  const og=dueOrig(b);const tg=dueTgt(b)&&!DECIDED.includes(b.status)&&!isSent(b);return `<div class="due ${cls}${tg?' tgt':''}"${tg?' title="Our own target date: the GC hasn’t given a due date yet"':''}>${tg?'<span class="tgt-tag">Target</span> ':''}${thisYr?fmtShort(b.due_date):fmtDate(b.due_date)}${b.due_time?' <span class="dim small">'+esc(fmtTime(b.due_time))+'</span>':''}<small>${txt}</small>${og&&og!==b.due_date?`<small class="due-was" title="Bid date moved ${dueHist(b).length} time${dueHist(b).length===1?'':'s'}">↻ was ${fmtShort(og)}</small>`:''}</div>`;
 }
 function scopeBar(b){const it=scopeItems(b);if(!it.length)return '<span class="dim small">No scopes</span>';const d=it.filter(x=>x.status==='Complete').length;
   return `<span class="who" style="gap:8px"><span class="scopebar" title="${esc(it.map(x=>x.name+': '+(x.status==='Complete'?'signed off'+(x.signed_initials?' by '+x.signed_initials:''):x.status||'Not Started')).join('\n'))}">${it.slice(0,14).map(x=>`<i class="${scopeCls(x)}"></i>`).join('')}</span><span class="small num">${d}/${it.length}</span></span>`}
@@ -660,7 +660,9 @@ function board(){if(crmMode()==='crm')return crmBoard();const Y=S.year||new Date
 
 /* ----- pipeline ----- */
 const ARCHIVED_FILTER=['archived','Archived',b=>!!b.archived_at];
-const FILTERS=[['active','All active',b=>ACTIVE.includes(b.status)],['notstarted','Project created',b=>b.status==='Project Created'],['rfq','RFQ sent',b=>b.status==='RFQ Sent'],['takeoff','Takeoff',b=>b.status==='Takeoff'],['quotes','Quotes',b=>b.status==='Quotes Received'],['estimating','Estimate & proposal',b=>b.status==='Estimating'||b.status==='Proposal Review'],['review','Ready for review',b=>b.status==='Proposal Review'],['submitted','Submitted',b=>b.status==='Submitted'],['hold','On hold',b=>b.status==='On Hold'],['awarded','Awarded',b=>b.status==='Awarded'],['lost','Not awarded',b=>b.status==='Not Awarded'],['nobid','No bid',b=>b.status==='No Bid'],['all','Everything',()=>true]];
+// a due date we picked ourselves because the GC hasn't given one
+const dueTgt=b=>!!(b&&b.rfq&&b.rfq.dueTarget);
+const FILTERS=[['active','All active',b=>ACTIVE.includes(b.status)],['notstarted','Project created',b=>b.status==='Project Created'],['rfq','RFQ sent',b=>b.status==='RFQ Sent'],['takeoff','Takeoff',b=>b.status==='Takeoff'],['quotes','Quotes',b=>b.status==='Quotes Received'],['estimating','Estimate & proposal',b=>b.status==='Estimating'||b.status==='Proposal Review'],['review','Ready for review',b=>b.status==='Proposal Review'],['submitted','Submitted',b=>b.status==='Submitted'],['hold','On hold',b=>b.status==='On Hold'],['awarded','Awarded',b=>b.status==='Awarded'],['lost','Not awarded',b=>b.status==='Not Awarded'],['nobid','No bid',b=>b.status==='No Bid'],['target','Target due dates',b=>dueTgt(b)&&!DECIDED.includes(b.status)&&!isSent(b)],['all','Everything',()=>true]];
 /* =====================================================================
    Pipeline views: Cards / List / Calendar, filters, sort and search
    (view choices are remembered per browser)
@@ -807,7 +809,7 @@ const CAL_TYPES=[['due','Bid due','due'],['walk','Site walk','walk'],['rfi','RFI
 function calEvents(list){
   const show=S.pv.cal;const ev=[];
   list.forEach(b=>{
-    if(show.due&&b.due_date)ev.push({date:b.due_date,type:'due',b,label:b.name,time:b.due_time?fmtTime(String(b.due_time).slice(0,5)):''});
+    if(show.due&&b.due_date)ev.push({date:b.due_date,type:'due',b,label:(dueTgt(b)?'Target · ':'')+b.name,time:b.due_time?fmtTime(String(b.due_time).slice(0,5)):''});
     if(show.walk&&b.walk_date)ev.push({date:b.walk_date,type:'walk',b,label:b.name});
     if(show.rfi&&b.rfi_date)ev.push({date:b.rfi_date,type:'rfi',b,label:b.name});
     if(show.quote)quotesFor(b.id).filter(q=>q.status==='Requested'&&q.due_date).forEach(q=>ev.push({date:String(q.due_date).slice(0,10),type:'quote',b,label:(vendorOf(q.vendor_id)?.company||'Vendor')+' · '+b.name}));
@@ -1132,7 +1134,8 @@ function bpProject(b,work,admin){
   </div></fieldset>
   <fieldset><legend>Key dates</legend><div class="fg">
     <label class="f" title="The day the invitation came in. Blank = the day the bid was entered.">Intake date<input type="date" class="field" data-bprfq="intake" value="${esc(rfqOf(b).intake||(b._new?todayStr():intakeOf(b)))}"${work?'':' disabled'}></label>
-    <label class="f"><span class="f-lab">Bid due date${dueOrig(b)?` <span class="dim small">(was ${fmtShort(dueOrig(b))})</span>`:''}</span><input type="date" class="field" ${bf('due_date')}></label>
+    <label class="f${dueTgt(b)?' due-tgt-f':''}"><span class="f-lab">${dueTgt(b)?'Target due date <span class="tgt-tag">our own</span>':'Bid due date'}${dueOrig(b)?` <span class="dim small">(was ${fmtShort(dueOrig(b))})</span>`:''}</span><input type="date" class="field" ${bf('due_date')}>
+      <span class="check small due-tgt-ck"><input type="checkbox" data-duetgt${dueTgt(b)?' checked':''}${work?'':' disabled'}> Our own target date (no official due date yet)</span></label>
     <label class="f">Due time<input type="time" class="field" ${bf('due_time')}></label>
     <label class="f" title="Shown to the client on their tracker. Blank = the bid due date.">Proposal expected by<input type="date" class="field" ${bf('proposal_eta')}></label>
     <label class="f" title="The date on the plan set you're bidding from">Plan date<input type="date" class="field" data-bprfq="planDate" value="${esc(rfqOf(b).planDate||'')}"${work?'':' disabled'}></label>
@@ -8717,6 +8720,9 @@ function fuState(b){const P=fuPlan(b);const sent0=fuSentDate(b);const rv=fuRev(b
   o.kind='nudge';o.due=addDays(o.last||sent,P.days);if(P.snooze&&P.snooze>o.due)o.due=P.snooze;o.wait=o.due>today;o.label=`Follow-up ${o.n+1} of ${P.rounds}`;return o}
 const fuIsDue=b=>{const s=fuState(b);return !!s.kind&&!s.wait};
 function fuList(){const mine=!bidsAll();return S.bids.filter(b=>live(b)&&b.status==='Submitted'&&(mine?assigned(b):true)).map(b=>({b,s:fuState(b)})).filter(x=>x.s.kind).sort((a,c)=>String(a.s.due).localeCompare(String(c.s.due)))}
+function tgtPanel(){if(!can('bids'))return '';const L=S.bids.filter(b=>live(b)&&dueTgt(b)&&b.due_date&&!DECIDED.includes(b.status)&&!isSent(b)&&(bidsAll()||assigned(b))&&daysUntil(b.due_date)<=7);if(!L.length)return '';
+  const past=L.filter(b=>daysUntil(b.due_date)<0).length;
+  return `<button class="panel pad fu-block" data-act="kpi-filter" data-v="target"><span class="fu-n">${L.length}</span><span class="fu-t"><b>target due date${L.length===1?'':'s'} coming up: ask the GC for the real date</b><small>${past?`${past} already past · `:''}${L.slice(0,3).map(b=>esc(b.name)).join(', ')}${L.length>3?` and ${L.length-3} more`:''}</small></span><span class="fu-go">Show them ›</span></button>`}
 function fuPanel(){if(!can('bids'))return '';const L=fuList();const due=L.filter(x=>!x.s.wait),soon=L.filter(x=>x.s.wait&&daysUntil(x.s.due)<=7);if(!due.length&&!soon.length)return '';
   const worst=due.length?-daysUntil(due[0].s.due):0;
   return `<button class="panel pad fu-block${due.length?'':' quiet'}" data-act="fu-list"><span class="fu-n">${due.length||soon.length}</span><span class="fu-t"><b>${due.length?`bid${due.length===1?'':'s'} need${due.length===1?'s':''} a GC follow-up`:`GC follow-up${soon.length===1?'':'s'} coming up this week`}</b><small>${due.length?`${soon.length?soon.length+' more coming up this week · ':''}oldest is ${worst} day${worst===1?'':'s'} overdue`:'Nothing due today'}</small></span><span class="fu-go">Show them ›</span></button>`}
@@ -11191,7 +11197,7 @@ function plCard(t){const n=daysUntil(t.due_date);const done=t.status==='done';co
 function plCal(){const P=S.pl;const today=todayStr();const base=P.cal?parseD(P.cal+'-01'):parseD(today);const y=base.getFullYear(),m=base.getMonth();const first=new Date(y,m,1);const start=new Date(y,m,1-first.getDay());const sel=P.day||today;
   const ev=new Map();const add=(d,e)=>{if(!d)return;d=String(d).slice(0,10);if(!ev.has(d))ev.set(d,[]);ev.get(d).push(e)};
   S.tasks.forEach(t=>{const mine=plMine(t);if(!(mine&&P.calMine||!mine&&t.shared&&P.calTeam||mine&&t.shared&&P.calTeam))return;if(t.due_date)add(t.due_date,{k:mine?'mine':'team',t});(t.checklist||[]).forEach(c=>{if(c.due&&!c.done&&t.status!=='done')add(c.due,{k:mine?'mine':'team',t,step:c})})});
-  if(P.calBids)(S.bids||[]).filter(b=>!b.archived_at).forEach(b=>{[['due_date','Bid due'],['walk_date','Site walk'],['rfi_date','RFIs due']].forEach(([f,l])=>{if(b[f])add(b[f],{k:'bid',b,l})})});
+  if(P.calBids)(S.bids||[]).filter(b=>!b.archived_at).forEach(b=>{[['due_date',dueTgt(b)?'Target due date':'Bid due'],['walk_date','Site walk'],['rfi_date','RFIs due']].forEach(([f,l])=>{if(b[f])add(b[f],{k:'bid',b,l})})});
   const item=e=>e.step?`<div class="pl-ce ${e.k} step" data-act="pl-open" data-id="${e.t.id}" title="${esc(e.t.title+' › '+e.step.t)}">↳ ${esc(e.step.t)}</div>`:e.t?`<div class="pl-ce ${e.k}${e.t.status==='done'?' done':''}" data-act="pl-open" data-id="${e.t.id}" draggable="true" data-pldrag="${e.t.id}" title="${esc(e.t.title)}">${e.t.due_time?`<b>${esc(fmtTime(e.t.due_time).replace(':00',''))}</b> `:''}${esc(e.t.title)}</div>`:`<div class="pl-ce bid" data-act="open-bid" data-id="${e.b.id}" title="${esc(e.l+': '+e.b.name)}"><b>${esc(e.l)}</b> ${esc(e.b.name)}</div>`;
   let cells='';for(let i=0;i<42;i++){const d=new Date(start);d.setDate(start.getDate()+i);const ds=plDs(d);const es=(ev.get(ds)||[]).sort((a,b)=>(a.k==='bid'?0:1)-(b.k==='bid'?0:1)||String(a.t&&a.t.due_time||'').localeCompare(String(b.t&&b.t.due_time||'')));
     cells+=`<div class="pl-cd${d.getMonth()!==m?' out':''}${ds===today?' today':''}${ds===sel?' sel':''}${d.getDay()%6===0?' we':''}" data-act="pl-day" data-v="${ds}" data-pldrop="day:${ds}"><div class="pl-cdn">${d.getDate()}</div>${es.slice(0,4).map(item).join('')}${es.length>4?`<div class="pl-more">+${es.length-4} more</div>`:''}</div>`}
@@ -12056,6 +12062,9 @@ document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')re
   if(t.dataset.rfqdue!=null){rfqSetDue(t.value);return}
   // putting in the date a quote came back marks it received
   if(t.dataset.qf&&t.dataset.qf.endsWith('.received_date')){const q=M.draft.quotes[+t.dataset.qf.split('.')[0]];if(q&&t.value&&q.status!=='Received'){q.status='Received';renderModal()}}});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.duetgt!=null&&M&&M.kind==='bid'){const r=rfqOf(M.draft);if(t.checked)r.dueTarget=true;else delete r.dueTarget;
+  if(t.checked&&!M.draft.due_date){const d=new Date();d.setDate(d.getDate()+14);M.draft.due_date=d.toISOString().slice(0,10);toast('Set a target two weeks out. Change it to whatever you plan for.')}
+  if(!M.draft._new)bpSaveUI('Editing…');const y=$('#modal .mbody')?.scrollTop;renderModal();const bd=$('#modal .mbody');if(bd&&y!=null)bd.scrollTop=y;return}});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.bprfq&&M&&M.kind==='bid'){rfqOf(M.draft)[t.dataset.bprfq]=t.value;if(!M.draft._new)bpSaveUI('Editing…')}});
 function rfqSetDue(v){if(v&&!/^\d{4}-\d{2}-\d{2}$/.test(v))return;if(v&&+v.slice(0,4)<2000)return;   // still typing the year
   const b=M.draft;rfqOf(b).due=v;b.quotes.forEach(q=>{if(qOpen(q))q.due_date=v});
@@ -14586,6 +14595,8 @@ function dueHistHtml(b,work){const h=dueHist(b);if(!h.length)return '';const ses
 const dueDelta=x=>{const n=dayDiff(x.from,x.to);return n==null?'':n===0?'same day':`${n>0?'+':''}${n} day${Math.abs(n)===1?'':'s'}`};
 // typing a date fires a change for every partial date, so the move is recorded once the field is left
 document.addEventListener('focusout',e=>{const t=e.target;if(!M||M.kind!=='bid'||!t.dataset||t.dataset.bf!=='due_date'||M.draft._new)return;const v=t.value;if(!/^\d{4}-\d{2}-\d{2}$/.test(v)||+v.slice(0,4)<2000)return;
+  // moving our own target date isn't a GC moving the bid date; ask whether this is the real date now
+  if(dueTgt(M.draft)){const was=(byId(S.bids,M.draft.id)||{}).due_date;if(v!==was&&confirm(`Is ${fmtDate(v)} the official due date from the GC now?\n\nOK: yes, it's official (the target flag comes off).\nCancel: it's still our own target date.`)){delete rfqOf(M.draft).dueTarget;dueRerender()}return}
   const h=rfqOf(M.draft).dueHist||[];const n=h.length,sess=M.dueSess!=null&&h[M.dueSess]?h[M.dueSess].to:null;dueMoved(M.draft,v);const h2=rfqOf(M.draft).dueHist||[];
   if(h2.length!==n||(M.dueSess!=null&&h2[M.dueSess]&&h2[M.dueSess].to!==sess)||(M.dueSess==null&&sess!=null))dueRerender()});
 let duePtr=false;document.addEventListener('pointerdown',()=>{duePtr=true},true);document.addEventListener('pointerup',()=>{setTimeout(()=>{duePtr=false;if(dueRerender.q){dueRerender.q=false;if(M&&M.kind==='bid')renderModal()}},0)},true);

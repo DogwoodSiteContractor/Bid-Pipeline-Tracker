@@ -3097,3 +3097,7 @@ input.uncommitted{border-color:var(--warn,#d9a441)!important;box-shadow:0 0 0 2p
 .bal-foot>div{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:6px 12px;display:flex;flex-direction:column;min-width:120px}
 .bal-foot span{font-size:11px;opacity:.7}.bal-foot b{font-variant-numeric:tabular-nums}
 .bal-foot .bad{border-color:var(--bad,#e05252)}.bal-foot .warn{border-color:var(--warn,#d9a441)}
+.tgt-tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.03em;text-transform:uppercase;padding:1px 6px;border-radius:999px;border:1px dashed var(--warn,#d9a441);color:var(--warn,#d9a441);vertical-align:1px}
+.due.tgt{border-left:2px dashed var(--warn,#d9a441);padding-left:6px}
+.due-tgt-f input[type=date]{border-style:dashed;border-color:var(--warn,#d9a441)}
+.due-tgt-ck{display:flex;gap:6px;align-items:center;margin-top:6px;font-weight:400}
