@@ -3101,3 +3101,4 @@ input.uncommitted{border-color:var(--warn,#d9a441)!important;box-shadow:0 0 0 2p
 .due.tgt{border-left:2px dashed var(--warn,#d9a441);padding-left:6px}
 .due-tgt-f input[type=date]{border-style:dashed;border-color:var(--warn,#d9a441)}
 .due-tgt-ck{display:flex;gap:6px;align-items:center;margin-top:6px;font-weight:400}
+.bp-backst{border-color:var(--warn,#d9a441);color:var(--warn,#d9a441)}

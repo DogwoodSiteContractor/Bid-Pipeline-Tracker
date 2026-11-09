@@ -1106,7 +1106,7 @@ function bidModal(){
       ${isNew&&work?'<button class="btn primary" data-act="save">Create bid</button>':''}</div></div>
   <div class="bp-tabs" role="tablist">${tabs}${b.status==='On Hold'?'<span class="bp-hold">'+pill('On hold','warn')+'</span>':''}</div>
   <div class="mbody bp-body"><div class="bp-grid"><div class="bp-main">${archNote}${cuBanner(b)}${supBanner(b)}${bidReqBanner(b)}${trkStrip(b)}${body}</div><aside class="bp-aside">${bpAside(b,work,admin,isNew)}</aside></div></div>
-  <div class="mfoot bp-foot"><div style="display:flex;gap:8px;flex-wrap:wrap">${b.status==='Awarded'&&!isNew&&!b._sample&&can('awards')?`<button class="btn" data-act="aw-frombid" data-id="${b.id}">🏗️ Open on the Awarded tab</button>`:''}${b._sample?'<span class="pill info">Practice bid · nothing is saved</span>':''}${work&&!isNew&&!b._sample?'<button class="btn" data-act="sup-start" title="Same project, new name or details — keeps everything and records the change">↻ Supersede</button>':''}${admin&&!isNew&&!b._sample?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button><button class="btn" data-act="${b.archived_at?'bid-restore':'bid-archive'}">${b.archived_at?'Restore':'Archive'}</button>${b.status==='Awarded'?`<button class="btn" data-act="create-job">${S.jobs.some(j=>j.bid_id===b.id)?'Open job':'Create job'}</button>`:''}`:''}</div>
+  <div class="mfoot bp-foot"><div style="display:flex;gap:8px;flex-wrap:wrap">${b.status==='Awarded'&&!isNew&&!b._sample&&can('awards')?`<button class="btn" data-act="aw-frombid" data-id="${b.id}">🏗️ Open on the Awarded tab</button>`:''}${b._sample?'<span class="pill info">Practice bid · nothing is saved</span>':''}${work&&!isNew&&!b._sample&&bpBackTo(b)?`<button class="btn bp-backst" data-act="bp-back" title="Undo a stage move: changes the bid’s stage back to ${esc(bpBackTo(b).l)}">↩ Move stage back to ${esc(bpBackTo(b).l)}</button>`:''}${work&&!isNew&&!b._sample?'<button class="btn" data-act="sup-start" title="Same project, new name or details — keeps everything and records the change">↻ Supersede</button>':''}${admin&&!isNew&&!b._sample?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button><button class="btn" data-act="${b.archived_at?'bid-restore':'bid-archive'}">${b.archived_at?'Restore':'Archive'}</button>${b.status==='Awarded'?`<button class="btn" data-act="create-job">${S.jobs.some(j=>j.bid_id===b.id)?'Open job':'Create job'}</button>`:''}`:''}</div>
   <div class="r">${bpAdvanceHtml(b,work,isNew)}</div></div>`;
 }
 const estOn=()=>!tabOff('estimates');
@@ -1122,9 +1122,9 @@ function bpBack(){const b=M.draft;const t=bpBackTo(b);if(!t)return;
   const bd=$('#modal .mbody');if(bd)bd.scrollTop=0;toast(`Moved back from ${from} to ${t.l}.`)}
 function bpAdvanceHtml(b,work,isNew){
   const i=BP_TABS.findIndex(x=>x[0]===M.tab);const prev=BP_TABS[i-1],next=BP_TABS[i+1];
-  const nav=`${prev?`<button class="btn" data-act="bp-tab" data-v="${prev[0]}">← ${esc(prev[1])}</button>`:''}${next?`<button class="btn" data-act="bp-tab" data-v="${next[0]}">${esc(next[1])} →</button>`:''}`;
+  const nav=`${prev?`<button class="btn ghost" data-act="bp-tab" data-v="${prev[0]}" title="Look at the ${esc(prev[1])} page (the stage doesn’t change)">‹ ${esc(prev[1])} page</button>`:''}${next?`<button class="btn ghost" data-act="bp-tab" data-v="${next[0]}" title="Look at the ${esc(next[1])} page (the stage doesn’t change)">${esc(next[1])} page ›</button>`:''}`;
   if(isNew||!work)return nav;
-  const back=bpBackTo(b);const backBtn=back&&!b._sample?`<button class="btn ghost bp-backst" data-act="bp-back" title="Undo a stage move: puts the bid back to ${esc(back.l)}">↩ Back to ${esc(back.l)}</button>`:'';
+  const backBtn='';
   const cur=bpStageIdx(b);if(cur>=BP_TABS.length-1||b.status==='On Hold')return backBtn+nav;
   const key=BP_TABS[cur][0];const miss=bpMissing(b,key);const ep=key==='estprop';
   const label=ep?(b.status==='Proposal Review'?'Mark proposal sent →':'Ready for review →'):`Advance to ${esc(BP_TABS[cur+1][1])} →`;
