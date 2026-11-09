@@ -1228,6 +1228,7 @@ function epRrReady(b){const R=frOf(b);
 function epToSig(){setTimeout(()=>{const el=document.querySelector('.fr-sigs');if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('fr-flash');setTimeout(()=>el.classList.remove('fr-flash'),1600)}},50)}
 // a manager picks it up / approves it
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act=fr-release]');if(!t||!M||M.kind!=='bid')return;const b=M.draft;const R=frOf(b);if(!R.claim)return;const sv=clone(b.review);delete R.claim;M.epApArm=null;renderModal();frPush(b,()=>{b.review=sv}).then(ok=>{if(ok!==false)toast('Back to Ready for review. A manager can pick it up.')})});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act=fr-backx]');if(!t||!M||M.kind!=='bid')return;const b=M.draft;const R=frOf(b);const last=R.back[R.back.length-1];if(!last)return;const sv=clone(b.review);last.cleared=true;renderModal();frPush(b,()=>{b.review=sv}).then(ok=>{if(ok!==false)toast('Send-back note cleared')})});
 function epClaim(b){const R=frOf(b);if(R.claim||R.ok)return false;R.claim={uid:myId(),name:myName(),at:new Date().toISOString()};return true}
 async function epApprove(force){const b=M.draft;if(!frIsMgr()||!canWork(b))return;const open=frOpen(b);const st=frSet();
   if(open.length&&st.mode==='stop'){toast('Finish the final review checklist before approving.');return}
@@ -12952,7 +12953,7 @@ function frHtml(b,work){const e=epState(b);if(e==='ns'&&!Object.keys(frOf(b).ite
   return `<fieldset class="fr"><legend>Final review</legend>
     <div class="fr-top"><div class="fr-prog"><div class="fr-bar"><i style="width:${S2.total?Math.round(S2.done/S2.total*100):0}%"></i></div><span class="small"><b>${S2.done} of ${S2.total}</b> checked${needs.length?` · needs sign-off from ${needs.join(' and ')}`:' · signed off'}</span></div>
       ${frIsMgr()&&e==='rr'&&work&&!epMgrFlow()?`<button class="btn sm warn" data-act="fr-back">↩ Send back</button>`:''}${isAdmin()?'<button class="btn sm ghost" data-act="adm-open" data-v="review" title="Checklist items and rules (Settings)">⚙</button>':''}</div>
-    ${last&&e!=='sent'&&!R.sign.lead&&!R.sign.mgr?`<div class="notice fr-backnote"><b>Sent back by ${esc(last.by)}</b> · ${fmtShort(String(last.at).slice(0,10))}${last.note?`<div>${esc(last.note)}</div>`:''}${(last.open||[]).length?`<div class="small">Open then: ${esc(last.open.join(' · '))}</div>`:''}</div>`:''}
+    ${last&&!last.cleared&&e!=='sent'&&!R.sign.lead&&!R.sign.mgr?`<div class="notice fr-backnote">${work&&(frIsMgr()||last.by===myName()||(last.uid&&last.uid===myId()))?`<button class="linkbtn fr-bnx" data-act="fr-backx" title="Clear this send-back note (it stays in the bid’s history)">× Clear</button>`:''}<b>Sent back by ${esc(last.by)}</b> · ${fmtShort(String(last.at).slice(0,10))}${last.note?`<div>${esc(last.note)}</div>`:''}${(last.open||[]).length?`<div class="small">Open then: ${esc(last.open.join(' · '))}</div>`:''}</div>`:''}
     ${M.frBack?`<div class="fr-backbox"><b>Send it back to In progress</b><textarea class="field" rows="2" id="fr-backnote" placeholder="What needs another look?"></textarea><div class="small dim">${open.length?`Open items go with it: ${esc(open.join(' · '))}`:'Everything on the list is checked.'}</div><div class="adders"><button class="btn warn" data-act="fr-back-go">Send back</button><button class="btn ghost" data-act="fr-back-x">Cancel</button></div></div>`:''}
     ${M.frNote?`<div class="fr-backbox"><b>Note</b><textarea class="field" rows="2" id="fr-notetxt">${esc((R.items[M.frNote]||{}).note||'')}</textarea><div class="adders"><button class="btn primary sm" data-act="fr-note-ok">Save note</button><button class="btn ghost sm" data-act="fr-note-x">Cancel</button></div></div>`:''}
     <div class="fr-h">Checked by the app</div>${auto.map(([id,l,ok,d])=>row(id,l,'auto',ok,d)).join('')}
@@ -12987,7 +12988,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
   if(a==='fr-unsign'){const k=t.dataset.v;const prev=R.sign[k];delete R.sign[k];renderModal();if(await frPush(b,()=>{R.sign[k]=prev}))toast('Sign-off taken back.');return}
   if(a==='fr-back'){M.frBack=true;renderModal();setTimeout(()=>$('#fr-backnote')?.focus(),0);return}
   if(a==='fr-back-x'){M.frBack=false;renderModal();return}
-  if(a==='fr-back-go'){if(!frIsMgr())return;const note=($('#fr-backnote')?.value||'').trim();const sv=clone(R);R.back.push({by:myName(),at:new Date().toISOString(),note,open:frOpen(b)});delete R.sign.lead;delete R.sign.mgr;M.frBack=false;
+  if(a==='fr-back-go'){if(!frIsMgr())return;const note=($('#fr-backnote')?.value||'').trim();const sv=clone(R);R.back.push({by:myName(),uid:myId(),at:new Date().toISOString(),note,open:frOpen(b)});delete R.sign.lead;delete R.sign.mgr;M.frBack=false;
     if(await frPush(b,()=>{b.review=sv})){epGo('ip');toast(`Sent back to ${estName(b.lead_estimator_id)||'the estimator'}. It’s In progress again.`)}return}
   if(a==='fr-set-x'){M.frSet=null;renderModal();return}
   if(a==='fr-set-save'&&isAdmin()){const X=M.frSet;const lines=s=>[...new Set(String(s||'').split('\n').map(x=>x.trim()).filter(Boolean))];

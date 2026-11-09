@@ -3125,3 +3125,4 @@ input.uncommitted{border-color:var(--warn,#d9a441)!important;box-shadow:0 0 0 2p
 .cr-t td{padding:4px 8px;border-bottom:1px solid var(--border);vertical-align:middle}.cr-t th.r,.cr-t td.r{text-align:right}
 .cr-desc{min-width:180px}.cr-n{width:90px!important;text-align:right}.cr-pct{width:64px!important}.cr-sel{width:auto!important;min-width:120px}
 .cr-pickw{max-height:440px;overflow:auto}
+.fr-bnx{float:right;font-size:12.5px;margin-left:10px}
