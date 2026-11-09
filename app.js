@@ -6036,10 +6036,10 @@ function vEstimate(){const E=S.est;const tpl=!!(E&&E.tpl);const b=tpl?null:byId(
   if(E.err)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="err">${esc(E.err)}</div>`;
   if(!E.row)return estStartView(b,back);
   const d=E.data;const R=estCalc(d);const ro=EC().ro;estPick();const stale=estStale(d);
-  const tabs=tpl?[['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['sum','Default markup']]:[['info','Project info'],['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['quotes','Quotes'],['gantt','Gantt schedule'],['sum','Markup & totals'],['prop','Proposal']];
+  const tabs=tpl?[['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['sum','Default markup']]:[['info','Project info'],['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['quotes','Quotes'],['gantt','Gantt schedule'],['sum','Markup & totals'],['bal','Balance bid'],['prop','Proposal']];
   if(!tabs.some(t=>t[0]===E.tab))E.tab='build';
   const kpi=(l,v,s,c)=>`<div class="est-kpi${c?' '+c:''}"><span>${l}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
-  const body=E.tab==='setup'?estSetupView(d,R,ro):E.tab==='info'?estInfoView(d,b||{},ro):E.tab==='ind'?estIndView(d,R,ro):E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='gantt'?estGanttView(d,R,ro):E.tab==='sum'?estSumView(d,R,b||{},ro):estBuildView(d,R,ro);
+  const body=E.tab==='setup'?estSetupView(d,R,ro):E.tab==='info'?estInfoView(d,b||{},ro):E.tab==='ind'?estIndView(d,R,ro):E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='gantt'?estGanttView(d,R,ro):E.tab==='sum'?estSumView(d,R,b||{},ro):E.tab==='bal'?estBalView(d,R,ro):estBuildView(d,R,ro);
   const title=tpl?`<input class="field est-tplname" id="est-tplname" data-tplname value="${esc(E.tplName||'')}" placeholder="Template name"${ro?' disabled':''}>`:`<h1>${esc(b.name)}</h1>`;
   return `<div class="head est-headrow"><div>${back}${title}<p class="small"><b>${tpl?(E.tplBook==='section'?'Section template':'Master template'):'Estimate'}</b>${tpl?'':` · <button class="linkbtn" data-act="est-revs" title="Saved copies and revisions">${esc(E.ver?E.ver.label:estRevName(d))}</button>`} · <span id="est-status">${estStatusText()}</span></p></div>
     <div class="tools">${stale.length&&!ro?`<button class="btn" data-act="est-stale" title="Codebook prices changed since they were added">↻ Update ${stale.length} price${stale.length===1?'':'s'}</button>`:''}${tpl?'':`<button class="btn" data-act="est-revs">Revisions${estVersOf(E.bidId).length?` (${estVersOf(E.bidId).length})`:''}</button><button class="btn" data-act="est-export">Export to Excel</button>`}${!tpl&&cbEditable()?'<button class="btn" data-act="est-savetpl" data-v="estimate">Save as master template</button>':''}${tpl&&cbEditable()?`<button class="btn danger tpl-del" data-act="tpl-del" data-id="${E.tpl}">Delete template</button>`:''}</div></div>
@@ -6423,6 +6423,82 @@ function estSumView(d,R,b,ro){const m=d.markup;const p='markup';const dis=ro?' d
     ${line('Calculated total',money2(R.calcTotal),'est-sub')}${R.gc?line(esc(m.gcName||'General conditions')+' (lump-sum line)',money2(R.gc),'','included above'):''}${Math.abs(R.adj)>=.01?line('Rounding, overrides & adjustments',(R.adj>0?'+':'−')+money2(Math.abs(R.adj))):''}
     ${line('Bid total',money2(R.total),'est-grand')}${line('Margin',`${money2(R.margin)} · ${fmtN(R.marginPct,1)}%`,'','after direct + indirect cost')}${line('Retainage held',money2(R.ret),'',`${fmtN(num(m.ret)||0,2)}%`)}
     ${R.alts?line('Alternates (not in base bid)',money2(R.alts)):''}</div></div></div></div>`}
+
+/* ---------- Balance bid: every bid item's calculated and balanced unit price, with rounding and respreading ----------
+   The balanced unit price is the item's override (blank = the calculated price). Locked items keep their price when you round or respread. */
+const BAL_INC=[['smart','Smart (by size)'],['0.01','$0.01'],['0.05','$0.05'],['0.1','$0.10'],['0.25','$0.25'],['0.5','$0.50'],['1','$1'],['5','$5'],['10','$10'],['100','$100']];
+function balInc(v,inc){if(inc!=='smart')return +inc;const a=Math.abs(v);return a<1?.01:a<10?.05:a<100?.1:a<1000?1:a<10000?10:100}
+function balRound(v,inc,dir){const i=balInc(v,inc);const k=v/i;const n=dir==='down'?Math.floor(k+1e-9):dir==='nearest'?Math.round(k):Math.ceil(k-1e-9);return Math.round(n*i*100)/100}
+function balState(){const E=S.est;return E.bal=E.bal||{sel:new Set(),inc:'smart',dir:'up',by:'price',target:'',q:'',shut:new Set()}}
+function balTargets(d,R){const B=balState();const ok=(it,i)=>!it.alt&&!it.lock&&(num(R.items[i].q)||0)>0;const all=d.items.map((it,i)=>i).filter(i=>ok(d.items[i],i));const sel=all.filter(i=>B.sel.has(d.items[i].id));return sel.length?sel:all}
+function estBalView(d,R,ro){const B=balState();const dis=ro?' disabled':'';const q=normH(B.q);
+  const secs=[...(d.sections||[])];const known=new Set(secs.map(x=>x.id));const groups=secs.map(sc=>({sc,ix:d.items.map((it,i)=>i).filter(i=>d.items[i].sec===sc.id&&!d.items[i].alt)}));
+  const loose=d.items.map((it,i)=>i).filter(i=>!known.has(d.items[i].sec)&&!d.items[i].alt);if(loose.length)groups.unshift({sc:{id:'_none',code:'',name:'Not in a section'},ix:loose});
+  const alts=d.items.map((it,i)=>i).filter(i=>d.items[i].alt);if(alts.length)groups.push({sc:{id:'_alt',code:'',name:'Alternates (not in the base bid)'},ix:alts});
+  const f2=n=>Number(n||0).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});const sm=n=>(n<0?'−':'')+money2(Math.abs(n));const pct=(a,b)=>b?fmtN(a/b*100,2)+'%':'—';
+  const row=i=>{const it=d.items[i],x=R.items[i];const cq=x.q||0;const cost=x.total,cu=cq?cost/cq:0;const calcT=cq?x.calcUnit*cq:x.price;const bal=x.price;const vr=bal-calcT;const mu=bal-cost;
+    const st=bal<cost+x.ind-.005?['bad','Below cost + indirects']:x.ov?['good','Balanced by hand']:['','Calculated'];const arrow=!x.ov||Math.abs(vr)<.005?'':vr>0?'<span class="bal-up" title="Above calculated">▲</span>':'<span class="bal-dn" title="Below calculated">▼</span>';
+    return `<tr class="${B.sel.has(it.id)?'sel':''}${it.lock?' locked':''}"><td><input type="checkbox" data-balsel="${it.id}"${B.sel.has(it.id)?' checked':''}${cq>0?'':' disabled'}></td>
+      <td><span class="bal-dot ${st[0]}" title="${st[1]}"></span></td><td class="dim">${esc(it.code||'')}</td><td>${esc(it.desc||'Untitled')}</td>
+      <td class="r num">${fmtN(cq,2)}</td><td>${esc(it.unit||'')}</td><td class="r num">${money2(cu)}</td><td class="r num">${money2(x.calcUnit)}</td><td class="bal-ar">${arrow}</td>
+      <td class="bal-in">${cq>0?epIn(`items.${i}.override`,it.override,{n:1,cls:'bal-u',ph:fmtN(x.calcUnit,2),attrs:` data-balov="${i}"`,aria:'Balanced unit price'}):'<span class="dim small">no qty</span>'}</td>
+      <td><button class="bal-lk${it.lock?' on':''}" data-act="bal-lock" data-i="${i}" title="${it.lock?'Locked: rounding and respreading leave this price alone. Click to unlock.':'Click to lock this price'}"${dis}>${it.lock?'🔒':'🔓'}</button></td>
+      <td class="r num ${vr>.005?'good-t':vr<-.005?'bad-t':'dim'}">${Math.abs(vr)<.005?'0.00':(vr>0?'+':'−')+f2(Math.abs(vr))}</td><td class="r num">${money2(calcT)}</td><td class="r num"><b>${money2(bal)}</b></td>
+      <td class="r num ${mu<0?'bad-t':''}">${pct(mu,cost)}</td><td class="r num ${mu<0?'bad-t':''}">${sm(mu)}</td></tr>`};
+  let nRows=0;const body=groups.map(g=>{const ix=g.ix.filter(i=>!q||normH((d.items[i].code||'')+' '+(d.items[i].desc||'')).includes(q));if(!ix.length)return '';nRows+=ix.length;const shut=B.shut.has(g.sc.id)&&!q;
+    const st=ix.reduce((o,i)=>{const x=R.items[i];o.c+=x.total;o.calc+=(x.q?x.calcUnit*x.q:x.price);o.bal+=x.price;return o},{c:0,calc:0,bal:0});
+    return `<tr class="bal-sec"><td colspan="4"><button class="bal-tg" data-act="bal-shut" data-v="${esc(g.sc.id)}">${shut?'▸':'▾'}</button> <b>${esc(g.sc.code?g.sc.code+' ':'')}${esc(g.sc.name||'Section')}</b> <span class="dim small">${ix.length} item${ix.length===1?'':'s'}</span></td><td colspan="7"></td>
+      <td class="r num small ${st.bal-st.calc>.005?'good-t':st.bal-st.calc<-.005?'bad-t':'dim'}">${Math.abs(st.bal-st.calc)<.005?'':(st.bal>st.calc?'+':'−')+f2(Math.abs(st.bal-st.calc))}</td><td class="r num small">${money(st.calc)}</td><td class="r num small"><b>${money(st.bal)}</b></td><td class="r num small">${pct(st.bal-st.c,st.c)}</td><td class="r num small">${(st.bal-st.c<0?'−':'')+money(Math.abs(st.bal-st.c))}</td></tr>${shut?'':ix.map(row).join('')}`}).join('');
+  const nSel=d.items.filter(it=>B.sel.has(it.id)).length,nLock=d.items.filter(it=>it.lock&&!it.alt).length,nOv=d.items.filter((it,i)=>!it.alt&&R.items[i].ov).length;
+  const scope=nSel?`the ${nSel} selected item${nSel===1?'':'s'}`:`every unlocked item`;const variance=R.total-R.calcTotal;const mu=R.total-R.cost,prof=R.total-R.cost-R.ind;
+  const tgt=num(String(B.target).replace(/[,$\s]/g,''));
+  return `<div class="bal">
+    ${ro?'':`<div class="panel pad bal-tools">
+      <div class="bal-tool"><b>Round</b><select class="field sm" data-balset="inc">${BAL_INC.map(([k,l])=>`<option value="${k}"${B.inc===k?' selected':''}>${l}</option>`).join('')}</select>
+        <select class="field sm" data-balset="dir">${[['up','Up'],['nearest','Nearest'],['down','Down']].map(([k,l])=>`<option value="${k}"${B.dir===k?' selected':''}>${l}</option>`).join('')}</select>
+        <button class="btn sm primary" data-act="bal-round" title="Rounds the unit price of ${scope}">Round ${nSel?'selected':'all'}</button></div>
+      <div class="bal-tool"><b>Respread to</b><input class="field sm num bal-tgt" data-balset="target" inputmode="decimal" value="${esc(B.target)}" placeholder="${fmtN(R.calcTotal,2)}" title="The bid total you want. Blank = the calculated total.">
+        <select class="field sm" data-balset="by" title="How the difference is shared out">${[['price','by item price'],['cost','by item cost'],['mu','by item markup']].map(([k,l])=>`<option value="${k}"${B.by===k?' selected':''}>${l}</option>`).join('')}</select>
+        <button class="btn sm primary" data-act="bal-spread" title="Spreads the difference over ${scope}">Respread ${nSel?'selected':'all'}</button></div>
+      <div class="bal-tool"><button class="btn sm" data-act="bal-calc" title="Clears the balanced price on ${scope}, back to the calculated price">↺ Back to calculated</button>
+        <button class="btn sm ghost" data-act="bal-lockall" data-v="1">Lock ${nSel?'selected':'all'}</button><button class="btn sm ghost" data-act="bal-lockall" data-v="0">Unlock ${nSel?'selected':'all'}</button>
+        ${nSel?`<button class="btn sm ghost" data-act="bal-selnone">Clear selection (${nSel})</button>`:''}</div>
+      <p class="hint" style="margin:6px 0 0">Type a balanced unit price on any item to set it by hand; that also locks it, so rounding and respreading leave it alone. Tick items to act on just those. ${nOv} item${nOv===1?'':'s'} balanced · ${nLock} locked.</p></div>`}
+    <div class="bal-bar"><input class="field sm" data-balset="q" value="${esc(B.q)}" placeholder="Find a bid item…"><span class="dim small">${nRows} item${nRows===1?'':'s'}</span>
+      <button class="btn sm ghost" data-act="bal-shutall" data-v="1">Collapse all</button><button class="btn sm ghost" data-act="bal-shutall" data-v="0">Expand all</button></div>
+    <div class="panel scroll bal-wrap"><table class="bal-t"><thead><tr><th><input type="checkbox" data-balselall${nSel&&nSel===balTargets(d,R).length?' checked':''} title="Select every unlocked item"></th><th></th><th>Code</th><th>Description</th><th class="r">Qty</th><th>Unit</th>
+      <th class="r" title="Direct cost per unit">Cost / unit</th><th class="r">Calc unit</th><th></th><th class="r">Balanced unit</th><th></th><th class="r">Variance</th><th class="r">Calc total</th><th class="r">Balanced total</th><th class="r" title="Markup on direct cost">MU %</th><th class="r">Total MU</th></tr></thead>
+      <tbody>${body||`<tr><td colspan="16" class="dim" style="padding:20px;text-align:center">${q?'No bid items match.':'No bid items yet.'}</td></tr>`}</tbody></table></div>
+    <div class="bal-foot">
+      <div><span>Calculated</span><b>${money2(R.calcTotal)}</b></div><div><span>Balanced</span><b>${money2(R.total)}</b></div>
+      <div class="${Math.abs(variance)>=.5?(variance<0?'bad':'warn'):''}"><span>Variance</span><b>${variance>0?'+':''}${sm(variance)}</b></div>
+      ${tgt!=null?`<div class="${Math.abs(R.total-tgt)>=.5?'warn':''}"><span>To target</span><b>${R.total-tgt>0?'+':''}${money2(R.total-tgt)}</b></div>`:''}
+      <div><span>Direct cost</span><b>${money2(R.cost)}</b></div>${R.ind?`<div><span>Indirects</span><b>${money2(R.ind)}</b></div>`:''}
+      <div><span>Markup</span><b>${money2(mu)} · ${R.cost?fmtN(mu/R.cost*100,2):'0'}%</b></div><div><span>Profit</span><b>${money2(prof)} · ${R.total?fmtN(prof/R.total*100,2):'0'}%</b></div>
+      ${R.gc?`<div><span>${esc(d.markup?.gcName||'General conditions')}</span><b>${money2(R.gc)}</b></div>`:''}</div></div>`}
+// tools
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset.balov!=null&&S.est&&S.est.data){const it=S.est.data.items[+t.dataset.balov];if(it)it.lock=t.value.trim()!==''}
+  if(t.dataset.balset&&S.est&&(t.dataset.balset==='q'||t.dataset.balset==='target')){balState()[t.dataset.balset]=t.value;clearTimeout(estBalView._t);estBalView._t=setTimeout(()=>render(),t.dataset.balset==='q'?150:500)}},true);
+document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data)return;const B=balState();
+  if(t.dataset.balset&&t.tagName==='SELECT'){B[t.dataset.balset]=t.value;render();return}
+  if(t.dataset.balsel){t.checked?B.sel.add(t.dataset.balsel):B.sel.delete(t.dataset.balsel);render();return}
+  if(t.dataset.balselall!=null){const d=S.est.data,R=estCalc(d);if(t.checked){B.sel.clear();balTargets(d,R).forEach(i=>B.sel.add(d.items[i].id))}else B.sel.clear();render()}});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act^=bal-]');if(!t||!S.est||!S.est.data)return;const a=t.dataset.act,d=S.est.data,B=balState();
+  if(a==='bal-shut'){const k=t.dataset.v;B.shut.has(k)?B.shut.delete(k):B.shut.add(k);render();return}
+  if(a==='bal-shutall'){B.shut.clear();if(t.dataset.v==='1'){(d.sections||[]).forEach(x=>B.shut.add(x.id));B.shut.add('_none');B.shut.add('_alt')}render();return}
+  if(a==='bal-selnone'){B.sel.clear();render();return}
+  if(EC().ro)return;const R=estCalc(d);
+  if(a==='bal-lock'){const it=d.items[+t.dataset.i];it.lock=!it.lock;if(it.lock&&num(it.override)==null)it.override=R.items[+t.dataset.i].unitPrice;estTouch();render();return}
+  if(a==='bal-lockall'){const on=t.dataset.v==='1';const ix=B.sel.size?d.items.map((it,i)=>i).filter(i=>B.sel.has(d.items[i].id)):d.items.map((it,i)=>i).filter(i=>!d.items[i].alt);ix.forEach(i=>{const it=d.items[i];it.lock=on;if(on&&num(it.override)==null&&R.items[i].q>0)it.override=R.items[i].unitPrice});estTouch();render();toast(on?`Locked ${ix.length} item${ix.length===1?'':'s'}`:`Unlocked ${ix.length} item${ix.length===1?'':'s'}`);return}
+  const T=balTargets(d,R);if(!T.length){toast(B.sel.size?'The selected items are locked or have no quantity':'Every item is locked or has no quantity. Unlock some first.');return}
+  if(a==='bal-round'){let n=0;const before=R.total;T.forEach(i=>{const x=R.items[i];const v=balRound(x.unitPrice,B.inc,B.dir);if(Math.abs(v-x.unitPrice)>=.005||num(d.items[i].override)==null){d.items[i].override=v;n++}});estTouch();render();const R2=estCalc(d);toast(`Rounded ${n} unit price${n===1?'':'s'}: total ${R2.total-before>=0?'+':'−'}${money2(Math.abs(R2.total-before))}`);return}
+  if(a==='bal-calc'){if(!confirm(`Set ${B.sel.size?'the selected items':'every unlocked item'} (${T.length}) back to the calculated unit price?`))return;T.forEach(i=>{d.items[i].override=null});estTouch();render();toast(`${T.length} item${T.length===1?'':'s'} back to calculated`);return}
+  if(a==='bal-spread'){const tgt=num(String(B.target).replace(/[,$\s]/g,''));const target=tgt!=null?tgt:R.calcTotal;const diff=target-R.total;if(Math.abs(diff)<.005){toast('Already at that total');return}
+    const w=T.map(i=>{const x=R.items[i];return Math.max(0,B.by==='cost'?x.total:B.by==='mu'?x.price-x.total:x.price)});let W=w.reduce((s,v)=>s+v,0);const ww=W>0?w:T.map(()=>1);W=ww.reduce((s,v)=>s+v,0);
+    T.forEach((i,k)=>{const x=R.items[i];const share=diff*ww[k]/W;d.items[i].override=Math.max(0,Math.round((x.price+share)/x.q*100)/100)});
+    // whatever cents are left go on the item with the smallest quantity among the targets, so the total lands as close as it can
+    let R2=estCalc(d);let left=target-R2.total;if(Math.abs(left)>=.01){const j=T.slice().sort((a,b)=>R.items[a].q-R.items[b].q)[0];const x=R2.items[j];d.items[j].override=Math.max(0,Math.round((x.price+left)/x.q*100)/100);R2=estCalc(d);left=target-R2.total}
+    estTouch();render();toast(`Spread ${diff>0?'+':'−'}${money2(Math.abs(diff))} over ${T.length} item${T.length===1?'':'s'}${Math.abs(left)>=1?` · still ${money2(Math.abs(left))} ${left>0?'under':'over'} the target: unit prices can’t go below $0, so unlock or select more items`:Math.abs(left)>=.01?` · ${money2(Math.abs(left))} off from rounding to the cent`:''}`)}});
 
 /* ---------- Settings page (admin) ---------- */
 function setDraft(){if(!S.setDraft){const D=estDefaultsRaw();S.setDraft=clone({markup:D.markup,ind:D.ind.map(l=>({...l})),schedules:D.schedules,defSched:D.defSched,crews:D.crews,rates:ratesRaw()})}return S.setDraft}
