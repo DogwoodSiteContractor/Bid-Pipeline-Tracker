@@ -3115,3 +3115,5 @@ input.uncommitted{border-color:var(--warn,#d9a441)!important;box-shadow:0 0 0 2p
 .arv-name{min-width:200px}.arv-crew{width:190px!important}.arv-p{width:84px!important;text-align:right}
 .arv-mat{font-size:12px;min-width:180px;line-height:1.5}
 .arv-t .miss{border-color:var(--warn,#d9a441)}.miss-t{color:var(--warn,#d9a441);font-size:12px}
+.arv-name button.linkish{background:none;border:0;padding:0;margin:0;color:var(--ink);font:inherit;font-weight:600;text-align:left;cursor:pointer}
+.arv-name button.linkish:hover{text-decoration:underline;color:var(--accent)}
