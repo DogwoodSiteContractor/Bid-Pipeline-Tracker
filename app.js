@@ -1110,15 +1110,26 @@ function bidModal(){
   <div class="r">${bpAdvanceHtml(b,work,isNew)}</div></div>`;
 }
 const estOn=()=>!tabOff('estimates');
+// one stage back from where the bid is now (null when there's nowhere to go)
+function bpBackTo(b){if(b.status==='On Hold')return null;if(DECIDED.includes(b.status))return {st:'Submitted',l:'Proposal sent',tab:'outcome'};
+  if(b.status==='Submitted')return {st:'Proposal Review',l:'Ready for review',tab:'estprop',ep:'rr'};if(b.status==='Proposal Review')return {st:'Estimating',l:'Estimate & proposal in progress',tab:'estprop',ep:'ip'};
+  const i=BP_ORDER.indexOf(b.status);if(i<=0)return null;if(b.status==='Estimating')return {st:'Quotes Received',l:BP_TABS[i-1][1],tab:BP_TABS[i-1][0],ep:'ns'};return {st:BP_ORDER[i-1],l:BP_TABS[i-1][1],tab:BP_TABS[i-1][0]}}
+function bpBack(){const b=M.draft;const t=bpBackTo(b);if(!t)return;
+  const extra=DECIDED.includes(b.status)?`\n\nIt comes off ${b.status==='Awarded'?'Awarded':b.status==='No Bid'?'No bid':'Not awarded'} and goes back to waiting on the GC.`:b.status==='Submitted'?'\n\nThe GCs’ proposals go back to Not sent and the follow-up clock stops.':'';
+  if(!confirm(`Move “${b.name||'this bid'}” back to ${t.l}?${extra}\n\nNothing you entered is deleted.`))return;const from=stLabel(b.status);
+  if(t.ep==='rr'){propIds(b).forEach(id=>{const p=propOf(b,id);if(p.status==='Sent')b.client_proposals={...(b.client_proposals||{}),[id]:{...p,status:'Not sent'}}});b.status='Proposal Review';b.proposal_status='Complete';M.tab=t.tab;renderModal()}
+  else if(t.ep){M.tab=t.tab;epGo(t.ep,true);M.tab=t.tab;renderModal()}else{b.status=t.st;M.tab=t.tab;renderModal()}
+  const bd=$('#modal .mbody');if(bd)bd.scrollTop=0;toast(`Moved back from ${from} to ${t.l}.`)}
 function bpAdvanceHtml(b,work,isNew){
   const i=BP_TABS.findIndex(x=>x[0]===M.tab);const prev=BP_TABS[i-1],next=BP_TABS[i+1];
   const nav=`${prev?`<button class="btn" data-act="bp-tab" data-v="${prev[0]}">← ${esc(prev[1])}</button>`:''}${next?`<button class="btn" data-act="bp-tab" data-v="${next[0]}">${esc(next[1])} →</button>`:''}`;
   if(isNew||!work)return nav;
-  const cur=bpStageIdx(b);if(cur>=BP_TABS.length-1||b.status==='On Hold')return nav;
+  const back=bpBackTo(b);const backBtn=back&&!b._sample?`<button class="btn ghost bp-backst" data-act="bp-back" title="Undo a stage move: puts the bid back to ${esc(back.l)}">↩ Back to ${esc(back.l)}</button>`:'';
+  const cur=bpStageIdx(b);if(cur>=BP_TABS.length-1||b.status==='On Hold')return backBtn+nav;
   const key=BP_TABS[cur][0];const miss=bpMissing(b,key);const ep=key==='estprop';
   const label=ep?(b.status==='Proposal Review'?'Mark proposal sent →':'Ready for review →'):`Advance to ${esc(BP_TABS[cur+1][1])} →`;
   const left=miss.length?`<span class="bp-miss" title="${esc(miss.join('\n'))}">${M.advArm?'<b>Advance anyway?</b> ':'Still open: '}${esc(miss.slice(0,2).join(' · '))}${miss.length>2?` +${miss.length-2}`:''}</span>`:`<span class="bp-ready">✓ ${esc(BP_TABS[cur][1])} is done</span>`;
-  return `${nav}<span class="bp-adv">${left}<button class="btn ${miss.length?(M.advArm?'warn':''):'primary glow'}" data-act="bp-advance">${M.advArm&&miss.length?'Yes, advance':label}</button></span>`}
+  return `${backBtn}${nav}<span class="bp-adv">${left}<button class="btn ${miss.length?(M.advArm?'warn':''):'primary glow'}" data-act="bp-advance">${M.advArm&&miss.length?'Yes, advance':label}</button></span>`}
 
 /* tabs */
 function bpProject(b,work,admin){
@@ -1291,6 +1302,7 @@ function bpAside(b,work,admin,isNew){const files=isNew?[]:filesFor(b.id);
 /* switching tabs, advancing, recording the outcome */
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||!M||M.kind!=='bid')return;const a=t.dataset.act;
   if(a==='bp-tab'){M.tab=t.dataset.v;M.advArm=false;renderModal();const bd=$('#modal .mbody');if(bd)bd.scrollTop=0;return}
+  if(a==='bp-back'){bpBack();return}
   if(a==='bp-advance'){const b=M.draft;const cur=bpStageIdx(b);if(cur>=BP_TABS.length-1)return;const key=BP_TABS[cur][0];const miss=bpMissing(b,key);
     if(miss.length&&!M.advArm){M.advArm=true;renderModal();return}M.advArm=false;
     if(key==='estprop'){M.tab='estprop';if(b.status==='Proposal Review')epOpenSend();else epGo('rr');return}
