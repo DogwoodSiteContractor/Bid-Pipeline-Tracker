@@ -1211,7 +1211,7 @@ function epBar(b,work){const ph=epPhase(b);const steps=[['ns','Not started'],['i
   const R=frOf(b);const mgr=frIsMgr()&&work;const when=x=>x&&x.at?fmtShort(String(x.at).slice(0,10))+' '+fuTime(new Date(x.at).toTimeString().slice(0,5)):'';
   const hint=ph==='ns'?'Click <b>In progress</b> when you start the estimate.':ph==='ip'?(epLeadFirst()?'When the number and proposal are done, work through the <b>Final review</b> below and sign off as lead. That sends it to <b>Ready for review</b> for a manager.':'When the number and proposal are done, mark it <b>Ready for review</b>. Managers see it on their dashboard.')
     :ph==='rr'?(epMgrFlow()?(mgr?'Waiting on a manager. Opening it as a manager marks it <b>In review</b>.':'Waiting for a precon manager to pick it up.'):'Waiting on review. Once it’s checked, click <b>Sent</b> when the proposal goes out.')
-    :ph==='ir'?`<b>In review</b> by ${esc(R.claim.name||'a manager')} since ${when(R.claim)}.${mgr?' Approve it as ready to send, or send it back.':''}`
+    :ph==='ir'?`<b>In review</b> by ${esc(R.claim.name||'a manager')} since ${when(R.claim)}.${mgr?' Approve it as ready to send, or send it back.':''}${work&&(mgr||R.claim.uid===myId())?` <button class="linkbtn" data-act="fr-release" title="Takes ${R.claim.uid===myId()?'you':esc(R.claim.name||'them')} off this review; it goes back to Ready for review for a manager to pick up">${R.claim.uid===myId()?'I’m not reviewing this':'Release the review'}</button>`:''}`
     :ph==='ok'?`<b>Approved</b> by ${esc(R.ok.name||'a manager')} ${when(R.ok)}. Click <b>Sent</b> when the proposal goes out.`:'Sent. Follow-up and the outcome are on the next tab.';
   const mgrOnly=k=>k==='ir'||k==='ok';
   return `<div class="ep-bar"><div class="ep-steps">${steps.map(([k,l],i)=>`<button class="ep-step${i<ix?' past':''}${k===ph?' on':''}" data-act="ep-set" data-v="${k}"${work&&(!mgrOnly(k)||frIsMgr())?'':' disabled'}${mgrOnly(k)&&!frIsMgr()?' title="A precon manager sets this"':''}><i>${i<ix?'✓':i+1}</i>${l}</button>`).join('')}</div>
@@ -1227,6 +1227,7 @@ function epRrReady(b){const R=frOf(b);
   if(epLeadFirst()&&!R.sign.lead){toast(b.lead_estimator_id?'The lead estimator signs off on the final review first. Signing sends it to Ready for review.':'Add a lead estimator, and have them sign off on the final review first.');epToSig();return false}return true}
 function epToSig(){setTimeout(()=>{const el=document.querySelector('.fr-sigs');if(el){el.scrollIntoView({behavior:'smooth',block:'center'});el.classList.add('fr-flash');setTimeout(()=>el.classList.remove('fr-flash'),1600)}},50)}
 // a manager picks it up / approves it
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act=fr-release]');if(!t||!M||M.kind!=='bid')return;const b=M.draft;const R=frOf(b);if(!R.claim)return;const sv=clone(b.review);delete R.claim;M.epApArm=null;renderModal();frPush(b,()=>{b.review=sv}).then(ok=>{if(ok!==false)toast('Back to Ready for review. A manager can pick it up.')})});
 function epClaim(b){const R=frOf(b);if(R.claim||R.ok)return false;R.claim={uid:myId(),name:myName(),at:new Date().toISOString()};return true}
 async function epApprove(force){const b=M.draft;if(!frIsMgr()||!canWork(b))return;const open=frOpen(b);const st=frSet();
   if(open.length&&st.mode==='stop'){toast('Finish the final review checklist before approving.');return}
@@ -12933,7 +12934,7 @@ function frManual(b){const st=frSet();return (b.bid_type==='Budget / pricing'?st
 function frOpen(b){const R=frOf(b);const L=[];frAuto(b).forEach(([id,l,ok])=>{const r=R.items[id]||{};if(!ok&&!r.na)L.push(l)});frManual(b).forEach(([id,l])=>{const r=R.items[id]||{};if(!r.ok&&!r.na)L.push(l)});return L}
 function frNeeds(b){const R=frOf(b);const w=frSet().who;const L=!!R.sign.lead,G=!!R.sign.mgr;
   return w==='both'?[...(L?[]:['lead estimator']),...(G?[]:['precon manager'])]:w==='lead'?(L?[]:['lead estimator']):w==='mgr'?(G?[]:['precon manager']):(L||G?[]:['lead estimator or precon manager'])}
-const frIsMgr=()=>isAdmin()||canAssign();
+const frIsMgr=()=>isAdmin()||(canAssign()&&!isDev());
 const frIsLead=b=>{const me=myEst();return !!me&&b.lead_estimator_id===me.id};
 function frStats(b){const a=frAuto(b),m=frManual(b);const R=frOf(b);const done=a.filter(([id,,ok])=>ok||(R.items[id]||{}).na).length+m.filter(([id])=>(R.items[id]||{}).ok||(R.items[id]||{}).na).length;return {done,total:a.length+m.length}}
 function frHtml(b,work){const e=epState(b);if(e==='ns'&&!Object.keys(frOf(b).items).length)return '';const R=frOf(b);const st=frSet();const S2=frStats(b);const naOpen=M.frNa;
