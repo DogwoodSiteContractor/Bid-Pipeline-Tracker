@@ -5415,10 +5415,15 @@ function estCalc(d){const ctx=estCtx(d);const items=d.items.map(it=>itemCalc(it,
   items.forEach((x,i)=>{const pre=x.total+x.ind+x.mk;x.bond=pre*bondR;const calc=pre+x.bond+x.adj;const ov=num(d.items[i].override);
     x.calcUnit=x.q?r2(calc/x.q):0;x.ov=ov!=null&&x.q>0;x.unitPrice=x.ov?ov:x.calcUnit;x.price=x.q?r2(x.unitPrice*x.q):r2(calc);x.margin=x.price-x.total-x.ind});
   const gc=lump&&ind>0?r2((ind+gcMk)*(1+bondR)):0;
-  const total=bi.reduce((s,i)=>s+items[i].price,0)+gc,alts=items.reduce((s,x,i)=>s+(isBase(i)?0:x.price),0);
+  const gross=bi.reduce((s,i)=>s+items[i].price,0)+gc,alts=items.reduce((s,x,i)=>s+(isBase(i)?0:x.price),0);
+  // credits & deducts come off after markup, at the price chosen on each one; "option" credits are offered on the proposal but not taken
+  const credits=(d.credits||[]).map(c=>{const i=c.item?d.items.findIndex(x=>x.id===c.item):-1;const x=i>=0?items[i]:null;const q=c.qty==null||c.qty===''?(x?x.q:1):(num(c.qty)||0);
+    const unit=!x||c.basis==='fixed'?(num(c.price)||0):c.basis==='cost'?(x.q?(x.total+(x.ind||0))/x.q:0):c.basis==='pct'?x.unitPrice*(num(c.pct)??100)/100:x.unitPrice;
+    return {c,i,x,q,unit,amt:r2(q*unit),opt:c.mode==='option'}});
+  const creditBase=credits.filter(o=>!o.opt).reduce((s,o)=>s+o.amt,0),creditOpt=credits.filter(o=>o.opt).reduce((s,o)=>s+o.amt,0);const total=gross-creditBase;
   const F=cost>0?calcTotal/cost:1;
   const fuel={diesel:{gal:0,cost:0,adj:0},gas:{gal:0,cost:0,adj:0}};bi.forEach(i=>items[i].acts.forEach(a=>Object.entries(a.fuel||{}).forEach(([k,v])=>{const o=fuel[k];if(!o)return;o.gal+=v.gal;o.cost+=v.cost;o.adj+=v.adj})));
-  return {ctx,items,c,cost,mh,ot,ind,indLines,dur:{crewDays,conc,autoDays,days,weeks,months},oh,profit,bond,calcTotal,F,gc,adjSum,total,alts,adj:total-calcTotal,ret:total*(num(m.ret)||0)/100,split,fuel,margin:total-cost-ind,marginPct:total?(total-cost-ind)/total*100:0,rates:R}}
+  return {ctx,items,c,cost,mh,ot,ind,indLines,dur:{crewDays,conc,autoDays,days,weeks,months},oh,profit,bond,calcTotal,F,gc,adjSum,total,gross,credits,creditBase,creditOpt,alts,adj:gross-calcTotal,ret:total*(num(m.ret)||0)/100,split,fuel,margin:total-cost-ind,marginPct:total?(total-cost-ind)/total*100:0,rates:R}}
 
 // codebook prices that moved since they were copied in
 function estStale(d){const out=[];const acts=[];(d.items||[]).forEach(it=>(it.acts||[]).forEach(a=>acts.push(a)));if(d.act)acts.push(d.act);if(d.item)(d.item.acts||[]).forEach(a=>acts.push(a));
@@ -5970,10 +5975,10 @@ function propData(){const E=S.est,d=E.data,b=byId(S.bids,E.bidId)||{};const L=pr
 const propLines=t=>String(t||'').split(/\n+/).map(x=>x.trim()).filter(Boolean);
 // what the client sees for each line, depending on the format
 function propRows(d,R,P){const base=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>!o.it.alt);
-  if(P.format==='total')return {total:R.total,groups:[]};
+  if(P.format==='total')return {total:R.gross,groups:[]};
   const groups=(d.sections||[]).map(s=>{const items=base.filter(o=>o.it.sec===s.id);return {name:s.name||'General',items,total:items.reduce((a,o)=>a+o.x.price,0)}}).filter(g=>g.items.length);
   if(R.gc){const nm=d.markup.gcName||'General conditions';groups.unshift({name:nm,items:[{it:{code:'',desc:nm,qty:1,unit:'LS'},x:{price:R.gc,unitPrice:R.gc,q:1}}],total:R.gc})}
-  return {total:R.total,groups}}
+  return {total:R.gross,groups}}
 function propPaper(d,R,b,P){const L=propLib();const co=S.settings.general?.companyName||CFG.companyName||'';const logo=BRAND.loginLogo||'';
   const to=P.to.map(id=>byId(S.clients,id)).filter(Boolean);const PR=propRows(d,R,P);const GT=P.showDur||P.showGantt?ganttCalc(d,R):{total:0};const alts=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>o.it.alt);
   const list=(arr,extra)=>{const all=[...arr,...propLines(extra)];return all.length?`<ul>${all.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''};
@@ -5991,6 +5996,7 @@ function propPaper(d,R,b,P){const L=propLib();const co=S.settings.general?.compa
     ${P.intro?`<p>${esc(P.intro)}</p>`:''}${P.basis?`<p class="pp-basis"><b>Basis:</b> ${esc(P.basis)}</p>`:''}
     ${P.showDur&&GT.total?`<p class="pp-basis"><b>Schedule:</b> approximately ${ganttWeeksText(GT)}${GT.hasStart?`, ${fmtDate(GT.startDate)} to ${fmtDate(GT.finishDate)}`:' from notice to proceed'}, weather permitting.</p>`:''}
     <h2>Pricing</h2>${table}
+    ${R.credits&&R.credits.length?propCredits(R):''}
     ${alts.length?`<h2>Alternates</h2><table class="pp-t"><tbody>${alts.map(o=>`<tr><td>${esc(o.it.code)}</td><td>${esc(o.it.desc)}${o.x.q&&P.format==='unit'?` <span class="pp-dim">(${qtyFmt(o.it.qty)} ${esc(o.it.unit||'')} @ ${money2(o.x.unitPrice)})</span>`:''}</td><td class="r">${o.x.price<0?'Deduct ':'Add '}${money2(Math.abs(o.x.price))}</td></tr>`).join('')}</tbody></table>`:''}
     ${P.showGantt&&GT.total?`<h2>Schedule</h2>${ganttPaper(d,R)}<p class="pp-dim" style="font-size:11px;margin:4px 0 0">${ganttWeeksText(GT)}. Working days only; durations are estimates.</p>`:''}
     ${P.incl.length||propLines(P.inclX).length?`<h2>Inclusions</h2>${list(P.incl,P.inclX)}`:''}
@@ -6125,10 +6131,10 @@ function vEstimate(){const E=S.est;const tpl=!!(E&&E.tpl);const b=tpl?null:byId(
   if(E.err)return `<div class="head"><div>${back}<h1>Estimate</h1></div></div><div class="err">${esc(E.err)}</div>`;
   if(!E.row)return estStartView(b,back);
   const d=E.data;const R=estCalc(d);const ro=EC().ro;estPick();const stale=estStale(d);
-  const tabs=tpl?[['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['sum','Default markup']]:[['info','Project info'],['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['quotes','Quotes'],['gantt','Gantt schedule'],['sum','Markup & totals'],['bal','Balance bid'],['prop','Proposal']];
+  const tabs=tpl?[['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['sum','Default markup']]:[['info','Project info'],['build','Build'],['setup','Bid item setup'],['ind','Schedule & indirects'],['res','Resources'],['quotes','Quotes'],['gantt','Gantt schedule'],['sum','Markup & totals'],['bal','Balance bid'],['cr','Credits & deducts'],['prop','Proposal']];
   if(!tabs.some(t=>t[0]===E.tab))E.tab='build';
   const kpi=(l,v,s,c)=>`<div class="est-kpi${c?' '+c:''}"><span>${l}</span><b>${v}</b>${s?`<small>${s}</small>`:''}</div>`;
-  const body=E.tab==='setup'?estSetupView(d,R,ro):E.tab==='info'?estInfoView(d,b||{},ro):E.tab==='ind'?estIndView(d,R,ro):E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='gantt'?estGanttView(d,R,ro):E.tab==='sum'?estSumView(d,R,b||{},ro):E.tab==='bal'?estBalView(d,R,ro):estBuildView(d,R,ro);
+  const body=E.tab==='setup'?estSetupView(d,R,ro):E.tab==='info'?estInfoView(d,b||{},ro):E.tab==='ind'?estIndView(d,R,ro):E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='gantt'?estGanttView(d,R,ro):E.tab==='sum'?estSumView(d,R,b||{},ro):E.tab==='bal'?estBalView(d,R,ro):E.tab==='cr'?estCrView(d,R,ro):estBuildView(d,R,ro);
   const title=tpl?`<input class="field est-tplname" id="est-tplname" data-tplname value="${esc(E.tplName||'')}" placeholder="Template name"${ro?' disabled':''}>`:`<h1>${esc(b.name)}</h1>`;
   return `<div class="head est-headrow"><div>${back}${title}<p class="small"><b>${tpl?(E.tplBook==='section'?'Section template':'Master template'):'Estimate'}</b>${tpl?'':` · <button class="linkbtn" data-act="est-revs" title="Saved copies and revisions">${esc(E.ver?E.ver.label:estRevName(d))}</button>`} · <span id="est-status">${estStatusText()}</span></p></div>
     <div class="tools">${stale.length&&!ro?`<button class="btn" data-act="est-stale" title="Codebook prices changed since they were added">↻ Update ${stale.length} price${stale.length===1?'':'s'}</button>`:''}${tpl?'':`<button class="btn" data-act="est-revs">Revisions${estVersOf(E.bidId).length?` (${estVersOf(E.bidId).length})`:''}</button><button class="btn" data-act="est-export">Export to Excel</button>`}${!tpl&&cbEditable()?'<button class="btn" data-act="est-savetpl" data-v="estimate">Save as master template</button>':''}${tpl&&cbEditable()?`<button class="btn danger tpl-del" data-act="tpl-del" data-id="${E.tpl}">Delete template</button>`:''}</div></div>
@@ -6136,7 +6142,7 @@ function vEstimate(){const E=S.est;const tpl=!!(E&&E.tpl);const b=tpl?null:byId(
   ${E.conflict?`<div class="err est-conflict"><b>Someone else saved this estimate while you were working.</b> Your last changes haven’t been saved. <button class="btn sm" data-act="est-reload">Load their version</button> <button class="btn sm danger" data-act="est-keep">Keep mine (overwrite theirs)</button></div>`:''}
   ${ro&&!E.conflict?`<div class="notice">View only — ${tpl?'only admins change templates':'you’re not on this bid’s estimating team'}.</div>`:''}
   ${tpl?'<div class="notice est-tplnote">This is a template. It’s priced at today’s codebook rates; quantities here are “typical”. Estimates started from it get their own copy.</div>':''}
-  <div class="est-kpis">${kpi('Direct cost',money(R.cost),`${fmtN(R.mh,0)} man-hours${R.ot?' · '+money(R.ot)+' OT':''}`)}${kpi('Indirects',money(R.ind),R.ind?`${fmtN(R.dur.weeks,1)} weeks`:'none yet')}${kpi('Markup',money(R.total-R.cost-R.ind),R.cost?`${fmtN((R.total-R.cost-R.ind)/(R.cost+R.ind||1)*100,1)}% on cost`:'')}${kpi('Bid total',money(R.total),R.alts?`+ ${money(R.alts)} alternates`:`${d.sections.length} section${d.sections.length===1?'':'s'} · ${(n=>n+' bid item'+(n===1?'':'s'))(d.items.filter(i=>!i.alt).length)}`,'main')}${kpi('Margin',R.total?fmtN(R.marginPct,1)+'%':'—','of bid total')}${kpi('Retainage held',money(R.ret),`${fmtN(num(d.markup.ret)||0,1)}%`)}</div>
+  <div class="est-kpis">${kpi('Direct cost',money(R.cost),`${fmtN(R.mh,0)} man-hours${R.ot?' · '+money(R.ot)+' OT':''}`)}${kpi('Indirects',money(R.ind),R.ind?`${fmtN(R.dur.weeks,1)} weeks`:'none yet')}${kpi('Markup',money(R.total-R.cost-R.ind),R.cost?`${fmtN((R.total-R.cost-R.ind)/(R.cost+R.ind||1)*100,1)}% on cost`:'')}${kpi(R.creditBase?'Net bid total':'Bid total',money(R.total),R.creditBase?`after −${money(R.creditBase)} credits`:R.alts?`+ ${money(R.alts)} alternates`:`${d.sections.length} section${d.sections.length===1?'':'s'} · ${(n=>n+' bid item'+(n===1?'':'s'))(d.items.filter(i=>!i.alt).length)}`,'main')}${kpi('Margin',R.total?fmtN(R.marginPct,1)+'%':'—','of bid total')}${kpi('Retainage held',money(R.ret),`${fmtN(num(d.markup.ret)||0,1)}%`)}</div>
   <div class="seg est-tabs" role="tablist">${tabs.map(([k,l])=>`<button class="${E.tab===k?'on':''}" data-act="est-tab" data-v="${k}" role="tab">${l}</button>`).join('')}</div>
   ${body}${EST_PICK.html}<datalist id="cb-units">${CB_UNITS.map(u=>`<option value="${u}">`).join('')}</datalist>${estCtxMenu(d)}`}
 function estStartView(b,back){const work=canWork(b);const others=S.estIndex.filter(x=>x.bid_id!==b.id).map(x=>({x,b:byId(S.bids,x.bid_id)})).filter(o=>o.b).sort((p,q)=>String(q.x.updated_at).localeCompare(String(p.x.updated_at)));
@@ -6517,7 +6523,7 @@ function estSumView(d,R,b,ro){const m=d.markup;const p='markup';const dis=ro?' d
     ${line('Direct cost',money2(R.cost),'est-sub')}${R.ind?line('Indirects',money2(R.ind),'',`${fmtN(R.dur.weeks,1)} weeks`):''}
     ${line('Overhead',money2(R.oh))}${line('Markup / profit',money2(R.profit))}${R.bond?line('Bond',money2(R.bond),'',`${fmtN(num(m.bond)||0,2)}%`):''}
     ${line('Calculated total',money2(R.calcTotal),'est-sub')}${R.gc?line(esc(m.gcName||'General conditions')+' (lump-sum line)',money2(R.gc),'','included above'):''}${Math.abs(R.adj)>=.01?line('Rounding, overrides & adjustments',(R.adj>0?'+':'−')+money2(Math.abs(R.adj))):''}
-    ${line('Bid total',money2(R.total),'est-grand')}${line('Margin',`${money2(R.margin)} · ${fmtN(R.marginPct,1)}%`,'','after direct + indirect cost')}${line('Retainage held',money2(R.ret),'',`${fmtN(num(m.ret)||0,2)}%`)}
+    ${R.creditBase?line('Bid before credits',money2(R.gross),'est-sub')+line('Credits taken',`−${money2(R.creditBase)}`,'',`${R.credits.filter(o=>!o.opt).length} on the Credits & deducts tab`):''}${line(R.creditBase?'Net bid total':'Bid total',money2(R.total),'est-grand')}${R.creditOpt?line('Optional deducts offered',`−${money2(R.creditOpt)}`,'','listed on the proposal, not taken'):''}${line('Margin',`${money2(R.margin)} · ${fmtN(R.marginPct,1)}%`,'','after direct + indirect cost')}${line('Retainage held',money2(R.ret),'',`${fmtN(num(m.ret)||0,2)}%`)}
     ${R.alts?line('Alternates (not in base bid)',money2(R.alts)):''}</div></div></div></div>`}
 
 /* ---------- Balance bid: every bid item's calculated and balanced unit price, with rounding and respreading ----------
@@ -6546,7 +6552,7 @@ function estBalView(d,R,ro){const B=balState();const dis=ro?' disabled':'';const
     return `<tr class="bal-sec"><td colspan="4"><button class="bal-tg" data-act="bal-shut" data-v="${esc(g.sc.id)}">${shut?'▸':'▾'}</button> <b>${esc(g.sc.code?g.sc.code+' ':'')}${esc(g.sc.name||'Section')}</b> <span class="dim small">${ix.length} item${ix.length===1?'':'s'}</span></td><td colspan="7"></td>
       <td class="r num small ${st.bal-st.calc>.005?'good-t':st.bal-st.calc<-.005?'bad-t':'dim'}">${Math.abs(st.bal-st.calc)<.005?'':(st.bal>st.calc?'+':'−')+f2(Math.abs(st.bal-st.calc))}</td><td class="r num small">${money(st.calc)}</td><td class="r num small"><b>${money(st.bal)}</b></td><td class="r num small">${pct(st.bal-st.c,st.c)}</td><td class="r num small">${(st.bal-st.c<0?'−':'')+money(Math.abs(st.bal-st.c))}</td></tr>${shut?'':ix.map(row).join('')}`}).join('');
   const nSel=d.items.filter(it=>B.sel.has(it.id)).length,nLock=d.items.filter(it=>it.lock&&!it.alt).length,nOv=d.items.filter((it,i)=>!it.alt&&R.items[i].ov).length;
-  const scope=nSel?`the ${nSel} selected item${nSel===1?'':'s'}`:`every unlocked item`;const variance=R.total-R.calcTotal;const mu=R.total-R.cost,prof=R.total-R.cost-R.ind;
+  const scope=nSel?`the ${nSel} selected item${nSel===1?'':'s'}`:`every unlocked item`;const variance=R.gross-R.calcTotal;const mu=R.gross-R.cost,prof=R.gross-R.cost-R.ind;
   const tgt=num(String(B.target).replace(/[,$\s]/g,''));
   return `<div class="bal">
     ${ro?'':`<div class="panel pad bal-tools">
@@ -6566,11 +6572,11 @@ function estBalView(d,R,ro){const B=balState();const dis=ro?' disabled':'';const
       <th class="r" title="Direct cost per unit">Cost / unit</th><th class="r">Calc unit</th><th></th><th class="r">Balanced unit</th><th></th><th class="r">Variance</th><th class="r">Calc total</th><th class="r">Balanced total</th><th class="r" title="Markup on direct cost">MU %</th><th class="r">Total MU</th></tr></thead>
       <tbody>${body||`<tr><td colspan="16" class="dim" style="padding:20px;text-align:center">${q?'No bid items match.':'No bid items yet.'}</td></tr>`}</tbody></table></div>
     <div class="bal-foot">
-      <div><span>Calculated</span><b>${money2(R.calcTotal)}</b></div><div><span>Balanced</span><b>${money2(R.total)}</b></div>
+      <div><span>Calculated</span><b>${money2(R.calcTotal)}</b></div><div><span>Balanced</span><b>${money2(R.gross)}</b></div>
       <div class="${Math.abs(variance)>=.5?(variance<0?'bad':'warn'):''}"><span>Variance</span><b>${variance>0?'+':''}${sm(variance)}</b></div>
-      ${tgt!=null?`<div class="${Math.abs(R.total-tgt)>=.5?'warn':''}"><span>To target</span><b>${R.total-tgt>0?'+':''}${money2(R.total-tgt)}</b></div>`:''}
+      ${tgt!=null?`<div class="${Math.abs(R.gross-tgt)>=.5?'warn':''}"><span>To target</span><b>${R.gross-tgt>0?'+':''}${money2(R.gross-tgt)}</b></div>`:''}
       <div><span>Direct cost</span><b>${money2(R.cost)}</b></div>${R.ind?`<div><span>Indirects</span><b>${money2(R.ind)}</b></div>`:''}
-      <div><span>Markup</span><b>${money2(mu)} · ${R.cost?fmtN(mu/R.cost*100,2):'0'}%</b></div><div><span>Profit</span><b>${money2(prof)} · ${R.total?fmtN(prof/R.total*100,2):'0'}%</b></div>
+      <div><span>Markup</span><b>${money2(mu)} · ${R.cost?fmtN(mu/R.cost*100,2):'0'}%</b></div><div><span>Profit</span><b>${money2(prof)} · ${R.gross?fmtN(prof/R.gross*100,2):'0'}%</b></div>
       ${R.gc?`<div><span>${esc(d.markup?.gcName||'General conditions')}</span><b>${money2(R.gc)}</b></div>`:''}</div></div>`}
 // tools
 document.addEventListener('input',e=>{const t=e.target;if(t.dataset.balov!=null&&S.est&&S.est.data){const it=S.est.data.items[+t.dataset.balov];if(it)it.lock=t.value.trim()!==''}
@@ -6587,14 +6593,49 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act^=bal-]
   if(a==='bal-lock'){const it=d.items[+t.dataset.i];it.lock=!it.lock;if(it.lock&&num(it.override)==null)it.override=R.items[+t.dataset.i].unitPrice;estTouch();render();return}
   if(a==='bal-lockall'){const on=t.dataset.v==='1';const ix=B.sel.size?d.items.map((it,i)=>i).filter(i=>B.sel.has(d.items[i].id)):d.items.map((it,i)=>i).filter(i=>!d.items[i].alt);ix.forEach(i=>{const it=d.items[i];it.lock=on;if(on&&num(it.override)==null&&R.items[i].q>0)it.override=R.items[i].unitPrice});estTouch();render();toast(on?`Locked ${ix.length} item${ix.length===1?'':'s'}`:`Unlocked ${ix.length} item${ix.length===1?'':'s'}`);return}
   const T=balTargets(d,R);if(!T.length){toast(B.sel.size?'The selected items are locked or have no quantity':'Every item is locked or has no quantity. Unlock some first.');return}
-  if(a==='bal-round'){let n=0;const before=R.total;T.forEach(i=>{const x=R.items[i];const v=balRound(x.unitPrice,B.inc,B.dir);if(Math.abs(v-x.unitPrice)>=.005||num(d.items[i].override)==null){d.items[i].override=v;n++}});estTouch();render();const R2=estCalc(d);toast(`Rounded ${n} unit price${n===1?'':'s'}: total ${R2.total-before>=0?'+':'−'}${money2(Math.abs(R2.total-before))}`);return}
+  if(a==='bal-round'){let n=0;const before=R.gross;T.forEach(i=>{const x=R.items[i];const v=balRound(x.unitPrice,B.inc,B.dir);if(Math.abs(v-x.unitPrice)>=.005||num(d.items[i].override)==null){d.items[i].override=v;n++}});estTouch();render();const R2=estCalc(d);toast(`Rounded ${n} unit price${n===1?'':'s'}: total ${R2.gross-before>=0?'+':'−'}${money2(Math.abs(R2.gross-before))}`);return}
   if(a==='bal-calc'){if(!confirm(`Set ${B.sel.size?'the selected items':'every unlocked item'} (${T.length}) back to the calculated unit price?`))return;T.forEach(i=>{d.items[i].override=null});estTouch();render();toast(`${T.length} item${T.length===1?'':'s'} back to calculated`);return}
-  if(a==='bal-spread'){const tgt=num(String(B.target).replace(/[,$\s]/g,''));const target=tgt!=null?tgt:R.calcTotal;const diff=target-R.total;if(Math.abs(diff)<.005){toast('Already at that total');return}
+  if(a==='bal-spread'){const tgt=num(String(B.target).replace(/[,$\s]/g,''));const target=tgt!=null?tgt:R.calcTotal;const diff=target-R.gross;if(Math.abs(diff)<.005){toast('Already at that total');return}
     const w=T.map(i=>{const x=R.items[i];return Math.max(0,B.by==='cost'?x.total:B.by==='mu'?x.price-x.total:x.price)});let W=w.reduce((s,v)=>s+v,0);const ww=W>0?w:T.map(()=>1);W=ww.reduce((s,v)=>s+v,0);
     T.forEach((i,k)=>{const x=R.items[i];const share=diff*ww[k]/W;d.items[i].override=Math.max(0,Math.round((x.price+share)/x.q*100)/100)});
     // whatever cents are left go on the item with the smallest quantity among the targets, so the total lands as close as it can
-    let R2=estCalc(d);let left=target-R2.total;if(Math.abs(left)>=.01){const j=T.slice().sort((a,b)=>R.items[a].q-R.items[b].q)[0];const x=R2.items[j];d.items[j].override=Math.max(0,Math.round((x.price+left)/x.q*100)/100);R2=estCalc(d);left=target-R2.total}
+    let R2=estCalc(d);let left=target-R2.gross;if(Math.abs(left)>=.01){const j=T.slice().sort((a,b)=>R.items[a].q-R.items[b].q)[0];const x=R2.items[j];d.items[j].override=Math.max(0,Math.round((x.price+left)/x.q*100)/100);R2=estCalc(d);left=target-R2.gross}
     estTouch();render();toast(`Spread ${diff>0?'+':'−'}${money2(Math.abs(diff))} over ${T.length} item${T.length===1?'':'s'}${Math.abs(left)>=1?` · still ${money2(Math.abs(left))} ${left>0?'under':'over'} the target: unit prices can’t go below $0, so unlock or select more items`:Math.abs(left)>=.01?` · ${money2(Math.abs(left))} off from rounding to the cent`:''}`)}});
+
+/* ---------- Credits & deducts: credit back part or all of a bid item (or a lump sum), taken in the base bid or offered as an option ---------- */
+const CR_REASONS=['Owner-furnished material','Value engineering','Scope removed','Unused allowance','By others','Other'];
+const CR_BASIS=[['price','Our bid price'],['cost','Our cost'],['pct','% of our price'],['fixed','Price I type']];
+function crLabel(o,d){return o.c.desc||(o.x?`Credit: ${d.items[o.i].desc||'bid item'}`:'Credit')}
+function propCredits(R){const d=S.est.data;const T=R.credits.filter(o=>!o.opt),O=R.credits.filter(o=>o.opt);const row=o=>`<tr><td>${esc(crLabel(o,d))}${o.c.reason?` <span class="pp-dim">(${esc(o.c.reason)})</span>`:''}${o.x&&o.q?` <span class="pp-dim">${qtyFmt(o.q)} ${esc(d.items[o.i].unit||'')} @ ${money2(o.unit)}</span>`:''}</td><td class="r">Deduct ${money2(o.amt)}</td></tr>`;
+  return `${T.length?`<h2>Credits</h2><table class="pp-t"><tbody>${T.map(row).join('')}</tbody><tfoot><tr class="pp-grand"><td>Net base bid</td><td class="r">${money2(R.total)}</td></tr></tfoot></table>`:''}${O.length?`<h2>Optional deducts</h2><table class="pp-t"><tbody>${O.map(row).join('')}</tbody></table>`:''}`}
+function estCrView(d,R,ro){const C=S.est.cr=S.est.cr||{q:''};const dis=ro?' disabled':'';const q=normH(C.q);
+  const rows=R.credits.map((o,k)=>{const p=`credits.${k}`;const c=o.c;const it=o.x?d.items[o.i]:null;
+    return `<tr><td>${it?`<span class="dim small">${esc(it.code||'')}</span> ${esc(it.desc||'')}`:'<span class="pill info">Lump sum</span>'}${c.item&&!it?' <span class="pill bad">bid item removed</span>':''}</td>
+      <td>${epIn(p+'.desc',c.desc,{ph:it?`Credit: ${it.desc||''}`:'What the credit is for',cls:'cr-desc',aria:'Credit description'})}</td>
+      <td>${epSel(p+'.reason',c.reason||'',[['','Reason…'],...CR_REASONS.map(x=>[x,x])],{aria:'Reason',cls:'cr-sel'})}</td>
+      <td class="r">${epIn(p+'.qty',c.qty,{n:1,ph:it?qtyFmt(o.x.q):'1',cls:'cr-n',aria:'Quantity to credit',title:it?'Blank credits the whole quantity':''})}</td><td class="small">${esc(it?it.unit||'':'LS')}</td>
+      <td>${it?epSel(p+'.basis',c.basis||'price',CR_BASIS,{aria:'Credit price',cls:'cr-sel'}):'<span class="small dim">Price I type</span>'}</td>
+      <td class="r">${!it||c.basis==='fixed'?epIn(p+'.price',c.price,{n:1,ph:'0.00',cls:'cr-n',aria:'Credit unit price'}):c.basis==='pct'?`${epIn(p+'.pct',c.pct,{n:1,ph:'100',cls:'cr-n cr-pct',aria:'Percent of our price'})}%`:'<span class="dim small">auto</span>'}</td>
+      <td class="r num">${money2(o.unit)}</td><td class="r num"><b class="bad-t">−${money2(o.amt)}</b></td>
+      <td>${epSel(p+'.mode',c.mode||'base',[['base','Taken in base bid'],['option','Offered as an option']],{aria:'How it’s used',cls:'cr-sel'})}</td>
+      <td>${ro?'':`<button class="btn sm ghost danger-t" data-act="cr-del" data-k="${k}" title="Remove this credit">×</button>`}</td></tr>`}).join('');
+  const has=new Set((d.credits||[]).map(c=>c.item).filter(Boolean));
+  const pick=d.items.map((it,i)=>({it,x:R.items[i],i})).filter(o=>!o.it.alt&&(!q||normH((o.it.code||'')+' '+(o.it.desc||'')).includes(q)));
+  return `<div class="cr">
+    <div class="cr-kpis"><div><span>Bid before credits</span><b>${money2(R.gross)}</b></div><div><span>Credits taken</span><b class="bad-t">−${money2(R.creditBase)}</b></div><div class="cr-net"><span>Net bid</span><b>${money2(R.total)}</b></div><div><span>Optional deducts offered</span><b>${R.creditOpt?'−'+money2(R.creditOpt):'—'}</b></div><div><span>Margin on net</span><b>${money2(R.margin)} · ${fmtN(R.marginPct,1)}%</b></div></div>
+    <div class="panel pad"><div class="cr-h"><h3>Credits</h3>${ro?'':'<button class="btn sm" data-act="cr-add" data-i="">+ Lump-sum credit</button>'}</div>
+      ${rows?`<div class="scroll"><table class="cr-t"><thead><tr><th>Against</th><th>Description</th><th>Reason</th><th class="r">Qty</th><th>Unit</th><th>Price from</th><th class="r">Rate</th><th class="r">Credit / unit</th><th class="r">Credit</th><th>Use</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+        :'<p class="dim small" style="margin:6px 0">No credits yet. Add one from a bid item below, or a lump-sum credit.</p>'}
+      <p class="hint">Credits come off after markup, at the price you pick: <b>our bid price</b> is the unit price the GC sees, <b>our cost</b> gives back the cost and keeps the markup, <b>% of our price</b> is for a negotiated share, and <b>Price I type</b> is any amount. <b>Taken in base bid</b> lowers the number; <b>Offered as an option</b> lists it on the proposal as a deduct the GC can take.</p></div>
+    <div class="panel pad"><div class="cr-h"><h3>Bid items</h3><input class="field sm" data-crq value="${esc(C.q)}" placeholder="Find a bid item…" style="max-width:260px"></div>
+      <div class="scroll cr-pickw"><table class="cr-t"><thead><tr><th>Code</th><th>Description</th><th class="r">Qty</th><th>Unit</th><th class="r">Our unit price</th><th class="r">Our cost / unit</th><th class="r">Amount</th><th></th></tr></thead><tbody>
+      ${pick.map(o=>`<tr><td class="dim">${esc(o.it.code||'')}</td><td>${esc(o.it.desc||'Untitled')}${has.has(o.it.id)?' <span class="pill warn">has a credit</span>':''}</td><td class="r num">${qtyFmt(o.x.q)}</td><td>${esc(o.it.unit||'')}</td><td class="r num">${money2(o.x.unitPrice)}</td><td class="r num dim">${money2(o.x.q?(o.x.total+(o.x.ind||0))/o.x.q:0)}</td><td class="r num">${money2(o.x.price)}</td>
+        <td>${ro?'':`<button class="btn sm" data-act="cr-add" data-i="${o.it.id}"${dis}>+ Credit</button>`}</td></tr>`).join('')||'<tr><td colspan="8" class="dim">No bid items match.</td></tr>'}</tbody></table></div></div></div>`}
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset.crq==null||!S.est)return;(S.est.cr=S.est.cr||{}).q=t.value;clearTimeout(estCrView._t);estCrView._t=setTimeout(()=>render(),150)});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act^=cr-]');if(!t||!S.est||!S.est.data||EC().ro)return;const d=S.est.data;d.credits=d.credits||[];
+  if(t.dataset.act==='cr-add'){const id=t.dataset.i||null;d.credits.push({id:newId(),item:id,desc:'',reason:'',qty:null,basis:id?'price':'fixed',pct:null,price:null,mode:'base'});estTouch();render();
+    const k=d.credits.length-1;focusSoon(`credits.${k}.${id?'qty':'desc'}`);toast(id?'Credit added: it credits the whole quantity at our bid price until you change it':'Lump-sum credit added');return}
+  if(t.dataset.act==='cr-del'){const k=+t.dataset.k;const c=d.credits[k];if(!c)return;if(!confirm('Remove this credit?'))return;d.credits.splice(k,1);estTouch();render()}});
 
 /* ---------- Settings page (admin) ---------- */
 function setDraft(){if(!S.setDraft){const D=estDefaultsRaw();S.setDraft=clone({markup:D.markup,ind:D.ind.map(l=>({...l})),schedules:D.schedules,defSched:D.defSched,crews:D.crews,rates:ratesRaw()})}return S.setDraft}
