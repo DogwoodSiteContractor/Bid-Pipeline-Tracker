@@ -1320,7 +1320,27 @@ window.addEventListener('hashchange',()=>{const m=/^#bid=([\w-]+)/.exec(location
 // one picker for everyone you bid to, split into GCs & clients / Developers & owners (engineers left out)
 function clientPickHtml(b){const avail=S.clients.filter(c=>!b.client_ids.includes(c.id)&&!isDesignCo(c)).sort((a,c)=>a.company.localeCompare(c.company));
   const grp=(l,k)=>{const xs=avail.filter(c=>coKind(c)===k);return xs.length?`<optgroup label="${l}">${xs.map(c=>`<option value="${c.id}">${esc(c.company)}${c.type?' · '+esc(c.type):''}</option>`).join('')}</optgroup>`:''};
-  return `<select class="field" data-act="add-client"><option value="">+ Add a GC, client, developer or owner…</option>${grp('GCs & clients','gc')}${grp('Developers & owners','own')}</select>`}
+  const canNew=can('contacts','edit');const N=M&&M.newCo;
+  if(N)return `<div class="newco"><input class="field" id="newco-name" data-newco="name" value="${esc(N.name)}" placeholder="Company name" autocomplete="off">
+    <select class="field" data-newco="kind"><option value="gc"${N.kind==='gc'?' selected':''}>GC / client</option><option value="own"${N.kind==='own'?' selected':''}>Developer / owner</option></select>
+    <button class="btn primary sm" data-act="newco-add"${N.busy?' disabled':''}>${N.busy?'Adding…':'Add & save to Contacts'}</button><button class="btn sm ghost" data-act="newco-x">Cancel</button>
+    ${N.dup?`<div class="small newco-dup">“${esc(N.dup.company)}” is already in Contacts. <button class="linkbtn" data-act="newco-use" data-id="${N.dup.id}">Use it</button></div>`:''}</div>`;
+  return `<select class="field" data-act="add-client"><option value="">+ Add a GC, client, developer or owner…</option>${canNew?'<option value="__new">✎ Type a new company…</option>':''}${grp('GCs & clients','gc')}${grp('Developers & owners','own')}</select>`}
+function bidAddClient(id){if(!M||!M.draft||!id||M.draft.client_ids.includes(id))return;M.draft.client_ids.push(id);const own=isOwnerCo(byId(S.clients,id));
+  M.draft.client_proposals={...(M.draft.client_proposals||{}),[id]:{...((M.draft.client_proposals||{})[id]||{}),role:{gc:!own,own}}};const first=byId(S.clients,id)?.contacts?.[0]?.name;if(first)M.draft.client_contacts[id]=first}
+document.addEventListener('input',e=>{const t=e.target;if(!M||!M.newCo||t.dataset.newco==null)return;M.newCo[t.dataset.newco]=t.value;
+  if(t.dataset.newco==='name'){const k=normH(t.value);const d=k?S.clients.find(c=>normH(c.company)===k):null;if(!!d!==!!M.newCo.dup||(d&&d.id!==M.newCo.dup?.id)){M.newCo.dup=d||null;renderModal();const el=$('#newco-name');if(el){el.focus();el.setSelectionRange(el.value.length,el.value.length)}}}});
+document.addEventListener('change',e=>{const t=e.target;if(M&&M.newCo&&t.dataset.newco==='kind')M.newCo.kind=t.value},true);
+document.addEventListener('keydown',e=>{if(e.target.id==='newco-name'&&M&&M.newCo){if(e.key==='Enter'){e.preventDefault();document.querySelector('[data-act=newco-add]')?.click()}else if(e.key==='Escape'){e.preventDefault();e.stopPropagation();M.newCo=null;renderModal()}}},true);
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act^=newco-]');if(!t||!M||!M.newCo)return;const a=t.dataset.act,N=M.newCo;
+  if(a==='newco-x'){M.newCo=null;renderModal();return}
+  if(a==='newco-use'){bidAddClient(t.dataset.id);M.newCo=null;renderModal();return}
+  if(a==='newco-add'){const name=String(N.name||'').trim();if(!name){$('#newco-name')?.focus();toast('Type the company name first');return}
+    const dup=S.clients.find(c=>normH(c.company)===normH(name));if(dup){bidAddClient(dup.id);M.newCo=null;renderModal();toast(`${dup.company} was already in Contacts, so it was added from there`);return}
+    N.busy=true;renderModal();const id=newId();
+    try{await run(sb.from('clients').insert({id,company:name,type:N.kind==='own'?'Developer':'General contractor',phone:'',email:'',address:'',notes:'',contacts:[]}));await loadTable('clients');
+      if(!M||!M.newCo)return;bidAddClient(id);M.newCo=null;renderModal();toast(`${name} added to the bid and saved to Contacts`)}
+    catch(er){if(M&&M.newCo){M.newCo.busy=false;renderModal()}toast(errMsg(er))}}});
 function clientsSection(b,work){
   const d=work?'':' disabled';
   const clientsSorted=S.clients.slice().sort((a,c)=>a.company.localeCompare(c.company));
@@ -4402,7 +4422,7 @@ document.addEventListener('change',e=>{
     case 'vtypeF':S.q.vtype=t.value;render();break;
     case 'sup-addclient':if(t.value&&M.sup){M.sup.draft.client_ids.push(t.value);renderModal()}break;
     case 'add-support':if(t.value==='__all'){const d=M.draft;S.estimators.filter(e=>e.active!==false&&e.id!==d.lead_estimator_id&&!d.support_estimator_ids.includes(e.id)).sort((a,c)=>a.name.localeCompare(c.name)).forEach(e=>d.support_estimator_ids.push(e.id));renderModal()}else if(t.value){M.draft.support_estimator_ids.push(t.value);renderModal()}break;
-    case 'add-client':if(t.value){M.draft.client_ids.push(t.value);{const own=isOwnerCo(byId(S.clients,t.value));M.draft.client_proposals={...(M.draft.client_proposals||{}),[t.value]:{...((M.draft.client_proposals||{})[t.value]||{}),role:{gc:!own,own}}}}const first=byId(S.clients,t.value)?.contacts?.[0]?.name;if(first)M.draft.client_contacts[t.value]=first;renderModal()}break;
+    case 'add-client':if(t.value==='__new'){M.newCo={name:'',kind:'gc'};renderModal();setTimeout(()=>$('#newco-name')?.focus(),20);break}if(t.value){M.draft.client_ids.push(t.value);{const own=isOwnerCo(byId(S.clients,t.value));M.draft.client_proposals={...(M.draft.client_proposals||{}),[t.value]:{...((M.draft.client_proposals||{})[t.value]||{}),role:{gc:!own,own}}}}const first=byId(S.clients,t.value)?.contacts?.[0]?.name;if(first)M.draft.client_contacts[t.value]=first;renderModal()}break;
     case 'add-quote':if(t.value){addQuote(t.value);renderModal()}break;
     case 'add-quote-scope':if(t.value){const had=M.draft.quotes.some(q=>q.vendor_id===t.value&&qOpen(q));addQuote(t.value,t.dataset.scope);if(had&&M.draft.quotes.some(q=>q.vendor_id===t.value&&qHas(q,t.dataset.scope)&&qScopes(q).length>1))toast(`Added ${t.dataset.scope} to ${vendorOf(t.value)?.company||'their'} quote, so they send one price for all of it.`);renderModal()}break;
     case 'q-addscope':if(t.value){const q=M.draft.quotes[+t.dataset.i];if(q){qSetScopes(q,[...qScopes(q),t.value]);renderModal()}}break;
