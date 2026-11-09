@@ -4640,12 +4640,81 @@ function vCb(){
     <label class="check small"><input type="checkbox" data-cbf="inactive"${c.inactive?' checked':''}> Show inactive</label>
     <span class="dim small cb-count">${list.length===all.length?`${all.length} ${all.length===1?'item':'items'}`:`${list.length} of ${all.length}`}</span>
     ${admin&&!sel.length&&list.length&&massFields.length&&!((bk==='labor'||bk==='equipment')&&rfGet(c[rfCbKey(bk)]))?`<button class="btn sm" data-act="cb-mass" data-all="1" title="Change prices on everything shown">Mass update ${list.length===all.length?'all':list.length+' shown'}</button>`:''}</div>
-  ${bulk}
+  ${bk==='activity'?`<div class="seg arv-mode"><button class="${c.rv?'':'on'}" data-act="arv-mode" data-v="0">List</button><button class="${c.rv?'on':''}" data-act="arv-mode" data-v="1">✓ Review grid</button></div>`:''}
+  ${bk==='activity'&&c.rv?arvHtml(list,admin):`${bulk}
   ${bk==='labor'||bk==='equipment'?rfBar(bk,admin):bk==='crew'?rfBar('crew',admin):''}
   ${(bk==='labor'||bk==='equipment')&&rfGet(c[rfCbKey(bk)])?rfGrid(list,admin,bk):''}<div class="panel scroll"${(bk==='labor'||bk==='equipment')&&rfGet(c[rfCbKey(bk)])?' hidden':''}><table class="cb-table cb-${bk}"><thead><tr>${admin?`<th class="cb-ck"><input type="checkbox" data-cbselall aria-label="Select all shown"${allOn?' checked':''}></th>`:''}${cols.join('')}</tr></thead><tbody>
   ${shown.map(row).join('')||`<tr><td colspan="${cols.length+1}">${empty}</td></tr>`}</tbody></table></div>
-  ${list.length>shown.length?`<div class="adders"><button class="btn" data-act="cb-more">Show ${Math.min(400,list.length-shown.length)} more (${list.length-shown.length} not shown)</button></div>`:''}`;
+  ${list.length>shown.length?`<div class="adders"><button class="btn" data-act="cb-more">Show ${Math.min(400,list.length-shown.length)} more (${list.length-shown.length} not shown)</button></div>`:''}`}`;
 }
+/* ---------- Activity review grid: every activity on one screen, crews and production set in the row, bulk changes, then push to bid items ---------- */
+const ARV_F=[['all','All'],['nocrew','No crew'],['noprod','No production'],['nomat','No material or sub'],['open','Anything missing']];
+function arvInfo(x){const a=cbD(x).act||{};const res=a.res||[];const mats=res.filter(r=>r.kind==='material'||r.kind==='sub');
+  const lump=res.some(r=>(r.kind==='material'||r.kind==='sub')&&!r.cb);const q=num(cbD(x).qty)||1;let cu=0;try{const r=actCalc(a,q,{hpd:10,tax:0});cu=q?(r.total||0)/q:0}catch(e){}
+  return {a,res,mats,lump,crew:a.crew&&a.crew.id?cbById(a.crew.id):null,hasCrew:!!(a.crew&&a.crew.id),hasProd:!!num(a.prod)||['hrs','shifts','days','weeks'].includes(a.mode),cu}}
+function arvUses(){const m=new Map();cbList('biditem').forEach(b=>(cbD(b).item?.acts||[]).forEach(a=>{const k=normH(a.desc);if(k)m.set(k,(m.get(k)||0)+1)}));return m}
+function arvHtml(list,admin){const c=S.cb;const f=c.rvf||'all';const sel=c.rvSel=c.rvSel||new Set();const uses=arvUses();const crews=cbList('crew').filter(x=>x.active!==false).sort((a,b)=>a.description.localeCompare(b.description));
+  const I=list.map(x=>({x,i:arvInfo(x)}));const cnt={nocrew:0,noprod:0,nomat:0,open:0};I.forEach(({i})=>{const nc=!i.hasCrew,np=!i.hasProd,nm=!i.mats.length;if(nc)cnt.nocrew++;if(np)cnt.noprod++;if(nm)cnt.nomat++;if(nc||np||nm)cnt.open++});
+  const keep=({i})=>f==='all'||(f==='nocrew'&&!i.hasCrew)||(f==='noprod'&&!i.hasProd)||(f==='nomat'&&!i.mats.length)||(f==='open'&&(!i.hasCrew||!i.hasProd||!i.mats.length));
+  const R=I.filter(keep);const shown=R.slice(0,c.rvMore||300);const dis=admin?'':' disabled';const nSel=R.filter(o=>sel.has(o.x.id)).length;
+  const crewOpts=cur=>`<option value="">— No crew —</option>${crews.map(k=>`<option value="${k.id}"${cur===k.id?' selected':''}>${esc(k.description)}</option>`).join('')}`;
+  const f2=v=>v==null?'':String(+(+v).toFixed(3));
+  const row=({x,i})=>{const a=i.a;const md=a.mode||'uph';const pv=num(a.prod);const rate=md==='uph'||md==='upd';const ph=!rate||pv==null?null:md==='uph'?pv:pv/10,pd=!rate||pv==null?null:md==='upd'?pv:pv*10;const U=esc(x.unit||a.unit||'unit');const n=uses.get(normH(x.description))||0;
+    return `<tr class="${sel.has(x.id)?'sel':''}"><td><input type="checkbox" data-arvsel="${x.id}"${sel.has(x.id)?' checked':''}${dis}></td>
+      <td class="arv-name"><button class="linkish" data-act="cb-open" data-id="${x.id}" title="Open the full activity">${esc(x.description||'Untitled')}</button>${x.code?` <span class="dim small">${esc(x.code)}</span>`:''}</td>
+      <td class="small dim">${esc(x.category||'')}</td><td>${U}</td>
+      <td><select class="field sm arv-crew${i.hasCrew?'':' miss'}" data-arvcrew="${x.id}"${dis}>${crewOpts(a.crew?.id)}${a.crew&&a.crew.id&&!i.crew?`<option value="${esc(a.crew.id)}" selected>${esc(a.crew.name||'')} (removed)</option>`:''}</select></td>
+      <td>${rate||pv==null?`<input class="field sm num arv-p${i.hasProd?'':' miss'}" data-arvprod="hr" data-id="${x.id}" value="${f2(ph)}" placeholder="/hr" inputmode="decimal"${dis}>`:`<span class="small" title="Set as ${esc(prodLabel(md,x.unit))}">${fmtN(pv,2)} ${esc(prodLabel(md,x.unit))}</span>`}</td>
+      <td>${rate||pv==null?`<input class="field sm num arv-p${i.hasProd?'':' miss'}" data-arvprod="day" data-id="${x.id}" value="${f2(pd)}" placeholder="/day" inputmode="decimal"${dis}>`:''}</td>
+      <td class="arv-mat">${i.mats.length?i.mats.map(r=>`<span class="est-tag k-${r.kind}">${r.kind==='sub'?'SUB':'MAT'}</span> ${esc(r.desc||'')}${r.cb?'':' <span class="pill warn" title="A lump price, not linked to the codebook">lump</span>'}`).join('<br>'):'<span class="miss-t">none</span>'}</td>
+      <td class="r small">${i.res.length}</td><td class="r num">${i.cu?money2(i.cu):'<span class="dim">—</span>'}</td><td class="r small">${n||'<span class="dim">0</span>'}</td></tr>`};
+  return `<div class="arv">
+    <div class="arv-bar"><div class="seg">${ARV_F.map(([k,l])=>`<button class="${f===k?'on':''}" data-act="arv-f" data-v="${k}">${l}${k==='all'?` (${I.length})`:` (${cnt[k]})`}</button>`).join('')}</div>
+      ${admin?`<button class="btn sm primary" data-act="arv-push" title="Copy crews, production rates and any new cost lines from these activities into every bid item that uses them">⇢ Push to bid items</button>`:''}</div>
+    ${admin&&nSel?`<div class="arv-bulk panel pad"><b>${nSel} selected</b>
+      <select class="field sm" data-arvbulk="crew"><option value="">Set crew…</option>${crews.map(k=>`<option value="${k.id}">${esc(k.description)}</option>`).join('')}<option value="__none">No crew</option></select>
+      <span class="arv-bp">Set production <input class="field sm num" id="arv-bp" inputmode="decimal" placeholder="rate"><select class="field sm" id="arv-bpu"><option value="uph">per hr</option><option value="upd">per day</option></select><button class="btn sm" data-act="arv-bprod">Apply</button></span>
+      <button class="linkbtn" data-act="arv-selnone">Clear</button></div>`:''}
+    <div class="panel scroll arv-wrap"><table class="arv-t"><thead><tr><th><input type="checkbox" data-arvselall${nSel&&nSel===R.length?' checked':''}${dis}></th><th>Activity</th><th>Category</th><th>Unit</th><th>Crew</th><th>Prod / hr</th><th>Prod / day <span class="dim small">(10 hr)</span></th><th>Material / sub</th><th class="r">Lines</th><th class="r">$ / unit</th><th class="r" title="How many bid items use this activity">Bid items</th></tr></thead>
+      <tbody>${shown.map(row).join('')||`<tr><td colspan="11" class="dim" style="padding:20px;text-align:center">Nothing here. ${f==='all'?'Try another search or category.':'Every activity shown has this filled in.'}</td></tr>`}</tbody></table></div>
+    ${R.length>shown.length?`<div class="adders"><button class="btn" data-act="arv-more">Show more (${R.length-shown.length} not shown)</button></div>`:''}
+    <p class="hint">Changes save as you make them. Picking a crew also fills in the crew’s production rate when the activity doesn’t have one. When you’re done with a batch, <b>Push to bid items</b> copies the crews, production rates and any new cost lines into the bid items that use these activities.</p></div>`}
+async function arvSave(ids,fn,msg){const rows=[];ids.forEach(id=>{const x=cbById(id);if(!x)return;const d=cbD(x);d.act=d.act||{desc:x.description,unit:x.unit,res:[]};fn(d.act,x);const st=estStale(d);if(st.length)estApplyStale(st);x.data=d;x.updated_at=new Date().toISOString();rows.push(cbRow(x))});
+  if(!rows.length)return;try{await cbUpsert(rows);if(msg)toast(msg)}catch(e){toast(cbErr(e));await loadTable('codebook')}render()}
+function arvSetCrew(a,cid){if(!cid){a.crew=null;return}const k=cbById(cid);if(!k)return;a.crew=crewSnap(k);if(!num(a.prod))crewProdTo(a,k)}
+document.addEventListener('change',e=>{const t=e.target;if(S.view!=='cb'||!S.cb)return;const c=S.cb;
+  if(t.dataset.arvcrew){arvSave([t.dataset.arvcrew],a=>arvSetCrew(a,t.value),t.value?`Crew set: ${cbById(t.value)?.description||''}`:'Crew removed');return}
+  if(t.dataset.arvsel){t.checked?c.rvSel.add(t.dataset.arvsel):c.rvSel.delete(t.dataset.arvsel);render();return}
+  if(t.dataset.arvselall!=null){const on=t.checked;document.querySelectorAll('[data-arvsel]').forEach(b=>on?c.rvSel.add(b.dataset.arvsel):c.rvSel.delete(b.dataset.arvsel));render();return}
+  if(t.dataset.arvbulk==='crew'&&t.value){const ids=[...c.rvSel];const v=t.value==='__none'?'':t.value;arvSave(ids,a=>arvSetCrew(a,v),v?`${cbById(v)?.description} set on ${ids.length} activit${ids.length===1?'y':'ies'}`:`Crew removed from ${ids.length}`)}});
+document.addEventListener('input',e=>{const t=e.target;if(!t.dataset||!t.dataset.arvprod)return;const raw=t.value.replace(/[,\s]/g,'');const v=raw===''?null:num(raw);if(raw!==''&&v==null)return;
+  const tr=t.closest('tr');const other=tr&&tr.querySelector(`[data-arvprod="${t.dataset.arvprod==='hr'?'day':'hr'}"]`);if(other)other.value=v==null?'':String(+(t.dataset.arvprod==='hr'?v*10:v/10).toFixed(3));
+  clearTimeout(t._sv);const id=t.dataset.id,k=t.dataset.arvprod;t._sv=setTimeout(()=>{const x=cbById(id);if(!x)return;const d=cbD(x);d.act=d.act||{res:[]};d.act.mode=k==='day'?'upd':'uph';d.act.prod=v;delete d.act.prodSrc;x.data=d;
+    cbUpsert([cbRow(x)]).catch(er=>toast(cbErr(er)))},600)});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act^=arv-]');if(!t||S.view!=='cb')return;const c=S.cb,a=t.dataset.act;
+  if(a==='arv-mode'){c.rv=t.dataset.v==='1';render();return}
+  if(a==='arv-f'){c.rvf=t.dataset.v;c.rvMore=0;render();return}
+  if(a==='arv-more'){c.rvMore=(c.rvMore||300)+300;render();return}
+  if(a==='arv-selnone'){c.rvSel.clear();render();return}
+  if(!cbEditable())return;
+  if(a==='arv-bprod'){const v=num(String($('#arv-bp')?.value||'').replace(/[,\s]/g,''));if(v==null){toast('Type a production rate first');return}const md=$('#arv-bpu')?.value||'uph';const ids=[...c.rvSel];
+    arvSave(ids,x=>{x.mode=md;x.prod=v;delete x.prodSrc},`Production set on ${ids.length} activit${ids.length===1?'y':'ies'}`);return}
+  if(a==='arv-push')arvPush()});
+// bid items take each activity's crew, production and any cost lines they don't have yet (nothing is removed, quantities stay)
+async function arvPush(){const A=new Map();cbList('activity').forEach(x=>{const k=normH(x.description);if(k&&!A.has(k))A.set(k,cbD(x).act||{})});
+  const rows=[];let nc=0,np=0,nl=0;
+  cbList('biditem').forEach(b=>{const d=cbD(b);const it=d.item;if(!it||!Array.isArray(it.acts))return;let ch=false;
+    it.acts.forEach(t=>{const s0=A.get(normH(t.desc));if(!s0)return;
+      if(s0.crew&&s0.crew.id&&(!t.crew||t.crew.id!==s0.crew.id)){t.crew=clone(s0.crew);nc++;ch=true}
+      if(num(s0.prod)&&(num(t.prod)!==num(s0.prod)||(t.mode||'uph')!==(s0.mode||'uph'))){t.prod=s0.prod;t.mode=s0.mode||'uph';delete t.prodSrc;np++;ch=true}
+      (s0.res||[]).forEach(r0=>{const has=(t.res||[]).some(r=>(r0.cb&&r.cb===r0.cb)||(!r0.cb&&!r.cb&&normH(r.desc)===normH(r0.desc)&&r.kind===r0.kind));if(has)return;
+        // a linked line replaces the lump placeholder of the same kind
+        if(r0.cb){const j=(t.res||[]).findIndex(r=>!r.cb&&r.kind===r0.kind);if(j>=0)t.res.splice(j,1)}
+        (t.res=t.res||[]).push({...clone(r0),id:newId()});nl++;ch=true})});
+    if(ch){const st=estStale(d);if(st.length)estApplyStale(st);b.data=d;b.updated_at=new Date().toISOString();rows.push(cbRow(b))}});
+  if(!rows.length){toast('Every bid item already matches its activities');return}
+  if(!confirm(`Push to ${rows.length} bid item${rows.length===1?'':'s'}?\n\n• ${nc} crew${nc===1?'':'s'} set\n• ${np} production rate${np===1?'':'s'} set\n• ${nl} cost line${nl===1?'':'s'} added\n\nNothing is removed and quantities stay as they are.`)){await loadTable('codebook');render();return}
+  try{toast(`Updating ${rows.length} bid items…`);await cbUpsert(rows);await loadTable('codebook');render();toast(`${rows.length} bid item${rows.length===1?'':'s'} updated from their activities`)}catch(e){toast(cbErr(e));await loadTable('codebook');render()}}
 
 function rfPick(book,lbl){const cur=rfGet(S.cb[rfCbKey(book)]);const dflt=rfDefault(book);
   return `<label class="f rf-pick">${lbl}<select class="field" data-rfsel="${book}">${[['','Codebook rates'],...rfAll(book).map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${(cur?cur.id:'')===v?' selected':''}>${esc(l)}${v===dflt?' (default)':''}</option>`).join('')}</select></label>`}
