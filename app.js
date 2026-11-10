@@ -1158,7 +1158,7 @@ function bpProject(b,work,admin){
   <fieldset><legend>Bidding to</legend>
     <div class="bp-gcs">${b.client_ids.map(id=>{const c=byId(S.clients,id);const cs=c?.contacts||[];const R=cRole(b,id);const dis=work?'':' disabled';return `<div class="bp-gc"><div><b>${esc(clientName(id))}</b><div class="dim small">${esc(c?.type||'')}</div></div>
       <div class="bp-roles" role="group" aria-label="Role on this bid"><label class="check${R.gc?' on':''}"><input type="checkbox" data-crole="${id}.gc"${R.gc?' checked':''}${dis}> GC / client</label><label class="check${R.own?' on':''}"><input type="checkbox" data-crole="${id}.own"${R.own?' checked':''}${dis}> Developer / owner</label></div>
-      <select class="field sm" data-cc="${id}"${dis}><option value="">Contact…</option>${cs.map(x=>`<option${b.client_contacts?.[id]===x.name?' selected':''}>${esc(x.name)}</option>`).join('')}</select>${work?`<button class="rm" data-act="rm-client" data-id="${id}" aria-label="Remove">×</button>`:''}</div>`}).join('')||'<div class="dim small">No GC, client, developer or owner yet.</div>'}</div>
+      <select class="field sm" data-cc="${id}"${dis}><option value="">Contact…</option>${cs.map(x=>`<option${b.client_contacts?.[id]===x.name?' selected':''}>${esc(x.name)}</option>`).join('')}${work&&can('contacts','edit')?'<option value="__new">+ New contact…</option>':''}</select>${work?`<button class="rm" data-act="rm-client" data-id="${id}" aria-label="Remove">×</button>`:''}${newCtHtml(id)}</div>`}).join('')||'<div class="dim small">No GC, client, developer or owner yet.</div>'}</div>
     ${work?`<div class="adders">${clientPickHtml(b)}</div>`:''}
     <p class="hint">Tick what each company is on this job: <b>GC / client</b> gets the proposal, <b>Developer / owner</b> is the project’s developer or owner. A company can be both. With no GC on the bid, the developer / owner gets the proposal. Numbers and proposals are on the <b>Estimate & proposal</b> tab.</p></fieldset>
   <fieldset><legend>Estimating team</legend><div class="fg">
@@ -1345,6 +1345,23 @@ function clientPickHtml(b){const avail=S.clients.filter(c=>!b.client_ids.include
     <button class="btn primary sm" data-act="newco-add"${N.busy?' disabled':''}>${N.busy?'Adding…':'Add & save to Contacts'}</button><button class="btn sm ghost" data-act="newco-x">Cancel</button>
     ${N.dup?`<div class="small newco-dup">“${esc(N.dup.company)}” is already in Contacts. <button class="linkbtn" data-act="newco-use" data-id="${N.dup.id}">Use it</button></div>`:''}</div>`;
   return `<select class="field" data-act="add-client"><option value="">+ Add a GC, client, developer or owner…</option>${canNew?'<option value="__new">✎ Type a new company…</option>':''}${grp('GCs & clients','gc')}${grp('Developers & owners','own')}</select>`}
+// a new person at a company, typed on the bid and saved to that company in Contacts
+function newCtHtml(cid){const N=M&&M.newCt;if(!N||N.cid!==cid)return '';const co=byId(S.clients,cid);
+  return `<div class="newct"><div class="small"><b>New contact at ${esc(co?.company||'this company')}</b> · saves to Contacts</div>
+    <div class="newct-f"><input class="field sm" id="newct-name" data-newct="name" value="${esc(N.name)}" placeholder="Name" autocomplete="off"><input class="field sm" data-newct="title" value="${esc(N.title)}" placeholder="Title (optional)"><input class="field sm" data-newct="email" value="${esc(N.email)}" placeholder="Email" type="email"><input class="field sm" data-newct="phone" value="${esc(N.phone)}" placeholder="Phone">
+    <button class="btn primary sm" data-act="newct-add"${N.busy?' disabled':''}>${N.busy?'Saving…':'Add contact'}</button><button class="btn sm ghost" data-act="newct-x">Cancel</button></div></div>`}
+document.addEventListener('change',e=>{const t=e.target;if(!t.dataset||t.dataset.cc==null||t.value!=='__new'||!M||M.kind!=='bid')return;e.stopImmediatePropagation();
+  t.value=M.draft.client_contacts?.[t.dataset.cc]||'';M.newCt={cid:t.dataset.cc,name:'',title:'',email:'',phone:''};renderModal();setTimeout(()=>$('#newct-name')?.focus(),20)},true);
+document.addEventListener('input',e=>{const t=e.target;if(!M||!M.newCt||t.dataset.newct==null)return;M.newCt[t.dataset.newct]=t.value},true);
+document.addEventListener('keydown',e=>{const t=e.target;if(!M||!M.newCt||t.dataset.newct==null)return;if(e.key==='Enter'){e.preventDefault();document.querySelector('[data-act=newct-add]')?.click()}else if(e.key==='Escape'){e.preventDefault();e.stopPropagation();M.newCt=null;renderModal()}},true);
+document.addEventListener('click',async e=>{const t=e.target.closest('[data-act^=newct-]');if(!t||!M||!M.newCt)return;const N=M.newCt;
+  if(t.dataset.act==='newct-x'){M.newCt=null;renderModal();return}
+  const name=String(N.name||'').trim();if(!name){$('#newct-name')?.focus();toast('Type the person’s name');return}
+  const co=byId(S.clients,N.cid);if(!co){M.newCt=null;renderModal();return}const list=Array.isArray(co.contacts)?co.contacts:[];
+  const dup=list.find(x=>normH(x.name)===normH(name));if(dup){M.draft.client_contacts[N.cid]=dup.name;M.newCt=null;bpSaveUI('Editing…');renderModal();toast(`${dup.name} was already a contact there, so they were picked`);return}
+  N.busy=true;renderModal();const ct={name,title:String(N.title||'').trim(),phone:String(N.phone||'').trim(),email:String(N.email||'').trim()};
+  try{await run(sb.from('clients').update({contacts:[...list,ct]}).eq('id',co.id));await loadTable('clients');if(!M||M.kind!=='bid')return;M.draft.client_contacts[N.cid]=name;M.newCt=null;renderModal();toast(`${name} added to ${co.company} in Contacts`)}
+  catch(er){if(M&&M.newCt){M.newCt.busy=false;renderModal()}toast(errMsg(er))}});
 function bidAddClient(id){if(!M||!M.draft||!id||M.draft.client_ids.includes(id))return;M.draft.client_ids.push(id);const own=isOwnerCo(byId(S.clients,id));
   M.draft.client_proposals={...(M.draft.client_proposals||{}),[id]:{...((M.draft.client_proposals||{})[id]||{}),role:{gc:!own,own}}};const first=byId(S.clients,id)?.contacts?.[0]?.name;if(first)M.draft.client_contacts[id]=first}
 document.addEventListener('input',e=>{const t=e.target;if(!M||!M.newCo||t.dataset.newco==null)return;M.newCo[t.dataset.newco]=t.value;
@@ -1375,7 +1392,7 @@ function clientsSection(b,work){
       :`<div class="signing"><select class="field" data-cp="${id}.status"${d} style="width:110px">${CP_ST.map(x=>`<option${(p.status||'Not sent')===x?' selected':''}>${x}</option>`).join('')}</select>${work?`<button class="btn sm" data-act="award" data-id="${id}">${b.status==='Awarded'&&b.awarded_client_id?'Switch award here':'Mark awarded'}</button>`:''}</div>`;
     return `<div class="gc-row${won?' is-won':''}">
       <div><b style="font-weight:600">${esc(clientName(id))}</b><div class="dim small">${esc(c?.type||'')}${ct?.phone?' · '+esc(ct.phone):''}${ct?.email?' · '+esc(ct.email):''}</div>
-        <select class="field" data-cc="${id}"${d} style="margin-top:6px"><option value="">Contact…</option>${cs.map(x=>`<option${b.client_contacts?.[id]===x.name?' selected':''}>${esc(x.name)}</option>`).join('')}</select></div>
+        <select class="field" data-cc="${id}"${d} style="margin-top:6px"><option value="">Contact…</option>${cs.map(x=>`<option${b.client_contacts?.[id]===x.name?' selected':''}>${esc(x.name)}</option>`).join('')}${d?'':can('contacts','edit')?'<option value="__new">+ New contact…</option>':''}</select>${newCtHtml(id)}</div>
       ${amtBox(id,p,'amount_without',hasW?'Without site impr.':'Number')||(multi?'<span></span>':'<div class="gc-same small dim">Gets the base bid</div>')}${(hasW&&amtBox(id,p,'amount_with','With site impr.'))||'<span></span>'}
       ${(p.status&&p.status!=='Not sent')||p.sent_date?`<label class="f">Sent on<input type="date" class="field" data-cp="${id}.sent_date" value="${esc(p.sent_date||'')}"${d}></label>`:'<span></span>'}
       <div class="f">Proposal${status}</div>

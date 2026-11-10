@@ -3161,3 +3161,5 @@ input.uncommitted{border-color:var(--warn,#d9a441)!important;box-shadow:0 0 0 2p
 .shp-it:hover,.shp-it:focus{background:var(--surface-2);outline:none}.shp-it .num{text-align:right}
 .tpl-g{margin-bottom:12px;padding-bottom:10px;border-bottom:1px solid var(--border)}.tpl-g:last-child{border-bottom:0}
 .tpl-cat{margin-bottom:6px}.tpl-cat .linkbtn{margin-left:auto}.tpl-g .tplgrid{padding-left:22px}
+.newct{flex-basis:100%;margin-top:8px;padding:8px 10px;border:1px dashed var(--border);border-radius:8px}
+.newct-f{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.newct-f input{flex:1;min-width:140px}
