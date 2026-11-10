@@ -3155,3 +3155,7 @@ input.uncommitted{border-color:var(--warn,#d9a441)!important;box-shadow:0 0 0 2p
 .sh-t td.sh-mat,.sh-t td.sh-sub{position:relative}.sh-more{position:absolute;right:3px;top:5px;font-size:10.5px;padding:1px 5px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:inherit;cursor:pointer}
 .sh-alt{position:absolute;right:4px;top:6px;font-size:10px}.sh-t td.sh-desc{position:sticky}
 .sh-t tfoot td{position:sticky;bottom:0;background:var(--surface-2);font-weight:600;padding:0 6px;border-top:2px solid var(--border)}
+.shp-bar{display:flex;gap:8px;margin-bottom:8px}.shp-bar select{width:auto;max-width:220px}
+.shp-list{max-height:420px;overflow:auto;border:1px solid var(--border);border-radius:8px}
+.shp-it{display:grid;grid-template-columns:120px 1fr 50px 90px;gap:10px;align-items:center;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--border);padding:7px 10px;color:inherit;font:inherit;cursor:pointer}
+.shp-it:hover,.shp-it:focus{background:var(--surface-2);outline:none}.shp-it .num{text-align:right}
