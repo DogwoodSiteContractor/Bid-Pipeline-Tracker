@@ -6170,7 +6170,9 @@ function estSelResolve(d){let s=S.est.sel;if(typeof s==='string')s=S.est.sel={t:
   if(s.t==='item'){const i=d.items.findIndex(x=>x.id===s.id);return i<0?null:{t:'item',i,o:d.items[i],p:`items.${i}`}}
   for(let i=0;i<d.items.length;i++){const j=d.items[i].acts.findIndex(a=>a.id===s.id);if(j>=0)return {t:'act',i,j,o:d.items[i].acts[j],it:d.items[i],p:`items.${i}.acts.${j}`}}return null}
 function estLevel(lv){const E=S.est,d=E.data;E.open=new Set(lv==='sec'?[]:lv==='items'?d.sections.map(s=>s.id):[...d.sections.map(s=>s.id),...d.items.map(i=>i.id)]);estOpenSave();render()}
-function estBuildView(d,R,ro){const E=S.est;if(!E.tpl&&!S.ch.rows&&can('estimates'))chLoad();if(!E.tpl)chBackfill();const open=estOpenSet();const sel=E.sel||{};const g=(p,v,col,o={})=>epIn(p,v,{...o,attrs:` data-grid="eo" data-col="${col}"`});
+function estBuildView(d,R,ro){const E=S.est;if(E.bv==null){try{E.bv=localStorage.getItem('bp.bv')||'outline'}catch(er){E.bv='outline'}}
+  const bvSeg=E.tpl?'':`<div class="seg eb-bv"><button class="${E.bv==='sheet'?'':'on'}" data-act="est-bv" data-v="outline">☰ Outline</button><button class="${E.bv==='sheet'?'on':''}" data-act="est-bv" data-v="sheet">▦ Spreadsheet</button></div>`;
+  if(E.bv==='sheet'&&!E.tpl)return `<div class="sh-top">${bvSeg}${ro?'':`<button class="btn primary sm" data-act="eo-add" data-t="sec">+ Section</button><button class="btn sm" data-act="est-tplsync">↻ Update from codebook</button>${cbEditable()?'<button class="btn sm" data-act="est-cbbak">⇪ Back up to codebooks</button>':''}`}</div>${estSheetView(d,R,ro)}`;if(!E.tpl&&!S.ch.rows&&can('estimates'))chLoad();if(!E.tpl)chBackfill();const open=estOpenSet();const sel=E.sel||{};const g=(p,v,col,o={})=>epIn(p,v,{...o,attrs:` data-grid="eo" data-col="${col}"`});
   const secTot=new Map();d.items.forEach((it,i)=>{const x=R.items[i];const t=secTot.get(it.sec)||{cost:0,price:0,alt:0,mh:0};if(it.alt)t.alt+=x.price;else{t.cost+=x.total;t.price+=x.price;t.mh+=x.mh}secTot.set(it.sec,t)});
   const dots=(t,id)=>ro?'':`<button class="eo-dots" data-act="eo-menu" data-t="${t}" data-id="${id}" aria-label="More">⋯</button>`;
   let rows='';
@@ -6198,7 +6200,122 @@ function estBuildView(d,R,ro){const E=S.est;if(!E.tpl&&!S.ch.rows&&can('estimate
     <div class="eo-scroll" id="eo-scroll" data-keepscroll><table class="eo"><colgroup><col class="c-code"><col><col class="c-qty"><col class="c-unit"><col class="c-cost"><col class="c-up"><col class="c-tot"><col class="c-more"></colgroup><thead><tr><th class="eo-code">Code</th><th>Description</th><th class="r">Qty</th><th>Unit</th><th class="r">Cost</th><th class="r">Unit price</th><th class="r">Total</th><th></th></tr></thead>
       <tbody>${rows||`<tr><td colspan="8"><div class="empty"><b>No sections yet</b>${ro?'':'Add a section, then bid items under it.'}</div></td></tr>`}</tbody>
       <tfoot>${R.gc?`<tr><td></td><td>${esc(d.markup.gcName||'General conditions')} <span class="dim small">(indirects, lump sum)</span></td><td></td><td></td><td class="r num">${money(R.ind)}</td><td></td><td class="r num">${money(R.gc)}</td><td></td></tr>`:''}<tr><td></td><td><b>Base bid</b></td><td></td><td></td><td class="r num">${money(R.cost+R.ind)}</td><td></td><td class="r num"><b>${money(R.total)}</b></td><td></td></tr>${R.alts?`<tr><td></td><td class="dim">Alternates</td><td></td><td></td><td></td><td></td><td class="r num dim">${money(R.alts)}</td><td></td></tr>`:''}</tfoot></table></div></div>`;
-  return `<div class="eb${E.wide?' wide':''}${(E.sel||{}).t==='act'?' act':''}">${outline}${E.wide?'':`<div class="eb-right" id="eb-right">${estRight(d,R,ro)}</div>`}</div>`}
+  return `${bvSeg?`<div class="sh-top">${bvSeg}</div>`:''}<div class="eb${E.wide?' wide':''}${(E.sel||{}).t==='act'?' act':''}">${outline}${E.wide?'':`<div class="eb-right" id="eb-right">${estRight(d,R,ro)}</div>`}</div>`}
+/* ---------- Build: spreadsheet view. One row per section, bid item and activity; type straight into the cells like Excel.
+   Arrow keys / Enter move between cells, Ctrl+D fills down, pasting a block from Excel fills the cells to the right and below. ---------- */
+const SH_COLS=[['code','Code',90],['desc','Bid item / activity',260],['qty','Qty',84],['unit','Unit',58],['crew','Crew',170],['ph','Prod / hr',80],['pd','Prod / day',84],['hrs','Crew hrs',74],
+  ['mat','Material',200],['matp','Mat $ / unit',86],['sub','Sub',190],['subp','Sub $ / unit',86],['lab','Labor',92],['eq','Equipment',92],['matc','Material $',96],['subc','Sub $',92],['oth','Other',80],
+  ['cost','Total cost',104],['cu','Cost / unit',88],['up','Bid unit price',100],['bt','Bid total',108]];
+const SH_LOCK=['code','desc'];
+function shHidden(){try{return new Set(JSON.parse(localStorage.getItem('bp.shHide')||'[]'))}catch(e){return new Set()}}
+function shSetHidden(s){try{localStorage.setItem('bp.shHide',JSON.stringify([...s]))}catch(e){}}
+function shLists(){const o=(b)=>cbList(b).filter(x=>x.active!==false).map(x=>`<option value="${esc((x.code?x.code+' · ':'')+x.description)}">`).join('');return `<datalist id="sh-mat">${o('material')}</datalist><datalist id="sh-sub">${o('sub')}</datalist>`}
+function shFirst(a,kind){return (a.res||[]).findIndex(r=>r.kind===kind)}
+function shCbFromLabel(book,v){const s=String(v||'').trim();if(!s)return null;const L=cbList(book);const k=s.toLowerCase();
+  return L.find(x=>((x.code?x.code+' · ':'')+x.description).toLowerCase()===k)||L.find(x=>x.code&&x.code.toLowerCase()===k)||L.find(x=>x.description.toLowerCase()===k)||null}
+function estSheetView(d,R,ro){const E=S.est;const hide=shHidden();const cols=SH_COLS.filter(c=>SH_LOCK.includes(c[0])||!hide.has(c[0]));const crews=cbList('crew').filter(x=>x.active!==false).sort((a,b)=>a.description.localeCompare(b.description));
+  const hpd=num(R.ctx.hpd)||10;const f=v=>v==null||v===''?'':String(+(+v).toFixed(4));const m=v=>v?money2(v):'';const dis=ro?' disabled':'';let rn=0;const rows=[];
+  const inp=(row,col,val,o={})=>`<input class="sh-in${o.cls?' '+o.cls:''}" data-sh="${col}" data-rw="${row}" value="${esc(val??'')}"${o.ph!=null?` placeholder="${esc(o.ph)}"`:''}${o.list?` list="${o.list}"`:''}${o.n?' inputmode="decimal"':''}${o.title?` title="${esc(o.title)}"`:''}${dis} autocomplete="off" spellcheck="false">`;
+  const cell=(k,html,cls='')=>`<td class="sh-${k}${cls?' '+cls:''}">${html}</td>`;
+  const secT=new Map();d.items.forEach((it,i)=>{if(it.alt)return;const x=R.items[i];const t=secT.get(it.sec)||{c:{labor:0,equipment:0,material:0,sub:0,other:0},cost:0,bt:0,hrs:0};
+    t.cost+=x.total;t.bt+=x.price;x.acts.forEach(a=>{t.hrs+=a.hrs;['labor','equipment','material','sub'].forEach(k=>t.c[k]+=a.c[k]);t.c.other+=a.c.other+a.c.trucking+a.c.tax});secT.set(it.sec,t)});
+  const tot=(o,k)=>k==='lab'?o.c.labor:k==='eq'?o.c.equipment:k==='matc'?o.c.material:k==='subc'?o.c.sub:k==='oth'?(o.c.other||0)+(o.c.trucking||0)+(o.c.tax||0):0;
+  d.sections.forEach((s,k)=>{const t=secT.get(s.id)||{c:{},cost:0,bt:0,hrs:0};const rw=`s:${k}`;
+    rows.push(`<tr class="sh-r-sec" data-shrow="${rw}">${cols.map(([c])=>c==='code'?cell(c,inp(rw,'code',s.code,{ph:'#'})):c==='desc'?cell(c,inp(rw,'desc',s.name,{ph:'Section name',cls:'b'})):
+      c==='hrs'?cell(c,t.hrs?fmtN(t.hrs,1):'','r num'):['lab','eq','matc','subc','oth'].includes(c)?cell(c,m(tot(t,c)),'r num'):c==='cost'?cell(c,m(t.cost),'r num'):c==='bt'?cell(c,`<b>${m(t.bt)}</b>`,'r num'):cell(c,'')).join('')}</tr>`);
+    d.items.forEach((it,i)=>{if(it.sec!==s.id)return;const x=R.items[i];const ir=`i:${i}`;const hrs=x.acts.reduce((a,b)=>a+b.hrs,0);
+      rows.push(`<tr class="sh-r-item${it.alt?' alt':''}" data-shrow="${ir}">${cols.map(([c])=>{switch(c){
+        case 'code':return cell(c,inp(ir,'code',it.code,{ph:'#'}));case 'desc':return cell(c,inp(ir,'desc',it.desc,{ph:'Bid item',cls:'b'})+(it.alt?'<span class="pill info sh-alt">alt</span>':''));
+        case 'qty':return cell(c,inp(ir,'qty',f(it.qty),{n:1,ph:'0',cls:'r'}));case 'unit':return cell(c,inp(ir,'unit',it.unit,{ph:'unit'}));
+        case 'hrs':return cell(c,hrs?fmtN(hrs,1):'','r num dim');case 'cost':return cell(c,m(x.total),'r num');case 'cu':return cell(c,x.unit?money2(x.unit):'','r num dim');
+        case 'up':return cell(c,inp(ir,'up',it.override==null?'':f(it.override),{n:1,ph:x.q?fmtN(x.calcUnit,2):'',cls:'r'+(it.override!=null?' sh-ov':''),title:'Blank = calculated. Type a price to set it by hand.'}));
+        case 'bt':return cell(c,`<b>${m(x.price)}</b>`,'r num');default:return ['lab','eq','matc','subc','oth'].includes(c)?cell(c,m(tot(x,c)),'r num dim'):cell(c,'')}}).join('')}</tr>`);
+      (it.acts||[]).forEach((a,j)=>{const y=x.acts[j];const ar=`a:${i}:${j}`;const md=a.mode||'uph';const pv=num(a.prod);const rate=md==='uph'||md==='upd';
+        const ph=rate&&pv!=null?(md==='uph'?pv:pv/hpd):null,pd=rate&&pv!=null?(md==='upd'?pv:pv*hpd):null;const mi=shFirst(a,'material'),si=shFirst(a,'sub');const mr=mi>=0?a.res[mi]:null,sr=si>=0?a.res[si]:null;
+        const more=(kind,idx)=>{const n=(a.res||[]).filter(r=>r.kind===kind).length-1;return n>0?`<button class="sh-more" data-act="sh-open" data-rw="${ar}" title="${n} more ${kind} line${n===1?'':'s'}: open the activity">+${n}</button>`:''};
+        const lbl=r=>r?(r.code?r.code+' · ':'')+(r.desc||''):'';
+        rows.push(`<tr class="sh-r-act" data-shrow="${ar}">${cols.map(([c])=>{switch(c){
+          case 'code':return cell(c,inp(ar,'code',a.code,{ph:'#',cls:'dim'}));case 'desc':return cell(c,inp(ar,'desc',a.desc,{ph:'Activity'}),'sh-ind');
+          case 'qty':return cell(c,inp(ar,'qty',f(a.qty),{n:1,ph:x.q?fmtN(x.q,2):'',cls:'r',title:'Blank = the bid item’s quantity'}));case 'unit':return cell(c,inp(ar,'unit',a.unit,{ph:it.unit||'unit'}));
+          case 'crew':return cell(c,`<select class="sh-in sh-sel" data-sh="crew" data-rw="${ar}"${dis}><option value="">—</option>${crews.map(k2=>`<option value="${k2.id}"${a.crew&&a.crew.id===k2.id?' selected':''}>${esc(k2.description)}</option>`).join('')}${a.crew&&a.crew.id&&!crews.some(k2=>k2.id===a.crew.id)?`<option value="${esc(a.crew.id)}" selected>${esc(a.crew.name||'crew')}</option>`:''}</select>`);
+          case 'ph':return cell(c,rate||pv==null?inp(ar,'ph',f(ph),{n:1,cls:'r',ph:'/hr'}):`<span class="small dim" title="${esc(prodLabel(md,a.unit||it.unit))}">${fmtN(pv,2)}</span>`);
+          case 'pd':return cell(c,rate||pv==null?inp(ar,'pd',f(pd),{n:1,cls:'r',ph:'/day'}):'');
+          case 'hrs':return cell(c,y.hrs?fmtN(y.hrs,1):'','r num');
+          case 'mat':return cell(c,inp(ar,'mat',lbl(mr),{list:'sh-mat',ph:'Type to find a material',cls:mr&&!mr.cb?'sh-lump':''})+more('material'));
+          case 'matp':return cell(c,mr?inp(ar,'matp',f(mr.price),{n:1,cls:'r'}):'');
+          case 'sub':return cell(c,inp(ar,'sub',lbl(sr),{list:'sh-sub',ph:'Type to find a sub',cls:sr&&!sr.cb?'sh-lump':''})+more('sub'));
+          case 'subp':return cell(c,sr?inp(ar,'subp',f(sr.price),{n:1,cls:'r'}):'');
+          case 'cost':return cell(c,m(y.total),'r num');case 'cu':return cell(c,y.unit?money2(y.unit):'','r num dim');
+          default:return ['lab','eq','matc','subc','oth'].includes(c)?cell(c,m(tot(y,c)),'r num'):cell(c,'')}}).join('')}</tr>`)});
+      if(!ro)rows.push(`<tr class="sh-r-add" data-shrow="na:${i}"><td></td><td class="sh-ind" colspan="${cols.length-1}">${inp(`na:${i}`,'newact','',{ph:'+ type a new activity…'})}</td></tr>`)});
+    if(!ro)rows.push(`<tr class="sh-r-add" data-shrow="ni:${k}"><td></td><td colspan="${cols.length-1}">${inp(`ni:${k}`,'newitem','',{ph:'+ type a new bid item…',cls:'b'})}</td></tr>`)});
+  const colMenu=`<details class="sh-cols"><summary class="btn sm ghost">Columns ▾</summary><div class="sh-colsp">${SH_COLS.filter(c=>!SH_LOCK.includes(c[0])).map(([k,l])=>`<label><input type="checkbox" data-shcol="${k}"${hide.has(k)?'':' checked'}> ${l}</label>`).join('')}</div></details>`;
+  return `${shLists()}<div class="sh-bar"><span class="dim small">Type in any cell. Enter or ↑↓ to move, Tab to go right, <b>Ctrl+D</b> fills down from above, paste a block from Excel to fill several cells. Right-click a row for more.</span>${colMenu}</div>
+    <div class="panel sh-wrap" id="sh-wrap"><table class="sh-t"><colgroup>${cols.map(c=>`<col style="width:${c[2]}px">`).join('')}</colgroup>
+      <thead><tr>${cols.map(([k,l])=>`<th class="sh-${k}${['qty','ph','pd','hrs','matp','subp','lab','eq','matc','subc','oth','cost','cu','up','bt'].includes(k)?' r':''}">${l}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody>
+      <tfoot><tr>${cols.map(([c])=>c==='desc'?'<td><b>Base bid</b></td>':c==='cost'?`<td class="r num"><b>${money2(R.cost)}</b></td>`:c==='bt'?`<td class="r num"><b>${money2(R.gross)}</b></td>`:c==='hrs'?`<td class="r num">${fmtN(R.items.reduce((s,x,i)=>s+(d.items[i].alt?0:x.acts.reduce((a,b)=>a+b.hrs,0)),0),1)}</td>`:'<td></td>').join('')}</tr></tfoot></table></div>`}
+// write one cell's value into the estimate (no redraw); returns false when nothing changed
+function shApply(rw,col,val){const d=S.est.data;const p=rw.split(':');const v=String(val??'').trim();const n=v===''?null:num(v.replace(/[,$\s]/g,''));
+  if(p[0]==='s'){const s=d.sections[+p[1]];if(!s)return false;if(col==='code')s.code=v;else if(col==='desc')s.name=v;else return false;return true}
+  if(p[0]==='i'){const it=d.items[+p[1]];if(!it)return false;if(col==='code')it.code=v;else if(col==='desc')it.desc=v;else if(col==='qty')it.qty=n;else if(col==='unit')it.unit=v;else if(col==='up')it.override=n;else return false;return true}
+  if(p[0]==='na'){if(!v)return false;const it=d.items[+p[1]];const a=estNewAct({code:estNextActCode(it),desc:v,unit:''});const tp=cbList('activity').find(x=>normH(x.description)===normH(v));
+    it.acts.push(tp?{...actFromTpl(cbD(tp).act||{}),code:a.code}:a);S.est.shFocus=`a:${+p[1]}:${it.acts.length-1}|${tp?'qty':'crew'}`;if(tp)toast(`“${tp.description}” came in from the Activities codebook`);return true}
+  if(p[0]==='ni'){if(!v)return false;const s=d.sections[+p[1]];const tp=cbList('biditem').find(x=>normH(x.description)===normH(v));let it;
+    if(tp){const src=cbD(tp).item||{};it=estAddItem(d,s.id,{tpl:tp.id,desc:src.desc||tp.description,unit:cbD(tp).unit||tp.unit||'',acts:(src.acts||[]).map(a=>actFromTpl(a))});it.acts.forEach((a,j)=>a.code=`${it.code}.${(j+1)*10}`);toast(`“${tp.description}” came in from the Bid items codebook`)}
+    else it=estAddItem(d,s.id,{desc:v});S.est.shFocus=`i:${d.items.indexOf(it)}|qty`;return true}
+  if(p[0]!=='a')return false;const it=d.items[+p[1]];const a=it&&it.acts[+p[2]];if(!a)return false;const hpd=num(estCtx(d).hpd)||10;
+  switch(col){case 'code':a.code=v;break;case 'desc':a.desc=v;break;case 'qty':a.qty=n;break;case 'unit':a.unit=v;break;
+    case 'crew':{const x=cbById(v);a.crew=x?crewSnap(x):null;if(x)crewProdTo(a,x);break}
+    case 'ph':a.mode='uph';a.prod=n;delete a.prodSrc;break;case 'pd':a.mode='upd';a.prod=n;delete a.prodSrc;break;
+    case 'mat':case 'sub':{const kind=col==='mat'?'material':'sub';const i0=shFirst(a,kind);const old=i0>=0?a.res[i0]:null;
+      if(!v){if(old)a.res.splice(i0,1);break}const x=shCbFromLabel(kind,v);let r;
+      if(x){r=resFromCb(x);if(old){r.factor=old.factor??r.factor;r.basis=old.basis||r.basis;if(old.waste!=null)r.waste=old.waste;r.id=old.id}}
+      else{if(old&&!old.cb){old.desc=v;break}r={id:newId(),kind,desc:v,unit:a.unit||it.unit||'',basis:'unit',factor:1,waste:0,price:0,tax:kind==='material'}}
+      a.res=a.res||[];if(i0>=0)a.res[i0]=r;else a.res.push(r);break}
+    case 'matp':case 'subp':{const i0=shFirst(a,col==='matp'?'material':'sub');if(i0<0)return false;a.res[i0].price=n??0;break}
+    default:return false}
+  return true}
+function shCells(){return [...document.querySelectorAll('#sh-wrap [data-sh]')]}
+function shKey(el){return el.dataset.rw+'|'+el.dataset.sh}
+function shRedraw(focusKey){const w=$('#sh-wrap');const sc=w?[w.scrollTop,w.scrollLeft]:null;if(focusKey)S.est.shFocus=focusKey;estTouch();render();
+  const w2=$('#sh-wrap');if(w2&&sc){w2.scrollTop=sc[0];w2.scrollLeft=sc[1]}const k=S.est.shFocus;S.est.shFocus=null;if(k){const [rw,c]=k.split('|');const el=document.querySelector(`#sh-wrap [data-rw="${rw}"][data-sh="${c}"]`)||document.querySelector(`#sh-wrap [data-rw="${rw}"][data-sh]`);if(el){el.focus({preventScroll:false});if(el.select&&el.tagName==='INPUT')el.select()}}}
+// the cell next to this one in a direction (rows by order on screen, columns by header order)
+function shMove(el,dr,dc){const C=SH_COLS.map(c=>c[0]);const rowsEls=[...document.querySelectorAll('#sh-wrap tbody tr')];let ri=rowsEls.indexOf(el.closest('tr'));const ci=C.indexOf(el.dataset.sh);
+  if(dc){const inRow=[...rowsEls[ri].querySelectorAll('[data-sh]')];const k=inRow.indexOf(el)+dc;return inRow[k]||null}
+  for(ri+=dr;ri>=0&&ri<rowsEls.length;ri+=dr){const t=rowsEls[ri].querySelector(`[data-sh="${el.dataset.sh}"]`);if(t)return t;if(['newact','newitem'].includes(el.dataset.sh)){const t2=rowsEls[ri].querySelector('[data-sh=desc]');if(t2)return t2}
+    if(el.dataset.sh==='desc'){const t3=rowsEls[ri].querySelector('[data-sh=newact],[data-sh=newitem]');if(t3)return t3}}return null}
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset.shcol){const h=shHidden();t.checked?h.delete(t.dataset.shcol):h.add(t.dataset.shcol);shSetHidden(h);render();return}
+  if(!t.dataset||!t.dataset.sh||!S.est||!S.est.data||EC().ro||!t.closest('#sh-wrap'))return;
+  if(shApply(t.dataset.rw,t.dataset.sh,t.value))shRedraw(S.est.shFocus||S.est.shNext||shKey(t));S.est.shNext=null});
+document.addEventListener('keydown',e=>{const t=e.target;if(!t.dataset||!t.dataset.sh||!t.closest('#sh-wrap'))return;const isIn=t.tagName==='INPUT';
+  const go=n=>{if(!n)return;e.preventDefault();const changed=isIn&&t.value!==t.defaultValue;S.est.shNext=shKey(n);if(changed){t.blur();return}S.est.shNext=null;n.focus();if(n.select&&n.tagName==='INPUT')n.select()};
+  if(e.key==='Enter'){go(shMove(t,e.shiftKey?-1:1,0)||t);return}
+  if(e.key==='ArrowDown'&&!(isIn&&t.list&&t.value)){go(shMove(t,1,0));return}
+  if(e.key==='ArrowUp'&&!(isIn&&t.list&&t.value)){go(shMove(t,-1,0));return}
+  if(e.key==='ArrowRight'&&(!isIn||t.selectionStart===t.value.length&&t.selectionEnd===t.value.length)){go(shMove(t,0,1));return}
+  if(e.key==='ArrowLeft'&&(!isIn||t.selectionStart===0&&t.selectionEnd===0)){go(shMove(t,0,-1));return}
+  if(e.key==='Escape'&&isIn){t.value=t.defaultValue;t.blur();return}
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){e.preventDefault();const up=shMove(t,-1,0);if(!up)return;t.value=up.value;if(t.tagName==='SELECT')t.value=up.value;t.dispatchEvent(new Event('change',{bubbles:true}))}},true);
+document.addEventListener('paste',e=>{const t=e.target;if(!t.dataset||!t.dataset.sh||!t.closest('#sh-wrap')||EC().ro)return;const txt=(e.clipboardData||window.clipboardData).getData('text');if(!/[\t\n]/.test(txt.replace(/\n$/,'')))return;
+  e.preventDefault();const grid=txt.replace(/\r/g,'').replace(/\n$/,'').split('\n').map(l=>l.split('\t'));let n=0;let rowEl=t;
+  // gather the targets first: rows go down the same column, columns go right in each row
+  const targets=[];for(const line of grid){if(!rowEl)break;let c=rowEl;for(const v of line){if(!c)break;targets.push([c.dataset.rw,c.dataset.sh,v]);c=shMove(c,0,1)}rowEl=shMove(rowEl,1,0)}
+  targets.forEach(([rw,c,v])=>{if(shApply(rw,c,v))n++});if(n){shRedraw(shKey(t));toast(`Pasted into ${n} cell${n===1?'':'s'}`)}});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act=sh-open],[data-act=est-bv]');if(!t||!S.est)return;
+  if(t.dataset.act==='est-bv'){S.est.bv=t.dataset.v;try{localStorage.setItem('bp.bv',t.dataset.v)}catch(er){}render();return}
+  const p=t.dataset.rw.split(':');const it=S.est.data.items[+p[1]];const a=it&&it.acts[+p[2]];if(!a)return;S.est.bv='outline';S.est.sel={t:'act',id:a.id};estOpenSet().add(it.id);estOpenSet().add(it.sec);estOpenSave();render()});
+// right-click a row
+document.addEventListener('contextmenu',e=>{const tr=e.target.closest&&e.target.closest('#sh-wrap tr[data-shrow]');if(!tr||e.shiftKey||EC().ro)return;if(e.target.tagName==='INPUT'&&e.target.selectionStart!==e.target.selectionEnd)return;
+  const d=S.est.data;const p=tr.dataset.shrow.split(':');const it=p[0]==='i'||p[0]==='a'?d.items[+p[1]]:null;const a=p[0]==='a'?it.acts[+p[2]]:null;const s=p[0]==='s'?d.sections[+p[1]]:null;if(!it&&!s)return;e.preventDefault();
+  const op=(o,t2,id)=>()=>{estOp(o,t2,id);S.est.bv='sheet';render()};
+  const items=s?[['+','Add a bid item',()=>{const x=estAddItem(d,s.id,{});shRedraw(`i:${d.items.indexOf(x)}|desc`)}],['↑','Move section up',op('up','sec',s.id)],['↓','Move section down',op('down','sec',s.id)],null,['×','Delete section…',()=>{if(confirm(`Delete the section “${s.name||'Section'}” and its ${d.items.filter(x=>x.sec===s.id).length} bid items?`)){S.est.sel={t:'sec',id:s.id};estOp('del','sec',s.id);render()}},'danger']]
+    :a?[['+','Add an activity below',()=>{const n2=estNewAct({code:estNextActCode(it)});it.acts.splice(+p[2]+1,0,n2);shRedraw(`a:${p[1]}:${+p[2]+1}|desc`)}],['⧉','Duplicate activity',()=>{const c=clone(a);c.id=newId();(c.res||[]).forEach(r=>r.id=newId());c.code=estNextActCode(it);it.acts.splice(+p[2]+1,0,c);shRedraw(`a:${p[1]}:${+p[2]+1}|desc`)}],
+      ['↑','Move up',op('up','act',a.id)],['↓','Move down',op('down','act',a.id)],['☰','Open all cost lines',()=>{S.est.bv='outline';S.est.sel={t:'act',id:a.id};estOpenSet().add(it.id);estOpenSet().add(it.sec);estOpenSave();render()}],null,['×','Delete activity',()=>{if(confirm(`Delete “${a.desc||'this activity'}”?`)){it.acts.splice(+p[2],1);shRedraw()}},'danger']]
+    :[['+','Add a new activity',()=>{const n2=estNewAct({code:estNextActCode(it)});it.acts.push(n2);shRedraw(`a:${p[1]}:${it.acts.length-1}|desc`)}],['🔍','Add an activity from the codebook…',()=>{S.est.sel={t:'item',id:it.id};setTimeout(()=>pickOpen('activity'),0)}],
+      ['+','Add a bid item below',()=>{const x=estNewItem(d,{code:estNextItemCode(d,it.sec),sec:it.sec,qty:null,unit:''});d.items.splice(+p[1]+1,0,x);shRedraw(`i:${+p[1]+1}|desc`)}],['⧉','Duplicate bid item',op('dup','item',it.id)],['↑','Move up',op('up','item',it.id)],['↓','Move down',op('down','item',it.id)],
+      [it.alt?'↩':'⇄',it.alt?'Put back in the base bid':'Make it an alternate',op('alt','item',it.id)],null,['×','Delete bid item',()=>{if(confirm(`Delete “${it.desc||'this bid item'}” and its ${it.acts.length} activit${it.acts.length===1?'y':'ies'}?`)){d.items.splice(+p[1],1);shRedraw()}},'danger']];
+  actmOpen(e.clientX,e.clientY,items)});
+
 const EF0={fold:new Set()}; // folds for the codebook's bid item / activity window when no estimate is open
 function estFold(key,title,body,extra){const E=S.est||EF0;const shut=(E.fold||(E.fold=new Set())).has(key);
   return `<div class="ef${shut?' shut':''}"><div class="ef-h"><button class="ef-t" data-act="ef-fold" data-k="${key}">${shut?'▸':'▾'} ${title}</button>${extra||''}</div>${shut?'':`<div class="ef-b">${body}</div>`}</div>`}
