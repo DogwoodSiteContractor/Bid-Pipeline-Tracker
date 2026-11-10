@@ -3163,3 +3163,4 @@ input.uncommitted{border-color:var(--warn,#d9a441)!important;box-shadow:0 0 0 2p
 .tpl-cat{margin-bottom:6px}.tpl-cat .linkbtn{margin-left:auto}.tpl-g .tplgrid{padding-left:22px}
 .newct{flex-basis:100%;margin-top:8px;padding:8px 10px;border:1px dashed var(--border);border-radius:8px}
 .newct-f{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}.newct-f input{flex:1;min-width:140px}
+.aw-contract{margin-top:10px;padding-top:10px;border-top:1px dashed var(--border)}.aw-ch{grid-column:1/-1}

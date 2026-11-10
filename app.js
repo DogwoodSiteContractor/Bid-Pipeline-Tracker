@@ -77,11 +77,21 @@ const ownerIds=b=>(b.client_ids||[]).filter(id=>cRole(b,id).own);
 // "GC: Evergreen · Owner: Sprouts" style line for headers and cards
 function partyLine(b,o={}){const P=propIds(b),O=ownerIds(b).filter(id=>!P.includes(id)||!cRole(b,id).gc);const nm=ids=>ids.slice(0,o.max||3).map(id=>esc(clientName(id))).join(', ')+(ids.length>(o.max||3)?` +${ids.length-(o.max||3)}`:'');
   const gcs=(b.client_ids||[]).filter(id=>cRole(b,id).gc);const parts=[];if(gcs.length)parts.push(nm(gcs));if(O.length)parts.push(`${gcs.length?'Owner: ':''}${nm(O)}`);return parts.join(' · ')||(o.none??'No GC yet')}
-const PROJECT_TYPES=['Industrial','Commercial','Residential','Single Family','Townhomes','Single Family & Townhomes','Apartments','Public / municipal','Institutional','Other'];
+// asset class and project type, as in the precon tracking workbook
+const ASSET_CLASSES=['Residential','Industrial','Municipal','Office','Other Commercial'];
+const PROJECT_TYPE_GROUPS=[['Residential',['Build to Rent (Residential)','Single Family (Residential)','Multifamily (Residential)','Amenity (Residential)']],['Industrial',['Shallow Bay (Industrial)','Cross Dock (Industrial)','Warehouse (Industrial)']],['Municipal',['Municipal']],['Office',['Office']],['Other Commercial',['Other Commercial']]];
+const PROJECT_TYPES=PROJECT_TYPE_GROUPS.flatMap(g=>g[1]);
 // older names and common variations → current project type
-const PROJECT_TYPE_ALIASES={singlefamily:'Single Family',sfr:'Single Family',singlefamilyhomes:'Single Family',multifamily:'Apartments',apartment:'Apartments',apartments:'Apartments',townhome:'Townhomes',townhouses:'Townhomes',townhouse:'Townhomes',townhomes:'Townhomes',
-  singlefamilytownhomes:'Single Family & Townhomes',singlefamilyandtownhomes:'Single Family & Townhomes',sftownhomes:'Single Family & Townhomes',residential:'Residential',industrial:'Industrial',warehouse:'Industrial',commercial:'Commercial',retail:'Commercial',office:'Commercial',public:'Public / municipal',municipal:'Public / municipal',publicmunicipal:'Public / municipal',institutional:'Institutional',school:'Institutional'};
+const PROJECT_TYPE_ALIASES={industrial:'Warehouse (Industrial)',warehouse:'Warehouse (Industrial)',distribution:'Warehouse (Industrial)',shallowbay:'Shallow Bay (Industrial)',crossdock:'Cross Dock (Industrial)',
+  singlefamily:'Single Family (Residential)',sfr:'Single Family (Residential)',singlefamilyhomes:'Single Family (Residential)',townhome:'Single Family (Residential)',townhomes:'Single Family (Residential)',townhouses:'Single Family (Residential)',townhouse:'Single Family (Residential)',
+  singlefamilytownhomes:'Single Family (Residential)',singlefamilyandtownhomes:'Single Family (Residential)',sftownhomes:'Single Family (Residential)',residential:'Single Family (Residential)',
+  multifamily:'Multifamily (Residential)',apartment:'Multifamily (Residential)',apartments:'Multifamily (Residential)',buildtorent:'Build to Rent (Residential)',btr:'Build to Rent (Residential)',amenity:'Amenity (Residential)',
+  commercial:'Other Commercial',retail:'Other Commercial',othercommercial:'Other Commercial',other:'Other Commercial',institutional:'Other Commercial',office:'Office',public:'Municipal',municipal:'Municipal',publicmunicipal:'Municipal'};
 const normProjectType=v=>{if(!v)return v;if(PROJECT_TYPES.includes(v))return v;return PROJECT_TYPE_ALIASES[String(v).toLowerCase().replace(/[^a-z0-9]/g,'')]||v};
+const assetOf=t=>{const n=normProjectType(t);const g=PROJECT_TYPE_GROUPS.find(x=>x[1].includes(n));return g?g[0]:(n?'Other Commercial':'')};
+const ptShort=t=>String(normProjectType(t)||'').replace(/\s*\((Residential|Industrial)\)$/,'');
+// the new columns from update 61 are only written once the database has them
+const BID_COLS61=['asset_class','contract_date','contract_amount','start_date'];const has61=()=>S.bids.some(b=>'asset_class' in b);
 const live=b=>!b.archived_at;
 // dashboards and win rates count archived bids only when someone asks for them (Board dashboard → Include archived)
 const statOk=b=>!b.archived_at||!!S.inclArch;
@@ -191,7 +201,7 @@ const pick=(b,w,o)=>b.use_for==='without'?(o??w):(w??o);
 function clientAmount(b,cid){const p=propOf(b,cid);return pick(b,num(p.amount_with)??num(b.amount_with),num(p.amount_without)??num(b.amount_without))??0}
 const bidValue=b=>{const base=pick(b,num(b.amount_with),num(b.amount_without));if(base!=null)return base;
   const a=propIds(b).map(id=>clientAmount(b,id)).filter(Boolean);return a.length?Math.max(...a):0};
-const wonValue=b=>num(b.awarded_amount)??(b.awarded_client_id?clientAmount(b,b.awarded_client_id):bidValue(b));
+const wonValue=b=>num(b.contract_amount)??num(b.awarded_amount)??(b.awarded_client_id?clientAmount(b,b.awarded_client_id):bidValue(b));
 const clientWon=(b,cid)=>b.status==='Awarded'&&(b.awarded_client_id?b.awarded_client_id===cid:propIds(b).length===1&&propIds(b)[0]===cid);
 const clientLost=(b,cid)=>!clientWon(b,cid)&&(b.status==='Not Awarded'||propOf(b,cid).status==='Lost'||(b.status==='Awarded'&&!!b.awarded_client_id));
 /* ---- addenda & proposal revisions ---- */
@@ -990,7 +1000,7 @@ function mhead(t,s){return `<div class="mhead"><div><h2>${esc(t)}</h2>${s?`<p>${
 const DIS=()=>M&&M.kind==='bid'?(canWork(M.draft)?'':' disabled'):M&&(M.kind==='client'||M.kind==='vendor')?(can('contacts','edit')?'':' disabled'):M&&(M.kind==='lib'||M.kind==='tpl')?(can('codebook','edit')||isAdmin()?'':' disabled'):(isAdmin()?'':' disabled');
 
 /* ----- bid editor ----- */
-function newBid(){return{id:newId(),name:'',location:'',project_type:'Commercial',bid_type:'Hard bid',size:'',status:'Project Created',probability:50,
+function newBid(){return{id:newId(),name:'',location:'',project_type:'Other Commercial',asset_class:'Other Commercial',contract_date:null,contract_amount:null,start_date:null,bid_type:'Hard bid',size:'',status:'Project Created',probability:50,
   due_date:'',due_time:'',walk_date:'',rfi_date:'',lead_estimator_id:'',support_estimator_ids:[],client_ids:[],client_contacts:{},client_proposals:{},awarded_client_id:'',addenda:[],revisions:[],
   scope_items:[],
   proposal_status:'Not Started',amount_with:null,amount_without:null,use_for:'without',margin:null,follow_ups:[],notes:'',
@@ -998,7 +1008,7 @@ function newBid(){return{id:newId(),name:'',location:'',project_type:'Commercial
 function openBid(id){
   const b=byId(S.bids,id);if(!b)return;
   const d=Object.assign(newBid(),clone(b));d._new=false;
-  d.scope_items=clone(scopeItems(b));d.project_type=normProjectType(d.project_type)||'Commercial';d.client_proposals=d.client_proposals||{};d.client_contacts=d.client_contacts||{};d.awarded_client_id=d.awarded_client_id||'';d.addenda=Array.isArray(d.addenda)?d.addenda:[];d.revisions=revClean(d.revisions);d.due_time=d.due_time?String(d.due_time).slice(0,5):'';
+  d.scope_items=clone(scopeItems(b));d.project_type=normProjectType(d.project_type)||'Other Commercial';d.asset_class=d.asset_class||assetOf(d.project_type);d.client_proposals=d.client_proposals||{};d.client_contacts=d.client_contacts||{};d.awarded_client_id=d.awarded_client_id||'';d.addenda=Array.isArray(d.addenda)?d.addenda:[];d.revisions=revClean(d.revisions);d.due_time=d.due_time?String(d.due_time).slice(0,5):'';
   ['due_date','walk_date','rfi_date','submitted_date','awarded_date'].forEach(k=>d[k]=d[k]||'');
   d.lead_estimator_id=d.lead_estimator_id||'';d.quotes=clone(quotesFor(id));d.quotes.forEach(q=>{['requested_date','due_date','received_date'].forEach(k=>q[k]=q[k]||'')});
   const claim=d.status==='Proposal Review'&&!d._sample&&frIsMgr()&&canWork(d)&&epMgrFlow()&&epClaim(d);
@@ -1140,7 +1150,8 @@ function bpProject(b,work,admin){
   return (aiOn()&&work?`<div class="ai-bar"><button class="btn ai-btn" data-act="ai-invite">✨ Fill from invite</button><span class="small dim">Paste the invite email or drop the PDF and AI fills in the fields. The file isn’t saved.</span></div>`:'')+btplBar(b,work)+`<fieldset><legend>Project</legend><div class="fg">
     <label class="f s2"><span class="f-lab">Project name${work?' <span class="req">required</span>':''}</span><input class="field" ${bf('name')} placeholder="e.g. Riverside Commerce Park"></label>
     <label class="f s2">Location<input class="field" ${bf('location')} placeholder="City, county or address"></label>
-    <label class="f">Project type${sel('project_type',PROJECT_TYPES)}</label>
+    <label class="f">Asset class<select class="field" data-act="asset-sel"${DIS()}>${['',...ASSET_CLASSES].map(x=>`<option value="${esc(x)}"${(b.asset_class||assetOf(b.project_type))===x?' selected':''}>${x?esc(x):'—'}</option>`).join('')}</select></label>
+    <label class="f">Project type<select class="field" ${bf('project_type')}>${PROJECT_TYPE_GROUPS.map(([g,ts])=>`<optgroup label="${esc(g)}">${ts.map(t=>`<option${normProjectType(b.project_type)===t?' selected':''}>${esc(t)}</option>`).join('')}</optgroup>`).join('')}${b.project_type&&!PROJECT_TYPES.includes(normProjectType(b.project_type))?`<option selected>${esc(b.project_type)}</option>`:''}</select></label>
     <label class="f">Bid type${sel('bid_type',BID_TYPES)}</label>
     <label class="f">Size<input class="field" ${bf('size')} placeholder="e.g. 14 acres"></label>
     <label class="f">Number of units<input type="number" min="0" step="1" class="field" ${bf('units','n')} placeholder="e.g. 240"></label>
@@ -1279,9 +1290,14 @@ function bpOutcome(b,work){
   ${work&&!DECIDED.includes(b.status)?`<fieldset><legend>Outcome</legend><p class="hint" style="margin:0 0 10px">${isSent(b)?'When you hear back, record it here.':'The proposal hasn’t gone out yet. You can still record a decision.'}</p><div class="adders"><button class="btn" data-act="bp-out" data-v="Awarded">🏆 Awarded</button><button class="btn" data-act="bp-out" data-v="Not Awarded">Not awarded</button><button class="btn" data-act="bp-out" data-v="No Bid">No bid</button></div></fieldset>`:''}
   ${outcome?`<fieldset><legend>${DECIDED.includes(b.status)?esc(b.status):'Submitted'}</legend><div class="fg">
     <label class="f">Submitted on<input type="date" class="field" ${bf('submitted_date')}></label>
-    ${b.status==='Awarded'?`<label class="f">Awarded on<input type="date" class="field" ${bf('awarded_date')}></label>
+    ${b.status==='Awarded'?`<label class="f">Verbal award on<input type="date" class="field" ${bf('awarded_date')}></label>
     <label class="f">Awarded by<select class="field" data-act="award-sel"${DIS()}><option value="">${propIds(b).length?'Pick the GC…':'Add GCs first'}</option>${propIds(b).map(id=>`<option value="${id}"${b.awarded_client_id===id?' selected':''}>${esc(clientName(id))}</option>`).join('')}</select></label>
-    <label class="f">Contract amount<input type="number" step="0.01" class="field" ${bf('awarded_amount','n')} placeholder="${b.awarded_client_id&&clientAmount(b,b.awarded_client_id)?money(clientAmount(b,b.awarded_client_id)):'Defaults to bid value'}"></label>`:''}
+    <label class="f">Est. contract amount<input type="number" step="0.01" class="field" ${bf('awarded_amount','n')} placeholder="${b.awarded_client_id&&clientAmount(b,b.awarded_client_id)?money(clientAmount(b,b.awarded_client_id)):'Defaults to bid value'}"></label>
+    <label class="f">Anticipated start<input type="date" class="field" ${bf('start_date')}></label></div>
+    <div class="fg aw-contract"><div class="s2 small aw-ch"><b>Contract executed</b> <span class="dim">· once the contract is signed</span></div>
+    <label class="f">Contract signed on<input type="date" class="field" ${bf('contract_date')}></label>
+    <label class="f">Contract amount<input type="number" step="0.01" class="field" ${bf('contract_amount','n')} placeholder="${money((num(b.awarded_amount)??(b.awarded_client_id?clientAmount(b,b.awarded_client_id):bidValue(b)))||0)}"></label>`:''}
+    ${isSent(b)&&!DECIDED.includes(b.status)?`<label class="f">Likelihood to win<select class="field" data-act="likely-sel"${DIS()}><option value="">—</option>${[1,2,3,4,5,6,7,8,9,10].map(n=>`<option value="${n}"${b.rfq&&b.rfq.likely===n?' selected':''}>${n} of 10</option>`).join('')}</select></label><label class="f">Anticipated start<input type="date" class="field" ${bf('start_date')}></label>`:''}
     ${b.status==='Not Awarded'?`<label class="f">Lost reason${sel('lost_reason',LOST_REASONS)}</label><label class="f s2">Awarded to / low number<input class="field" ${bf('awarded_to')} placeholder="Who got it, and at what price"></label>`:''}
   </div></fieldset>`:''}
   <fieldset><legend>GC follow-up log</legend><div class="rows">
@@ -1675,8 +1691,8 @@ async function saveBid(opt={},m=M){
     if(!last)addRevision(d,'Original proposal',true);
     else if(!revSame(last.snapshot,revSnap(d)))addRevision(d,'Numbers updated',true);}
   if(d.status==='Awarded'&&!d.awarded_date)d.awarded_date=todayStr();
-  const row={};BID_COLS.forEach(k=>row[k]=d[k]);if('addenda' in row)row.addenda=addsKeep;
-  ['due_date','due_time','walk_date','rfi_date','submitted_date','awarded_date','lead_estimator_id','awarded_client_id'].forEach(k=>row[k]=nullIfEmpty(row[k]));
+  const row={};(has61()?BID_COLS.concat(BID_COLS61):BID_COLS).forEach(k=>row[k]=d[k]);if('addenda' in row)row.addenda=addsKeep;
+  ['due_date','due_time','walk_date','rfi_date','submitted_date','awarded_date','contract_date','start_date','lead_estimator_id','awarded_client_id'].forEach(k=>{if(k in row)row[k]=nullIfEmpty(row[k])});if('contract_amount' in row)row.contract_amount=num(row.contract_amount)??null;if('asset_class' in row)row.asset_class=row.asset_class||assetOf(row.project_type)||'';
   row.follow_ups=(d.follow_ups||[]).filter(f=>f.date||f.note);row.updated_by=S.session.user.id;
   const wasNew=!!d._new;
   if(d._new)await run(sb.from('bids').insert(row));
@@ -1999,8 +2015,8 @@ async function runImport(){
       if(dropE.has(f.lead_estimator_id))delete f.lead_estimator_id;if(f.support_estimator_ids)f.support_estimator_ids=f.support_estimator_ids.filter(id=>!dropE.has(id));
       const base=newBid();
       const d=importBid(f,base);
-      const row={};BID_COLS.forEach(k=>row[k]=d[k]);
-      ['due_date','due_time','walk_date','rfi_date','submitted_date','awarded_date','lead_estimator_id','awarded_client_id'].forEach(k=>row[k]=nullIfEmpty(row[k]));
+      const row={};(has61()?BID_COLS.concat(BID_COLS61):BID_COLS).forEach(k=>row[k]=d[k]);
+      ['due_date','due_time','walk_date','rfi_date','submitted_date','awarded_date','contract_date','start_date','lead_estimator_id','awarded_client_id'].forEach(k=>{if(k in row)row[k]=nullIfEmpty(row[k])});if('contract_amount' in row)row.contract_amount=num(row.contract_amount)??null;if('asset_class' in row)row.asset_class=row.asset_class||assetOf(row.project_type)||'';
       row.updated_by=S.session.user.id;
       inserts.push([x,row]);
     }
@@ -12255,7 +12271,7 @@ function rfqScopes(b,qs){const ord=n=>{const i=b.scope_items.findIndex(x=>x.name
 function rfqMap(b,qs){const r=rfqOf(b);const lead=byId(S.estimators,b.lead_estimator_id)||{};const co=S.settings.general?.companyName||CFG.companyName||'Dogwood Site Contractors';const sc=rfqScopes(b,qs);
   return {project:b.name||'',location:b.location||'',quotes_due:rfqD(rfqDue(b)),quotes_due_time:r.time||'5PM',note:r.note||'',note_short:r.note?' '+r.note.replace(/^\W+|\W+$/g,'').replace(/^(pricing and quotes needed are for )?only /i,''):'',start_date:r.start||'TBD',plans_link:'\u0001plans\u0001',details_table:'\u0001table\u0001',quote_portal:'You can upload your quote, ask questions or decline this RFQ on your quote portal (the private link we emailed you; reply if you need it again).',
     scopes:sc.map(x=>x.n+(x.mat?' (material)':'')).join(', '),plan_date:r.planDate?rfqD(r.planDate):'',engineer:r.engineer||'',gc:propIds(b).map(clientName).join(', '),bid_due:rfqD(b.due_date),walk_date:b.walk_date?rfqD(b.walk_date):'',rfi_date:b.rfi_date?rfqD(b.rfi_date):'',estimator:lead.name||myName(),company:co,
-    _sc:sc,_desc:r.desc||`This is a ${String(b.project_type||'Commercial')} Development which includes the following:`,_plans:r.plans||'',_plansLabel:r.plansLabel||(r.planDate?`${r.planDate.replace(/-/g,'')} - ${b.name||'Plans'} Civil Set.pdf`:'')}}
+    _sc:sc,_desc:r.desc||`This is a ${ptShort(b.project_type)||'Commercial'} Development which includes the following:`,_plans:r.plans||'',_plansLabel:r.plansLabel||(r.planDate?`${r.planDate.replace(/-/g,'')} - ${b.name||'Plans'} Civil Set.pdf`:'')}}
 // fill the template: drop a line when its fields came out empty and nothing else is on it
 function rfqLines(str,map){return String(str||'').split('\n').flatMap(line=>{let empty=false,any=false;const out=line.replace(/\{(\w+)\}/g,(m,k)=>{if(!(k in map))return m;any=true;const v=map[k];if(v===''||v==null)empty=true;return v??''});
   if(any&&empty&&!out.replace(/[*_\s:|–-]/g,''))return [];return [out]}).join('\n').replace(/\n{3,}/g,'\n\n').trim()}
@@ -12293,7 +12309,7 @@ function rfqView(){const b=M.draft;const R=M.rfq;const T=rfqTpl();const r=rfqOf(
      ${f('plansLabel','Link text',r.planDate?`${r.planDate.replace(/-/g,'')} - ${b.name||'Plans'} Civil Set.pdf`:'e.g. 20260918 - River Hill Communities Civil Set.pdf','s2')}
      ${f('engineer','Engineer','e.g. LJA Engineering')}
      ${f('start','Anticipated start','TBD')}
-     ${f('desc','Description line',`This is a ${b.project_type||'Commercial'} Development which includes the following:`,'s2')}
+     ${f('desc','Description line',`This is a ${ptShort(b.project_type)||'Commercial'} Development which includes the following:`,'s2')}
    </div><p class="hint">Saved with the bid, so the next RFQ for this project starts filled in. Scopes you self perform are listed as “(material)”.</p></fieldset>
    <fieldset><legend>Who it goes to</legend><div class="rfq-list">${rows||'<div class="dim small">Add vendors and subs on the Scopes & RFQs tab first.</div>'}</div>
      ${noMail.length?`<p class="hint bad">${noMail.map(v=>esc(v.company)).join(', ')} ${noMail.length===1?'has':'have'} no email on file and will be left off. Add it on the Vendors page.</p>`:''}${vqRfqHtml(vs)}</fieldset>
@@ -12356,6 +12372,10 @@ document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')re
   if(t.dataset.rfqdue!=null){rfqSetDue(t.value);return}
   // putting in the date a quote came back marks it received
   if(t.dataset.qf&&t.dataset.qf.endsWith('.received_date')){const q=M.draft.quotes[+t.dataset.qf.split('.')[0]];if(q&&t.value&&q.status!=='Received'){q.status='Received';renderModal()}}});
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')return;
+  if(t.dataset.act==='asset-sel'){M.draft.asset_class=t.value;bpSaveUI('Editing…');return}
+  if(t.dataset.act==='likely-sel'){const r=rfqOf(M.draft);if(t.value)r.likely=+t.value;else delete r.likely;bpSaveUI('Editing…');return}
+  if(t.dataset.bf==='project_type'){M.draft.asset_class=assetOf(t.value);setTimeout(()=>{const s=$('[data-act=asset-sel]');if(s)s.value=M.draft.asset_class},0)}});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.duetgt!=null&&M&&M.kind==='bid'){const r=rfqOf(M.draft);if(t.checked)r.dueTarget=true;else delete r.dueTarget;
   if(t.checked&&!M.draft.due_date){const d=new Date();d.setDate(d.getDate()+14);M.draft.due_date=d.toISOString().slice(0,10);toast('Set a target two weeks out. Change it to whatever you plan for.')}
   if(!M.draft._new)bpSaveUI('Editing…');const y=$('#modal .mbody')?.scrollTop;renderModal();const bd=$('#modal .mbody');if(bd&&y!=null)bd.scrollTop=y;return}});
