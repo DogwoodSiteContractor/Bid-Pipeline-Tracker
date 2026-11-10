@@ -224,6 +224,15 @@ function staleAddenda(b){const r=revisions(b);if(!r.length)return [];const last=
 function clientsLine(b,max=2){const ids=propIds(b);if(!ids.length)return 'No client assigned';
   if(b.status==='Awarded'&&b.awarded_client_id)return 'Awarded by '+esc(clientName(b.awarded_client_id))+(ids.length>1?` <span class="dim">(bid to ${ids.length})</span>`:'');
   return ids.slice(0,max).map(id=>esc(clientName(id))).join(', ')+(ids.length>max?` +${ids.length-max} more`:'')}
+// re-bids: a bid can point at the earlier bid for the same job (Best & Final, revised plans…). A job counts once, at its latest proposal.
+const rebidOf=b=>b&&b.rfq&&b.rfq.rebidOf||null;
+function jobRoot(b){let x=b,n=0;while(x&&rebidOf(x)&&n<20){const p=byId(S.bids,rebidOf(x));if(!p)break;x=p;n++}return x?x.id:b.id}
+const bidWhen=b=>sentOn(b)||b.submitted_date||b.due_date||String(b.created_at||'').slice(0,10);
+// keep only the latest bid of each job in a list
+function jobsOnce(list){const m=new Map();list.forEach(b=>{const k=jobRoot(b);const o=m.get(k);if(!o||bidWhen(b)>bidWhen(o))m.set(k,b)});return list.filter(b=>m.get(jobRoot(b))===b)}
+// a later re-bid of the same job exists (an awarded bid is never hidden)
+function rebidLater(b){if(b.status==='Awarded')return false;const k=jobRoot(b);const w=bidWhen(b);return S.bids.some(x=>x!==b&&!x._new&&jobRoot(x)===k&&bidWhen(x)>w)}
+const sentYear=b=>+(String(sentOn(b)||b.submitted_date||b.due_date||'').slice(0,4))||null;
 const yearOf=b=>+(String(b.due_date||b.submitted_date||'').slice(0,4))||new Date(b.created_at||Date.now()).getFullYear();
 const lastTouch=b=>(b.follow_ups||[]).map(f=>f.date).filter(Boolean).sort().pop()||b.submitted_date||'';
 const needsFollowUp=b=>isPending(b)&&(!lastTouch(b)||daysUntil(lastTouch(b))<=-7);
@@ -512,7 +521,7 @@ function precon(){
   const val=act.reduce((s,b)=>s+bidValue(b),0);
   const Y=new Date().getFullYear();
   const yr=S.bids.filter(b=>yearOf(b)===Y&&statOk(b));
-  const proposed=yr.filter(isSent);
+  const proposed=jobsOnce(S.bids.filter(b=>statOk(b)&&isSent(b)&&sentYear(b)===Y));
   const won=yr.filter(b=>b.status==='Awarded');
   const split=list=>{const w=list.filter(b=>bidValue(b)&&b.use_for!=='without').length,o=list.filter(b=>bidValue(b)&&b.use_for==='without').length;return `${w} w/ site, ${o} w/o site`};
   const kpis=`<div class="kpis">
@@ -1157,6 +1166,11 @@ function bpProject(b,work,admin){
     <label class="f">Asset class<select class="field" data-act="asset-sel"${DIS()}>${['',...ASSET_CLASSES].map(x=>`<option value="${esc(x)}"${(b.asset_class||assetOf(b.project_type))===x?' selected':''}>${x?esc(x):'—'}</option>`).join('')}</select></label>
     <label class="f">Project type<select class="field" ${bf('project_type')}>${PROJECT_TYPE_GROUPS.map(([g,ts])=>`<optgroup label="${esc(g)}">${ts.map(t=>`<option${normProjectType(b.project_type)===t?' selected':''}>${esc(t)}</option>`).join('')}</optgroup>`).join('')}${b.project_type&&!PROJECT_TYPES.includes(normProjectType(b.project_type))?`<option selected>${esc(b.project_type)}</option>`:''}</select></label>
     <label class="f">Bid type${sel('bid_type',BID_TYPES)}</label>
+    ${(()=>{if(b._new&&!b.name)return '';const cur=rebidOf(b);const gcs=new Set(b.client_ids||[]);const others=S.bids.filter(x=>x.id!==b.id&&!x._new&&jobRoot(x)!==b.id);
+      const same=others.filter(x=>(x.client_ids||[]).some(id=>gcs.has(id))).sort((x,y)=>bidWhen(y).localeCompare(bidWhen(x))),rest=others.filter(x=>!same.includes(x)).sort((x,y)=>(x.name||'').localeCompare(y.name||''));
+      const o=x=>`<option value="${x.id}"${cur===x.id?' selected':''}>${esc(x.name||'Untitled')}${bidWhen(x)?` · ${fmtShort(bidWhen(x))}`:''}</option>`;
+      const newer=S.bids.filter(x=>rebidOf(x)===b.id);
+      return `<label class="f s2" title="Best & Final, revised plans, a second round… The job counts once in yearly totals and reports, at its latest proposal.">Re-bid of<select class="field" data-act="rebid-sel"${DIS()}><option value="">— Not a re-bid (its own job) —</option>${same.length?`<optgroup label="Same GC">${same.map(o).join('')}</optgroup>`:''}<optgroup label="All bids">${rest.map(o).join('')}</optgroup></select>${newer.length?`<span class="small dim">Re-bid later as ${newer.map(x=>`<button class="linkbtn" data-act="open-bid" data-id="${x.id}">${esc(x.name)}</button>`).join(', ')}</span>`:''}</label>`})()}
     <label class="f">Size<input class="field" ${bf('size')} placeholder="e.g. 14 acres"></label>
     <label class="f">Number of units<input type="number" min="0" step="1" class="field" ${bf('units','n')} placeholder="e.g. 240"></label>
   </div></fieldset>
@@ -12378,6 +12392,7 @@ document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')re
   if(t.dataset.qf&&t.dataset.qf.endsWith('.received_date')){const q=M.draft.quotes[+t.dataset.qf.split('.')[0]];if(q&&t.value&&q.status!=='Received'){q.status='Received';renderModal()}}});
 document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')return;
   if(t.dataset.act==='asset-sel'){M.draft.asset_class=t.value;bpSaveUI('Editing…');return}
+  if(t.dataset.act==='rebid-sel'){const r=rfqOf(M.draft);if(t.value)r.rebidOf=t.value;else delete r.rebidOf;bpSaveUI('Editing…');return}
   if(t.dataset.act==='likely-sel'){const r=rfqOf(M.draft);if(t.value)r.likely=+t.value;else delete r.likely;bpSaveUI('Editing…');return}
   if(t.dataset.bf==='project_type'){M.draft.asset_class=assetOf(t.value);setTimeout(()=>{const s=$('[data-act=asset-sel]');if(s)s.value=M.draft.asset_class},0)}});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.duetgt!=null&&M&&M.kind==='bid'){const r=rfqOf(M.draft);if(t.checked)r.dueTarget=true;else delete r.dueTarget;
@@ -14086,7 +14101,7 @@ function rpOutcome(b){return b.status==='Awarded'?'Won':b.status==='Not Awarded'
 const rpState=loc=>{const m=String(loc||'').match(/,\s*([A-Z]{2})\b/);return m?m[1]:''};
 // sources: each field is [label, type, getter, opts]; type = cat | num | money | days | date | text
 const RP_SRC={
-  bids:{l:'Bids',need:()=>can('bids'),date:'intake',rows:()=>S.bids.filter(b=>!b._new&&statOk(b)),id:b=>b.id,open:b=>b.id,
+  bids:{l:'Bids',need:()=>can('bids'),date:'intake',rows:()=>S.bids.filter(b=>!b._new&&statOk(b)&&!rebidLater(b)),id:b=>b.id,open:b=>b.id,
     f:{name:['Project','text',b=>b.name],status:['Stage','cat',b=>stLabel(b.status)],outcome:['Outcome','cat',rpOutcome,{order:'outcome'}],
       client:['GC / client','cat',b=>clientName(b.awarded_client_id||propIds(b)[0])||'No client'],estimator:['Lead estimator','cat',b=>byId(S.estimators,b.lead_estimator_id)?.name||'Unassigned'],
       ptype:['Project type','cat',b=>normProjectType(b.project_type)||'Other'],btype:['Bid type','cat',b=>b.bid_type||'Hard bid'],size:['Size','cat',b=>rpSize(bidValue(b)),{order:'size'}],
