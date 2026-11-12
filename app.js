@@ -760,18 +760,27 @@ function wbView(){const W=S.wb=S.wb||{tab:'bids',y:new Date().getFullYear()};con
   const cell=(v,o={})=>`<td class="${o.cls||''}"${o.f!=null?` data-f="${esc(o.f)}"`:''}${o.title?` title="${esc(o.title)}"`:''}>${v}</td>`;
   const inp=(b,k,v,o={})=>edit?`<td class="wb-ed${o.cls?' '+o.cls:''}"><input class="wb-in${o.r?' r':''}" data-wbk="${k}" data-id="${b.id}" value="${esc(v??'')}"${o.type?` type="${o.type}"`:''}${o.ph?` placeholder="${esc(o.ph)}"`:''}${o.n?' inputmode="decimal"':''} autocomplete="off"></td>`:cell(esc(v??''),{cls:o.cls});
   const sel=(b,k,v,opts)=>edit?`<td class="wb-ed"><select class="wb-in" data-wbk="${k}" data-id="${b.id}"><option value=""></option>${opts.map(o=>`<option${o===v||String(o)===String(v)?' selected':''}>${esc(o)}</option>`).join('')}</select></td>`:cell(esc(v??''));
-  const name=b=>`<td class="wb-name"><button class="wb-link" data-act="open-bid" data-id="${b.id}" title="Open the bid">${esc(b.name||'Untitled')}</button>${rebidOf(b)?' <span class="wb-tag" title="Latest round of a re-bid">re-bid</span>':''}</td>`;
-  const left=b=>cell(esc(wbCo(b)))+name(b)+inp(b,'contact',wbContact(b),{ph:''})+sel(b,'asset_class',b.asset_class||assetOf(b.project_type),ASSET_CLASSES)+sel(b,'project_type',normProjectType(b.project_type),PROJECT_TYPES);
-  let head,rows,foot,title;
+  const name=b=>edit?`<td class="wb-ed wb-name"><div class="wb-nm"><input class="wb-in" data-wbk="name" data-id="${b.id}" value="${esc(b.name||'')}" autocomplete="off">${rebidOf(b)?'<span class="wb-tag" title="Latest round of a re-bid">re-bid</span>':''}<button class="wb-open" data-act="open-bid" data-id="${b.id}" title="Open the bid">↗</button></div></td>`:`<td class="wb-name"><button class="wb-link" data-act="open-bid" data-id="${b.id}" title="Open the bid">${esc(b.name||'Untitled')}</button>${rebidOf(b)?' <span class="wb-tag" title="Latest round of a re-bid">re-bid</span>':''}</td>`;
+  const multi=b=>(b.client_ids||[]).length>1;
+  const co=b=>edit&&!multi(b)?`<td class="wb-ed"><input class="wb-in" list="wb-cos" data-wbk="company" data-id="${b.id}" value="${esc(wbCo(b))}" placeholder="Company…" autocomplete="off"></td>`:cell(esc(wbCo(b)),{title:multi(b)?'Several companies bid this — change them on the bid form':''});
+  const left=b=>co(b)+name(b)+inp(b,'contact',wbContact(b),{ph:''})+sel(b,'asset_class',b.asset_class||assetOf(b.project_type),ASSET_CLASSES)+sel(b,'project_type',normProjectType(b.project_type),PROJECT_TYPES);
+  let head,rows,foot,title,ids=[],extra='';const nw=W.nw=W.nw||{};
+  const nIn=(k,o={})=>`<td class="wb-ed"><input class="wb-in${o.r?' r':''}" data-wbnew="${k}" value="${esc(nw[k]||'')}"${o.type?` type="${o.type}"`:''}${o.list?` list="${o.list}"`:''} placeholder="${esc(o.ph||'')}"${o.n?' inputmode="decimal"':''} autocomplete="off"></td>`;
+  const pickRow=(kind,list,label,cols)=>edit?`<tr class="wb-new"><th class="wb-rn">+</th><td colspan="${cols}" class="wb-ed"><select class="wb-in wb-pick" data-wbpick="${kind}"><option value="">${label}</option>${list.map(b=>`<option value="${b.id}">${esc(b.name||'Untitled')}${wbCo(b)?' · '+esc(wbCo(b)):''}${bidValue(b)?' · '+money(bidValue(b)):''}</option>`).join('')}</select></td></tr>`:'';
+  const live=S.bids.filter(b=>!b._new&&isSent(b)).sort((a,b)=>(sentOn(b)||'').localeCompare(sentOn(a)||''));
   if(W.tab==='bids'){title='BIDS SUBMITTED';head=['Company Name','Opportunity Name','Company Contact','Asset Class','Project Type','Likelihood to win 1-10','Due Date','Bid Amount','Submission Date','Anticipated Start Date','NOTES'];
-    rows=D.bids.map(b=>left(b)+sel(b,'likely',(b.rfq||{}).likely||'',[1,2,3,4,5,6,7,8,9,10])+cell(d(b.due_date),{cls:'c',f:b.due_date||''})+cell(m(bidValue(b)),{cls:'r',f:bidValue(b)||''})+cell(d(sentOn(b)),{cls:'c',f:sentOn(b)})
+    rows=D.bids.map(b=>left(b)+sel(b,'likely',(b.rfq||{}).likely||'',[1,2,3,4,5,6,7,8,9,10])+(edit?inp(b,'due_date',b.due_date||'',{type:'date'})+inp(b,'amount',bidValue(b)?money2(bidValue(b)):'',{n:1,r:1,ph:'$0.00'})+inp(b,'sent',sentOn(b),{type:'date'}):cell(d(b.due_date),{cls:'c',f:b.due_date||''})+cell(m(bidValue(b)),{cls:'r',f:bidValue(b)||''})+cell(d(sentOn(b)),{cls:'c',f:sentOn(b)}))
       +inp(b,'start_date',b.start_date||'',{type:'date'})+inp(b,'wbNote',(b.rfq||{}).wbNote||'',{ph:wbNoteAuto(b),cls:'wb-note'}));
+    ids=D.bids.map(b=>b.id);
+    if(edit)extra=`<tr class="wb-new"><th class="wb-rn">+</th>${nIn('company',{list:'wb-cos',ph:'Company'})}${nIn('name',{ph:'＋ New bid: type the project name'})}<td></td><td></td><td></td><td></td>${nIn('due',{type:'date'})}${nIn('amount',{n:1,r:1,ph:'$0.00'})}${nIn('sent',{type:'date'})}<td></td><td class="wb-addc"><button class="wb-addbtn" data-act="wb-add" title="Create the bid (or press Enter in this row)">${W.busy?'Adding…':'＋ Add bid'}</button><span class="dim small"> sent date defaults to today</span></td></tr>`;
     foot=`<td></td><td><b>${D.bids.length} bids</b></td><td></td><td></td><td></td><td></td><td></td><td class="r"><b>${m(D.bids.reduce((s,b)=>s+bidValue(b),0))}</b></td><td></td><td></td><td></td>`}
   else if(W.tab==='verbal'){title='VERBAL AWARDS';head=['Company Name','Opportunity Name','Company Contact','Asset Class','Project Type','Est. Contract Amount','Verbal Award Date','Anticipated Start Date'];
     rows=D.verbal.map(b=>left(b)+inp(b,'awarded_amount',b.awarded_amount??'',{n:1,r:1,ph:money2(wonValue(b)||0)})+inp(b,'awarded_date',b.awarded_date||'',{type:'date'})+inp(b,'start_date',b.start_date||'',{type:'date'}));
+    ids=D.verbal.map(b=>b.id);extra=pickRow('verbal',live.filter(b=>b.status!=='Awarded'&&b.status!=='No Bid'),'＋ Add a verbal award: pick a sent bid…',head.length);
     foot=`<td></td><td><b>${D.verbal.length} awards</b></td><td></td><td></td><td></td><td class="r"><b>${m(D.verbal.reduce((s,b)=>s+(num(b.awarded_amount)??wonValue(b)??0),0))}</b></td><td></td><td></td>`}
   else if(W.tab==='contract'){title='CONTRACTS EXECUTED';head=['Company Name','Opportunity Name','Company Contact','Asset Class','Project Type','Contract Amount','Contract Date','Anticipated Start Date'];
     rows=D.contract.map(b=>left(b)+inp(b,'contract_amount',b.contract_amount??'',{n:1,r:1})+inp(b,'contract_date',b.contract_date||'',{type:'date'})+inp(b,'start_date',b.start_date||'',{type:'date'}));
+    ids=D.contract.map(b=>b.id);extra=pickRow('contract',S.bids.filter(b=>!b._new&&b.status==='Awarded'&&!b.contract_date),'＋ Add an executed contract: pick an awarded bid…',head.length);
     foot=`<td></td><td><b>${D.contract.length} contracts</b></td><td></td><td></td><td></td><td class="r"><b>${m(D.contract.reduce((s,b)=>s+(num(b.contract_amount)||0),0))}</b></td><td></td><td></td>`}
   else{title='PIPELINE TRACKING SUMMARY';
     head=['Week Start','Week End','Bids Submitted','Total Bid Amount','Verbal Awards','Verbal Awards Amount','Executed Contracts','Executed Contracts Amount','','Cumulative Bids Submitted','Cumulative Bid Amount','Cumulative Verbal Awards','Cumulative Verbal Award Amount','Cumulative Executed Contracts','Cumulative Executed Contract Amount','','Bids to Verbal Awards Conversion','Bids to Executed Contracts Conversion'];
@@ -783,7 +792,7 @@ function wbView(){const W=S.wb=S.wb||{tab:'bids',y:new Date().getFullYear()};con
         +cell(c[0],{cls:'r'})+cell(money(c[1]),{cls:'r'})+cell(c[2],{cls:'r'})+cell(money(c[3]),{cls:'r'})+cell(c[4],{cls:'r'})+cell(money(c[5]),{cls:'r'})+'<td class="wb-gap"></td>'
         +cell(c[0]?fmtN(c[2]/c[0]*100,1)+'%':'0.0%',{cls:'r'})+cell(c[0]?fmtN(c[4]/c[0]*100,1)+'%':'0.0%',{cls:'r'})+'</tr>'});
     foot=`<td colspan="2"><b>Total ${Y}</b></td><td class="r"><b>${c[0]}</b></td><td class="r"><b>${money(c[1])}</b></td><td class="r"><b>${c[2]}</b></td><td class="r"><b>${money(c[3])}</b></td><td class="r"><b>${c[4]}</b></td><td class="r"><b>${money(c[5])}</b></td><td class="wb-gap"></td><td colspan="6"></td><td class="wb-gap"></td><td class="r"><b>${c[0]?fmtN(c[2]/c[0]*100,1):'0.0'}%</b></td><td class="r"><b>${c[0]?fmtN(c[4]/c[0]*100,1):'0.0'}%</b></td>`}
-  const isSum=W.tab==='sum';const body=isSum?rows.map((r,i)=>r.replace('>',`><th class="wb-rn">${i+2}</th>`)).join(''):rows.map((r,i)=>`<tr><th class="wb-rn">${i+2}</th>${r}</tr>`).join('');const nCols=head.length;
+  const isSum=W.tab==='sum';const body=isSum?rows.map((r,i)=>r.replace('>',`><th class="wb-rn">${i+2}</th>`)).join(''):rows.map((r,i)=>`<tr data-wbid="${ids[i]||''}"><th class="wb-rn">${i+2}</th>${r}</tr>`).join('')+extra;const nCols=head.length;
   const widths=isSum?[92,92,80,120,74,120,80,130,14,90,130,90,140,100,150,14,110,120]:W.tab==='bids'?[170,230,140,110,170,96,96,124,104,118,240]:[170,230,140,110,170,130,118,130];
   return `<div class="wb">
     <div class="wb-rib"><div class="wb-ttl"><b>DOGWOOD SITE CONTRACTORS, LLC</b><span>${title} · ${Y}</span></div>
@@ -791,23 +800,127 @@ function wbView(){const W=S.wb=S.wb||{tab:'bids',y:new Date().getFullYear()};con
       <span class="dim small">Date: ${fmtDate(todayStr())}</span><span style="flex:1"></span>
       <button class="btn sm primary" data-act="wb-xlsx" title="Download this workbook (all four sheets) as an Excel file">⬇ Download as Excel</button></div>
     <div class="wb-fx"><span class="wb-ref" id="wb-ref">A1</span><span class="wb-fxi">ƒx</span><span class="wb-fxv" id="wb-fxv"></span></div>
+    ${edit?`<datalist id="wb-cos">${S.clients.map(c=>c.company||'').filter(Boolean).sort((a,b)=>a.localeCompare(b)).map(c=>`<option value="${esc(c)}">`).join('')}</datalist>`:''}
     <div class="wb-grid" id="wb-grid"><table class="wb-t"><colgroup><col style="width:42px">${widths.map(w=>`<col style="width:${w}px">`).join('')}</colgroup>
       <thead><tr class="wb-letters"><th class="wb-corner"></th>${head.map((h,i)=>`<th>${wbCol(i)}</th>`).join('')}</tr>
         <tr class="wb-head"><th class="wb-rn">1</th>${head.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>
       <tbody>${body}</tbody><tfoot><tr><th class="wb-rn"></th>${foot}</tr></tfoot></table></div>
     <div class="wb-tabs">${WB_TABS.map(([k,l])=>`<button class="${W.tab===k?'on':''}" data-act="wb-tab" data-v="${k}">${l}${k==='bids'?` <span>${D.bids.length}</span>`:k==='verbal'?` <span>${D.verbal.length}</span>`:k==='contract'?` <span>${D.contract.length}</span>`:''}</button>`).join('')}
-      <span class="wb-hint">${edit&&!isSum?'Type in the white cells: contact, asset class, type, likelihood, dates, amounts and notes save to the bid. Click a project to open it.':'Built from the bids. Each job counts once, at its latest proposal.'}</span></div></div>`}
-async function wbSave(b,k,v){const patch={};const val=String(v??'').trim();
-  if(k==='likely'||k==='wbNote'){const r={...(b.rfq||{})};if(val==='')delete r[k];else r[k]=k==='likely'?+val:val;patch.rfq=r}
+      <span class="wb-hint">${edit&&!isSum?'Type in any white cell and it saves to the bid. Use the + row to add. Right-click a row for awarded, archive, delete. ↗ opens the bid.':'Built from the bids. Each job counts once, at its latest proposal.'}</span></div></div>`}
+async function wbClient(name){const k=normH(name);const ex=S.clients.find(c=>normH(c.company)===k);if(ex)return ex.id;
+  if(!can('contacts','edit')){toast(`${name} isn’t in Contacts yet. Ask someone who can edit Contacts to add it.`);return ''}
+  const id=newId();await run(sb.from('clients').insert({id,company:name,type:'General contractor',phone:'',email:'',address:'',notes:'',contacts:[]}));await loadTable('clients');toast(`${name} saved to Contacts`);return id}
+async function wbPatch(b,patch,o={}){const old={};Object.keys(patch).forEach(x=>old[x]=clone(b[x]??null));Object.assign(b,patch);patch.updated_by=S.session.user.id;
+  let ok=true;try{await run(sb.from('bids').update(patch).eq('id',b.id))}catch(e){ok=false;Object.assign(b,old);toast(errMsg(e))}
+  if(ok&&!o.noUndo){const W=S.wb;if(W.grp)W.grp.push({id:b.id,old});else{(W.undo=W.undo||[]).push([{id:b.id,old}]);if(W.undo.length>50)W.undo.shift()}}
+  if(o.quiet)return;wbRender()}
+function wbRender(){const g=$('#wb-grid');const sc=g?[g.scrollTop,g.scrollLeft]:null;render();const g2=$('#wb-grid');if(g2&&sc){g2.scrollTop=sc[0];g2.scrollLeft=sc[1]}wbPaint()}
+function wbStatus(b,v){if(b.status===v)return;const patch={status:v};
+  if(v==='Awarded'){if(!b.awarded_date)patch.awarded_date=todayStr();if(!b.awarded_client_id&&propIds(b).length===1)patch.awarded_client_id=propIds(b)[0]}
+  if(v==='Submitted'&&!b.submitted_date)patch.submitted_date=todayStr();
+  wbPatch(b,patch);toast(`${b.name}: ${v==='Submitted'?'back to submitted':v.toLowerCase()}`)}
+async function wbSave(b,k,v,o={}){const patch={};const val=String(v??'').trim();
+  if(k==='name'){if(!val||val===b.name)return;patch.name=val}
+  else if(k==='amount'){const n=val===''?null:num(val.replace(/[,$\s]/g,''));if(val!==''&&n==null){toast('That isn’t a number');render();return}patch[b.use_for==='without'?'amount_without':'amount_with']=n}
+  else if(k==='sent'){if(!val){render();return}patch.submitted_date=val;const cp=clone(b.client_proposals||{});Object.values(cp).forEach(p=>{if(p&&p.sent_date&&String(p.sent_date).slice(0,10)<val)p.sent_date=val});patch.client_proposals=cp;if(!isSent(b))patch.proposal_status='Sent'}
+  else if(k==='company'){if(!val||normH(val)===normH(wbCo(b)))return;let id;try{id=await wbClient(val)}catch(e){toast(errMsg(e));return}if(!id){render();return}
+    const old=(b.client_ids||[])[0];const cp=clone(b.client_proposals||{}),cc={...(b.client_contacts||{})};
+    if(old){cp[id]=cp[old]||{};delete cp[old];if(cc[old]!=null){cc[id]=cc[old];delete cc[old]}}else cp[id]={status:isSent(b)?'Sent':'',sent_date:sentOn(b)||''};
+    patch.client_ids=[id];patch.client_proposals=cp;patch.client_contacts=cc;if(b.awarded_client_id===old||(old&&!b.awarded_client_id&&b.status==='Awarded'))patch.awarded_client_id=b.status==='Awarded'?id:(b.awarded_client_id===old?id:b.awarded_client_id)}
+  else if(k==='likely'||k==='wbNote'){const r={...(b.rfq||{})};if(val==='')delete r[k];else r[k]=k==='likely'?+val:val;patch.rfq=r}
   else if(k==='contact'){const id=b.awarded_client_id||propIds(b)[0];if(!id){toast('Add a GC to this bid first');return}patch.client_contacts={...(b.client_contacts||{}),[id]:val}}
   else if(k==='awarded_amount'||k==='contract_amount')patch[k]=val===''?null:num(val.replace(/[,$\s]/g,''));
   else if(k==='project_type'){patch.project_type=val||b.project_type;patch.asset_class=assetOf(patch.project_type)}
   else patch[k]=val||null;
   if(k==='asset_class')patch.asset_class=val;
-  const old={};Object.keys(patch).forEach(x=>old[x]=b[x]);Object.assign(b,patch);
-  try{await run(sb.from('bids').update(patch).eq('id',b.id));}catch(e){Object.assign(b,old);toast(errMsg(e))}
-  const g=$('#wb-grid');const sc=g?[g.scrollTop,g.scrollLeft]:null;render();const g2=$('#wb-grid');if(g2&&sc){g2.scrollTop=sc[0];g2.scrollLeft=sc[1]}}
+  await wbPatch(b,patch,o)}
+// ---- Excel-style range select, fill handle, copy/paste, delete, undo ----
+const WBR={a:null,b:null,drag:0,fill:null};
+const wbRows=()=>[...document.querySelectorAll('#wb-grid tbody tr[data-wbid]')];
+function wbPos(td){const tr=td&&td.closest('tr[data-wbid]');if(!tr||td.tagName!=='TD')return null;return {r:wbRows().indexOf(tr),c:[...tr.children].indexOf(td)}}
+function wbBox(){if(!WBR.a)return null;const b=WBR.b||WBR.a;return {r0:Math.min(WBR.a.r,b.r),r1:Math.max(WBR.a.r,b.r),c0:Math.min(WBR.a.c,b.c),c1:Math.max(WBR.a.c,b.c)}}
+const wbCell=(r,c)=>{const tr=wbRows()[r];return tr?tr.children[c]:null};
+function wbVal(td){const i=td&&td.querySelector('input,select');return i?i.value:td?(td.dataset.f!=null&&td.dataset.f!==''?td.dataset.f:td.textContent.trim()):''}
+function wbPaint(prev){const g=$('#wb-grid');if(!g)return;g.querySelectorAll('.wb-rng,.wb-fp').forEach(x=>x.classList.remove('wb-rng','wb-fp'));g.querySelector('#wb-fill')?.remove();
+  const B=wbBox();if(!B||!wbRows().length)return;
+  for(let r=B.r0;r<=B.r1;r++)for(let c=B.c0;c<=B.c1;c++)wbCell(r,c)?.classList.add('wb-rng');
+  if(prev)for(let r=prev[0];r<=prev[1];r++)for(let c=B.c0;c<=B.c1;c++)wbCell(r,c)?.classList.add('wb-fp');
+  const last=wbCell(B.r1,B.c1);if(!last)return;const gr=g.getBoundingClientRect(),cr=last.getBoundingClientRect();
+  const h=document.createElement('div');h.id='wb-fill';h.title='Drag to copy into the cells below (or above)';h.style.left=(cr.right-gr.left+g.scrollLeft-4)+'px';h.style.top=(cr.bottom-gr.top+g.scrollTop-4)+'px';g.appendChild(h);
+  const ref=$('#wb-ref');if(ref&&(B.r0!==B.r1||B.c0!==B.c1))ref.textContent=`${wbCol(B.c0-1)}${B.r0+2}:${wbCol(B.c1-1)}${B.r1+2}`}
+const wbMulti=()=>{const B=wbBox();return B&&(B.r0!==B.r1||B.c0!==B.c1)};
+// turn a pasted/copied value into what the cell expects; null = skip
+function wbNorm(td,v){const i=td.querySelector('.wb-in[data-wbk]');if(!i)return null;v=String(v??'').trim();
+  if(i.tagName==='SELECT'){if(v==='')return '';const o=[...i.options].find(o=>o.value.toLowerCase()===v.toLowerCase());return o?o.value:null}
+  if(i.type==='date'){if(v==='')return '';if(/^\d{4}-\d{2}-\d{2}/.test(v))return v.slice(0,10);const d=new Date(v);return isNaN(d)?null:wbIso(d)}
+  return v}
+async function wbBatch(list){list=list.filter(x=>x.v!=null&&x.b);if(!list.length)return;const W=S.wb;W.grp=[];
+  for(const x of list)await wbSave(x.b,x.k,x.v,{quiet:true});
+  if(W.grp.length)(W.undo=W.undo||[]).push(W.grp);W.grp=null;wbRender();toast(`${list.length} cell${list.length===1?'':'s'} updated · Ctrl+Z to undo`)}
+const wbItem=(td,v)=>{const i=td&&td.querySelector('.wb-in[data-wbk]');if(!i)return null;const n=wbNorm(td,v);if(n==null||n===i.value)return null;return {b:byId(S.bids,i.dataset.id),k:i.dataset.wbk,v:n}};
+function wbFillTo(r){const B=wbBox();if(!B)return;const out=[];const len=B.r1-B.r0+1;
+  const rows=r>B.r1?[...Array(r-B.r1)].map((_,i)=>B.r1+1+i):r<B.r0?[...Array(B.r0-r)].map((_,i)=>r+i):[];
+  rows.forEach(rr=>{for(let c=B.c0;c<=B.c1;c++){const off=rr>B.r1?(rr-B.r0)%len:((rr-B.r0)%len+len)%len;const it=wbItem(wbCell(rr,c),wbVal(wbCell(B.r0+off,c)));if(it)out.push(it)}});
+  if(rows.length){WBR.a={r:Math.min(B.r0,r),c:B.c0};WBR.b={r:Math.max(B.r1,r),c:B.c1}}
+  wbBatch(out)}
+document.addEventListener('mousedown',e=>{if(e.button!==0)return;const g=e.target.closest&&e.target.closest('#wb-grid');if(!g)return;
+  if(e.target.id==='wb-fill'){e.preventDefault();WBR.fill={to:null};g.classList.add('wb-drag');return}
+  const td=e.target.closest('td');const p=wbPos(td);if(!p)return;if(e.target.closest('button,select'))return void(WBR.a=WBR.b=p,wbPaint());
+  if(e.shiftKey&&WBR.a){e.preventDefault();WBR.b=p;wbPaint();return}
+  WBR.a=WBR.b=p;WBR.drag=1;wbPaint()});
+document.addEventListener('mousemove',e=>{if(!WBR.drag&&!WBR.fill)return;const g=$('#wb-grid');if(!g)return;const el=document.elementFromPoint(e.clientX,e.clientY);const td=el&&el.closest&&el.closest('#wb-grid td');const p=wbPos(td);if(!p)return;
+  if(WBR.fill){const B=wbBox();if(!B)return;WBR.fill.to=p.r;wbPaint(p.r>B.r1?[B.r1+1,p.r]:p.r<B.r0?[p.r,B.r0-1]:null);return}
+  if(p.r!==WBR.b.r||p.c!==WBR.b.c){WBR.b=p;if(wbMulti()){g.classList.add('wb-drag');if(document.activeElement&&document.activeElement.closest('#wb-grid'))document.activeElement.blur();getSelection().removeAllRanges()}wbPaint()}});
+document.addEventListener('mouseup',()=>{const g=$('#wb-grid');g&&g.classList.remove('wb-drag');WBR.drag=0;if(WBR.fill){const to=WBR.fill.to;WBR.fill=null;if(to!=null)wbFillTo(to);else wbPaint()}});
+function wbTsv(){const B=wbBox();if(!B)return '';const L=[];for(let r=B.r0;r<=B.r1;r++){const a=[];for(let c=B.c0;c<=B.c1;c++)a.push(wbVal(wbCell(r,c)).replace(/[\t\n]/g,' '));L.push(a.join('\t'))}return L.join('\n')}
+const wbTextSel=t=>{try{return (t.tagName==='INPUT'||t.tagName==='TEXTAREA')&&t.selectionStart!=null&&t.selectionStart!==t.selectionEnd}catch(_){return false}};
+const wbDirty=t=>t&&t.classList&&t.classList.contains('wb-in')&&t.tagName==='INPUT'&&t.value!==t.defaultValue;
+document.addEventListener('copy',e=>{if(!$('#wb-grid')||!WBR.a)return;const t=document.activeElement;const inG=t&&t.closest&&t.closest('#wb-grid');if(!inG&&t!==document.body)return;if(!wbMulti()&&wbTextSel(t))return;
+  e.preventDefault();e.clipboardData.setData('text/plain',wbTsv());const B=wbBox();toast(`Copied ${(B.r1-B.r0+1)*(B.c1-B.c0+1)} cell${wbMulti()?'s':''}`)});
+document.addEventListener('paste',e=>{if(!$('#wb-grid')||!WBR.a)return;const t=document.activeElement;const inG=t&&t.closest&&t.closest('#wb-grid');if(!inG&&t!==document.body)return;
+  const txt=(e.clipboardData.getData('text/plain')||'').replace(/\r/g,'').replace(/\n$/,'');const grid=txt.split('\n').map(l=>l.split('\t'));const single=grid.length===1&&grid[0].length===1;
+  if(single&&!wbMulti())return; // one value into one cell: let the browser paste as you'd type
+  e.preventDefault();const B=wbBox();const out=[];
+  if(single){for(let r=B.r0;r<=B.r1;r++)for(let c=B.c0;c<=B.c1;c++){const it=wbItem(wbCell(r,c),grid[0][0]);if(it)out.push(it)}}
+  else{const n=wbRows().length;grid.forEach((row,i)=>row.forEach((v,j)=>{const r=B.r0+i,c=B.c0+j;if(r>=n)return;const it=wbItem(wbCell(r,c),v);if(it)out.push(it)}));WBR.b={r:Math.min(n-1,B.r0+grid.length-1),c:B.c0+Math.max(...grid.map(r=>r.length))-1}}
+  if(!out.length){toast('Nothing to paste into here. Grey cells come from the bid form.');return}if(t&&t.blur&&inG)t.blur();wbBatch(out)});
+document.addEventListener('keydown',e=>{if(!$('#wb-grid'))return;const t=e.target;const inG=t.closest&&t.closest('#wb-grid');const mod=e.ctrlKey||e.metaKey;
+  if(mod&&!e.shiftKey&&e.key.toLowerCase()==='z'&&(inG||t===document.body)&&!wbDirty(t)){const U=S.wb.undo||[];if(!U.length)return;e.preventDefault();const grp=U.pop();
+    (async()=>{for(const x of grp.slice().reverse()){const b=byId(S.bids,x.id);if(b)await wbPatch(b,x.old,{quiet:true,noUndo:true})}wbRender();toast('Undone')})();return}
+  if(!WBR.a||!(inG||t===document.body))return;
+  if(mod&&e.key.toLowerCase()==='d'){e.preventDefault();const B=wbBox();if(!B||B.r1===B.r0)return;const out=[];for(let r=B.r0+1;r<=B.r1;r++)for(let c=B.c0;c<=B.c1;c++){const it=wbItem(wbCell(r,c),wbVal(wbCell(B.r0,c)));if(it)out.push(it)}wbBatch(out);return}
+  if((e.key==='Delete'||e.key==='Backspace')&&(wbMulti()||t===document.body)){e.preventDefault();const B=wbBox();const out=[];for(let r=B.r0;r<=B.r1;r++)for(let c=B.c0;c<=B.c1;c++){const td=wbCell(r,c);const i=td&&td.querySelector('.wb-in[data-wbk]');if(i&&!['name','sent','company'].includes(i.dataset.wbk)){const it=wbItem(td,'');if(it)out.push(it)}}wbBatch(out)}});
+document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('[data-act=wb-tab],[data-wby]')){WBR.a=WBR.b=null}},true);
+async function wbAdd(){const W=S.wb,N=W.nw||{};const name=String(N.name||'').trim();if(!name){$('[data-wbnew=name]')?.focus();toast('Type the project name first');return}
+  if(W.busy||!can('bids','edit'))return;W.busy=true;render();
+  try{const co=String(N.company||'').trim();const cid=co?await wbClient(co):'';
+    const d=newBid();delete d._new;const sent=N.sent||todayStr();Object.assign(d,{name,status:'Submitted',proposal_status:'Sent',submitted_date:sent,due_date:N.due||sent,use_for:'without',amount_without:num(String(N.amount||'').replace(/[,$\s]/g,''))??null});
+    if(cid){d.client_ids=[cid];d.client_proposals={[cid]:{status:'Sent',sent_date:sent}}}
+    const row={};(has61()?BID_COLS.concat(BID_COLS61):BID_COLS).forEach(k=>row[k]=d[k]);
+    ['due_date','due_time','walk_date','rfi_date','submitted_date','awarded_date','contract_date','start_date','lead_estimator_id','awarded_client_id'].forEach(k=>{if(k in row)row[k]=nullIfEmpty(row[k])});if('asset_class' in row)row.asset_class=row.asset_class||assetOf(row.project_type)||'';row.updated_by=S.session.user.id;
+    await run(sb.from('bids').insert(row));await loadTable('bids');W.nw={};
+    if(+sent.slice(0,4)!==+W.y)toast(`${name} added under ${sent.slice(0,4)}`);else toast(`${name} added`)}
+  catch(e){toast(errMsg(e))}
+  W.busy=false;render();const g=$('#wb-grid');if(g)g.scrollTop=g.scrollHeight;$('[data-wbnew=name]')?.focus()}
+document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.wbnew!=null&&S.wb){S.wb.nw=S.wb.nw||{};S.wb.nw[t.dataset.wbnew]=t.value}});
+document.addEventListener('keydown',e=>{const t=e.target;if(e.key==='Enter'&&t.dataset&&t.dataset.wbnew!=null){e.preventDefault();e.stopPropagation();S.wb.nw[t.dataset.wbnew]=t.value;wbAdd()}},true);
+document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('[data-act=wb-add]'))wbAdd()});
+document.addEventListener('contextmenu',e=>{if(e.shiftKey)return;const tr=e.target.closest&&e.target.closest('#wb-grid tr[data-wbid]');if(!tr||!tr.dataset.wbid||e.target.closest('[data-act=open-bid]'))return;
+  const t=e.target;if((t.tagName==='INPUT'||t.tagName==='TEXTAREA')&&t.selectionStart!==t.selectionEnd)return; // keep copy/paste when text is selected
+  const b=byId(S.bids,tr.dataset.wbid);if(!b||!can('bids','edit'))return;e.preventDefault();e.stopImmediatePropagation();
+  const it=[['↗','Open bid',()=>openBid(b.id)],null];
+  if(b.status!=='Awarded')it.push(['🏆','Mark awarded (verbal)',()=>wbStatus(b,'Awarded')]);
+  if(b.status==='Awarded'&&!b.contract_date)it.push(['✍','Contract executed today',()=>wbPatch(b,{contract_date:todayStr(),contract_amount:num(b.contract_amount)??num(b.awarded_amount)??wonValue(b)??null})]);
+  if(b.status!=='Not Awarded')it.push(['✕','Mark not awarded',()=>wbStatus(b,'Not Awarded')]);
+  if(b.status==='Awarded'||b.status==='Not Awarded')it.push(['↩','Back to submitted',()=>wbStatus(b,'Submitted')]);
+  it.push(null);
+  it.push(b.archived_at?['📤','Restore from archive',async()=>{await setArchived([b.id],false);render()}]:['🗄','Archive',async()=>{await setArchived([b.id],true);render()}]);
+  if(isAdmin())it.push(['🗑','Delete bid…',()=>{M={kind:'biddel',bidId:b.id,typed:'',back:null};showModal();setTimeout(()=>document.getElementById('biddel-in')?.focus(),30)},'danger']);
+  actmOpen(e.clientX,e.clientY,it)});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset.wby!=null){S.wb.y=+t.value;render();return}
+  if(t.dataset&&t.dataset.wbpick){const b=byId(S.bids,t.value);if(!b)return;
+    if(t.dataset.wbpick==='verbal')wbStatus(b,'Awarded');
+    else wbPatch(b,{contract_date:todayStr(),contract_amount:num(b.contract_amount)??num(b.awarded_amount)??wonValue(b)??null});return}
   if(!t.dataset||!t.dataset.wbk||!t.closest('#wb-grid'))return;const b=byId(S.bids,t.dataset.id);if(b)wbSave(b,t.dataset.wbk,t.value)});
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act=wb-tab],[data-act=wb-xlsx]');if(!t)return;if(t.dataset.act==='wb-tab'){S.wb.tab=t.dataset.v;render();return}wbXlsx()});
 // the formula bar follows the selected cell; arrows and Enter move like Excel
