@@ -740,6 +740,105 @@ function pvData(){
   return {pool,base,list,inArch,est,q};
 }
 
+/* ---------- Pipeline: Workbook view. The precon tracking workbook, built from the bids: Summary, Bids Submitted, Verbal Awards, Contracts Executed.
+   Sheet tabs at the bottom, column letters and row numbers, a formula bar; the hand-kept columns can be typed in and save to the bid. ---------- */
+const WB_TABS=[['sum','Summary'],['bids','01. Bids Submitted'],['verbal','02. Verbal Awards'],['contract','03. Contracts Executed']];
+const wbCo=b=>clientName(b.awarded_client_id||propIds(b)[0])||'';
+const wbContact=b=>{const id=b.awarded_client_id||propIds(b)[0];return id?(b.client_contacts||{})[id]||'':''};
+const wbNoteAuto=b=>b.status==='Awarded'?(b.contract_date?'Awarded to Dogwood - Under Contract':'Verbal award to Dogwood'):b.status==='Not Awarded'?'Not Awarded to Dogwood'+(b.lost_reason?` (${b.lost_reason})`:''):b.status==='No Bid'?'No bid':'';
+function wbData(Y){const all=S.bids.filter(b=>!b._new&&(!scopeView()||bidVisible(b)));
+  const bids=jobsOnce(all.filter(b=>isSent(b)&&sentYear(b)===Y)).sort((a,b)=>(sentOn(a)||'').localeCompare(sentOn(b)||'')||(a.name||'').localeCompare(b.name||''));
+  const verbal=all.filter(b=>b.status==='Awarded'&&+(String(b.awarded_date||sentOn(b)||'').slice(0,4))===Y).sort((a,b)=>String(a.awarded_date||'').localeCompare(String(b.awarded_date||'')));
+  const contract=all.filter(b=>b.contract_date&&+String(b.contract_date).slice(0,4)===Y).sort((a,b)=>String(a.contract_date).localeCompare(String(b.contract_date)));
+  return {bids,verbal,contract}}
+function wbWeeks(Y){const out=[];let s=new Date(Y,0,1);while(s.getFullYear()===Y){const e=new Date(s);e.setDate(e.getDate()+(6-e.getDay()));const end=e.getFullYear()>Y?new Date(Y,11,31):e;out.push([new Date(s),end]);s=new Date(end);s.setDate(s.getDate()+1)}return out}
+const wbIso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const wbCol=i=>{let s='';i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s};
+function wbView(){const W=S.wb=S.wb||{tab:'bids',y:new Date().getFullYear()};const Y=+W.y;const D=wbData(Y);const edit=can('bids','edit');
+  const years=[...new Set(S.bids.map(b=>sentYear(b)).filter(Boolean))].sort((a,b)=>b-a);if(!years.includes(Y))years.unshift(Y);
+  const m=v=>v==null||v===''?'':money2(+v);const d=v=>v?fmtDate(v):'';
+  const cell=(v,o={})=>`<td class="${o.cls||''}"${o.f!=null?` data-f="${esc(o.f)}"`:''}${o.title?` title="${esc(o.title)}"`:''}>${v}</td>`;
+  const inp=(b,k,v,o={})=>edit?`<td class="wb-ed${o.cls?' '+o.cls:''}"><input class="wb-in${o.r?' r':''}" data-wbk="${k}" data-id="${b.id}" value="${esc(v??'')}"${o.type?` type="${o.type}"`:''}${o.ph?` placeholder="${esc(o.ph)}"`:''}${o.n?' inputmode="decimal"':''} autocomplete="off"></td>`:cell(esc(v??''),{cls:o.cls});
+  const sel=(b,k,v,opts)=>edit?`<td class="wb-ed"><select class="wb-in" data-wbk="${k}" data-id="${b.id}"><option value=""></option>${opts.map(o=>`<option${o===v||String(o)===String(v)?' selected':''}>${esc(o)}</option>`).join('')}</select></td>`:cell(esc(v??''));
+  const name=b=>`<td class="wb-name"><button class="wb-link" data-act="open-bid" data-id="${b.id}" title="Open the bid">${esc(b.name||'Untitled')}</button>${rebidOf(b)?' <span class="wb-tag" title="Latest round of a re-bid">re-bid</span>':''}</td>`;
+  const left=b=>cell(esc(wbCo(b)))+name(b)+inp(b,'contact',wbContact(b),{ph:''})+sel(b,'asset_class',b.asset_class||assetOf(b.project_type),ASSET_CLASSES)+sel(b,'project_type',normProjectType(b.project_type),PROJECT_TYPES);
+  let head,rows,foot,title;
+  if(W.tab==='bids'){title='BIDS SUBMITTED';head=['Company Name','Opportunity Name','Company Contact','Asset Class','Project Type','Likelihood to win 1-10','Due Date','Bid Amount','Submission Date','Anticipated Start Date','NOTES'];
+    rows=D.bids.map(b=>left(b)+sel(b,'likely',(b.rfq||{}).likely||'',[1,2,3,4,5,6,7,8,9,10])+cell(d(b.due_date),{cls:'c',f:b.due_date||''})+cell(m(bidValue(b)),{cls:'r',f:bidValue(b)||''})+cell(d(sentOn(b)),{cls:'c',f:sentOn(b)})
+      +inp(b,'start_date',b.start_date||'',{type:'date'})+inp(b,'wbNote',(b.rfq||{}).wbNote||'',{ph:wbNoteAuto(b),cls:'wb-note'}));
+    foot=`<td></td><td><b>${D.bids.length} bids</b></td><td></td><td></td><td></td><td></td><td></td><td class="r"><b>${m(D.bids.reduce((s,b)=>s+bidValue(b),0))}</b></td><td></td><td></td><td></td>`}
+  else if(W.tab==='verbal'){title='VERBAL AWARDS';head=['Company Name','Opportunity Name','Company Contact','Asset Class','Project Type','Est. Contract Amount','Verbal Award Date','Anticipated Start Date'];
+    rows=D.verbal.map(b=>left(b)+inp(b,'awarded_amount',b.awarded_amount??'',{n:1,r:1,ph:money2(wonValue(b)||0)})+inp(b,'awarded_date',b.awarded_date||'',{type:'date'})+inp(b,'start_date',b.start_date||'',{type:'date'}));
+    foot=`<td></td><td><b>${D.verbal.length} awards</b></td><td></td><td></td><td></td><td class="r"><b>${m(D.verbal.reduce((s,b)=>s+(num(b.awarded_amount)??wonValue(b)??0),0))}</b></td><td></td><td></td>`}
+  else if(W.tab==='contract'){title='CONTRACTS EXECUTED';head=['Company Name','Opportunity Name','Company Contact','Asset Class','Project Type','Contract Amount','Contract Date','Anticipated Start Date'];
+    rows=D.contract.map(b=>left(b)+inp(b,'contract_amount',b.contract_amount??'',{n:1,r:1})+inp(b,'contract_date',b.contract_date||'',{type:'date'})+inp(b,'start_date',b.start_date||'',{type:'date'}));
+    foot=`<td></td><td><b>${D.contract.length} contracts</b></td><td></td><td></td><td></td><td class="r"><b>${m(D.contract.reduce((s,b)=>s+(num(b.contract_amount)||0),0))}</b></td><td></td><td></td>`}
+  else{title='PIPELINE TRACKING SUMMARY';
+    head=['Week Start','Week End','Bids Submitted','Total Bid Amount','Verbal Awards','Verbal Awards Amount','Executed Contracts','Executed Contracts Amount','','Cumulative Bids Submitted','Cumulative Bid Amount','Cumulative Verbal Awards','Cumulative Verbal Award Amount','Cumulative Executed Contracts','Cumulative Executed Contract Amount','','Bids to Verbal Awards Conversion','Bids to Executed Contracts Conversion'];
+    const today=todayStr();let c=[0,0,0,0,0,0];const inW=(v,s,e)=>v&&v>=s&&v<=e;
+    rows=wbWeeks(Y).map(([s0,e0])=>{const s=wbIso(s0),e=wbIso(e0);const B=D.bids.filter(b=>inW(sentOn(b),s,e)),V=D.verbal.filter(b=>inW(b.awarded_date,s,e)),K=D.contract.filter(b=>inW(b.contract_date,s,e));
+      const w=[B.length,B.reduce((x,b)=>x+bidValue(b),0),V.length,V.reduce((x,b)=>x+(num(b.awarded_amount)??wonValue(b)??0),0),K.length,K.reduce((x,b)=>x+(num(b.contract_amount)||0),0)];c=c.map((v,i)=>v+w[i]);
+      const fut=s>today;const n=v=>v?v:'<span class="wb-z">0</span>';const mm=v=>v?money(v):'<span class="wb-z">$0</span>';
+      return `<tr class="${fut?'wb-fut':''}${today>=s&&today<=e?' wb-now':''}">`+cell(d(s),{cls:'c'})+cell(d(e),{cls:'c'})+cell(n(w[0]),{cls:'r'})+cell(mm(w[1]),{cls:'r'})+cell(n(w[2]),{cls:'r'})+cell(mm(w[3]),{cls:'r'})+cell(n(w[4]),{cls:'r'})+cell(mm(w[5]),{cls:'r'})+'<td class="wb-gap"></td>'
+        +cell(c[0],{cls:'r'})+cell(money(c[1]),{cls:'r'})+cell(c[2],{cls:'r'})+cell(money(c[3]),{cls:'r'})+cell(c[4],{cls:'r'})+cell(money(c[5]),{cls:'r'})+'<td class="wb-gap"></td>'
+        +cell(c[0]?fmtN(c[2]/c[0]*100,1)+'%':'0.0%',{cls:'r'})+cell(c[0]?fmtN(c[4]/c[0]*100,1)+'%':'0.0%',{cls:'r'})+'</tr>'});
+    foot=`<td colspan="2"><b>Total ${Y}</b></td><td class="r"><b>${c[0]}</b></td><td class="r"><b>${money(c[1])}</b></td><td class="r"><b>${c[2]}</b></td><td class="r"><b>${money(c[3])}</b></td><td class="r"><b>${c[4]}</b></td><td class="r"><b>${money(c[5])}</b></td><td class="wb-gap"></td><td colspan="6"></td><td class="wb-gap"></td><td class="r"><b>${c[0]?fmtN(c[2]/c[0]*100,1):'0.0'}%</b></td><td class="r"><b>${c[0]?fmtN(c[4]/c[0]*100,1):'0.0'}%</b></td>`}
+  const isSum=W.tab==='sum';const body=isSum?rows.map((r,i)=>r.replace('>',`><th class="wb-rn">${i+2}</th>`)).join(''):rows.map((r,i)=>`<tr><th class="wb-rn">${i+2}</th>${r}</tr>`).join('');const nCols=head.length;
+  const widths=isSum?[92,92,80,120,74,120,80,130,14,90,130,90,140,100,150,14,110,120]:W.tab==='bids'?[170,230,140,110,170,96,96,124,104,118,240]:[170,230,140,110,170,130,118,130];
+  return `<div class="wb">
+    <div class="wb-rib"><div class="wb-ttl"><b>DOGWOOD SITE CONTRACTORS, LLC</b><span>${title} · ${Y}</span></div>
+      <label class="wb-y">Year <select class="field sm" data-wby>${years.map(y=>`<option${y===Y?' selected':''}>${y}</option>`).join('')}</select></label>
+      <span class="dim small">Date: ${fmtDate(todayStr())}</span><span style="flex:1"></span>
+      <button class="btn sm primary" data-act="wb-xlsx" title="Download this workbook (all four sheets) as an Excel file">⬇ Download as Excel</button></div>
+    <div class="wb-fx"><span class="wb-ref" id="wb-ref">A1</span><span class="wb-fxi">ƒx</span><span class="wb-fxv" id="wb-fxv"></span></div>
+    <div class="wb-grid" id="wb-grid"><table class="wb-t"><colgroup><col style="width:42px">${widths.map(w=>`<col style="width:${w}px">`).join('')}</colgroup>
+      <thead><tr class="wb-letters"><th class="wb-corner"></th>${head.map((h,i)=>`<th>${wbCol(i)}</th>`).join('')}</tr>
+        <tr class="wb-head"><th class="wb-rn">1</th>${head.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>
+      <tbody>${body}</tbody><tfoot><tr><th class="wb-rn"></th>${foot}</tr></tfoot></table></div>
+    <div class="wb-tabs">${WB_TABS.map(([k,l])=>`<button class="${W.tab===k?'on':''}" data-act="wb-tab" data-v="${k}">${l}${k==='bids'?` <span>${D.bids.length}</span>`:k==='verbal'?` <span>${D.verbal.length}</span>`:k==='contract'?` <span>${D.contract.length}</span>`:''}</button>`).join('')}
+      <span class="wb-hint">${edit&&!isSum?'Type in the white cells: contact, asset class, type, likelihood, dates, amounts and notes save to the bid. Click a project to open it.':'Built from the bids. Each job counts once, at its latest proposal.'}</span></div></div>`}
+async function wbSave(b,k,v){const patch={};const val=String(v??'').trim();
+  if(k==='likely'||k==='wbNote'){const r={...(b.rfq||{})};if(val==='')delete r[k];else r[k]=k==='likely'?+val:val;patch.rfq=r}
+  else if(k==='contact'){const id=b.awarded_client_id||propIds(b)[0];if(!id){toast('Add a GC to this bid first');return}patch.client_contacts={...(b.client_contacts||{}),[id]:val}}
+  else if(k==='awarded_amount'||k==='contract_amount')patch[k]=val===''?null:num(val.replace(/[,$\s]/g,''));
+  else if(k==='project_type'){patch.project_type=val||b.project_type;patch.asset_class=assetOf(patch.project_type)}
+  else patch[k]=val||null;
+  if(k==='asset_class')patch.asset_class=val;
+  const old={};Object.keys(patch).forEach(x=>old[x]=b[x]);Object.assign(b,patch);
+  try{await run(sb.from('bids').update(patch).eq('id',b.id));}catch(e){Object.assign(b,old);toast(errMsg(e))}
+  const g=$('#wb-grid');const sc=g?[g.scrollTop,g.scrollLeft]:null;render();const g2=$('#wb-grid');if(g2&&sc){g2.scrollTop=sc[0];g2.scrollLeft=sc[1]}}
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset.wby!=null){S.wb.y=+t.value;render();return}
+  if(!t.dataset||!t.dataset.wbk||!t.closest('#wb-grid'))return;const b=byId(S.bids,t.dataset.id);if(b)wbSave(b,t.dataset.wbk,t.value)});
+document.addEventListener('click',e=>{const t=e.target.closest('[data-act=wb-tab],[data-act=wb-xlsx]');if(!t)return;if(t.dataset.act==='wb-tab'){S.wb.tab=t.dataset.v;render();return}wbXlsx()});
+// the formula bar follows the selected cell; arrows and Enter move like Excel
+document.addEventListener('focusin',e=>{const g=e.target.closest&&e.target.closest('#wb-grid');if(!g)return;const td=e.target.closest('td');if(!td)return;document.querySelectorAll('#wb-grid td.wb-sel').forEach(x=>x.classList.remove('wb-sel'));td.classList.add('wb-sel');wbFx(td)});
+document.addEventListener('click',e=>{const td=e.target.closest&&e.target.closest('#wb-grid td');if(!td)return;document.querySelectorAll('#wb-grid td.wb-sel').forEach(x=>x.classList.remove('wb-sel'));td.classList.add('wb-sel');wbFx(td)});
+function wbFx(td){const tr=td.parentElement;const ci=[...tr.children].indexOf(td)-1;const ri=[...tr.parentElement.children].indexOf(tr)+2;const ref=$('#wb-ref'),fx=$('#wb-fxv');if(ref)ref.textContent=wbCol(ci)+ri;
+  const inp=td.querySelector('input,select');if(fx)fx.textContent=inp?(inp.tagName==='SELECT'?inp.value:inp.value||inp.placeholder||''):(td.dataset.f!=null&&td.dataset.f!==''?td.dataset.f:td.textContent.trim())}
+document.addEventListener('keydown',e=>{const t=e.target;if(!t.classList||!t.classList.contains('wb-in'))return;const td=t.closest('td'),tr=td.parentElement;const ci=[...tr.children].indexOf(td);
+  const go=(dr,dc)=>{let r=tr,c=ci;for(let k=0;k<200;k++){if(dr)r=dr>0?r.nextElementSibling:r.previousElementSibling;if(!r)return;c=dc?c+dc:c;const x=r.children[c];if(!x)return;const i=x.querySelector('.wb-in');if(i){e.preventDefault();i.focus();if(i.select)i.select();return}if(!dr&&!dc)return}};
+  if(e.key==='Enter'||(e.key==='ArrowDown'&&t.tagName!=='SELECT')){go(e.shiftKey?-1:1,0);return}
+  if(e.key==='ArrowUp'&&t.tagName!=='SELECT'){go(-1,0);return}
+  if(e.key==='Escape'){t.value=t.defaultValue;t.blur()}},true);
+async function wbXlsx(){let X;try{X=await loadXLSX()}catch(e){toast(e.message);return}const Y=+S.wb.y;const D=wbData(Y);
+  const top=t=>[['DOGWOOD SITE CONTRACTORS, LLC'],[t],[],['Date:',todayStr()],[]];
+  const L=b=>[wbCo(b),b.name||'',wbContact(b),b.asset_class||assetOf(b.project_type),normProjectType(b.project_type)];
+  const bidsA=[...top('BIDS SUBMITTED'),['Company Name','Opportunity Name','Company Contact','Asset Class','Project Type','Likelihood to win 1-10','Due Date','Bid Amount','Submission Date','Anticipated Start Date','NOTES'],
+    ...D.bids.map(b=>[...L(b),(b.rfq||{}).likely||'',b.due_date||'',bidValue(b)||0,sentOn(b)||'',b.start_date||'',(b.rfq||{}).wbNote||wbNoteAuto(b)])];
+  const vA=[...top('VERBAL AWARDS'),['Company Name','Opportunity Name','Company Contact','Asset Class','Project Type','Est. Contract Amount','Verbal Award Date','Anticipated Start Date'],...D.verbal.map(b=>[...L(b),num(b.awarded_amount)??wonValue(b)??0,b.awarded_date||'',b.start_date||''])];
+  const cA=[...top('CONTRACTS EXECUTED'),['Company Name','Opportunity Name','Company Contact','Asset Class','Project Type','Contract Amount','Contract Date','Anticipated Start Date'],...D.contract.map(b=>[...L(b),num(b.contract_amount)||0,b.contract_date||'',b.start_date||''])];
+  const sA=[...top('PIPELINE TRACKING SUMMARY'),['Week Start','Week End','Bids Submitted','Total Bid Amount','Verbal Awards','Verbal Awards Amount','Executed Contracts','Executed Contracts Amount','','Cumulative Bids Submitted','Cumulative Bid Amount','Cumulative Verbal Awards','Cumulative Verbal Award Amount','Cumulative Executed Contracts','Cumulative Executed Contract Amount','','Bids to Verbal Awards Conversion','Bids to Executed Contracts Conversion']];
+  let c=[0,0,0,0,0,0];const inW=(v,s,e)=>v&&v>=s&&v<=e;
+  wbWeeks(Y).forEach(([s0,e0])=>{const s=wbIso(s0),e=wbIso(e0);const B=D.bids.filter(b=>inW(sentOn(b),s,e)),V=D.verbal.filter(b=>inW(b.awarded_date,s,e)),K=D.contract.filter(b=>inW(b.contract_date,s,e));
+    const w=[B.length,B.reduce((x,b)=>x+bidValue(b),0),V.length,V.reduce((x,b)=>x+(num(b.awarded_amount)??wonValue(b)??0),0),K.length,K.reduce((x,b)=>x+(num(b.contract_amount)||0),0)];c=c.map((v,i)=>v+w[i]);
+    sA.push([s,e,...w,'',...c,'',c[0]?c[2]/c[0]:0,c[0]?c[4]/c[0]:0])});
+  const wb=X.utils.book_new();const add=(rows,name,money,dates,pct)=>{const ws=X.utils.aoa_to_sheet(rows);const R=X.utils.decode_range(ws['!ref']);
+    for(let r=6;r<=R.e.r;r++)for(let ci=0;ci<=R.e.c;ci++){const a=X.utils.encode_cell({r,c:ci});const v=ws[a];if(!v)continue;if(money.includes(ci)&&typeof v.v==='number')v.z='$#,##0.00';if(pct&&pct.includes(ci)&&typeof v.v==='number')v.z='0.0%';
+      if(dates.includes(ci)&&typeof v.v==='string'&&/^\d{4}-\d\d-\d\d$/.test(v.v)){const [yy,mo,dd]=v.v.split('-').map(Number);ws[a]={t:'n',v:(Date.UTC(yy,mo-1,dd)-Date.UTC(1899,11,30))/864e5,z:'m/d/yyyy'}}}
+    ws['!cols']=rows[5].map((h,i)=>({wch:Math.max(10,Math.min(42,String(h||'').length+4,...rows.slice(6,200).map(r=>String(r[i]??'').length+2)))}));X.utils.book_append_sheet(wb,ws,name)};
+  add(sA,'Summary',[3,5,7,10,12,14],[0,1],[16,17]);add(bidsA,'01. Bids Submitted',[7],[6,8,9]);add(vA,'02. Verbal Awards',[5],[6,7]);add(cA,'03. Contracts Executed',[5],[6,7]);
+  X.writeFile(wb,`Dogwood Site Contractors - Pipeline Tracking ${todayStr()}.xlsx`);toast('Workbook downloaded')}
+
 function vPipeline(){
   const {pool,base,list,inArch,est,q}=pvData();const pv=S.pv;
   S.shownIds=list.map(b=>b.id);
@@ -758,9 +857,10 @@ function vPipeline(){
   const ICON={cards:'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="9" y="1.5" width="5.5" height="5.5" rx="1"/><rect x="1.5" y="9" width="5.5" height="5.5" rx="1"/><rect x="9" y="9" width="5.5" height="5.5" rx="1"/></svg>',
     list:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3.5h12M2 8h12M2 12.5h12"/></svg>',
     calendar:'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="12" rx="1.5"/><path d="M1.5 6.5h13M5 1v3M11 1v3"/></svg>',
-    map:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14.5s-4.5-4.2-4.5-7.7a4.5 4.5 0 0 1 9 0c0 3.5-4.5 7.7-4.5 7.7z"/><circle cx="8" cy="6.8" r="1.6"/></svg>'};
-  const body=!list.length&&pv.mode!=='calendar'?`<div class="panel"><div class="empty"><b>No bids match</b>${pool.length?(q||nf||S.filter!=='active'?`Try a different search or filter. <button class="linkbtn" data-act="pv-reset">Clear search and filters</button>`:'Nothing active right now.'):est?'Bids assigned to you will appear here.':'Create your first bid to fill the pipeline.'}</div></div>`
-    :pv.mode==='list'?listView(list):pv.mode==='calendar'?calendarView(list):pv.mode==='map'?bmView(list):`<div class="cards${S.selMode?' selecting':''}">${list.map(card).join('')}</div>`;
+    map:'<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 14.5s-4.5-4.2-4.5-7.7a4.5 4.5 0 0 1 9 0c0 3.5-4.5 7.7-4.5 7.7z"/><circle cx="8" cy="6.8" r="1.6"/></svg>',
+    sheet:'<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="1.5" y="2" width="13" height="12" rx="1"/><path d="M1.5 6h13M1.5 10h13M6 2v12"/></svg>'};
+  const body=!list.length&&pv.mode!=='calendar'&&pv.mode!=='sheet'?`<div class="panel"><div class="empty"><b>No bids match</b>${pool.length?(q||nf||S.filter!=='active'?`Try a different search or filter. <button class="linkbtn" data-act="pv-reset">Clear search and filters</button>`:'Nothing active right now.'):est?'Bids assigned to you will appear here.':'Create your first bid to fill the pipeline.'}</div></div>`
+    :pv.mode==='sheet'?wbView():pv.mode==='list'?listView(list):pv.mode==='calendar'?calendarView(list):pv.mode==='map'?bmView(list):`<div class="cards${S.selMode?' selecting':''}">${list.map(card).join('')}</div>`;
   return `<div class="head"><div><h1>${est?'My bids':'Pipeline'}</h1><p>${pool.filter(live).length} bid${pool.filter(live).length===1?'':'s'}${est?' assigned to you':' on file'}</p></div><div class="tools">${mineSeg()}${est||scopeView()?'':'<button class="btn" data-act="export-xlsx">Export Excel</button><button class="btn ghost" data-act="export">CSV</button>'}${isAdmin()?`<button class="btn" data-act="arch-open" title="Archive old or filler bids in one go: all of them, an Excel import, everything due before a date…">🗄 Archive…</button><button class="btn${S.selMode?' primary':''}" data-act="sel-mode">${S.selMode?'Selecting…':'Select'}</button>`:''}${can('bids','view')&&role()!=='board'?`<button class="btn ai-btn" data-act="ai-rate-open" title="Grade an invite go / no-go against our history and rules">${aiOn()?'✨ ':''}Rate project</button>`:''}${isAdmin()?'<button class="btn" data-act="import">Import from Excel</button><button class="btn primary" data-act="new-bid">+ New bid</button>':''}</div></div>
   <div class="bar">${FILTERS.map(([k,l,fn])=>`<button class="chip ${S.filter===k?'on':''}" data-act="filter" data-v="${k}">${l}<b>${base.filter(b=>live(b)&&fn(b)).length}</b></button>`).join('')}${base.some(b=>b.archived_at)||inArch?`<button class="chip ${inArch?'on':''}" data-act="filter" data-v="archived">🗄 Archived<b>${base.filter(b=>b.archived_at).length}</b></button>`:''}${inArch?(()=>{const A=base.filter(b=>b.archived_at);const ys=[...new Set(A.map(yearOf))].sort((a,b)=>b-a);
     return `<span class="ar-f"><select class="field sm" data-arf="arYear"><option value="">All years</option>${ys.map(y=>`<option value="${y}"${String(S.arYear||'')===String(y)?' selected':''}>${y} (${A.filter(b=>yearOf(b)===y).length})</option>`).join('')}</select>
@@ -769,11 +869,11 @@ function vPipeline(){
     <div class="pv-search"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><input id="q-pipe" class="field" placeholder="Search projects, GCs, estimators, scopes, vendors, notes…" value="${esc(S.q.pipe||'')}" data-q="pipe" aria-label="Search bids">${S.q.pipe?'<button class="rm" data-act="pv-clearq" aria-label="Clear search">×</button>':'<kbd>/</kbd>'}</div>
     <button class="btn${pv.open||nf?' on-soft':''}" data-act="pv-filters" aria-expanded="${pv.open}"><svg class="ic" viewBox="0 0 16 16" aria-hidden="true"><path d="M2 3h12l-4.5 5.5V13l-3 1.5V8.5z"/></svg>Filters${nf?` <span class="count">${nf}</span>`:''}</button>
     ${pv.mode!=='calendar'?`<label class="pv-sort"><span class="dim small">Sort</span><select class="field" data-act="pv-sortsel" aria-label="Sort by">${SORTS.map(([k,l])=>`<option value="${k}"${pv.sort===k?' selected':''}>${l}</option>`).join('')}</select><button class="btn sm ghost" data-act="pv-dir" title="Reverse order" aria-label="Reverse order">${(pv.dir||'asc')==='desc'?'↓':'↑'}</button></label>`:''}
-    <div class="vseg" role="tablist" aria-label="View">${[['cards','Cards'],['list','List'],['calendar','Calendar'],['map','Map']].map(([k,l])=>`<button role="tab" aria-selected="${pv.mode===k}" class="${pv.mode===k?'on':''}" data-act="pv-mode" data-v="${k}" title="${l} view">${ICON[k]}<span>${l}</span></button>`).join('')}</div>
+    <div class="vseg" role="tablist" aria-label="View">${[['cards','Cards'],['list','List'],['calendar','Calendar'],['map','Map'],['sheet','Workbook']].map(([k,l])=>`<button role="tab" aria-selected="${pv.mode===k}" class="${pv.mode===k?'on':''}" data-act="pv-mode" data-v="${k}" title="${l} view">${ICON[k]}<span>${l}</span></button>`).join('')}</div>
   </div>
   ${pv.open?filterPanel(est):''}
   ${nf?`<div class="pv-pills">${activePills()}<button class="linkbtn" data-act="pv-clearf">Clear all filters</button></div>`:''}
-  ${pv.mode!=='calendar'?`<div class="pv-summary">Showing <b>${list.length}</b> of ${inArch?pool.filter(b=>b.archived_at).length:pool.filter(live).length} bid${list.length===1?'':'s'}${total?` · <b>${moneyK(total)}</b> total value`:''}${q?` · matching “${esc(S.q.pipe.trim())}”`:''}</div>`:''}
+  ${pv.mode!=='calendar'&&pv.mode!=='sheet'?`<div class="pv-summary">Showing <b>${list.length}</b> of ${inArch?pool.filter(b=>b.archived_at).length:pool.filter(live).length} bid${list.length===1?'':'s'}${total?` · <b>${moneyK(total)}</b> total value`:''}${q?` · matching “${esc(S.q.pipe.trim())}”`:''}</div>`:''}
   ${inArch&&isAdmin()?archBatches(pool):''}
   ${S.selMode&&pv.mode!=='calendar'?'<div class="notice">Click bids to select them, then archive or delete. Archived bids leave your pipeline and dashboard but keep all their history — find them under <b>Archived</b> to restore. Use the filters and search to narrow down first.</div>':''}
   ${body}${pv.mode!=='calendar'?selBar:''}`;
