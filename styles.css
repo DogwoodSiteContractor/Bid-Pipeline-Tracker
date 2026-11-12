@@ -3209,3 +3209,26 @@ input.uncommitted{border-color:var(--warn,#d9a441)!important;box-shadow:0 0 0 2p
 .wb-t td.wb-fp{box-shadow:inset 0 0 0 1px #217346;background:color-mix(in srgb,#217346 6%,var(--surface))!important;outline:1px dashed #217346;outline-offset:-3px}
 #wb-fill{position:absolute;width:8px;height:8px;background:#217346;border:1px solid #fff;cursor:crosshair;z-index:6}
 .wb-drag,.wb-drag *{user-select:none!important;cursor:crosshair}.wb-drag .wb-in{pointer-events:none}
+
+/* estimate sheet in the Excel look */
+.xl-frame{border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--surface)}
+.xl-frame .sh-wrap{border:0;border-radius:0;margin:0;position:relative;max-height:calc(100vh - 320px)}
+.sh-wrap.xl .sh-t{font-family:Calibri,Carlito,'Segoe UI',Arial,sans-serif;font-size:13px}
+.sh-wrap.xl .sh-t td{border-bottom:1px solid color-mix(in srgb,var(--border) 75%,transparent);border-right:1px solid color-mix(in srgb,var(--border) 75%,transparent);height:24px}
+.sh-wrap.xl .sh-in{height:24px}
+.sh-wrap.xl .xl-letters th{top:0;height:22px;padding:2px 4px;background:var(--surface-2);font-weight:400;text-align:center;font-size:12px}
+.sh-wrap.xl .xl-head th{top:23px;background:#4C7E5B;color:#fff;font-weight:700;border-right-color:rgba(255,255,255,.25)}
+.sh-wrap.xl th.sh-rn,.sh-wrap.xl .sh-t td:nth-child(1){position:sticky;left:0;z-index:4;background:var(--surface-2)!important;color:var(--muted,#888)!important;text-align:center;font-weight:400!important;font-size:11.5px;border-right:1px solid var(--border)}
+.sh-wrap.xl .xl-head th.sh-rn{background:var(--surface-2)!important;z-index:5}.sh-wrap.xl .xl-letters th.sh-rn{z-index:5}
+.sh-wrap.xl .sh-t th:nth-child(2),.sh-wrap.xl .sh-t td:nth-child(2){position:sticky;left:42px;z-index:2;border-right:1px solid var(--border)}
+.sh-wrap.xl .sh-t th:nth-child(3),.sh-wrap.xl .sh-t td:nth-child(3){position:sticky;left:132px;z-index:2;border-right:2px solid var(--border)}
+.sh-wrap.xl thead th:nth-child(2),.sh-wrap.xl thead th:nth-child(3){z-index:4}
+.sh-wrap.xl .sh-t tbody th.sh-rn{position:sticky;left:0;z-index:3;border-bottom:1px solid color-mix(in srgb,var(--border) 75%,transparent)}
+.sh-wrap.xl tfoot th.sh-rn{position:sticky;bottom:0;left:0;z-index:4}
+.sh-wrap.xl .sh-in:focus{box-shadow:inset 0 0 0 2px #217346}
+.sh-wrap.xl .sh-r-sec td{background:color-mix(in srgb,#217346 16%,var(--surface))}
+.sh-wrap.xl .sh-r-item td{background:color-mix(in srgb,#217346 6%,var(--surface))}
+.sh-t td.xs-rng{background:color-mix(in srgb,#217346 14%,var(--surface))!important;box-shadow:inset 0 0 0 1px color-mix(in srgb,#217346 45%,transparent)}
+.sh-t td.xs-fp{outline:1px dashed #217346;outline-offset:-3px;background:color-mix(in srgb,#217346 6%,var(--surface))!important}
+#xs-fill{position:absolute;width:8px;height:8px;background:#217346;border:1px solid #fff;cursor:crosshair;z-index:7}
+.xs-drag,.xs-drag *{user-select:none!important;cursor:crosshair}.xs-drag .sh-in{pointer-events:none}

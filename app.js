@@ -924,7 +924,7 @@ document.addEventListener('change',e=>{const t=e.target;if(t.dataset.wby!=null){
   if(!t.dataset||!t.dataset.wbk||!t.closest('#wb-grid'))return;const b=byId(S.bids,t.dataset.id);if(b)wbSave(b,t.dataset.wbk,t.value)});
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act=wb-tab],[data-act=wb-xlsx]');if(!t)return;if(t.dataset.act==='wb-tab'){S.wb.tab=t.dataset.v;render();return}wbXlsx()});
 // the formula bar follows the selected cell; arrows and Enter move like Excel
-document.addEventListener('focusin',e=>{const g=e.target.closest&&e.target.closest('#wb-grid');if(!g)return;const td=e.target.closest('td');if(!td)return;document.querySelectorAll('#wb-grid td.wb-sel').forEach(x=>x.classList.remove('wb-sel'));td.classList.add('wb-sel');wbFx(td)});
+document.addEventListener('focusin',e=>{const g=e.target.closest&&e.target.closest('#wb-grid');if(!g)return;const td=e.target.closest('td');if(!td)return;if(!WBR.drag&&!WBR.fill){const p=wbPos(td);if(p&&(!WBR.a||!wbMulti()||!(WBR.a.r===p.r&&WBR.a.c===p.c))){if(!wbMulti()||!document.querySelector('#wb-grid .wb-rng')?.contains(td)){WBR.a=WBR.b=p;wbPaint()}}}document.querySelectorAll('#wb-grid td.wb-sel').forEach(x=>x.classList.remove('wb-sel'));td.classList.add('wb-sel');wbFx(td)});
 document.addEventListener('click',e=>{const td=e.target.closest&&e.target.closest('#wb-grid td');if(!td)return;document.querySelectorAll('#wb-grid td.wb-sel').forEach(x=>x.classList.remove('wb-sel'));td.classList.add('wb-sel');wbFx(td)});
 function wbFx(td){const tr=td.parentElement;const ci=[...tr.children].indexOf(td)-1;const ri=[...tr.parentElement.children].indexOf(tr)+2;const ref=$('#wb-ref'),fx=$('#wb-fxv');if(ref)ref.textContent=wbCol(ci)+ri;
   const inp=td.querySelector('input,select');if(fx)fx.textContent=inp?(inp.tagName==='SELECT'?inp.value:inp.value||inp.placeholder||''):(td.dataset.f!=null&&td.dataset.f!==''?td.dataset.f:td.textContent.trim())}
@@ -6482,6 +6482,7 @@ function shCbFromLabel(book,v){const s=String(v||'').trim();if(!s)return null;co
   return L.find(x=>((x.code?x.code+' · ':'')+x.description).toLowerCase()===k)||L.find(x=>x.code&&x.code.toLowerCase()===k)||L.find(x=>x.description.toLowerCase()===k)||null}
 function estSheetView(d,R,ro){const E=S.est;const hide=shHidden();const cols=SH_COLS.filter(c=>SH_LOCK.includes(c[0])||!hide.has(c[0]));const crews=cbList('crew').filter(x=>x.active!==false).sort((a,b)=>a.description.localeCompare(b.description));
   const hpd=num(R.ctx.hpd)||10;const f=v=>v==null||v===''?'':String(+(+v).toFixed(4));const m=v=>v?money2(v):'';const dis=ro?' disabled':'';let rn=0;const rows=[];
+  E.shRef=d;E.shSnap=JSON.stringify(d); // the state on screen, for Ctrl+Z
   const inp=(row,col,val,o={})=>`<input class="sh-in${o.cls?' '+o.cls:''}" data-sh="${col}" data-rw="${row}" value="${esc(val??'')}"${o.ph!=null?` placeholder="${esc(o.ph)}"`:''}${o.list?` list="${o.list}"`:''}${o.n?' inputmode="decimal"':''}${o.title?` title="${esc(o.title)}"`:''}${dis} autocomplete="off" spellcheck="false">`;
   const cell=(k,html,cls='')=>`<td class="sh-${k}${cls?' '+cls:''}">${html}</td>`;
   const secT=new Map();d.items.forEach((it,i)=>{if(it.alt)return;const x=R.items[i];const t=secT.get(it.sec)||{c:{labor:0,equipment:0,material:0,sub:0,other:0},cost:0,bt:0,hrs:0};
@@ -6517,10 +6518,12 @@ function estSheetView(d,R,ro){const E=S.est;const hide=shHidden();const cols=SH_
       if(!ro)rows.push(`<tr class="sh-r-add" data-shrow="na:${i}"><td></td><td class="sh-ind" colspan="${cols.length-1}">${inp(`na:${i}`,'newact','',{ph:'+ type a new activity…'})}</td></tr>`)});
     if(!ro)rows.push(`<tr class="sh-r-add" data-shrow="ni:${k}"><td></td><td colspan="${cols.length-1}">${inp(`ni:${k}`,'newitem','',{ph:'+ type a new bid item…',cls:'b'})}</td></tr>`)});
   const colMenu=`<details class="sh-cols"><summary class="btn sm ghost">Columns ▾</summary><div class="sh-colsp">${SH_COLS.filter(c=>!SH_LOCK.includes(c[0])).map(([k,l])=>`<label><input type="checkbox" data-shcol="${k}"${hide.has(k)?'':' checked'}> ${l}</label>`).join('')}</div></details>`;
-  return `${shLists()}<div class="sh-bar"><span class="dim small">Type in any cell. Enter or ↑↓ to move, Tab to go right, <b>Ctrl+D</b> fills down from above, paste a block from Excel to fill several cells. Right-click a row for more.</span>${colMenu}</div>
-    <div class="panel sh-wrap" id="sh-wrap"><table class="sh-t"><colgroup>${cols.map(c=>`<col style="width:${c[2]}px">`).join('')}</colgroup>
-      <thead><tr>${cols.map(([k,l])=>`<th class="sh-${k}${['qty','ph','pd','hrs','matp','subp','lab','eq','matc','subc','oth','cost','cu','up','bt'].includes(k)?' r':''}">${l}</th>`).join('')}</tr></thead><tbody>${rows.join('')}</tbody>
-      <tfoot><tr>${cols.map(([c])=>c==='desc'?'<td><b>Base bid</b></td>':c==='cost'?`<td class="r num"><b>${money2(R.cost)}</b></td>`:c==='bt'?`<td class="r num"><b>${money2(R.gross)}</b></td>`:c==='hrs'?`<td class="r num">${fmtN(R.items.reduce((s,x,i)=>s+(d.items[i].alt?0:x.acts.reduce((a,b)=>a+b.hrs,0)),0),1)}</td>`:'<td></td>').join('')}</tr></tfoot></table></div>`}
+  let rno=1;const body=rows.map(r=>{const add=r.startsWith('<tr class="sh-r-add"');return r.replace(/^(<tr[^>]*>)/,`$1<th class="sh-rn">${add?'+':++rno}</th>`)}).join('');
+  return `${shLists()}<div class="sh-bar"><span class="dim small">Click and drag to select, drag the green corner to copy down, <b>Ctrl+C / Ctrl+V</b> to and from Excel, <b>Ctrl+D</b> fills down, <b>Delete</b> clears, <b>Ctrl+Z</b> undoes. Right-click a row for more.</span>${colMenu}</div>
+    <div class="xl-frame"><div class="wb-fx"><span class="wb-ref" id="sh-ref">A1</span><span class="wb-fxi">ƒx</span><span class="wb-fxv" id="sh-fxv"></span></div>
+    <div class="panel sh-wrap xl" id="sh-wrap"><table class="sh-t"><colgroup><col style="width:42px">${cols.map(c=>`<col style="width:${c[2]}px">`).join('')}</colgroup>
+      <thead><tr class="xl-letters"><th class="sh-rn"></th>${cols.map((c,i)=>`<th>${wbCol(i)}</th>`).join('')}</tr><tr class="xl-head"><th class="sh-rn">1</th>${cols.map(([k,l])=>`<th class="sh-${k}${['qty','ph','pd','hrs','matp','subp','lab','eq','matc','subc','oth','cost','cu','up','bt'].includes(k)?' r':''}">${l}</th>`).join('')}</tr></thead><tbody>${body}</tbody>
+      <tfoot><tr><th class="sh-rn"></th>${cols.map(([c])=>c==='desc'?'<td><b>Base bid</b></td>':c==='cost'?`<td class="r num"><b>${money2(R.cost)}</b></td>`:c==='bt'?`<td class="r num"><b>${money2(R.gross)}</b></td>`:c==='hrs'?`<td class="r num">${fmtN(R.items.reduce((s,x,i)=>s+(d.items[i].alt?0:x.acts.reduce((a,b)=>a+b.hrs,0)),0),1)}</td>`:'<td></td>').join('')}</tr></tfoot></table></div></div>`}
 // write one cell's value into the estimate (no redraw); returns false when nothing changed
 function shApply(rw,col,val){const d=S.est.data;const p=rw.split(':');const v=String(val??'').trim();const n=v===''?null:num(v.replace(/[,$\s]/g,''));
   if(p[0]==='s'){const s=d.sections[+p[1]];if(!s)return false;if(col==='code')s.code=v;else if(col==='desc')s.name=v;else return false;return true}
@@ -6544,8 +6547,9 @@ function shApply(rw,col,val){const d=S.est.data;const p=rw.split(':');const v=St
   return true}
 function shCells(){return [...document.querySelectorAll('#sh-wrap [data-sh]')]}
 function shKey(el){return el.dataset.rw+'|'+el.dataset.sh}
-function shRedraw(focusKey){const w=$('#sh-wrap');const sc=w?[w.scrollTop,w.scrollLeft]:null;if(focusKey)S.est.shFocus=focusKey;estTouch();render();
-  const w2=$('#sh-wrap');if(w2&&sc){w2.scrollTop=sc[0];w2.scrollLeft=sc[1]}const k=S.est.shFocus;S.est.shFocus=null;if(k){const [rw,c]=k.split('|');const el=document.querySelector(`#sh-wrap [data-rw="${rw}"][data-sh="${c}"]`)||document.querySelector(`#sh-wrap [data-rw="${rw}"][data-sh]`);if(el){el.focus({preventScroll:false});if(el.select&&el.tagName==='INPUT')el.select()}}}
+function shRedraw(focusKey){const E=S.est;if(E&&E.shSnap&&E.shRef===E.data){const now=JSON.stringify(E.data);if(now!==E.shSnap){(E.shUndo=E.shUndo||[]).push(E.shSnap);if(E.shUndo.length>40)E.shUndo.shift()}}
+  const w=$('#sh-wrap');const sc=w?[w.scrollTop,w.scrollLeft]:null;if(focusKey)S.est.shFocus=focusKey;estTouch();render();
+  const w2=$('#sh-wrap');if(w2&&sc){w2.scrollTop=sc[0];w2.scrollLeft=sc[1]}const k=S.est.shFocus;S.est.shFocus=null;if(k){const [rw,c]=k.split('|');const el=document.querySelector(`#sh-wrap [data-rw="${rw}"][data-sh="${c}"]`)||document.querySelector(`#sh-wrap [data-rw="${rw}"][data-sh]`);if(el){el.focus({preventScroll:false});if(el.select&&el.tagName==='INPUT')el.select()}}xsPaint()}
 // the cell next to this one in a direction (rows by order on screen, columns by header order)
 function shMove(el,dr,dc){const C=SH_COLS.map(c=>c[0]);const rowsEls=[...document.querySelectorAll('#sh-wrap tbody tr')];let ri=rowsEls.indexOf(el.closest('tr'));const ci=C.indexOf(el.dataset.sh);
   if(dc){const inRow=[...rowsEls[ri].querySelectorAll('[data-sh]')];const k=inRow.indexOf(el)+dc;return inRow[k]||null}
@@ -6562,12 +6566,66 @@ document.addEventListener('keydown',e=>{const t=e.target;if(!t.dataset||!t.datas
   if(e.key==='ArrowRight'&&(!isIn||t.selectionStart===t.value.length&&t.selectionEnd===t.value.length)){go(shMove(t,0,1));return}
   if(e.key==='ArrowLeft'&&(!isIn||t.selectionStart===0&&t.selectionEnd===0)){go(shMove(t,0,-1));return}
   if(e.key==='Escape'&&isIn){t.value=t.defaultValue;t.blur();return}
-  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){e.preventDefault();const up=shMove(t,-1,0);if(!up)return;t.value=up.value;if(t.tagName==='SELECT')t.value=up.value;t.dispatchEvent(new Event('change',{bubbles:true}))}},true);
-document.addEventListener('paste',e=>{const t=e.target;if(!t.dataset||!t.dataset.sh||!t.closest('#sh-wrap')||EC().ro)return;const txt=(e.clipboardData||window.clipboardData).getData('text');if(!/[\t\n]/.test(txt.replace(/\n$/,'')))return;
-  e.preventDefault();const grid=txt.replace(/\r/g,'').replace(/\n$/,'').split('\n').map(l=>l.split('\t'));let n=0;let rowEl=t;
-  // gather the targets first: rows go down the same column, columns go right in each row
-  const targets=[];for(const line of grid){if(!rowEl)break;let c=rowEl;for(const v of line){if(!c)break;targets.push([c.dataset.rw,c.dataset.sh,v]);c=shMove(c,0,1)}rowEl=shMove(rowEl,1,0)}
-  targets.forEach(([rw,c,v])=>{if(shApply(rw,c,v))n++});if(n){shRedraw(shKey(t));toast(`Pasted into ${n} cell${n===1?'':'s'}`)}});
+  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='d'){e.preventDefault();if(xsMulti()){xsFillDown();return}const up=shMove(t,-1,0);if(!up)return;t.value=up.value;if(t.tagName==='SELECT')t.value=up.value;t.dispatchEvent(new Event('change',{bubbles:true}))}},true);
+// ---- Excel-style range select, fill handle, copy/paste, delete, undo on the estimate sheet ----
+const XS={a:null,b:null,drag:0,fill:null};
+const xsRows=()=>[...document.querySelectorAll('#sh-wrap tbody tr')];
+function xsPos(td){const tr=td&&td.closest('#sh-wrap tbody tr');if(!tr||td.tagName!=='TD')return null;return {r:xsRows().indexOf(tr),c:[...tr.children].indexOf(td)}}
+function xsBox(){if(!XS.a)return null;const b=XS.b||XS.a;return {r0:Math.min(XS.a.r,b.r),r1:Math.max(XS.a.r,b.r),c0:Math.min(XS.a.c,b.c),c1:Math.max(XS.a.c,b.c)}}
+const xsMulti=()=>{const B=xsBox();return !!B&&(B.r0!==B.r1||B.c0!==B.c1)};
+const xsCell=(r,c)=>{const tr=xsRows()[r];return tr?tr.children[c]:null};
+const xsIn=td=>{const i=td&&td.querySelector('[data-sh]');return i&&!i.disabled&&!['newact','newitem'].includes(i.dataset.sh)?i:null};
+function xsText(td){if(!td)return '';const i=td.querySelector('input,select');if(i)return i.tagName==='SELECT'?(i.value?i.selectedOptions[0]?.text||'':''):i.value;return td.textContent.trim()}
+function xsNorm(i,v){v=String(v??'').trim();if(i.tagName!=='SELECT')return v;if(v==='')return '';const o=[...i.options].find(o=>o.value===v||o.text.toLowerCase()===v.toLowerCase());return o?o.value:null}
+function xsPaint(prev){const g=$('#sh-wrap');if(!g)return;g.querySelectorAll('.xs-rng,.xs-fp').forEach(x=>x.classList.remove('xs-rng','xs-fp'));g.querySelector('#xs-fill')?.remove();
+  const B=xsBox();if(!B)return;const n=xsRows().length;if(B.r1>=n){XS.a=XS.b=null;return}
+  for(let r=B.r0;r<=B.r1;r++)for(let c=B.c0;c<=B.c1;c++)xsCell(r,c)?.classList.add('xs-rng');
+  if(prev)for(let r=prev[0];r<=prev[1];r++)for(let c=B.c0;c<=B.c1;c++)xsCell(r,c)?.classList.add('xs-fp');
+  if(EC().ro)return;const last=xsCell(B.r1,B.c1);if(!last)return;const gr=g.getBoundingClientRect(),cr=last.getBoundingClientRect();
+  const h=document.createElement('div');h.id='xs-fill';h.title='Drag to copy into the cells below (or above)';h.style.left=(cr.right-gr.left+g.scrollLeft-4)+'px';h.style.top=(cr.bottom-gr.top+g.scrollTop-4)+'px';g.appendChild(h);
+  xsFx()}
+function xsFx(){const B=xsBox();const ref=$('#sh-ref'),fx=$('#sh-fxv');if(!B||!ref)return;const rn=r=>{const th=xsRows()[r]?.querySelector('.sh-rn');return th?th.textContent:''};
+  ref.textContent=xsMulti()?`${wbCol(B.c0-1)}${rn(B.r0)}:${wbCol(B.c1-1)}${rn(B.r1)}`:`${wbCol(B.c0-1)}${rn(B.r0)}`;if(fx){const td=xsCell(B.r0,B.c0);const i=td&&td.querySelector('input');fx.textContent=i&&!i.value?(i.placeholder||''):xsText(td)}}
+// write many cells at once, one redraw (and one Ctrl+Z step)
+function xsApply(list){let n=0;for(const [i,v] of list){const x=xsNorm(i,v);if(x==null||x===(i.value??''))continue;if(shApply(i.dataset.rw,i.dataset.sh,x))n++}
+  if(n){const B=xsBox();const a=B&&xsIn(xsCell(B.r0,B.c0));shRedraw(a?shKey(a):null);toast(`${n} cell${n===1?'':'s'} updated · Ctrl+Z to undo`)}return n}
+function xsFillTo(r){const B=xsBox();if(!B)return;const out=[];const len=B.r1-B.r0+1;
+  const rows=r>B.r1?[...Array(r-B.r1)].map((_,i)=>B.r1+1+i):r<B.r0?[...Array(B.r0-r)].map((_,i)=>r+i):[];
+  rows.forEach(rr=>{for(let c=B.c0;c<=B.c1;c++){const i=xsIn(xsCell(rr,c));if(!i)continue;const off=((rr-B.r0)%len+len)%len;const src=xsCell(B.r0+off,c);const si=src&&src.querySelector('input,select');if(!si)continue;out.push([i,si.value])}});
+  if(rows.length){XS.a={r:Math.min(B.r0,r),c:B.c0};XS.b={r:Math.max(B.r1,r),c:B.c1}}
+  if(!xsApply(out))xsPaint()}
+function xsFillDown(){const B=xsBox();if(!B||B.r0===B.r1)return;const out=[];for(let r=B.r0+1;r<=B.r1;r++)for(let c=B.c0;c<=B.c1;c++){const i=xsIn(xsCell(r,c));const si=xsCell(B.r0,c)?.querySelector('input,select');if(i&&si)out.push([i,si.value])}xsApply(out)}
+document.addEventListener('mousedown',e=>{if(e.button!==0)return;const g=e.target.closest&&e.target.closest('#sh-wrap');if(!g)return;
+  if(e.target.id==='xs-fill'){e.preventDefault();XS.fill={to:null};g.classList.add('xs-drag');return}
+  const td=e.target.closest('td');const p=xsPos(td);if(!p)return;if(e.target.closest('button,select')){XS.a=XS.b=p;xsPaint();return}
+  if(e.shiftKey&&XS.a){e.preventDefault();XS.b=p;xsPaint();return}
+  XS.a=XS.b=p;XS.drag=1;xsPaint()});
+document.addEventListener('mousemove',e=>{if(!XS.drag&&!XS.fill)return;const g=$('#sh-wrap');if(!g)return;const el=document.elementFromPoint(e.clientX,e.clientY);const td=el&&el.closest&&el.closest('#sh-wrap td');const p=xsPos(td);if(!p)return;
+  if(XS.fill){const B=xsBox();if(!B)return;XS.fill.to=p.r;xsPaint(p.r>B.r1?[B.r1+1,p.r]:p.r<B.r0?[p.r,B.r0-1]:null);return}
+  if(p.r!==XS.b.r||p.c!==XS.b.c){XS.b=p;if(xsMulti()){g.classList.add('xs-drag');if(document.activeElement&&document.activeElement.closest('#sh-wrap'))document.activeElement.blur();getSelection().removeAllRanges()}xsPaint()}});
+document.addEventListener('mouseup',()=>{const g=$('#sh-wrap');g&&g.classList.remove('xs-drag');XS.drag=0;if(XS.fill){const to=XS.fill.to;XS.fill=null;if(to!=null)xsFillTo(to);else xsPaint()}});
+document.addEventListener('focusin',e=>{const td=e.target.closest&&e.target.closest('#sh-wrap td');if(!td||XS.drag||XS.fill)return;const p=xsPos(td);if(!p)return;const B=xsBox();
+  if(!(xsMulti()&&p.r>=B.r0&&p.r<=B.r1&&p.c>=B.c0&&p.c<=B.c1)){XS.a=XS.b=p;xsPaint()}else xsFx()});
+const xsTextSel=t=>{try{return (t.tagName==='INPUT')&&t.selectionStart!=null&&t.selectionStart!==t.selectionEnd}catch(_){return false}};
+const xsHere=t=>t===document.body||(t.closest&&t.closest('#sh-wrap'));
+document.addEventListener('copy',e=>{if(!$('#sh-wrap')||!XS.a)return;const t=document.activeElement;if(!xsHere(t))return;if(!xsMulti()&&xsTextSel(t))return;const B=xsBox();
+  const L=[];for(let r=B.r0;r<=B.r1;r++){const a=[];for(let c=B.c0;c<=B.c1;c++)a.push(xsText(xsCell(r,c)).replace(/[\t\n]/g,' '));L.push(a.join('\t'))}
+  e.preventDefault();e.clipboardData.setData('text/plain',L.join('\n'));if(xsMulti())toast(`Copied ${(B.r1-B.r0+1)*(B.c1-B.c0+1)} cells`)});
+document.addEventListener('paste',e=>{if(!$('#sh-wrap')||!XS.a||EC().ro)return;const t=document.activeElement;if(!xsHere(t))return;
+  const txt=((e.clipboardData||window.clipboardData).getData('text')||'').replace(/\r/g,'').replace(/\n$/,'');const grid=txt.split('\n').map(l=>l.split('\t'));const single=grid.length===1&&grid[0].length===1;
+  if(single&&!xsMulti())return; // one value into one cell: the browser pastes it as typing
+  e.preventDefault();const B=xsBox();const out=[];
+  if(single){for(let r=B.r0;r<=B.r1;r++)for(let c=B.c0;c<=B.c1;c++){const i=xsIn(xsCell(r,c));if(i)out.push([i,grid[0][0]])}}
+  else{const n=xsRows().length;grid.forEach((row,ri)=>row.forEach((v,ci)=>{if(B.r0+ri>=n)return;const i=xsIn(xsCell(B.r0+ri,B.c0+ci));if(i)out.push([i,v])}));XS.b={r:Math.min(n-1,B.r0+grid.length-1),c:B.c0+Math.max(...grid.map(r=>r.length))-1}}
+  if(t&&t.blur&&t!==document.body)t.blur();if(!xsApply(out))toast('Nothing to paste into here. Grey cells are calculated.')});
+document.addEventListener('keydown',e=>{if(!$('#sh-wrap')||!S.est)return;const t=e.target;if(!xsHere(t))return;const mod=e.ctrlKey||e.metaKey;const E=S.est;
+  if(mod&&(e.key.toLowerCase()==='z'||e.key.toLowerCase()==='y')){const dirty=t.tagName==='INPUT'&&t.value!==t.defaultValue;if(dirty||EC().ro)return;const redo=e.key.toLowerCase()==='y'||e.shiftKey;
+    const from=redo?(E.shRedo=E.shRedo||[]):(E.shUndo=E.shUndo||[]),to=redo?(E.shUndo=E.shUndo||[]):(E.shRedo=E.shRedo||[]);if(!from.length)return;e.preventDefault();
+    to.push(JSON.stringify(E.data));const x=JSON.parse(from.pop());const d=E.data;Object.keys(d).forEach(k=>delete d[k]);Object.assign(d,x);E.shSnap=null;
+    const w=$('#sh-wrap');const sc=w?[w.scrollTop,w.scrollLeft]:null;estTouch();render();const w2=$('#sh-wrap');if(w2&&sc){w2.scrollTop=sc[0];w2.scrollLeft=sc[1]}xsPaint();toast(redo?'Redone':'Undone');return}
+  if(!XS.a||EC().ro)return;
+  if(mod&&e.key.toLowerCase()==='d'&&t===document.body){e.preventDefault();xsFillDown();return}
+  if((e.key==='Delete'||e.key==='Backspace')&&(xsMulti()||t===document.body)){e.preventDefault();const B=xsBox();const out=[];for(let r=B.r0;r<=B.r1;r++)for(let c=B.c0;c<=B.c1;c++){const i=xsIn(xsCell(r,c));if(i&&!(i.dataset.sh==='desc'&&/^[si]:/.test(i.dataset.rw)))out.push([i,''])}xsApply(out)}});
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act=sh-open],[data-act=est-bv]');if(!t||!S.est)return;
   if(t.dataset.act==='est-bv'){S.est.bv=t.dataset.v;try{localStorage.setItem('bp.bv',t.dataset.v)}catch(er){}render();return}
   const p=t.dataset.rw.split(':');const it=S.est.data.items[+p[1]];const a=it&&it.acts[+p[2]];if(!a)return;S.est.bv='outline';S.est.sel={t:'act',id:a.id};estOpenSet().add(it.id);estOpenSet().add(it.sec);estOpenSave();render()});
