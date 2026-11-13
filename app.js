@@ -370,9 +370,14 @@ function renderNow(){
   const views={chores:vChores,reports:vReports,awards:vAwards,award:vAward,admin:vAdmin,btpl:vBtpl,workload:vWorkload,positions:vPositions,grabs:vGrabs,lists:vLists,vendor:vVendor,vboard:vVboard,plan:vPlan,fun:vFun,help:vHelp,dev:vDev,teampm:vTeamPm,teamoffice:vTeamOffice,access:vAccess,acct:vAcct,dashboard:vDashboard,pipeline:vPipeline,jobs:vJobs,job:vJob,estimators:vEstimators,clients:vClients,vendors:vVendors,scopes:vScopes,team:vTeam,calc:vCalc,cb:vCb,tw:vTw,estimate:vEstimate,estimates:vEstimates,settings:vSettings};
   const navOk=v=>navGroups().some(g=>g[2].includes(v));
   if(!navOk(S.view))S.view=navItems()[0][0];
-  const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop]);
+  const keep=[...main.querySelectorAll('[data-keepscroll]')].map(e=>[e.id,e.scrollTop,e.scrollLeft]);
+  // spreadsheet cells have no id: remember the focused cell (and anything typed but not saved yet) by its data attributes
+  const cellSel=a&&!fid&&main.contains(a)&&a.dataset?(a.dataset.wbk&&a.dataset.id?`[data-wbk="${a.dataset.wbk}"][data-id="${a.dataset.id}"]`:a.dataset.wbnew?`[data-wbnew="${a.dataset.wbnew}"]`:a.dataset.sh&&a.dataset.rw?`#sh-wrap [data-rw="${a.dataset.rw}"][data-sh="${a.dataset.sh}"]`:null):null;
+  const cellVal=cellSel&&a.tagName==='INPUT'&&a.value!==a.defaultValue?a.value:null;let cellPos=null;try{cellPos=cellSel&&a.tagName==='INPUT'?[a.selectionStart,a.selectionEnd]:null}catch(e){}
   main.innerHTML=(estsTabFor()?estsTabs(estsTabFor()):subNav())+(typeof tourBanner==='function'&&S.view===(navItems()[0]||[])[0]?tourBanner():'')+views[S.view]();
-  keep.forEach(([id,top])=>{const e=id&&document.getElementById(id);if(e)e.scrollTop=top});
+  keep.forEach(([id,top,left])=>{const e=id&&document.getElementById(id);if(e){e.scrollTop=top;e.scrollLeft=left}});
+  if(cellSel){const n=main.querySelector(cellSel);if(n){if(cellVal!=null)n.value=cellVal;n.focus({preventScroll:true});try{if(cellPos&&cellPos[0]!=null)n.setSelectionRange(cellPos[0],cellPos[1])}catch(e){}}}
+  if(typeof wbPaint==='function'&&main.querySelector('#wb-grid'))requestAnimationFrame(()=>wbPaint());if(typeof xsPaint==='function'&&main.querySelector('#sh-wrap'))requestAnimationFrame(()=>xsPaint());
   if(fid){const n=document.getElementById(fid);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});try{n.setSelectionRange(pos,pe??pos)}catch(e){}if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();if(S.view==='calc'&&$('#tk-canvas'))tkMount();if(S.view==='tw')twMount();
   // the page content can add a scrollbar after the top bar was fitted, so fit it again once laid out
@@ -754,6 +759,53 @@ function wbData(Y){const all=S.bids.filter(b=>!b._new&&(!scopeView()||bidVisible
 function wbWeeks(Y){const out=[];let s=new Date(Y,0,1);while(s.getFullYear()===Y){const e=new Date(s);e.setDate(e.getDate()+(6-e.getDay()));const end=e.getFullYear()>Y?new Date(Y,11,31):e;out.push([new Date(s),end]);s=new Date(end);s.setDate(s.getDate()+1)}return out}
 const wbIso=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const wbCol=i=>{let s='';i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26)}return s};
+// column values for sorting / filtering each sheet: [value(b), type] — s text, n number, m money, d date
+function wbKC(tab){const L5=[[wbCo,'s'],[b=>b.name,'s'],[wbContact,'s'],[b=>b.asset_class||assetOf(b.project_type),'s'],[b=>normProjectType(b.project_type),'s']];
+  return tab==='bids'?[...L5,[b=>(b.rfq||{}).likely,'n'],[b=>b.due_date,'d'],[b=>bidValue(b),'m'],[b=>sentOn(b),'d'],[b=>b.start_date,'d'],[b=>(b.rfq||{}).wbNote||wbNoteAuto(b),'s']]
+    :tab==='verbal'?[...L5,[b=>num(b.awarded_amount)??wonValue(b),'m'],[b=>b.awarded_date,'d'],[b=>b.start_date,'d']]
+    :tab==='contract'?[...L5,[b=>num(b.contract_amount),'m'],[b=>b.contract_date,'d'],[b=>b.start_date,'d']]:[]}
+const wbBlank=v=>v==null||v===''||(typeof v==='number'&&!v);
+function wbDisp(v,t){if(wbBlank(v))return '(Blanks)';return t==='m'?money2(+v):t==='d'?fmtDate(String(v).slice(0,10)):String(v).trim()}
+function wbSt(tab){const W=S.wb;W.sf=W.sf||{};return W.sf[tab]=W.sf[tab]||{sort:null,flt:{}}}
+const wbSFOn=tab=>{const st=wbSt(tab);return !!st.sort||Object.keys(st.flt).length>0};
+function wbSF(list,tab){const st=wbSt(tab);const K=wbKC(tab);let L=list.filter(b=>Object.entries(st.flt).every(([c,vals])=>{const k=K[+c];return !k||vals.includes(wbDisp(k[0](b),k[1]))}));
+  if(st.sort&&K[st.sort.c]){const [f,t]=K[st.sort.c];const dir=st.sort.dir;const key=b=>{const v=f(b);return wbBlank(v)?null:t==='s'?String(v).toLowerCase():t==='d'?String(v).slice(0,10):+v};
+    L=L.map((b,i)=>[b,key(b),i]).sort((x,y)=>{if(x[1]==null&&y[1]==null)return x[2]-y[2];if(x[1]==null)return 1;if(y[1]==null)return -1;const r=x[1]<y[1]?-1:x[1]>y[1]?1:0;return r*dir||x[2]-y[2]}).map(x=>x[0])}
+  return L}
+function wbFltOpen(c,x,y){const W=S.wb,tab=W.tab;const K=wbKC(tab)[c];if(!K)return;const D=wbData(+W.y);const base=tab==='bids'?D.bids:tab==='verbal'?D.verbal:D.contract;
+  // values offered = rows that pass the OTHER columns' filters (like Excel)
+  const st=wbSt(tab);const others=Object.fromEntries(Object.entries(st.flt).filter(([k])=>+k!==c));const save=st.flt;st.flt=others;const pool=wbSF(base,tab);st.flt=save;
+  const cnt=new Map();pool.forEach(b=>{const v=wbDisp(K[0](b),K[1]);cnt.set(v,(cnt.get(v)||0)+1)});
+  const vals=[...cnt.keys()].sort((a,b)=>a==='(Blanks)'?1:b==='(Blanks)'?-1:K[1]==='m'||K[1]==='n'?num(String(a).replace(/[,$]/g,''))-num(String(b).replace(/[,$]/g,'')):K[1]==='d'?new Date(a)-new Date(b):a.localeCompare(b));
+  const cur=st.flt[c];wbFltClose();const el=document.createElement('div');el.id='wbflt';el.className='wbflt';el.dataset.c=c;
+  const hd=document.querySelectorAll('#wb-grid .wb-head th')[c+1]?.textContent.replace(/[▲▼⏷]/g,'').trim()||'';
+  el.innerHTML=`<div class="wbflt-h">Filter: <b>${esc(hd)}</b></div><input class="field sm" id="wbflt-q" placeholder="Search…" autocomplete="off">
+    <label class="wbflt-all"><input type="checkbox" id="wbflt-all"${!cur?' checked':''}> (Select all)</label>
+    <div class="wbflt-list">${vals.map(v=>`<label data-v="${esc(v.toLowerCase())}"><input type="checkbox" value="${esc(v)}"${!cur||cur.includes(v)?' checked':''}> <span>${esc(v)}</span><i>${cnt.get(v)}</i></label>`).join('')}</div>
+    <div class="wbflt-f"><button class="btn sm ghost" data-wbflt="clear">Clear filter</button><span style="flex:1"></span><button class="btn sm" data-wbflt="cancel">Cancel</button><button class="btn sm primary" data-wbflt="ok">OK</button></div>`;
+  document.body.appendChild(el);const r=el.getBoundingClientRect();el.style.left=Math.max(8,Math.min(x,innerWidth-r.width-8))+'px';el.style.top=Math.max(8,Math.min(y,innerHeight-r.height-8))+'px';setTimeout(()=>$('#wbflt-q')?.focus(),20)}
+function wbFltClose(){document.getElementById('wbflt')?.remove()}
+function wbSortSet(c,dir){const st=wbSt(S.wb.tab);st.sort=dir?{c,dir}:null;WBR.a=WBR.b=null;const g=$('#wb-grid');if(g)g.scrollTop=0;render()}
+function wbReset(){const W=S.wb;W.sf=W.sf||{};W.sf[W.tab]={sort:null,flt:{}};WBR.a=WBR.b=null;wbFltClose();render();toast('Back to the original view')}
+document.addEventListener('click',e=>{const t=e.target;const f=t.closest&&t.closest('#wbflt');
+  if(f){if(t.id==='wbflt-all'){f.querySelectorAll('.wbflt-list label:not([hidden]) input').forEach(i=>i.checked=t.checked);return}
+    const b=t.closest('[data-wbflt]');if(!b)return;const c=+f.dataset.c;const st=wbSt(S.wb.tab);
+    if(b.dataset.wbflt==='ok'){const all=[...f.querySelectorAll('.wbflt-list input')];const on=all.filter(i=>i.checked).map(i=>i.value);if(on.length===all.length&&!$('#wbflt-q').value)delete st.flt[c];else st.flt[c]=on;wbFltClose();WBR.a=WBR.b=null;render()}
+    else if(b.dataset.wbflt==='clear'){delete st.flt[c];wbFltClose();render()}else wbFltClose();return}
+  if(document.getElementById('wbflt'))wbFltClose();
+  const h=t.closest&&t.closest('#wb-grid .wb-head th[data-wbh]');if(h){if(t.closest('.wb-fbtn')){const r=h.getBoundingClientRect();wbFltOpen(+h.dataset.wbh,r.left,r.bottom+2);return}
+    const c=+h.dataset.wbh;const st=wbSt(S.wb.tab);const cur=st.sort&&st.sort.c===c?st.sort.dir:0;wbSortSet(c,cur===0?1:cur===1?-1:0)}
+  if(t.closest&&t.closest('[data-act=wb-reset]'))wbReset()});
+document.addEventListener('input',e=>{if(e.target.id!=='wbflt-q')return;const q=e.target.value.trim().toLowerCase();document.querySelectorAll('#wbflt .wbflt-list label').forEach(l=>{const hit=!q||l.dataset.v.includes(q);l.hidden=!hit;l.querySelector('input').checked=hit})});
+document.addEventListener('keydown',e=>{const f=document.getElementById('wbflt');if(!f)return;if(e.key==='Escape'){wbFltClose()}else if(e.key==='Enter'&&e.target.closest('#wbflt')){e.preventDefault();f.querySelector('[data-wbflt=ok]').click()}});
+// a save on blur can redraw the sheet between mousedown and the right-click: then find what is under the pointer now
+const xlHit=e=>e.target&&e.target.isConnected?e.target:(document.elementFromPoint(e.clientX,e.clientY)||e.target);
+document.addEventListener('contextmenu',e=>{const tg=xlHit(e);const h=tg.closest&&tg.closest('#wb-grid .wb-head th[data-wbh]');if(!h)return;e.preventDefault();e.stopImmediatePropagation();
+  const c=+h.dataset.wbh;const t=wbKC(S.wb.tab)[c][1];const st=wbSt(S.wb.tab);const nm=h.textContent.replace(/[▲▼⏷]/g,'').trim();
+  const az=t==='s'?['A → Z','Z → A']:t==='d'?['Oldest → newest','Newest → oldest']:['Smallest → largest','Largest → smallest'];const x=e.clientX,y=e.clientY;
+  const it=[['▲',`Sort ${az[0]}`,()=>wbSortSet(c,1)],['▼',`Sort ${az[1]}`,()=>wbSortSet(c,-1)]];if(st.sort&&st.sort.c===c)it.push(['↕','Clear sort',()=>wbSortSet(c,0)]);
+  it.push(null,['⏷','Filter…',()=>wbFltOpen(c,x,y)]);if(st.flt[c])it.push(['✕',`Clear filter from “${nm}”`,()=>{delete st.flt[c];render()}]);
+  it.push(null,['↺','Reset to original view',wbSFOn(S.wb.tab)?wbReset:null]);actmOpen(x,y,it)});
 function wbView(){const W=S.wb=S.wb||{tab:'bids',y:new Date().getFullYear()};const Y=+W.y;const D=wbData(Y);const edit=can('bids','edit');
   const years=[...new Set(S.bids.map(b=>sentYear(b)).filter(Boolean))].sort((a,b)=>b-a);if(!years.includes(Y))years.unshift(Y);
   const m=v=>v==null||v===''?'':money2(+v);const d=v=>v?fmtDate(v):'';
@@ -769,19 +821,19 @@ function wbView(){const W=S.wb=S.wb||{tab:'bids',y:new Date().getFullYear()};con
   const pickRow=(kind,list,label,cols)=>edit?`<tr class="wb-new"><th class="wb-rn">+</th><td colspan="${cols}" class="wb-ed"><select class="wb-in wb-pick" data-wbpick="${kind}"><option value="">${label}</option>${list.map(b=>`<option value="${b.id}">${esc(b.name||'Untitled')}${wbCo(b)?' · '+esc(wbCo(b)):''}${bidValue(b)?' · '+money(bidValue(b)):''}</option>`).join('')}</select></td></tr>`:'';
   const live=S.bids.filter(b=>!b._new&&isSent(b)).sort((a,b)=>(sentOn(b)||'').localeCompare(sentOn(a)||''));
   if(W.tab==='bids'){title='BIDS SUBMITTED';head=['Company Name','Opportunity Name','Company Contact','Asset Class','Project Type','Likelihood to win 1-10','Due Date','Bid Amount','Submission Date','Anticipated Start Date','NOTES'];
-    rows=D.bids.map(b=>left(b)+sel(b,'likely',(b.rfq||{}).likely||'',[1,2,3,4,5,6,7,8,9,10])+(edit?inp(b,'due_date',b.due_date||'',{type:'date'})+inp(b,'amount',bidValue(b)?money2(bidValue(b)):'',{n:1,r:1,ph:'$0.00'})+inp(b,'sent',sentOn(b),{type:'date'}):cell(d(b.due_date),{cls:'c',f:b.due_date||''})+cell(m(bidValue(b)),{cls:'r',f:bidValue(b)||''})+cell(d(sentOn(b)),{cls:'c',f:sentOn(b)}))
+    var L=wbSF(D.bids,'bids');rows=L.map(b=>left(b)+sel(b,'likely',(b.rfq||{}).likely||'',[1,2,3,4,5,6,7,8,9,10])+(edit?inp(b,'due_date',b.due_date||'',{type:'date'})+inp(b,'amount',bidValue(b)?money2(bidValue(b)):'',{n:1,r:1,ph:'$0.00'})+inp(b,'sent',sentOn(b),{type:'date'}):cell(d(b.due_date),{cls:'c',f:b.due_date||''})+cell(m(bidValue(b)),{cls:'r',f:bidValue(b)||''})+cell(d(sentOn(b)),{cls:'c',f:sentOn(b)}))
       +inp(b,'start_date',b.start_date||'',{type:'date'})+inp(b,'wbNote',(b.rfq||{}).wbNote||'',{ph:wbNoteAuto(b),cls:'wb-note'}));
-    ids=D.bids.map(b=>b.id);
+    ids=L.map(b=>b.id);
     if(edit)extra=`<tr class="wb-new"><th class="wb-rn">+</th>${nIn('company',{list:'wb-cos',ph:'Company'})}${nIn('name',{ph:'＋ New bid: type the project name'})}<td></td><td></td><td></td><td></td>${nIn('due',{type:'date'})}${nIn('amount',{n:1,r:1,ph:'$0.00'})}${nIn('sent',{type:'date'})}<td></td><td class="wb-addc"><button class="wb-addbtn" data-act="wb-add" title="Create the bid (or press Enter in this row)">${W.busy?'Adding…':'＋ Add bid'}</button><span class="dim small"> sent date defaults to today</span></td></tr>`;
-    foot=`<td></td><td><b>${D.bids.length} bids</b></td><td></td><td></td><td></td><td></td><td></td><td class="r"><b>${m(D.bids.reduce((s,b)=>s+bidValue(b),0))}</b></td><td></td><td></td><td></td>`}
+    foot=`<td></td><td><b>${L.length===D.bids.length?D.bids.length+' bids':L.length+' of '+D.bids.length+' bids'}</b></td><td></td><td></td><td></td><td></td><td></td><td class="r"><b>${m(L.reduce((s,b)=>s+bidValue(b),0))}</b></td><td></td><td></td><td></td>`}
   else if(W.tab==='verbal'){title='VERBAL AWARDS';head=['Company Name','Opportunity Name','Company Contact','Asset Class','Project Type','Est. Contract Amount','Verbal Award Date','Anticipated Start Date'];
-    rows=D.verbal.map(b=>left(b)+inp(b,'awarded_amount',b.awarded_amount??'',{n:1,r:1,ph:money2(wonValue(b)||0)})+inp(b,'awarded_date',b.awarded_date||'',{type:'date'})+inp(b,'start_date',b.start_date||'',{type:'date'}));
-    ids=D.verbal.map(b=>b.id);extra=pickRow('verbal',live.filter(b=>b.status!=='Awarded'&&b.status!=='No Bid'),'＋ Add a verbal award: pick a sent bid…',head.length);
-    foot=`<td></td><td><b>${D.verbal.length} awards</b></td><td></td><td></td><td></td><td class="r"><b>${m(D.verbal.reduce((s,b)=>s+(num(b.awarded_amount)??wonValue(b)??0),0))}</b></td><td></td><td></td>`}
+    var L=wbSF(D.verbal,'verbal');rows=L.map(b=>left(b)+inp(b,'awarded_amount',b.awarded_amount??'',{n:1,r:1,ph:money2(wonValue(b)||0)})+inp(b,'awarded_date',b.awarded_date||'',{type:'date'})+inp(b,'start_date',b.start_date||'',{type:'date'}));
+    ids=L.map(b=>b.id);extra=pickRow('verbal',live.filter(b=>b.status!=='Awarded'&&b.status!=='No Bid'),'＋ Add a verbal award: pick a sent bid…',head.length);
+    foot=`<td></td><td><b>${L.length===D.verbal.length?D.verbal.length+' awards':L.length+' of '+D.verbal.length+' awards'}</b></td><td></td><td></td><td></td><td class="r"><b>${m(L.reduce((s,b)=>s+(num(b.awarded_amount)??wonValue(b)??0),0))}</b></td><td></td><td></td>`}
   else if(W.tab==='contract'){title='CONTRACTS EXECUTED';head=['Company Name','Opportunity Name','Company Contact','Asset Class','Project Type','Contract Amount','Contract Date','Anticipated Start Date'];
-    rows=D.contract.map(b=>left(b)+inp(b,'contract_amount',b.contract_amount??'',{n:1,r:1})+inp(b,'contract_date',b.contract_date||'',{type:'date'})+inp(b,'start_date',b.start_date||'',{type:'date'}));
-    ids=D.contract.map(b=>b.id);extra=pickRow('contract',S.bids.filter(b=>!b._new&&b.status==='Awarded'&&!b.contract_date),'＋ Add an executed contract: pick an awarded bid…',head.length);
-    foot=`<td></td><td><b>${D.contract.length} contracts</b></td><td></td><td></td><td></td><td class="r"><b>${m(D.contract.reduce((s,b)=>s+(num(b.contract_amount)||0),0))}</b></td><td></td><td></td>`}
+    var L=wbSF(D.contract,'contract');rows=L.map(b=>left(b)+inp(b,'contract_amount',b.contract_amount??'',{n:1,r:1})+inp(b,'contract_date',b.contract_date||'',{type:'date'})+inp(b,'start_date',b.start_date||'',{type:'date'}));
+    ids=L.map(b=>b.id);extra=pickRow('contract',S.bids.filter(b=>!b._new&&b.status==='Awarded'&&!b.contract_date),'＋ Add an executed contract: pick an awarded bid…',head.length);
+    foot=`<td></td><td><b>${L.length===D.contract.length?D.contract.length+' contracts':L.length+' of '+D.contract.length+' contracts'}</b></td><td></td><td></td><td></td><td class="r"><b>${m(L.reduce((s,b)=>s+(num(b.contract_amount)||0),0))}</b></td><td></td><td></td>`}
   else{title='PIPELINE TRACKING SUMMARY';
     head=['Week Start','Week End','Bids Submitted','Total Bid Amount','Verbal Awards','Verbal Awards Amount','Executed Contracts','Executed Contracts Amount','','Cumulative Bids Submitted','Cumulative Bid Amount','Cumulative Verbal Awards','Cumulative Verbal Award Amount','Cumulative Executed Contracts','Cumulative Executed Contract Amount','','Bids to Verbal Awards Conversion','Bids to Executed Contracts Conversion'];
     const today=todayStr();let c=[0,0,0,0,0,0];const inW=(v,s,e)=>v&&v>=s&&v<=e;
@@ -797,13 +849,14 @@ function wbView(){const W=S.wb=S.wb||{tab:'bids',y:new Date().getFullYear()};con
   return `<div class="wb">
     <div class="wb-rib"><div class="wb-ttl"><b>DOGWOOD SITE CONTRACTORS, LLC</b><span>${title} · ${Y}</span></div>
       <label class="wb-y">Year <select class="field sm" data-wby>${years.map(y=>`<option${y===Y?' selected':''}>${y}</option>`).join('')}</select></label>
-      <span class="dim small">Date: ${fmtDate(todayStr())}</span><span style="flex:1"></span>
+      <span class="dim small">Date: ${fmtDate(todayStr())}</span><span style="flex:1"></span>${!isSum&&wbSFOn(W.tab)?`<button class="btn sm wb-reset" data-act="wb-reset" title="Clear every sort and filter on this sheet">↺ Reset view${Object.keys(wbSt(W.tab).flt).length?` · ${Object.keys(wbSt(W.tab).flt).length} filter${Object.keys(wbSt(W.tab).flt).length===1?'':'s'}`:''}</button>`:''}
       <button class="btn sm primary" data-act="wb-xlsx" title="Download this workbook (all four sheets) as an Excel file">⬇ Download as Excel</button></div>
     <div class="wb-fx"><span class="wb-ref" id="wb-ref">A1</span><span class="wb-fxi">ƒx</span><span class="wb-fxv" id="wb-fxv"></span>${xlZoomBtn('wb')}</div>
     ${edit?`<datalist id="wb-cos">${S.clients.map(c=>c.company||'').filter(Boolean).sort((a,b)=>a.localeCompare(b)).map(c=>`<option value="${esc(c)}">`).join('')}</datalist>`:''}
-    <div class="wb-grid" id="wb-grid"><table class="wb-t" style="zoom:${xlZoom('wb')}"><colgroup><col style="width:42px">${widths.map(w=>`<col style="width:${w}px">`).join('')}</colgroup>
+    <div class="wb-grid" id="wb-grid" data-keepscroll><table class="wb-t" style="zoom:${xlZoom('wb')}"><colgroup><col style="width:42px">${widths.map(w=>`<col style="width:${w}px">`).join('')}</colgroup>
       <thead><tr class="wb-letters"><th class="wb-corner"></th>${head.map((h,i)=>`<th>${wbCol(i)}</th>`).join('')}</tr>
-        <tr class="wb-head"><th class="wb-rn">1</th>${head.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>
+        <tr class="wb-head"><th class="wb-rn">1</th>${head.map((h,i)=>{if(isSum)return `<th>${esc(h)}</th>`;const st=wbSt(W.tab);const so=st.sort&&st.sort.c===i?st.sort.dir:0;const fl=!!st.flt[i];
+          return `<th data-wbh="${i}" class="wb-hs${so?' so':''}${fl?' fl':''}" title="Click to sort. Right-click to filter.">${esc(h)}<span class="wb-hi">${so===1?'▲':so===-1?'▼':''}</span><button class="wb-fbtn${fl?' on':''}" title="Filter">⏷</button></th>`}).join('')}</tr></thead>
       <tbody>${body}</tbody><tfoot><tr><th class="wb-rn"></th>${foot}</tr></tfoot></table></div>
     <div class="wb-tabs">${WB_TABS.map(([k,l])=>`<button class="${W.tab===k?'on':''}" data-act="wb-tab" data-v="${k}">${l}${k==='bids'?` <span>${D.bids.length}</span>`:k==='verbal'?` <span>${D.verbal.length}</span>`:k==='contract'?` <span>${D.contract.length}</span>`:''}</button>`).join('')}
       <span class="wb-hint">${edit&&!isSum?'Type in any white cell and it saves to the bid. Use the + row to add. Right-click a row for awarded, archive, delete. ↗ opens the bid.':'Built from the bids. Each job counts once, at its latest proposal.'}</span></div></div>`}
@@ -915,8 +968,7 @@ async function wbAdd(){const W=S.wb,N=W.nw||{};const name=String(N.name||'').tri
 document.addEventListener('input',e=>{const t=e.target;if(t.dataset&&t.dataset.wbnew!=null&&S.wb){S.wb.nw=S.wb.nw||{};S.wb.nw[t.dataset.wbnew]=t.value}});
 document.addEventListener('keydown',e=>{const t=e.target;if(e.key==='Enter'&&t.dataset&&t.dataset.wbnew!=null){e.preventDefault();e.stopPropagation();S.wb.nw[t.dataset.wbnew]=t.value;wbAdd()}},true);
 document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('[data-act=wb-add]'))wbAdd()});
-document.addEventListener('contextmenu',e=>{if(e.shiftKey)return;const tr=e.target.closest&&e.target.closest('#wb-grid tr[data-wbid]');if(!tr||!tr.dataset.wbid||e.target.closest('[data-act=open-bid]'))return;
-  const t=e.target;if((t.tagName==='INPUT'||t.tagName==='TEXTAREA')&&t.selectionStart!==t.selectionEnd)return; // keep copy/paste when text is selected
+document.addEventListener('contextmenu',e=>{if(e.shiftKey)return;const t=xlHit(e);const tr=t.closest&&t.closest('#wb-grid tr[data-wbid]');if(!tr||!tr.dataset.wbid||t.closest('[data-act=open-bid]'))return;if((t.tagName==='INPUT'||t.tagName==='TEXTAREA')&&t.selectionStart!==t.selectionEnd)return; // keep copy/paste when text is selected
   const b=byId(S.bids,tr.dataset.wbid);if(!b||!can('bids','edit'))return;e.preventDefault();e.stopImmediatePropagation();
   const it=[['↗','Open bid',()=>openBid(b.id)],null];
   if(b.status!=='Awarded')it.push(['🏆','Mark awarded (verbal)',()=>wbStatus(b,'Awarded')]);
@@ -6531,7 +6583,7 @@ function estSheetView(d,R,ro){const E=S.est;const hide=shHidden();const cols=SH_
   let rno=1;const body=rows.map(r=>{const add=r.startsWith('<tr class="sh-r-add"');return r.replace(/^(<tr[^>]*>)/,`$1<th class="sh-rn">${add?'+':++rno}</th>`)}).join('');
   return `${shLists()}<div class="sh-bar"><span class="dim small">Click and drag to select, drag the green corner to copy down, <b>Ctrl+C / Ctrl+V</b> to and from Excel, <b>Ctrl+D</b> fills down, <b>Delete</b> clears, <b>Ctrl+Z</b> undoes. Right-click a row for more.</span>${colMenu}</div>
     <div class="xl-frame"><div class="wb-fx"><span class="wb-ref" id="sh-ref">A1</span><span class="wb-fxi">ƒx</span><span class="wb-fxv" id="sh-fxv"></span>${xlZoomBtn('sh')}</div>
-    <div class="panel sh-wrap xl" id="sh-wrap"><table class="sh-t" style="zoom:${xlZoom('sh')}"><colgroup><col style="width:42px">${cols.map(c=>`<col style="width:${c[2]}px">`).join('')}</colgroup>
+    <div class="panel sh-wrap xl" id="sh-wrap" data-keepscroll><table class="sh-t" style="zoom:${xlZoom('sh')}"><colgroup><col style="width:42px">${cols.map(c=>`<col style="width:${c[2]}px">`).join('')}</colgroup>
       <thead><tr class="xl-letters"><th class="sh-rn"></th>${cols.map((c,i)=>`<th>${wbCol(i)}</th>`).join('')}</tr><tr class="xl-head"><th class="sh-rn">1</th>${cols.map(([k,l])=>`<th class="sh-${k}${['qty','ph','pd','hrs','matp','subp','lab','eq','matc','subc','oth','cost','cu','up','bt'].includes(k)?' r':''}">${l}</th>`).join('')}</tr></thead><tbody>${body}</tbody>
       <tfoot><tr><th class="sh-rn"></th>${cols.map(([c])=>c==='desc'?'<td><b>Base bid</b></td>':c==='cost'?`<td class="r num"><b>${money2(R.cost)}</b></td>`:c==='bt'?`<td class="r num"><b>${money2(R.gross)}</b></td>`:c==='hrs'?`<td class="r num">${fmtN(R.items.reduce((s,x,i)=>s+(d.items[i].alt?0:x.acts.reduce((a,b)=>a+b.hrs,0)),0),1)}</td>`:'<td></td>').join('')}</tr></tfoot></table></div></div>`}
 // write one cell's value into the estimate (no redraw); returns false when nothing changed
