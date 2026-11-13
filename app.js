@@ -799,9 +799,9 @@ function wbView(){const W=S.wb=S.wb||{tab:'bids',y:new Date().getFullYear()};con
       <label class="wb-y">Year <select class="field sm" data-wby>${years.map(y=>`<option${y===Y?' selected':''}>${y}</option>`).join('')}</select></label>
       <span class="dim small">Date: ${fmtDate(todayStr())}</span><span style="flex:1"></span>
       <button class="btn sm primary" data-act="wb-xlsx" title="Download this workbook (all four sheets) as an Excel file">⬇ Download as Excel</button></div>
-    <div class="wb-fx"><span class="wb-ref" id="wb-ref">A1</span><span class="wb-fxi">ƒx</span><span class="wb-fxv" id="wb-fxv"></span></div>
+    <div class="wb-fx"><span class="wb-ref" id="wb-ref">A1</span><span class="wb-fxi">ƒx</span><span class="wb-fxv" id="wb-fxv"></span>${xlZoomBtn('wb')}</div>
     ${edit?`<datalist id="wb-cos">${S.clients.map(c=>c.company||'').filter(Boolean).sort((a,b)=>a.localeCompare(b)).map(c=>`<option value="${esc(c)}">`).join('')}</datalist>`:''}
-    <div class="wb-grid" id="wb-grid"><table class="wb-t"><colgroup><col style="width:42px">${widths.map(w=>`<col style="width:${w}px">`).join('')}</colgroup>
+    <div class="wb-grid" id="wb-grid"><table class="wb-t" style="zoom:${xlZoom('wb')}"><colgroup><col style="width:42px">${widths.map(w=>`<col style="width:${w}px">`).join('')}</colgroup>
       <thead><tr class="wb-letters"><th class="wb-corner"></th>${head.map((h,i)=>`<th>${wbCol(i)}</th>`).join('')}</tr>
         <tr class="wb-head"><th class="wb-rn">1</th>${head.map(h=>`<th>${esc(h)}</th>`).join('')}</tr></thead>
       <tbody>${body}</tbody><tfoot><tr><th class="wb-rn"></th>${foot}</tr></tfoot></table></div>
@@ -834,6 +834,16 @@ async function wbSave(b,k,v,o={}){const patch={};const val=String(v??'').trim();
   else patch[k]=val||null;
   if(k==='asset_class')patch.asset_class=val;
   await wbPatch(b,patch,o)}
+// ---- Ctrl + mouse wheel zooms the Workbook and the estimate spreadsheet (remembered per sheet) ----
+function xlZoom(k){try{const z=+localStorage.getItem('bp.z.'+k);return z>=0.5&&z<=2?z:1}catch(e){return 1}}
+const xlZoomBtn=k=>`<button class="xl-zoom" data-act="xl-zoom" data-k="${k}" title="Hold Ctrl and scroll to zoom. Click to reset to 100%.">${Math.round(xlZoom(k)*100)}%</button>`;
+function xlSetZoom(k,z){z=Math.round(Math.min(2,Math.max(0.5,z))*20)/20;try{localStorage.setItem('bp.z.'+k,z)}catch(e){}
+  const g=document.getElementById(k==='wb'?'wb-grid':'sh-wrap');if(!g)return;const t=g.querySelector('table');const old=+t.style.zoom||1;
+  const cx=g.scrollLeft+g.clientWidth/2,cy=g.scrollTop+g.clientHeight/2;t.style.zoom=z;g.scrollLeft=cx*z/old-g.clientWidth/2;g.scrollTop=cy*z/old-g.clientHeight/2;
+  const b=document.querySelector(`[data-act=xl-zoom][data-k=${k}]`);if(b)b.textContent=Math.round(z*100)+'%';k==='wb'?wbPaint():xsPaint()}
+document.addEventListener('wheel',e=>{if(!(e.ctrlKey||e.metaKey))return;const g=e.target.closest&&e.target.closest('#wb-grid,#sh-wrap,.xl-frame,.wb-frame');if(!g)return;
+  const k=e.target.closest('#sh-wrap,.xl-frame')?'sh':'wb';e.preventDefault();xlSetZoom(k,xlZoom(k)*(e.deltaY<0?1.1:1/1.1))},{passive:false});
+document.addEventListener('click',e=>{const b=e.target.closest&&e.target.closest('[data-act=xl-zoom]');if(b)xlSetZoom(b.dataset.k,1)});
 // ---- Excel-style range select, fill handle, copy/paste, delete, undo ----
 const WBR={a:null,b:null,drag:0,fill:null};
 const wbRows=()=>[...document.querySelectorAll('#wb-grid tbody tr[data-wbid]')];
@@ -6520,8 +6530,8 @@ function estSheetView(d,R,ro){const E=S.est;const hide=shHidden();const cols=SH_
   const colMenu=`<details class="sh-cols"><summary class="btn sm ghost">Columns ▾</summary><div class="sh-colsp">${SH_COLS.filter(c=>!SH_LOCK.includes(c[0])).map(([k,l])=>`<label><input type="checkbox" data-shcol="${k}"${hide.has(k)?'':' checked'}> ${l}</label>`).join('')}</div></details>`;
   let rno=1;const body=rows.map(r=>{const add=r.startsWith('<tr class="sh-r-add"');return r.replace(/^(<tr[^>]*>)/,`$1<th class="sh-rn">${add?'+':++rno}</th>`)}).join('');
   return `${shLists()}<div class="sh-bar"><span class="dim small">Click and drag to select, drag the green corner to copy down, <b>Ctrl+C / Ctrl+V</b> to and from Excel, <b>Ctrl+D</b> fills down, <b>Delete</b> clears, <b>Ctrl+Z</b> undoes. Right-click a row for more.</span>${colMenu}</div>
-    <div class="xl-frame"><div class="wb-fx"><span class="wb-ref" id="sh-ref">A1</span><span class="wb-fxi">ƒx</span><span class="wb-fxv" id="sh-fxv"></span></div>
-    <div class="panel sh-wrap xl" id="sh-wrap"><table class="sh-t"><colgroup><col style="width:42px">${cols.map(c=>`<col style="width:${c[2]}px">`).join('')}</colgroup>
+    <div class="xl-frame"><div class="wb-fx"><span class="wb-ref" id="sh-ref">A1</span><span class="wb-fxi">ƒx</span><span class="wb-fxv" id="sh-fxv"></span>${xlZoomBtn('sh')}</div>
+    <div class="panel sh-wrap xl" id="sh-wrap"><table class="sh-t" style="zoom:${xlZoom('sh')}"><colgroup><col style="width:42px">${cols.map(c=>`<col style="width:${c[2]}px">`).join('')}</colgroup>
       <thead><tr class="xl-letters"><th class="sh-rn"></th>${cols.map((c,i)=>`<th>${wbCol(i)}</th>`).join('')}</tr><tr class="xl-head"><th class="sh-rn">1</th>${cols.map(([k,l])=>`<th class="sh-${k}${['qty','ph','pd','hrs','matp','subp','lab','eq','matc','subc','oth','cost','cu','up','bt'].includes(k)?' r':''}">${l}</th>`).join('')}</tr></thead><tbody>${body}</tbody>
       <tfoot><tr><th class="sh-rn"></th>${cols.map(([c])=>c==='desc'?'<td><b>Base bid</b></td>':c==='cost'?`<td class="r num"><b>${money2(R.cost)}</b></td>`:c==='bt'?`<td class="r num"><b>${money2(R.gross)}</b></td>`:c==='hrs'?`<td class="r num">${fmtN(R.items.reduce((s,x,i)=>s+(d.items[i].alt?0:x.acts.reduce((a,b)=>a+b.hrs,0)),0),1)}</td>`:'<td></td>').join('')}</tr></tfoot></table></div></div>`}
 // write one cell's value into the estimate (no redraw); returns false when nothing changed
