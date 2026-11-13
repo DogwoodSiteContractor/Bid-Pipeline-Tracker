@@ -868,6 +868,10 @@ async function wbPatch(b,patch,o={}){const old={};Object.keys(patch).forEach(x=>
   if(ok&&!o.noUndo){const W=S.wb;if(W.grp)W.grp.push({id:b.id,old});else{(W.undo=W.undo||[]).push([{id:b.id,old}]);if(W.undo.length>50)W.undo.shift()}}
   if(o.quiet)return;wbRender()}
 function wbRender(){const g=$('#wb-grid');const sc=g?[g.scrollTop,g.scrollLeft]:null;render();const g2=$('#wb-grid');if(g2&&sc){g2.scrollTop=sc[0];g2.scrollLeft=sc[1]}wbPaint()}
+// executed contract: also marks the bid awarded if it wasn't, so it shows on Verbal Awards and Contracts Executed
+function wbContract(b){const t=todayStr();const patch={contract_date:t,contract_amount:num(b.contract_amount)??num(b.awarded_amount)??wonValue(b)??bidValue(b)??null};
+  if(b.status!=='Awarded'){patch.status='Awarded';if(!b.awarded_date)patch.awarded_date=t;if(!b.awarded_client_id&&propIds(b).length===1)patch.awarded_client_id=propIds(b)[0];if(patch.awarded_amount==null&&num(b.awarded_amount)==null)patch.awarded_amount=patch.contract_amount}
+  wbPatch(b,patch);toast(`${b.name} moved to 03. Contracts Executed · dated today, change the date there if needed`)}
 function wbStatus(b,v){if(b.status===v)return;const patch={status:v};
   if(v==='Awarded'){if(!b.awarded_date)patch.awarded_date=todayStr();if(!b.awarded_client_id&&propIds(b).length===1)patch.awarded_client_id=propIds(b)[0]}
   if(v==='Submitted'&&!b.submitted_date)patch.submitted_date=todayStr();
@@ -972,7 +976,8 @@ document.addEventListener('contextmenu',e=>{if(e.shiftKey)return;const t=xlHit(e
   const b=byId(S.bids,tr.dataset.wbid);if(!b||!can('bids','edit'))return;e.preventDefault();e.stopImmediatePropagation();
   const it=[['↗','Open bid',()=>openBid(b.id)],null];
   if(b.status!=='Awarded')it.push(['🏆','Mark awarded (verbal)',()=>wbStatus(b,'Awarded')]);
-  if(b.status==='Awarded'&&!b.contract_date)it.push(['✍','Contract executed today',()=>wbPatch(b,{contract_date:todayStr(),contract_amount:num(b.contract_amount)??num(b.awarded_amount)??wonValue(b)??null})]);
+  if(!b.contract_date)it.push(['✍','Mark contract executed',()=>wbContract(b)]);
+  else{const cy=String(b.contract_date).slice(0,4);it.push(['✍',`Contract executed ${fmtShort(b.contract_date)} · go to it`,()=>{S.wb.tab='contract';S.wb.y=+cy||S.wb.y;WBR.a=WBR.b=null;render()}],['↩','Undo contract executed',()=>{wbPatch(b,{contract_date:null,contract_amount:null});toast(`${b.name} taken off Contracts Executed`)}])}
   if(b.status!=='Not Awarded')it.push(['✕','Mark not awarded',()=>wbStatus(b,'Not Awarded')]);
   if(b.status==='Awarded'||b.status==='Not Awarded')it.push(['↩','Back to submitted',()=>wbStatus(b,'Submitted')]);
   it.push(null);
@@ -982,7 +987,7 @@ document.addEventListener('contextmenu',e=>{if(e.shiftKey)return;const t=xlHit(e
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset.wby!=null){S.wb.y=+t.value;render();return}
   if(t.dataset&&t.dataset.wbpick){const b=byId(S.bids,t.value);if(!b)return;
     if(t.dataset.wbpick==='verbal')wbStatus(b,'Awarded');
-    else wbPatch(b,{contract_date:todayStr(),contract_amount:num(b.contract_amount)??num(b.awarded_amount)??wonValue(b)??null});return}
+    else wbContract(b);return}
   if(!t.dataset||!t.dataset.wbk||!t.closest('#wb-grid'))return;const b=byId(S.bids,t.dataset.id);if(b)wbSave(b,t.dataset.wbk,t.value)});
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act=wb-tab],[data-act=wb-xlsx]');if(!t)return;if(t.dataset.act==='wb-tab'){S.wb.tab=t.dataset.v;render();return}wbXlsx()});
 // the formula bar follows the selected cell; arrows and Enter move like Excel
