@@ -1284,7 +1284,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={shpick:shPickModal,cbbak:cbBakModal,qhist:qHistModal,tplsync:tplSyncModal,rfnew:rfNewModal,tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal,airate:aiRateModal,aiinstr:aiInstrModal,vqlink:vqLinkModal,aitko:atkModal,aitkr:atkReportModal}[M.kind]();
+  const html={estx:estxModal,shpick:shPickModal,cbbak:cbBakModal,qhist:qHistModal,tplsync:tplSyncModal,rfnew:rfNewModal,tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal,airate:aiRateModal,aiinstr:aiInstrModal,vqlink:vqLinkModal,aitko:atkModal,aitkr:atkReportModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='bid'?' bidpage':''}${['rpcard','rpdrill','airate','aitko','aitkr','import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -5946,6 +5946,78 @@ async function epToCodebook(p,k){const ec=EC();const src=epGet(ec.root,p);if(!sr
   try{const it=k==='activity'?epGet(ec.root,p.split('.acts.')[0]):null;const row=estCbRow(k,src,it,ctx);
     await run(sb.from('codebook').insert(row));await loadTable('codebook');toast(`Saved to the ${k==='activity'?'Activities':'Bid items'} codebook`)}catch(e){toast(cbErr(e))}}
 async function estPush(field){const E=S.est;const R=estCalc(E.data);try{await run(sb.from('bids').update({[field]:r2(R.total)}).eq('id',E.bidId));await loadTable('bids');toast(`Bid total ${money(R.total)} sent to the bid`)}catch(e){toast(errMsg(e))}}
+/* ---- Reports & exports: bid item cost breakdown, Foundation accounting CSV ---- */
+function estxModal(){const x=M;const E=S.est;const R=estCalc(E.data);const calc=E.data.items.reduce((s,it,i)=>s+(it.alt?0:(R.items[i].q?R.items[i].calcUnit*R.items[i].q:R.items[i].price)),0);const bal=E.data.items.reduce((s,it,i)=>s+(it.alt?0:R.items[i].price),0);
+  const rb=(v,l,amt)=>`<label class="estx-r"><input type="radio" name="estx-price" data-estx="price" value="${v}"${x.price===v?' checked':''}> ${l} <b>${money2(amt)}</b></label>`;
+  return mhead('Reports & exports','From this estimate')+`<div class="mbody estx">
+    <div class="estx-card"><div><b>Bid item cost breakdown</b><p class="dim small">Each bid item with labor, equipment, material, sub and other cost in their own columns, then overhead, markup, total price and unit price. Section subtotals and a grand total.</p></div>
+      <div class="estx-btns"><button class="btn" data-act="est-xbrkp">Print / PDF</button><button class="btn" data-act="est-xbrkx">Excel</button></div></div>
+    <div class="estx-card"><div><b>Accounting export (Foundation)</b><p class="dim small">The same CSV ProEstimate writes: revenue lines per pay item, and budget lines per cost code and cost type (labor, equipment, material, other). Subs are left out, as in ProEstimate. Set a bid item’s cost code on Bid item setup; blank uses its section code.</p>
+      <div class="estx-opts"><div>${rb('calc','Calculated prices',calc)}${rb('bal','Balanced prices',bal)}</div>
+      <label class="f">Project number<input class="field" data-estx="proj" value="${esc(x.proj)}" placeholder="Optional"></label>
+      <label class="estx-c"><input type="checkbox" data-estx="sep"${x.sep?' checked':''}> Separate revenue and budget files</label>
+      <label class="estx-c"><input type="checkbox" data-estx="hdr"${x.hdr?' checked':''}> Include header row</label></div></div>
+      <div class="estx-btns"><button class="btn primary" data-act="est-xacct">Export CSV</button></div></div>
+    <div class="estx-card"><div><b>Estimate to Excel</b><p class="dim small">Bid items, every activity and cost line, and the summary, in one workbook.</p></div><div class="estx-btns"><button class="btn" data-act="est-xxlsx">Excel</button></div></div>
+  </div><div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Close</button></div></div>`}
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='estx'||!t.dataset||!t.dataset.estx)return;const k=t.dataset.estx;M[k]=t.type==='checkbox'?t.checked:t.value});
+document.addEventListener('input',e=>{const t=e.target;if(!M||M.kind!=='estx'||!t.dataset||t.dataset.estx!=='proj')return;M.proj=t.value});
+// one row per bid item, by section; alternates in their own group at the end
+function estBrk(){const E=S.est,d=E.data,R=estCalc(d);const b=byId(S.bids,E.bidId);
+  const used=k=>d.items.some((it,i)=>Math.abs(R.items[i].c[k]||0)>.005);
+  const cols=[['labor','Labor'],['equipment','Equipment'],['material','Material'],['sub','Sub'],...(used('trucking')?[['trucking','Trucking']]:[]),['other','Other'],...(used('tax')?[['tax','Sales tax']]:[]),...(d.items.some((it,i)=>R.items[i].ind)?[['ind','Indirects']]:[])];
+  const hasBond=d.items.some((it,i)=>R.items[i].bond>.005);
+  const line=(it,i)=>{const x=R.items[i];const v={};cols.forEach(([k])=>v[k]=k==='ind'?x.ind:(x.c[k]||0));const cost=x.total+x.ind;const oh=x.mk0?x.oh0*(x.mk/x.mk0):x.oh0;const mk=x.mk-oh;const bond=x.bond||0;const bal=x.price-(cost+x.mk+bond);
+    return {code:it.code||'',desc:it.desc||'',q:x.q,unit:it.unit||'',v,cost,oh,mk,bond,bal,price:x.price,up:x.q?x.unitPrice:0}};
+  const groups=[];d.sections.forEach(sec=>{const L=d.items.map((it,i)=>({it,i})).filter(o=>o.it.sec===sec.id&&!o.it.alt).map(o=>line(o.it,o.i));if(L.length)groups.push({name:[sec.code,sec.name].filter(Boolean).join(' · '),rows:L})});
+  const orphan=d.items.map((it,i)=>({it,i})).filter(o=>!o.it.alt&&!d.sections.some(z=>z.id===o.it.sec)).map(o=>line(o.it,o.i));if(orphan.length)groups.push({name:'Other items',rows:orphan});
+  const alts=d.items.map((it,i)=>({it,i})).filter(o=>o.it.alt).map(o=>line(o.it,o.i));
+  const sum=L=>{const t={v:{},cost:0,oh:0,mk:0,bond:0,bal:0,price:0};cols.forEach(([k])=>t.v[k]=0);L.forEach(r=>{cols.forEach(([k])=>t.v[k]+=r.v[k]);['cost','oh','mk','bond','bal','price'].forEach(k=>t[k]+=r[k])});return t};
+  groups.forEach(g=>g.tot=sum(g.rows));const grand=sum(groups.flatMap(g=>g.rows));
+  return {b,cols,hasBond,hasBal:[...groups.flatMap(g=>g.rows),...alts].some(r=>Math.abs(r.bal)>.5),groups,alts,altTot:sum(alts),grand}}
+function estBrkPrint(){const B=estBrk();const m=v=>Math.abs(v)<.005?'':money2(v).replace('$','');
+  const head=`<tr><th>Item</th><th>Description</th><th class="r">Qty</th><th>Unit</th>${B.cols.map(c=>`<th class="r">${c[1]}</th>`).join('')}<th class="r">Total cost</th><th class="r">Overhead</th><th class="r">Markup</th>${B.hasBond?'<th class="r">Bond</th>':''}${B.hasBal?'<th class="r">Balancing</th>':''}<th class="r">Total price</th><th class="r">Unit price</th></tr>`;
+  const nums=r=>`${B.cols.map(([k])=>`<td class="r">${m(r.v[k])}</td>`).join('')}<td class="r">${m(r.cost)}</td><td class="r">${m(r.oh)}</td><td class="r">${m(r.mk)}</td>${B.hasBond?`<td class="r">${m(r.bond)}</td>`:''}${B.hasBal?`<td class="r">${m(r.bal)}</td>`:''}<td class="r"><b>${m(r.price)}</b></td>`;
+  const row=r=>`<tr><td>${esc(r.code)}</td><td>${esc(r.desc)}</td><td class="r">${r.q?fmtN(r.q,2):''}</td><td>${esc(r.unit)}</td>${nums(r)}<td class="r">${r.up?money2(r.up).replace('$',''):''}</td></tr>`;
+  const n=4+B.cols.length+5+(B.hasBond?1:0)+(B.hasBal?1:0);
+  const grp=(g,t)=>`<tr class="eb-g"><td colspan="${n}">${esc(g)}</td></tr>`;
+  const sub=(l,t,cls)=>`<tr class="${cls}"><td></td><td>${l}</td><td></td><td></td>${nums(t)}<td></td></tr>`;
+  let body=B.groups.map(g=>grp(g.name)+g.rows.map(row).join('')+sub(esc(g.name)+' subtotal',g.tot,'eb-sub')).join('')+sub('Base bid total',B.grand,'eb-grand');
+  if(B.alts.length)body+=grp('Alternates (not in the base bid)')+B.alts.map(row).join('')+sub('Alternates total',B.altTot,'eb-sub');
+  const old=document.title;document.title=`Bid item breakdown - ${B.b?.name||''}`;const pr=document.createElement('div');pr.id='print-root';pr.className='eb-print';
+  pr.innerHTML=`<h1>${esc(B.b?.name||'Estimate')}</h1><p>Bid item cost breakdown · ${fmtDate(todayStr())}</p><table class="eb-t"><thead>${head}</thead><tbody>${body}</tbody></table>`;
+  document.body.appendChild(pr);document.body.classList.add('printing-prop');window.print();setTimeout(()=>{document.body.classList.remove('printing-prop');pr.remove();document.title=old},500)}
+async function estBrkXlsx(){let X;try{X=await loadXLSX()}catch(e){toast(errMsg(e));return}const B=estBrk();
+  const head=['Item','Description','Quantity','Unit',...B.cols.map(c=>c[1]),'Total cost','Overhead','Markup',...(B.hasBond?['Bond']:[]),...(B.hasBal?['Balancing']:[]),'Total price','Unit price'];
+  const nums=r=>[...B.cols.map(([k])=>r2(r.v[k])),r2(r.cost),r2(r.oh),r2(r.mk),...(B.hasBond?[r2(r.bond)]:[]),...(B.hasBal?[r2(r.bal)]:[]),r2(r.price)];
+  const aoa=[[B.b?.name||'Estimate'],['Bid item cost breakdown',todayStr()],[],head];const bold=[];
+  B.groups.forEach(g=>{aoa.push([g.name]);bold.push(aoa.length-1);g.rows.forEach(r=>aoa.push([r.code,r.desc,r.q||'',r.unit,...nums(r),r.up?r2(r.up):'']));aoa.push(['',g.name+' subtotal','','',...nums(g.tot),'']);bold.push(aoa.length-1)});
+  aoa.push(['','Base bid total','','',...nums(B.grand),'']);bold.push(aoa.length-1);
+  if(B.alts.length){aoa.push([]);aoa.push(['Alternates (not in the base bid)']);B.alts.forEach(r=>aoa.push([r.code,r.desc,r.q||'',r.unit,...nums(r),r.up?r2(r.up):'']));aoa.push(['','Alternates total','','',...nums(B.altTot),''])}
+  const ws=X.utils.aoa_to_sheet(aoa);ws['!cols']=[{wch:9},{wch:42},{wch:10},{wch:6},...head.slice(4).map(()=>({wch:13}))];
+  const rg=X.utils.decode_range(ws['!ref']);for(let r=4;r<=rg.e.r;r++)for(let c=2;c<=rg.e.c;c++){const a=ws[X.utils.encode_cell({r,c})];if(a&&typeof a.v==='number')a.z=c===2?'#,##0.00':'#,##0.00'}
+  ws['!freeze']={xSplit:2,ySplit:4};const wb=X.utils.book_new();X.utils.book_append_sheet(wb,ws,'Bid item breakdown');
+  X.writeFile(wb,`bid-item-breakdown-${String(B.b?.name||'bid').replace(/[^\w-]+/g,'-').slice(0,40)}-${todayStr()}.xlsx`)}
+// Foundation layout, as ProEstimate's "Export Accounting Data" writes it
+const FDN_UNITS={LS:'L.S.',EA:'EACH',LF:'L.F.',SF:'S.F.',SY:'S.Y.',CY:'C.Y.',AC:'ACRE',TON:'TON',HR:'HR',DAY:'DAY',GAL:'GAL',LB:'LB',MO:'MONTH',WK:'WEEK',CF:'C.F.',LOAD:'LOAD'};
+const fdnUnit=u=>{const k=String(u||'').trim().toUpperCase().replace(/[^A-Z]/g,'');return FDN_UNITS[k]||String(u||'').trim().toUpperCase()};
+const fdnTxt=s=>String(s??'').replace(/[\u2033"]/g,'IN').replace(/[\u2032]/g,"'").replace(/,/g,' ').replace(/\//g,'-').replace(/[\r\n]+/g,' ').trim();
+function estAcctCsv(){const E=S.est,d=E.data,R=estCalc(d),x=M;const b=byId(S.bids,E.bidId);const proj=fdnTxt(x.proj);const f4=v=>(+v||0).toFixed(4);
+  const items=d.items.map((it,i)=>({it,i,x:R.items[i]})).filter(o=>!o.it.alt);
+  const rev=items.map(({it,i,x:r},n)=>{const code=fdnTxt(it.code||String(n+1));const sort=num(it.pe?.sort)??(n+1)*10;const up=x.price==='bal'?r.unitPrice:(r.q?r.calcUnit:r.price);const q=r.q||1;
+    return {code,sort,cells:['1',proj,code,'',(+sort).toFixed(2),fdnTxt(it.desc),f4(q),fdnUnit(it.unit),f4(up),f4(up*q),'0',code]}}).sort((a,c)=>a.code<c.code?-1:a.code>c.code?1:a.sort-c.sort).map(o=>o.cells);
+  const T=[['labor','L'],['equipment','E'],['material','M'],['other','O']];
+  // ProEstimate's project indirects (brought in as "Project indirects" cost lines) stay out of the budget, as in its own export
+  const peInd=(it,r)=>it.acts.reduce((s,a,j)=>s+(a.res||[]).reduce((t,z,n)=>t+(/^project indirects$/i.test(String(z.desc||'').trim())?(r.acts[j]?.res[n]?.cost||0):0),0),0);
+  const bud=[];items.forEach(({it,x:r},n)=>{const code=fdnTxt(it.code||String(n+1));const cc=fdnTxt(it.cc||secOf(d,it.sec)?.code||code);const q=r.q||1;
+    T.forEach(([k,t])=>{const amt=k==='material'?(r.c.material||0)+(r.c.tax||0):k==='other'?(r.c.other||0)+(r.c.trucking||0)-peInd(it,r):(r.c[k]||0);if(Math.abs(amt)<.005)return;bud.push({cc,t,code,cells:['3',proj,code,cc,t,f4(q),fdnUnit(it.unit),'0',(+amt).toFixed(8),'Y']})})});
+  bud.sort((a,c)=>(num(a.cc)??0)-(num(c.cc)??0)||String(a.cc).localeCompare(String(c.cc))||a.t.localeCompare(c.t)||(a.code<c.code?-1:a.code>c.code?1:0));
+  const H1=['Record','Project','PayItem','','SortCode','Description','Quantity','Unit','UnitPrice','Amount','','CostCode'],H3=['Record','Project','PayItem','CostCode','CostType','Quantity','Unit','','Amount','Budget'];
+  const csv=rows=>rows.map(r=>r.join(',')).join('\r\n')+'\r\n';const name=String(b?.name||'Estimate').replace(/[^\w-]+/g,'_').slice(0,40);const tag=x.price==='bal'?'_balanced_prices':'_calculated_prices';
+  const dl=(txt,fn)=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([txt],{type:'text/csv'}));a.download=fn;document.body.appendChild(a);a.click();setTimeout(()=>{URL.revokeObjectURL(a.href);a.remove()},500)};
+  const R1=(x.hdr?[H1]:[]).concat(rev),R3=(x.hdr?[H3]:[]).concat(bud.map(o=>o.cells));
+  if(x.sep){dl(csv(R1),`${name}_Accounting_revenue${tag}.csv`);setTimeout(()=>dl(csv(R3),`${name}_Accounting_budget.csv`),400)}else dl(csv(R1)+csv(R3),`${name}_Accounting${tag}.csv`);
+  toast(`${rev.length} revenue line${rev.length===1?'':'s'} and ${bud.length} budget line${bud.length===1?'':'s'} exported`)}
 async function estExport(){let X;try{X=await loadXLSX()}catch(e){toast(errMsg(e));return}const E=S.est,d=E.data,R=estCalc(d);const b=byId(S.bids,E.bidId);
   const wb=X.utils.book_new();const put=(name,rows,w)=>{const ws=X.utils.aoa_to_sheet(rows);ws['!cols']=w.map(x=>({wch:x}));X.utils.book_append_sheet(wb,ws,name)};
   const secName=it=>secOf(d,it.sec)?.name||'';
@@ -5996,6 +6068,11 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     case 'est-stale':{const st=estStale(S.est.data);estApplyStale(st);ec.redraw();toast(`Updated ${st.length} price${st.length===1?'':'s'} from the codebook`);break}
     case 'est-push':estPush(t.dataset.v);break;
     case 'est-export':estExport();break;
+    case 'est-xopen':M={kind:'estx',price:'calc',proj:'',sep:false,hdr:false};showModal();break;
+    case 'est-xbrkp':estBrkPrint();break;
+    case 'est-xbrkx':estBrkXlsx();break;
+    case 'est-xacct':estAcctCsv();break;
+    case 'est-xxlsx':closeModal();estExport();break;
     case 'ep-add-item':{const d=ec.root;const it=estNewItem(d);d.items.push(it);S.est.sel=it.id;ec.redraw();setTimeout(()=>{const el=document.getElementById(epId(`items.${d.items.length-1}.desc`));el?.focus()},0);break}
     case 'ep-add-act':{const it=epGet(ec.root,p);it.acts.push(estNewAct({unit:it.unit||''}));ec.redraw();setTimeout(()=>document.getElementById(epId(`${p}.acts.${it.acts.length-1}.desc`))?.focus(),0);break}
     case 'ep-mv':{const {arr,i}=epParent(ec.root,p);const j=i+(+t.dataset.d);if(j<0||j>=arr.length)break;[arr[i],arr[j]]=[arr[j],arr[i]];ec.redraw();break}
@@ -6474,7 +6551,7 @@ function vEstimate(){const E=S.est;const tpl=!!(E&&E.tpl);const b=tpl?null:byId(
   const body=E.tab==='setup'?estSetupView(d,R,ro):E.tab==='info'?estInfoView(d,b||{},ro):E.tab==='ind'?estIndView(d,R,ro):E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='gantt'?estGanttView(d,R,ro):E.tab==='sum'?estSumView(d,R,b||{},ro):E.tab==='bal'?estBalView(d,R,ro):E.tab==='cr'?estCrView(d,R,ro):estBuildView(d,R,ro);
   const title=tpl?`<input class="field est-tplname" id="est-tplname" data-tplname value="${esc(E.tplName||'')}" placeholder="Template name"${ro?' disabled':''}>`:`<h1>${esc(b.name)}</h1>`;
   return `<div class="head est-headrow"><div>${back}${title}<p class="small"><b>${tpl?(E.tplBook==='section'?'Section template':'Master template'):'Estimate'}</b>${tpl?'':` · <button class="linkbtn" data-act="est-revs" title="Saved copies and revisions">${esc(E.ver?E.ver.label:estRevName(d))}</button>`} · <span id="est-status">${estStatusText()}</span></p></div>
-    <div class="tools">${stale.length&&!ro?`<button class="btn" data-act="est-stale" title="Codebook prices changed since they were added">↻ Update ${stale.length} price${stale.length===1?'':'s'}</button>`:''}${tpl?'':`<button class="btn" data-act="est-revs">Revisions${estVersOf(E.bidId).length?` (${estVersOf(E.bidId).length})`:''}</button><button class="btn" data-act="est-export">Export to Excel</button>`}${!tpl&&cbEditable()?'<button class="btn" data-act="est-savetpl" data-v="estimate">Save as master template</button>':''}${tpl&&cbEditable()?`<button class="btn danger tpl-del" data-act="tpl-del" data-id="${E.tpl}">Delete template</button>`:''}</div></div>
+    <div class="tools">${stale.length&&!ro?`<button class="btn" data-act="est-stale" title="Codebook prices changed since they were added">↻ Update ${stale.length} price${stale.length===1?'':'s'}</button>`:''}${tpl?'':`<button class="btn" data-act="est-revs">Revisions${estVersOf(E.bidId).length?` (${estVersOf(E.bidId).length})`:''}</button><button class="btn" data-act="est-xopen" title="Bid item cost breakdown, Foundation accounting export, Excel">Reports & exports</button>`}${!tpl&&cbEditable()?'<button class="btn" data-act="est-savetpl" data-v="estimate">Save as master template</button>':''}${tpl&&cbEditable()?`<button class="btn danger tpl-del" data-act="tpl-del" data-id="${E.tpl}">Delete template</button>`:''}</div></div>
   ${E.ver?`<div class="notice est-verbar"><span>You’re looking at a saved copy: <b>${esc(E.ver.label)}</b>, kept ${fmtShort(String(E.ver.at).slice(0,10))}${E.ver.by?' by '+esc(E.ver.by):''}. It’s read-only.</span> <button class="btn sm primary" data-act="est-verback">Back to the working estimate</button>${b&&canWork(b)&&can('estimates','edit')?` <button class="btn sm${E.armR?' danger':''}" data-act="est-verrestore">${E.armR?'Click again — the current working estimate is kept as a copy':'Make this the working estimate'}</button>`:''}</div>`:''}
   ${E.conflict?`<div class="err est-conflict"><b>Someone else saved this estimate while you were working.</b> Your last changes haven’t been saved. <button class="btn sm" data-act="est-reload">Load their version</button> <button class="btn sm danger" data-act="est-keep">Keep mine (overwrite theirs)</button></div>`:''}
   ${ro&&!E.conflict?`<div class="notice">View only — ${tpl?'only admins change templates':'you’re not on this bid’s estimating team'}.</div>`:''}
@@ -6747,6 +6824,7 @@ function estRight(d,R,ro){const s=estSelResolve(d);if(!s)return `<div class="pan
         <label class="f">Quantity${epIn(s.p+'.qty',it.qty,{n:1,cls:it.qty==null||it.qty===''?'est-need':''})}</label><label class="f">Unit${epIn(s.p+'.unit',it.unit,{list:'cb-units'})}</label>
         <label class="f">Section<select class="field" data-eosec="${it.id}"${ro?' disabled':''}>${d.sections.map(z=>`<option value="${z.id}"${z.id===it.sec?' selected':''}>${esc(z.code+' · '+z.name)}</option>`).join('')}</select></label>
         <label class="f">Unit price override${epIn(s.p+'.override',it.override,{n:1,ph:x.calcUnit?money2(x.calcUnit).replace('$',''):'Calculated',title:'Leave blank to use the calculated unit price'})}</label>
+        <label class="f">Cost code${epIn(s.p+'.cc',it.cc,{ph:secOf(d,it.sec)?.code||'',title:'Job cost code for the accounting export (the budget lines). Blank = the section code.'})}</label>
         <label class="f s4">Notes${epIn(s.p+'.notes',it.notes,{ph:'Assumptions, inclusions, exclusions for this item'})}</label></div>
         <label class="check small"><input type="checkbox" data-ep="${s.p}.alt" data-ept="b"${it.alt?' checked':''}${ro?' disabled':''}> Alternate — priced, but not in the base bid</label>
         <div class="est-isum"><div><span>Cost</span><b>${money(x.total)}</b></div><div><span>Unit cost</span><b>${x.q?money2(x.unit):'—'}</b></div><div><span>Unit price</span><b>${x.q?money2(x.unitPrice):'—'}</b>${x.ov?`<small>calc. ${money2(x.calcUnit)}</small>`:''}</div><div><span>Total</span><b>${money(x.price)}</b></div><div><span>Man-hours</span><b>${fmtN(x.mh,1)}</b></div></div>${estMix(x.c)}`,`${ro?'':'<button class="btn sm ef-cb" data-act="cbpick-open" data-v="biditem" data-mode="fill" title="Fill this bid item from the codebook">📖 From codebook</button>'}`)}
@@ -14905,7 +14983,7 @@ function peeParse(rows){let h=-1,map=null;for(let i=0;i<Math.min(rows.length,15)
   const items=[];let cur=null;
   rows.slice(h+1).forEach((r,ri)=>{const pay=String(v(r,'pay')??'').trim(),desc=String(v(r,'desc')??'').trim();if(!pay&&!desc)return;
     const costs=Object.fromEntries(PEE_TYPES.map(([k])=>[k,n(r,k)]));const row={desc,qty:n(r,'qty'),unit:String(v(r,'unit')||'').trim(),costs,ucost:n(r,'ucost')||PEE_TYPES.reduce((s,[k])=>s+costs[k],0),ecost:n(r,'ecost')};
-    if(pay){cur={...row,pay,sort:n(r,'sort')||items.length*10,mup:n(r,'mup'),ubid:n(r,'ubid'),ebid:n(r,'ebid'),acts:[],row:h+2+ri};if(!cur.ecost)cur.ecost=cur.ucost*cur.qty;if(!cur.ebid&&cur.ubid)cur.ebid=cur.ubid*cur.qty;items.push(cur)}
+    if(pay){cur={...row,pay,sort:(v(r,'sort')===''||v(r,'sort')==null)?items.length*10:n(r,'sort'),mup:n(r,'mup'),ubid:n(r,'ubid'),ebid:n(r,'ebid'),acts:[],row:h+2+ri};if(!cur.ecost)cur.ecost=cur.ucost*cur.qty;if(!cur.ebid&&cur.ubid)cur.ebid=cur.ubid*cur.qty;items.push(cur)}
     else if(cur){if(!row.ecost)row.ecost=row.ucost*row.qty;cur.acts.push(row)}});
   if(!items.length)throw new Error('No pay items found under the header row.');
   items.sort((a,b)=>a.sort-b.sort);
