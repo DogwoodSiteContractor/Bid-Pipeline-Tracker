@@ -420,19 +420,19 @@ function brandBlock(){return BRAND.loginLogo?`<picture>${BRAND.loginLogoDark?`<s
 function msgBlock(){const m=S.authMsg;return m?(m.err?`<div class="err">${esc(m.err)}</div>`:`<div class="okmsg">${esc(m.ok)}</div>`):''}
 function authScreen(){
   let remembered='',rememberOn=true;try{remembered=localStorage.getItem(EMAIL_KEY)||'';rememberOn=localStorage.getItem(REMEMBER_KEY)!=='0'}catch(e){}
-  if(S.authView==='code')return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Check your email</h1><p class="lead">We sent a reset email to <b>${esc(S.resetEmail)}</b>. Type the code from it here and choose a new password, or click the link in the email.</p>
+  if(S.authView==='code')return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Check your email</h1><p class="lead">We sent a reset email to <b>${esc(S.resetEmail)}</b>. Click the link in it to choose a new password. If the email shows a 6-digit code instead, type it below.</p>
     <form id="code-form">${msgBlock()}<label class="f">Code from the email<input class="field" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,12}" maxlength="12" required autofocus placeholder="6-digit code"></label>
     <label class="f">New password<input class="field" type="password" name="p1" minlength="8" autocomplete="new-password" required></label>
     <label class="f">Confirm password<input class="field" type="password" name="p2" minlength="8" autocomplete="new-password" required></label>
     <button class="btn primary" type="submit">Save new password</button>
     <div class="rowx"><button type="button" class="linkbtn" data-act="auth-view" data-v="forgot">Send another email</button><button type="button" class="linkbtn" data-act="auth-view" data-v="login">Back to sign in</button></div>
-    <p class="hint" style="margin-top:12px">Nothing after a few minutes? Check your junk or quarantine folder for a message from Supabase, or ask an admin to set a temporary password for you on the Team page.</p></form></div></div>`;
+    <p class="hint" style="margin-top:12px">Nothing after a few minutes, or the link says it expired? Check your junk or quarantine folder for a message from Supabase. If it still doesn’t work, ask an admin to set a temporary password for you on the Team page.</p></form></div></div>`;
   if(S.authView==='resetlink')return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Choose a new password</h1><p class="lead">You opened the reset link from your email. Pick a new password to finish.</p>
     <form id="resetlink-form">${msgBlock()}<label class="f">New password<input class="field" type="password" name="p1" minlength="8" autocomplete="new-password" required autofocus></label>
     <label class="f">Confirm password<input class="field" type="password" name="p2" minlength="8" autocomplete="new-password" required></label>
     <button class="btn primary" type="submit">Save new password</button>
     <div class="rowx"><button type="button" class="linkbtn" data-act="auth-view" data-v="forgot">Send a new reset email</button><button type="button" class="linkbtn" data-act="auth-view" data-v="login">Back to sign in</button></div></form></div></div>`;
-  if(S.authView==='forgot')return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Reset your password</h1><p class="lead">We’ll email you a code and a link to set a new one.</p>
+  if(S.authView==='forgot')return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Reset your password</h1><p class="lead">We’ll email you a link to set a new one.</p>
     <form id="forgot-form">${msgBlock()}<label class="f">Email<input class="field" type="email" name="email" autocomplete="email" required value="${esc(remembered)}"></label>
     <button class="btn primary" type="submit">Send reset link</button><div class="rowx"><button type="button" class="linkbtn" data-act="auth-view" data-v="login">Back to sign in</button></div></form></div></div>`;
   return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Sign in</h1><p class="lead">Use the email your admin set up for you.</p>
