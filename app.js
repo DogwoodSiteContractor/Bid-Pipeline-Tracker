@@ -420,13 +420,13 @@ function authScreen(){
   if(S.authView==='forgot')return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Reset your password</h1><p class="lead">We’ll email you a link to set a new one.</p>
     <form id="forgot-form">${msgBlock()}<label class="f">Email<input class="field" type="email" name="email" autocomplete="email" required value="${esc(remembered)}"></label>
     <button class="btn primary" type="submit">Send reset link</button><div class="rowx"><button type="button" class="linkbtn" data-act="auth-view" data-v="login">Back to sign in</button></div></form></div></div>`;
-  return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Sign in</h1><p class="lead">Use the email your precon manager set up for you.</p>
+  return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Sign in</h1><p class="lead">Use the email your admin set up for you.</p>
   <form id="login-form">${msgBlock()}
    <label class="f">Email<input class="field" type="email" name="email" autocomplete="username" required value="${esc(remembered)}" ${remembered?'':'autofocus'}></label>
    <label class="f">Password<input class="field" type="password" name="password" autocomplete="current-password" required ${remembered?'autofocus':''}></label>
    <div class="rowx"><label class="check"><input type="checkbox" name="remember" ${rememberOn?'checked':''}> Remember me</label><button type="button" class="linkbtn" data-act="auth-view" data-v="forgot">Forgot password?</button></div>
    <button class="btn primary" type="submit">Sign in</button></form>
-  <p class="hint" style="margin-top:14px">Don’t have a login? Ask your precon manager to add you.</p></div></div>`;
+  <p class="hint" style="margin-top:14px">Don’t have a login? Ask your admin to add you.</p></div></div>`;
 }
 function setPasswordScreen(){return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>${S.profile&&S.profile.must_change_pw?'Create your password':'Set your password'}</h1><p class="lead">${S.profile&&S.profile.must_change_pw?'Welcome. You signed in with a temporary password — choose your own to continue.':'Choose a password for '+esc(S.session?.user?.email||'your account')+'.'}</p>
   <form id="password-form">${msgBlock()}<label class="f">New password<input class="field" type="password" name="p1" minlength="8" autocomplete="new-password" required autofocus></label>
@@ -646,7 +646,7 @@ function setupGuide(){
 /* ----- estimator personal view ----- */
 function mine(){
   const me=myEst();
-  if(!me)return `<div class="notice">Your account isn’t set up to work bids yet, so no bids can be assigned to you. Ask your precon manager to link your account on the Team page.</div>`;
+  if(!me)return `<div class="notice">Your account isn’t set up to work bids yet, so no bids can be assigned to you. Ask an admin to link your account on the Team page.</div>`;
   const my=S.bids.filter(b=>live(b)&&assigned(b));
   const act=my.filter(b=>ACTIVE.includes(b.status)).sort((a,b)=>(a.due_date||'9999').localeCompare(b.due_date||'9999'));
   const est=act.filter(isWorking);
