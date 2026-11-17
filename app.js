@@ -115,6 +115,9 @@ const VENDOR_TYPES=['Supplier','Subcontractor','Supplier & sub','Service / testi
 const CFG=window.BID_PIPELINE_CONFIG||{};
 const CONFIGURED=!!(CFG.supabaseUrl&&CFG.supabaseAnonKey&&!/YOUR-/.test(CFG.supabaseUrl+CFG.supabaseAnonKey));
 const INITIAL_HASH=location.hash;
+// reset link from our own email template: ?reset=<token hash>. Nothing is used up until the person submits a new password,
+// so a company mail scanner that opens the link first can't spend it.
+const RESET_HASH=(()=>{try{return new URLSearchParams(location.search).get('reset')||''}catch(e){return ''}})();
 const REMEMBER_KEY='bp-remember',EMAIL_KEY='bp-email';
 // Remember me ON  → session kept in localStorage (stays signed in after closing the browser)
 // Remember me OFF → session kept in sessionStorage (signed out when the browser closes)
@@ -163,7 +166,7 @@ const APP_NAME=String(CFG.appName||'Bid Pipeline');try{if(CFG.appName)document.t
 
 /* ---------- state ---------- */
 const TABLES=['bids','quotes','bid_files','bid_log','estimators','clients','vendors','settings','jobs','job_items','job_costs','codebook','pay_apps','feedback','fun_stats'];
-const S={loading:true,session:null,profile:null,profileFor:null,needPassword:/type=(invite|recovery)/.test(INITIAL_HASH),authView:'login',authMsg:null,
+const S={loading:true,session:null,profile:null,profileFor:null,needPassword:/type=(invite|recovery)/.test(INITIAL_HASH),authView:RESET_HASH?'resetlink':'login',resetEmail:'',authMsg:null,
   bids:[],quotes:[],bid_files:[],bid_log:[],tableErr:{},estimators:[],clients:[],vendors:[],profiles:[],settings:{},jobs:[],job_items:[],job_costs:[],codebook:[],pms:[],
   view:'dashboard',dash:'precon',filter:'active',q:{},estF:'',clientF:'',year:new Date().getFullYear()};
 let channel=null;
@@ -417,7 +420,19 @@ function brandBlock(){return BRAND.loginLogo?`<picture>${BRAND.loginLogoDark?`<s
 function msgBlock(){const m=S.authMsg;return m?(m.err?`<div class="err">${esc(m.err)}</div>`:`<div class="okmsg">${esc(m.ok)}</div>`):''}
 function authScreen(){
   let remembered='',rememberOn=true;try{remembered=localStorage.getItem(EMAIL_KEY)||'';rememberOn=localStorage.getItem(REMEMBER_KEY)!=='0'}catch(e){}
-  if(S.authView==='forgot')return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Reset your password</h1><p class="lead">We’ll email you a link to set a new one.</p>
+  if(S.authView==='code')return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Check your email</h1><p class="lead">We sent a reset email to <b>${esc(S.resetEmail)}</b>. Type the code from it here and choose a new password, or click the link in the email.</p>
+    <form id="code-form">${msgBlock()}<label class="f">Code from the email<input class="field" name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9 ]{6,12}" maxlength="12" required autofocus placeholder="6-digit code"></label>
+    <label class="f">New password<input class="field" type="password" name="p1" minlength="8" autocomplete="new-password" required></label>
+    <label class="f">Confirm password<input class="field" type="password" name="p2" minlength="8" autocomplete="new-password" required></label>
+    <button class="btn primary" type="submit">Save new password</button>
+    <div class="rowx"><button type="button" class="linkbtn" data-act="auth-view" data-v="forgot">Send another email</button><button type="button" class="linkbtn" data-act="auth-view" data-v="login">Back to sign in</button></div>
+    <p class="hint" style="margin-top:12px">Nothing after a few minutes? Check your junk or quarantine folder for a message from Supabase, or ask an admin to set a temporary password for you on the Team page.</p></form></div></div>`;
+  if(S.authView==='resetlink')return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Choose a new password</h1><p class="lead">You opened the reset link from your email. Pick a new password to finish.</p>
+    <form id="resetlink-form">${msgBlock()}<label class="f">New password<input class="field" type="password" name="p1" minlength="8" autocomplete="new-password" required autofocus></label>
+    <label class="f">Confirm password<input class="field" type="password" name="p2" minlength="8" autocomplete="new-password" required></label>
+    <button class="btn primary" type="submit">Save new password</button>
+    <div class="rowx"><button type="button" class="linkbtn" data-act="auth-view" data-v="forgot">Send a new reset email</button><button type="button" class="linkbtn" data-act="auth-view" data-v="login">Back to sign in</button></div></form></div></div>`;
+  if(S.authView==='forgot')return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Reset your password</h1><p class="lead">We’ll email you a code and a link to set a new one.</p>
     <form id="forgot-form">${msgBlock()}<label class="f">Email<input class="field" type="email" name="email" autocomplete="email" required value="${esc(remembered)}"></label>
     <button class="btn primary" type="submit">Send reset link</button><div class="rowx"><button type="button" class="linkbtn" data-act="auth-view" data-v="login">Back to sign in</button></div></form></div></div>`;
   return `<div class="auth"><div class="auth-card">${brandBlock()}<h1>Sign in</h1><p class="lead">Use the email your admin set up for you.</p>
@@ -450,7 +465,18 @@ document.addEventListener('submit',async e=>{
   if(f.id==='forgot-form'){
     busy('Sending…');
     const {error}=await sb.auth.resetPasswordForEmail(String(fd.get('email')).trim(),{redirectTo:location.origin+location.pathname});
-    S.authMsg=error?{err:errMsg(error)}:{ok:'Check your email for a reset link. It can take a minute to arrive.'};render();
+    if(error){S.authMsg={err:/rate|too many|seconds/i.test(errMsg(error))?'Too many reset emails in a short time. Wait a few minutes and try again, or ask an admin to set a temporary password.':errMsg(error)};render();return}
+    S.resetEmail=String(fd.get('email')).trim();S.authView='code';S.authMsg=null;render();
+  }
+  if(f.id==='code-form'||f.id==='resetlink-form'){
+    const p1=String(fd.get('p1')),p2=String(fd.get('p2'));
+    if(p1!==p2){S.authMsg={err:'The passwords don’t match.'};render();return}
+    busy('Saving…');S.resetting=true;
+    const v=f.id==='code-form'?await sb.auth.verifyOtp({email:S.resetEmail,token:String(fd.get('code')).replace(/\D/g,''),type:'recovery'}):await sb.auth.verifyOtp({token_hash:RESET_HASH,type:'recovery'});
+    if(v.error){S.resetting=false;S.authMsg={err:/expired|invalid|not found|otp/i.test(errMsg(v.error))?(f.id==='code-form'?'That code didn’t work or has expired. Check it, or send another email.':'This reset link has expired or was already used. Send a new reset email.'):errMsg(v.error)};render();return}
+    const {error}=await sb.auth.updateUser({password:p1});
+    if(error){S.resetting=false;S.needPassword=true;S.authMsg={err:/different from the old|same_password/i.test(errMsg(error))?'Pick a password that’s different from your old one.':errMsg(error)};render();return}
+    S.resetting=false;S.needPassword=false;S.authView='login';S.authMsg=null;history.replaceState(null,'',location.pathname);toast('Password saved. You’re signed in.');render();
   }
   if(f.id==='password-form'){
     const p1=String(fd.get('p1')),p2=String(fd.get('p2'));
@@ -7520,7 +7546,7 @@ async function start(){
   render();
   if(!sb){S.loading=false;render();return}
   sb.auth.onAuthStateChange((event,session)=>{
-    if(event==='PASSWORD_RECOVERY')S.needPassword=true;
+    if(event==='PASSWORD_RECOVERY'&&!S.resetting)S.needPassword=true;
     S.session=session;
     if(!session){resetData();S.loading=false;closeModal();render();return}
     // run outside the callback (Supabase recommends not awaiting inside it)
