@@ -3270,7 +3270,7 @@ input.uncommitted{border-color:var(--warn,#d9a441)!important;box-shadow:0 0 0 2p
 .np-btn svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round}
 .np-btn i{position:absolute;top:-6px;right:-6px;min-width:17px;height:17px;padding:0 4px;border-radius:9px;background:var(--bad);color:#fff;font:700 10.5px/17px "Barlow",sans-serif;font-style:normal;text-align:center;box-shadow:0 0 0 2px var(--top,#243D2C)}
 .np{position:fixed;right:0;bottom:0;top:var(--np-top,64px);z-index:19;width:360px;max-width:100%;display:flex;flex-direction:column;background:var(--surface);border-left:1px solid var(--line);box-shadow:-6px 0 24px rgba(0,0,0,.08)}
-.np[hidden]{display:none}
+.np[hidden],.np-btn[hidden]{display:none}
 .np-head{display:flex;align-items:center;justify-content:space-between;padding:12px 14px 10px;border-bottom:1px solid var(--line)}
 .np-head b{font-family:"Montserrat",sans-serif;font-size:14px}
 .np-x{border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);border-radius:6px;width:28px;height:26px;cursor:pointer;font-size:15px;line-height:1}

@@ -54,6 +54,7 @@ supabase/update-36-planner.sql             one-time update for the Planner (my t
 supabase/update-37-vendor-rankings.sql    one-time update for vendor rankings, price lists and vendor update links
 supabase/update-38-vendor-cleanup.sql     small follow-up: lets Reset clear a vendor's price history
 supabase/update-63-notifications.sql      one-time update for the Notifications panel (personal + team summaries)
+supabase/update-64-notifications-access.sql  choose which roles see the Notifications panel (run after update-63)
 ```
 
 > **Already set up before these updates?** Run each `supabase/update-*.sql` file you haven't run yet, once, in number order, in the SQL Editor. New installs only need `schema.sql`.
@@ -235,7 +236,9 @@ Either way you can also delete their quotes on bids. Otherwise those quotes stay
 ## Notifications panel (everyone)
 The bell in the top bar opens a panel on the right side of every page, and the » button collapses it again. The app remembers whether you left it open, and the bell shows a red count of summaries you haven't seen yet.
 - **My summary:** your own daily summary (new quotes, bids due, files sorted). Only you can see yours.
-- **Team:** the shared summary for the estimating team: quotes received, bids due today and tomorrow with trades still missing a quote, new addenda and new invites. Shown to admins, executives, estimators and board members (PMs and accounting don't see bids, so they don't get this tab).
+- **Team:** the shared summary for the estimating team: quotes received, bids due today and tomorrow with trades still missing a quote, new addenda and new invites.
+
+**Who sees it:** Team → Access chart → **Notifications panel** (admins). Tick the roles that should get the bell and the panel: admins, estimators, executives / owners, board members. It starts with admins and estimators only. Unticked roles see no bell, and the database won't send them any summaries. Needs `supabase/update-64-notifications-access.sql`.
 
 Summaries are written by the scheduled Claude task each morning; the app only displays them. Admins can remove a team summary, and anyone can remove their own personal ones. Summaries use simple formatting: `## Heading`, `- bullet`, `**bold**`. Needs `supabase/update-63-notifications.sql`; until it's run, the bell only shows for admins (with a note saying the update is needed).
 
