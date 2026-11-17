@@ -8183,7 +8183,7 @@ function tabSwitchPanel(){if(!isAdmin())return '';const off=tabsOff();
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset.tabsw==null||!isAdmin())return;const k=t.dataset.tabsw;const off=tabsOff().filter(x=>x!==k);if(!t.checked)off.push(k);
   const g={...(S.settings.general||{}),tabsOff:off};S.settings.general=g;render();run(sb.from('settings').upsert({key:'general',value:g})).then(()=>loadTable('settings')).then(()=>{render();toast(`${(TAB_SWITCH.find(x=>x[0]===k)||[])[1]} ${t.checked?'is back on':'is hidden for everyone'}`)}).catch(er=>toast(errMsg(er)))});
 function vAccess(){const rs=ROLE_ORDER.filter(r=>r!=='pending');const custom=S.profiles.filter(p=>customCount(p));
-  return teamHead('Access chart','What each role can open by default. Anyone can be adjusted on People & access.')+tabSwitchPanel()+`
+  return teamHead('Access chart','What each role can open by default. Anyone can be adjusted on People & access.')+tabSwitchPanel()+npAccessPanel()+`
   <div class="panel scroll"><table class="team-t acc-t"><thead><tr><th>Area</th>${rs.map(r=>`<th class="c">${esc(ROLE_LABEL[r])}</th>`).join('')}</tr></thead><tbody>
   ${AREAS.map(([a,l,d])=>`<tr><td><b>${esc(l)}</b><div class="small dim">${esc(d)}</div></td>${rs.map(r=>`<td class="c">${lvlPill(rolePerm(r,a))}</td>`).join('')}</tr>`).join('')}
   <tr><td><b>Which bids</b><div class="small dim">For bids, estimates and the dashboard</div></td>${rs.map(r=>`<td class="c small">${rolePerm(r,'bids')==='none'?'<span class="dim">—</span>':SCOPE_LABEL[rolePerm(r,'bids_scope')]||'Assigned only'}</td>`).join('')}</tr>
@@ -16512,7 +16512,10 @@ document.addEventListener('change',e=>{const F=window.__vqF;if(!F)return;const t
    Works quietly before the update is run: no table, no panel content. */
 S.np={rows:[],loaded:false,missing:false,tab:null};
 const NP_OPEN_KEY='bp-np-open',NP_SEEN_KEY='bp-np-seen';
-const npTeamOk=()=>isDev()||['admin','executive','estimator','board'].includes(role());
+const NP_ROLES=[['admin','Admins'],['estimator','Estimators'],['executive','Executives / owners'],['board','Board members']];
+const npRoles=()=>{const r=S.settings&&S.settings.notifications&&S.settings.notifications.roles;return Array.isArray(r)?r:['admin','estimator']};
+const npRoleOk=()=>isDev()||npRoles().includes(role());
+const npTeamOk=npRoleOk;
 function npOpen(){try{return localStorage.getItem(NP_OPEN_KEY)==='1'}catch(e){return false}}
 function npSeen(){try{return localStorage.getItem(NP_SEEN_KEY+'.'+myId())||''}catch(e){return ''}}
 function npSetSeen(){try{localStorage.setItem(NP_SEEN_KEY+'.'+myId(),new Date().toISOString())}catch(e){}}
@@ -16546,7 +16549,7 @@ function npHtml(){
   ${tabs.length>1?`<div class="np-tabs">${tabs.map(([k,l])=>{const n=S.np.rows.filter(r=>r.kind===k&&(!seen||r.created_at>seen)).length;return `<button class="${S.np.tab===k?'on':''}" data-act="np-tab" data-v="${k}">${l}${n?` <i>${n}</i>`:''}</button>`}).join('')}</div>`:''}
   <div class="np-list">${body}</div>`}
 function npPaint(){
-  const show=!!(S.session&&S.profile&&role()!=='pending'&&!S.loading);
+  const show=!!(S.session&&S.profile&&role()!=='pending'&&!S.loading&&npRoleOk());
   let el=document.getElementById('np');
   if(!show){if(el)el.hidden=true;document.body.classList.remove('np-on');npBadge();return}
   if(!el){el=document.createElement('aside');el.id='np';el.className='np';el.setAttribute('aria-label','Notifications');document.body.appendChild(el)}
@@ -16554,7 +16557,7 @@ function npPaint(){
   const open=npOpen();el.hidden=!open;document.body.classList.toggle('np-on',open);
   if(open){const h=npHtml();if(el._h!==h){const st=el.querySelector('.np-list')?.scrollTop||0;el.innerHTML=h;el._h=h;const l=el.querySelector('.np-list');if(l)l.scrollTop=st}}
   npBadge()}
-function npBadge(){const b=document.querySelector('#top .np-btn');if(!b)return;b.hidden=!!(S.np.missing&&!isAdmin()&&!isDev());const n=npOpen()?0:npUnread();const i=b.querySelector('i');
+function npBadge(){const b=document.querySelector('#top .np-btn');if(!b)return;b.hidden=!npRoleOk()||!!(S.np.missing&&!isAdmin()&&!isDev());const n=npOpen()?0:npUnread();const i=b.querySelector('i');
   if(i){i.textContent=n>9?'9+':String(n);i.hidden=!n}b.classList.toggle('on',npOpen());b.setAttribute('aria-expanded',String(npOpen()))}
 const npBtn=()=>`<button class="np-btn" data-act="np-toggle" title="Notifications" aria-label="Notifications" aria-expanded="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2a4 4 0 0 0-4 4v2.5L2.8 11h10.4L12 8.5V6a4 4 0 0 0-4-4z"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0"/></svg><i hidden>0</i></button>`;
 document.addEventListener('click',async e=>{const t=e.target.closest&&e.target.closest('[data-act^="np-"]');if(!t)return;const a=t.dataset.act;
@@ -16562,3 +16565,10 @@ document.addEventListener('click',async e=>{const t=e.target.closest&&e.target.c
   if(a==='np-tab'){S.np.tab=t.dataset.v;npSetSeen();npPaint();return}
   if(a==='np-del'){e.preventDefault();if(!confirm('Remove this summary for everyone who can see it?'))return;try{await run(sb.from('notifications').delete().eq('id',t.dataset.id));S.np.rows=S.np.rows.filter(r=>r.id!==t.dataset.id);npPaint()}catch(er){toast(errMsg(er))}}
 });
+// Team → Access chart: which roles see the Notifications panel (bell + My summary + Team)
+function npAccessPanel(){if(!isAdmin())return '';const on=npRoles();
+  return `<div class="panel pad tabsw"><b>Notifications panel</b><p class="small dim" style="margin:2px 0 10px">Who sees the bell and the summaries panel. Unticked roles don’t see the panel at all, and the database won’t send them the summaries either. Project managers and accounting can’t see bids, so they’re not listed.</p>
+    <div class="tabsw-g">${NP_ROLES.map(([k,l])=>`<label class="check"><input type="checkbox" data-nprole="${k}"${on.includes(k)?' checked':''}> <span><b>${l}</b></span></label>`).join('')}</div></div>`}
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset.nprole==null||!isAdmin())return;const k=t.dataset.nprole;let roles=npRoles().filter(x=>x!==k);if(t.checked)roles.push(k);
+  const v={...(S.settings.notifications||{}),roles};S.settings.notifications=v;render();
+  run(sb.from('settings').upsert({key:'notifications',value:v})).then(()=>loadTable('settings')).then(()=>{npLoad();render();toast(`Notifications panel ${t.checked?'turned on':'turned off'} for ${(NP_ROLES.find(x=>x[0]===k)||[])[1].toLowerCase()}`)}).catch(er=>toast(errMsg(er)))});
