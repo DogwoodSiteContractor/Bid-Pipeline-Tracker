@@ -53,6 +53,7 @@ supabase/update-35-presence.sql            optional: "last seen" in the who's-on
 supabase/update-36-planner.sql             one-time update for the Planner (my tasks, team board, calendar)
 supabase/update-37-vendor-rankings.sql    one-time update for vendor rankings, price lists and vendor update links
 supabase/update-38-vendor-cleanup.sql     small follow-up: lets Reset clear a vendor's price history
+supabase/update-63-notifications.sql      one-time update for the Notifications panel (personal + team summaries)
 ```
 
 > **Already set up before these updates?** Run each `supabase/update-*.sql` file you haven't run yet, once, in number order, in the SQL Editor. New installs only need `schema.sql`.
@@ -230,6 +231,13 @@ Each card can be narrowed by trade, scope and region. **+ Add a card** adds one,
 Either way you can also delete their quotes on bids. Otherwise those quotes stay on the bids: after a reset they still count toward the vendor's response rate, and after a delete they're left with no vendor.
 
 **Reminders.** A vendor's ranking is flagged when nobody has rated them in 30 days; only vendors you've used lately or marked preferred are flagged. Pricing is flagged once any of its prices are over 30 days old. Admins can change both numbers under **⚙ Reminders**. The precon dashboard shows a "Vendor upkeep" line when anything is due.
+
+## Notifications panel (everyone)
+The bell in the top bar opens a panel on the right side of every page, and the » button collapses it again. The app remembers whether you left it open, and the bell shows a red count of summaries you haven't seen yet.
+- **My summary:** your own daily summary (new quotes, bids due, files sorted). Only you can see yours.
+- **Team:** the shared summary for the estimating team: quotes received, bids due today and tomorrow with trades still missing a quote, new addenda and new invites. Shown to admins, executives, estimators and board members (PMs and accounting don't see bids, so they don't get this tab).
+
+Summaries are written by the scheduled Claude task each morning; the app only displays them. Admins can remove a team summary, and anyone can remove their own personal ones. Summaries use simple formatting: `## Heading`, `- bullet`, `**bold**`. Needs `supabase/update-63-notifications.sql`; until it's run, the bell only shows for admins (with a note saying the update is needed).
 
 ## Who's online (everyone)
 

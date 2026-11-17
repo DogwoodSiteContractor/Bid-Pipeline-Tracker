@@ -340,12 +340,12 @@ async function afterLogin(){
     await loadPms();
     await loadEstIndex();loadBidReqs();loadCOs();loadAcctInfo();
     if(channel)sb.removeChannel(channel);
-    presStart();plLoad();if(can('contacts'))vxLoad();
-    channel=sb.channel('bid-pipeline').on('postgres_changes',{event:'*',schema:'public'},p=>{if(p.table==='tasks'){plLoadSoon();return}if(p.table==='vendor_prices'||p.table==='vendor_ratings'){vxLoadSoon();return}if(TABLES.includes(p.table))debounceLoad(p.table);if(p.table==='estimates')estRemote(p)}).subscribe();
+    presStart();plLoad();if(can('contacts'))vxLoad();npLoad();
+    channel=sb.channel('bid-pipeline').on('postgres_changes',{event:'*',schema:'public'},p=>{if(p.table==='notifications'){npLoadSoon();return}if(p.table==='tasks'){plLoadSoon();return}if(p.table==='vendor_prices'||p.table==='vendor_ratings'){vxLoadSoon();return}if(TABLES.includes(p.table))debounceLoad(p.table);if(p.table==='estimates')estRemote(p)}).subscribe();
   }
   S.loading=false;schedule();
 }
-function resetData(){TABLES.forEach(t=>{if(t!=='settings')S[t]=[]});S.myFb=null;S.crew=null;S.trophy=null;if(S.fun){S.fun.loaded=false;S.fun.draft=null}S.est=null;S.estIndex=[];S.estsTab='list';S.settings={};S.profiles=[];S.profile=null;S.profileFor=null;S.tasks=[];S.plLoaded=false;S.view='dashboard';S.dash='precon';if(channel){sb.removeChannel(channel);channel=null}presStop()}
+function resetData(){TABLES.forEach(t=>{if(t!=='settings')S[t]=[]});S.myFb=null;S.crew=null;S.trophy=null;if(S.fun){S.fun.loaded=false;S.fun.draft=null}S.est=null;S.estIndex=[];S.estsTab='list';S.settings={};S.profiles=[];S.profile=null;S.profileFor=null;S.tasks=[];S.plLoaded=false;S.view='dashboard';S.dash='precon';S.np={rows:[],loaded:false,missing:false,tab:null};if(channel){sb.removeChannel(channel);channel=null}presStop()}
 function errMsg(e){const m=(e&&(e.message||e.error_description))||'Something went wrong.';
   if(/row-level security|permission denied/i.test(m))return 'You don’t have permission to make that change.';
   if(/Failed to fetch|NetworkError/i.test(m))return 'Can’t reach the server. Check your connection and try again.';
@@ -356,7 +356,7 @@ async function run(p){const {data,error}=await p;if(error)throw error;return dat
 let rq=0;
 function schedule(){if(rq)return;rq=requestAnimationFrame(()=>{rq=0;render()})}
 function render(){
-  if(render._busy){schedule();return}render._busy=true;try{renderNow()}finally{render._busy=false}}
+  if(render._busy){schedule();return}render._busy=true;try{renderNow();npPaint()}finally{render._busy=false}}
 function renderNow(){
   const main=$('#main');const top=$('#topwrap');
   if(!CONFIGURED){top.hidden=true;main.innerHTML=setupScreen();return}
@@ -393,7 +393,7 @@ function renderTop(){setTimeout(()=>{presPaint();presTrack(false)},0);
   $('#top').innerHTML=`<button class="brand" ${isAdmin()?'data-act="company" title="Edit company name"':'tabindex="-1" style="cursor:default"'}>${BRAND.logo?`<img class="brand-logo" src="${esc(BRAND.logo)}" alt="">`:'<span class="stake"></span>'}<span><b>${esc(company)}</b><small>${esc(APP_NAME)}</small></span></button>
   <nav class="nav">${navGroups().map(([k,l,mem])=>`<button class="${mem.includes(S.view)?'on':''}" data-act="nav" data-v="${k}">${l}</button>`).join('')}</nav>
   <div class="nav-more" hidden><button class="nav-morebtn" data-act="nav-more" aria-haspopup="true" aria-expanded="false">More ▾</button><div class="nav-menu" role="menu" hidden></div></div>
-  <div class="pres" id="pres"></div><button class="topsearch" data-act="pal-open" aria-label="Search (Ctrl+K)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><span>Search</span><kbd>Ctrl K</kbd></button>
+  <div class="pres" id="pres"></div><button class="topsearch" data-act="pal-open" aria-label="Search (Ctrl+K)"><svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><span>Search</span><kbd>Ctrl K</kbd></button>${npBtn()}
   <div class="userbox"><button class="me-av" data-act="fun-me" title="My profile">${funAv(crewOf(myId()),30)}</button><span>${esc(myName())}<br><span class="rolepill${isDev()?' dev':''}">${isDev()?'Developer':ROLE_LABEL[role()]}</span></span>
   ${can('bids','edit')&&bidsAll()?'<button class="btn primary" data-act="new-bid">+ New bid</button>':''}<button class="btn sm" data-act="signout">Sign out</button></div>`;
   navFit();
@@ -16505,3 +16505,60 @@ document.addEventListener('click',e=>{const t=e.target.closest?e.target:null;if(
   if(up||q||no){window.__vqF={bid:(up||q||no).dataset[up?'vqup':q?'vqq':'vqno'],kind:up?'quote':q?'question':'decline',files:[],reason:no?'Too busy right now':''};vqDraw();return}
   if(t.closest('[data-vqclose]')){window.__vqF=null;vqDraw();return}if(t.closest('[data-vqsend]')){vqSend();return}});
 document.addEventListener('change',e=>{const F=window.__vqF;if(!F)return;const t=e.target;if(t.id==='vq-files'){vqRead();F.files=[...F.files,...t.files].slice(0,20);vqDraw()}if(t.name==='vqr'){vqRead();F.reason=t.value;vqDraw()}});
+
+/* ---------- notifications panel (personal + team summaries) ----------
+   Rows live in the `notifications` table (supabase/update-63-notifications.sql).
+   The scheduled Claude task writes them; the panel just shows them.
+   Works quietly before the update is run: no table, no panel content. */
+S.np={rows:[],loaded:false,missing:false,tab:null};
+const NP_OPEN_KEY='bp-np-open',NP_SEEN_KEY='bp-np-seen';
+const npTeamOk=()=>isDev()||['admin','executive','estimator','board'].includes(role());
+function npOpen(){try{return localStorage.getItem(NP_OPEN_KEY)==='1'}catch(e){return false}}
+function npSeen(){try{return localStorage.getItem(NP_SEEN_KEY+'.'+myId())||''}catch(e){return ''}}
+function npSetSeen(){try{localStorage.setItem(NP_SEEN_KEY+'.'+myId(),new Date().toISOString())}catch(e){}}
+function npUnread(){const s=npSeen();return S.np.rows.filter(r=>!s||r.created_at>s).length}
+async function npLoad(){
+  if(!S.session||role()==='pending')return;
+  const {data,error}=await sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(60);
+  if(error){S.np.missing=/does not exist|schema cache/i.test(error.message||'');S.np.rows=[];S.np.loaded=true;npPaint();return}
+  S.np.rows=data||[];S.np.loaded=true;S.np.missing=false;if(npOpen())npSetSeen();npPaint();
+}
+function npLoadSoon(){clearTimeout(npLoadSoon._t);npLoadSoon._t=setTimeout(npLoad,300)}
+// light markdown: "## heading", "- bullet", "**bold**", blank line = paragraph break
+function npMd(t){const inl=s=>esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');let out='',list=false;
+  for(const raw of String(t||'').split(/\r?\n/)){const l=raw.trim();
+    if(/^[-•*]\s+/.test(l)){if(!list){out+='<ul>';list=true}out+='<li>'+inl(l.replace(/^[-•*]\s+/,''))+'</li>';continue}
+    if(list){out+='</ul>';list=false}
+    if(!l)continue;
+    if(/^#{1,3}\s+/.test(l))out+='<h4>'+inl(l.replace(/^#{1,3}\s+/,''))+'</h4>';else out+='<p>'+inl(l)+'</p>'}
+  if(list)out+='</ul>';return out}
+function npWhen(r){const d=new Date(r.created_at);const today=new Date();const same=d.toDateString()===today.toDateString();
+  const t=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});return same?'Today '+t:fmtShort(r.for_date||r.created_at.slice(0,10))+' · '+t}
+function npTabs(){const t=[['personal','My summary']];if(npTeamOk())t.push(['team','Team']);return t}
+function npHtml(){
+  const tabs=npTabs();if(!tabs.some(x=>x[0]===S.np.tab))S.np.tab=tabs[0][0];
+  const rows=S.np.rows.filter(r=>r.kind===S.np.tab);const seen=npSeen();
+  const body=!S.np.loaded?`<p class="np-empty">Loading…</p>`
+    :S.np.missing?`<p class="np-empty">Notifications aren’t set up yet. An admin needs to run <code>supabase/update-63-notifications.sql</code> once in Supabase.</p>`
+    :!rows.length?`<p class="np-empty">${S.np.tab==='team'?'No team summaries yet. They’ll show up here after the morning run.':'No personal summaries yet.'}</p>`
+    :rows.map((r,i)=>`<details class="np-item${seen&&r.created_at>seen?' new':''}"${i===0?' open':''}><summary><span class="np-title">${esc(r.title||(r.kind==='team'?'Team summary':'My summary'))}</span><small>${esc(npWhen(r))}</small></summary><div class="np-body">${npMd(r.body)}</div>${isAdmin()||(r.kind==='personal'&&r.user_id===myId())?`<button class="np-del" data-act="np-del" data-id="${esc(r.id)}" title="Remove this summary">Remove</button>`:''}</details>`).join('');
+  return `<div class="np-head"><b>Notifications</b><button class="np-x" data-act="np-toggle" aria-label="Collapse notifications">»</button></div>
+  ${tabs.length>1?`<div class="np-tabs">${tabs.map(([k,l])=>{const n=S.np.rows.filter(r=>r.kind===k&&(!seen||r.created_at>seen)).length;return `<button class="${S.np.tab===k?'on':''}" data-act="np-tab" data-v="${k}">${l}${n?` <i>${n}</i>`:''}</button>`}).join('')}</div>`:''}
+  <div class="np-list">${body}</div>`}
+function npPaint(){
+  const show=!!(S.session&&S.profile&&role()!=='pending'&&!S.loading);
+  let el=document.getElementById('np');
+  if(!show){if(el)el.hidden=true;document.body.classList.remove('np-on');npBadge();return}
+  if(!el){el=document.createElement('aside');el.id='np';el.className='np';el.setAttribute('aria-label','Notifications');document.body.appendChild(el)}
+  const tw=document.getElementById('topwrap');if(tw)el.style.setProperty('--np-top',Math.round(tw.getBoundingClientRect().bottom)+'px');
+  const open=npOpen();el.hidden=!open;document.body.classList.toggle('np-on',open);
+  if(open){const h=npHtml();if(el._h!==h){const st=el.querySelector('.np-list')?.scrollTop||0;el.innerHTML=h;el._h=h;const l=el.querySelector('.np-list');if(l)l.scrollTop=st}}
+  npBadge()}
+function npBadge(){const b=document.querySelector('#top .np-btn');if(!b)return;b.hidden=!!(S.np.missing&&!isAdmin()&&!isDev());const n=npOpen()?0:npUnread();const i=b.querySelector('i');
+  if(i){i.textContent=n>9?'9+':String(n);i.hidden=!n}b.classList.toggle('on',npOpen());b.setAttribute('aria-expanded',String(npOpen()))}
+const npBtn=()=>`<button class="np-btn" data-act="np-toggle" title="Notifications" aria-label="Notifications" aria-expanded="false"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2a4 4 0 0 0-4 4v2.5L2.8 11h10.4L12 8.5V6a4 4 0 0 0-4-4z"/><path d="M6.5 13a1.5 1.5 0 0 0 3 0"/></svg><i hidden>0</i></button>`;
+document.addEventListener('click',async e=>{const t=e.target.closest&&e.target.closest('[data-act^="np-"]');if(!t)return;const a=t.dataset.act;
+  if(a==='np-toggle'){const o=!npOpen();try{localStorage.setItem(NP_OPEN_KEY,o?'1':'0')}catch(er){}if(o)npSetSeen();const el=document.getElementById('np');if(el)el._h='';npPaint();return}
+  if(a==='np-tab'){S.np.tab=t.dataset.v;npSetSeen();npPaint();return}
+  if(a==='np-del'){e.preventDefault();if(!confirm('Remove this summary for everyone who can see it?'))return;try{await run(sb.from('notifications').delete().eq('id',t.dataset.id));S.np.rows=S.np.rows.filter(r=>r.id!==t.dataset.id);npPaint()}catch(er){toast(errMsg(er))}}
+});
