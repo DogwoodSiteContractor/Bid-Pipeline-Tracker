@@ -359,7 +359,7 @@ async function run(p){const {data,error}=await p;if(error)throw error;return dat
 let rq=0;
 function schedule(){if(rq)return;rq=requestAnimationFrame(()=>{rq=0;render()})}
 function render(){
-  if(render._busy){schedule();return}render._busy=true;try{renderNow();npPaint()}finally{render._busy=false}}
+  if(render._busy){schedule();return}render._busy=true;try{renderNow();npPaint()}finally{render._busy=false}try{svCheck()}catch(e){}}
 function renderNow(){
   const main=$('#main');const top=$('#topwrap');
   if(!CONFIGURED){top.hidden=true;main.innerHTML=setupScreen();return}
@@ -1310,7 +1310,7 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={estx:estxModal,shpick:shPickModal,cbbak:cbBakModal,qhist:qHistModal,tplsync:tplSyncModal,rfnew:rfNewModal,tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal,airate:aiRateModal,aiinstr:aiInstrModal,vqlink:vqLinkModal,aitko:atkModal,aitkr:atkReportModal}[M.kind]();
+  const html={survey:svModal,estx:estxModal,shpick:shPickModal,cbbak:cbBakModal,qhist:qHistModal,tplsync:tplSyncModal,rfnew:rfNewModal,tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal,airate:aiRateModal,aiinstr:aiInstrModal,vqlink:vqLinkModal,aitko:atkModal,aitkr:atkReportModal}[M.kind]();
   $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='bid'?' bidpage':''}${['rpcard','rpdrill','airate','aitko','aitkr','import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
@@ -8408,12 +8408,78 @@ function helpFb(){const L=S.myFb||[];
     ${f.status==='New'?`<button class="btn sm ghost" data-act="fb-withdraw" data-id="${f.id}">Withdraw</button>`:''}</div>`).join('')||'<div class="panel"><div class="empty">Nothing yet. Anything you send shows up here with its status and any reply.</div></div>'}</div>`}
 
 /* ---------- Developer page ---------- */
-function vDev(){if(!isDev())return '<div class="empty">This page is for the developer.</div>';const D=S.dev;const F=(S.feedback||[]).map(f=>({...f,status:fbStatusUi(f.status)}));const nNew=F.filter(f=>f.status==='New').length;
+function vDev(){if(!isDev())return '<div class="empty">This page is for the developer.</div>';const D=S.dev;const F=(S.feedback||[]).filter(f=>f.kind!=='survey').map(f=>({...f,status:fbStatusUi(f.status)}));const nNew=F.filter(f=>f.status==='New').length;
   return `<div class="head"><div><h1>Developer</h1><p>Only you can see this tab. Build ${APP_BUILD}.</p></div><div class="tools"><button class="btn primary" data-act="dev-run">▶ Run tests</button></div></div>
   ${S.tableErr&&S.tableErr.feedback?'<div class="notice">The feedback table isn’t there yet. Run <b>supabase/update-19-help-developer.sql</b> in Supabase.</div>':''}
-  <div class="seg acct-tabs">${[['inbox',`Feedback inbox${nNew?` <small>${nNew} new</small>`:''}`],['tests','System tests'],['reviews',`User reports${(S.reviews||[]).length?` <small>${(S.reviews||[]).length}</small>`:''}`],['usage','Storage & capacity'],['tabs','My tabs'],['games','Games'],['info','App info']].map(([k,l])=>`<button class="${D.tab===k?'on':''}" data-act="dev-tab" data-v="${k}">${l}</button>`).join('')}</div>
-  ${D.tab==='tabs'?devTabsPanel():D.tab==='games'?devGamesPanel():D.tab==='reviews'?devReviews():D.tab==='tests'?devTests():D.tab==='usage'?devUsage():D.tab==='info'?devInfo():devInbox(F)}`}
+  <div class="seg acct-tabs">${[['inbox',`Feedback inbox${nNew?` <small>${nNew} new</small>`:''}`],['tests','System tests'],['reviews',`User reports${(S.reviews||[]).length?` <small>${(S.reviews||[]).length}</small>`:''}`],['survey',`Survey${svCur()&&svCur().open?` <small>${svAnswers().length}</small>`:''}`],['usage','Storage & capacity'],['tabs','My tabs'],['games','Games'],['info','App info']].map(([k,l])=>`<button class="${D.tab===k?'on':''}" data-act="dev-tab" data-v="${k}">${l}</button>`).join('')}</div>
+  ${D.tab==='survey'?devSurvey():D.tab==='tabs'?devTabsPanel():D.tab==='games'?devGamesPanel():D.tab==='reviews'?devReviews():D.tab==='tests'?devTests():D.tab==='usage'?devUsage():D.tab==='info'?devInfo():devInbox(F)}`}
 const PRI_ORDER={P1:0,P2:1,P3:2,'':3},IMP_ORDER={high:0,normal:1,low:2};
+/* ---------- Feedback survey: the developer sends one survey to everyone; it pops up for each person once ----------
+   settings 'survey' = {id,title,intro,questions:[{id,type:'rating'|'text',q}],open,sent_at}. Answers are feedback rows
+   (kind 'survey', area 'survey:<id>', context.answers), so they reuse the feedback table's rules: everyone can send, only the developer reads. */
+const SV_DEFAULT={title:'How is the app working for you?',intro:'Two minutes, five questions. Your answers go straight to the developer and shape what gets built next.',questions:[
+  {id:'q1',type:'rating',q:'Overall, how useful is the app for your work?'},
+  {id:'q2',type:'text',q:'What do you use it for most?'},
+  {id:'q3',type:'text',q:'What is frustrating, confusing or slow?'},
+  {id:'q4',type:'text',q:'What is missing that would help you?'},
+  {id:'q5',type:'text',q:'Anything else?'}]};
+const svCur=()=>{const v=S.settings&&S.settings.survey;return v&&v.id?v:null};
+const svAnswers=(id)=>{const c=svCur();id=id||(c&&c.id);return (S.feedback||[]).filter(f=>f.kind==='survey'&&f.area==='survey:'+id)};
+const svKey=k=>`bp.sv.${k}`;
+function svGet(k){try{return localStorage.getItem(svKey(k))}catch(e){return null}}
+function svSet(k,v){try{localStorage.setItem(svKey(k),v)}catch(e){}}
+function devSurvey(){const D=S.dev;const c=svCur();if(S.feedback==null)loadTable('feedback');
+  if(!D.svDraft)D.svDraft=clone(c&&!c.open?{title:c.title,intro:c.intro,questions:c.questions}:SV_DEFAULT);const dr=D.svDraft;
+  if(S.crew==null&&!D.svCrewAsked){D.svCrewAsked=true;sb.rpc('crew_directory').then(r=>{if(!r.error){S.crew=r.data||[];render()}})}
+  let out='';
+  if(c){const A=svAnswers(c.id);const people=(S.crew||[]);const done=new Set(A.map(a=>a.created_by));const missing=people.filter(p=>!done.has(p.id));
+    const res=c.questions.map(q=>{const vals=A.map(a=>((a.context||{}).answers||{})[q.id]).filter(v=>v!=null&&String(v).trim()!=='');
+      if(q.type==='rating'){const n=vals.map(Number).filter(v=>v>0);const avg=n.length?n.reduce((s,v)=>s+v,0)/n.length:0;const dist=[1,2,3,4,5].map(k=>n.filter(v=>v===k).length);
+        return `<div class="sv-res"><b>${esc(q.q)}</b><div class="sv-avg">${n.length?avg.toFixed(1):'–'}<small> / 5 · ${n.length} answer${n.length===1?'':'s'}</small></div><div class="sv-dist">${dist.map((k,i)=>`<span title="${i+1}: ${k}"><i style="height:${n.length?Math.max(4,k/n.length*40):4}px"></i>${i+1}</span>`).join('')}</div></div>`}
+      return `<div class="sv-res"><b>${esc(q.q)}</b>${vals.length?`<ul>${A.filter(a=>String(((a.context||{}).answers||{})[q.id]||'').trim()).map(a=>`<li>${esc(((a.context||{}).answers||{})[q.id])}<small> · ${esc(a.created_by_name||'')}</small></li>`).join('')}</ul>`:'<p class="dim small">No answers yet.</p>'}</div>`}).join('');
+    out+=`<div class="panel pad sv-cur"><div class="sv-top"><div><h3 class="adm-h">${esc(c.title)}</h3><p class="dim small">${c.open?'Open':'Closed'} · sent ${fmtDate(String(c.sent_at||'').slice(0,10))} · <b>${A.length}</b> of ${people.length||'?'} people answered</p></div>
+      <div class="tools">${c.open?'<button class="btn" data-act="sv-close">Close survey</button>':'<button class="btn" data-act="sv-reopen">Reopen</button>'}<button class="btn" data-act="sv-preview">Preview</button></div></div>
+      ${missing.length&&c.open?`<p class="small dim">Still waiting on: ${missing.map(p=>esc(p.full_name)).join(', ')}</p>`:''}${res}</div>`}
+  const qrow=(q,i)=>`<div class="sv-q"><select class="field sm" data-svq="${i}" data-k="type"><option value="rating"${q.type==='rating'?' selected':''}>1–5 rating</option><option value="text"${q.type==='text'?' selected':''}>Written answer</option></select><input class="field" data-svq="${i}" data-k="q" value="${esc(q.q)}" placeholder="Question"><button class="btn sm ghost" data-act="sv-qdel" data-i="${i}" title="Remove">✕</button></div>`;
+  out+=`<div class="panel pad"><h3 class="adm-h">${c&&c.open?'Send a new survey instead':'New survey'}</h3><p class="dim small">It pops up once for everyone with an account the next time they open the app. They can answer, skip it, or be reminded tomorrow. Answers show up here.</p>
+    <label class="f">Title<input class="field" data-svf="title" value="${esc(dr.title)}"></label><label class="f">Intro<input class="field" data-svf="intro" value="${esc(dr.intro)}"></label>
+    <div class="sv-qs">${dr.questions.map(qrow).join('')}</div><div class="rowx"><button class="btn sm" data-act="sv-qadd">+ Question</button><span style="flex:1"></span>
+    ${c&&c.open?'<span class="dim small">Sending replaces the open survey.</span>':''}<button class="btn primary" data-act="sv-send">📣 Send survey to everyone</button></div></div>`;
+  return out}
+async function svSend(){const D=S.dev,dr=D.svDraft;const qs=dr.questions.map(q=>({...q,q:String(q.q||'').trim()})).filter(q=>q.q);if(!qs.length){toast('Add at least one question');return}
+  const c=svCur();if(c&&c.open&&!confirm('Replace the survey that is open now? Its answers stay here.'))return;
+  if(!confirm(`Send “${dr.title}” to everyone?`))return;
+  const v={id:newId(),title:String(dr.title||'Feedback survey').trim(),intro:String(dr.intro||'').trim(),questions:qs.map((q,i)=>({id:'q'+(i+1),type:q.type,q:q.q})),open:true,sent_at:new Date().toISOString(),sent_by:myName(),history:[...((c&&c.history)||[]),...(c?[{id:c.id,title:c.title,sent_at:c.sent_at}]:[])].slice(-20)};
+  try{await run(sb.from('settings').upsert({key:'survey',value:v}));await loadTable('settings');D.svDraft=null;toast('Survey sent. It pops up for each person the next time they open the app.');render()}catch(e){toast(errMsg(e))}}
+async function svSetOpen(open){const c=svCur();if(!c)return;try{await run(sb.from('settings').upsert({key:'survey',value:{...c,open}}));await loadTable('settings');toast(open?'Survey reopened':'Survey closed. It no longer pops up.');render()}catch(e){toast(errMsg(e))}}
+function svModal(){const c=M.sv;const a=M.ans||{};const qh=(q,i)=>q.type==='rating'?`<div class="sv-fq"><label>${i+1}. ${esc(q.q)}</label><div class="sv-stars">${[1,2,3,4,5].map(n=>`<button type="button" class="sv-star${+a[q.id]===n?' on':''}" data-act="sv-rate" data-q="${q.id}" data-v="${n}">${n}</button>`).join('')}<span class="dim small">1 = not useful · 5 = very useful</span></div></div>`
+    :`<div class="sv-fq"><label>${i+1}. ${esc(q.q)}</label><textarea class="field" rows="2" data-sva="${q.id}">${esc(a[q.id]||'')}</textarea></div>`;
+  return mhead(c.title,c.intro)+`<div class="mbody sv-form">${M.preview?'<div class="notice">Preview only. Nothing is sent from here.</div>':''}${c.questions.map(qh).join('')}</div>
+    <div class="mfoot"><div><button class="btn ghost" data-act="sv-later">Remind me tomorrow</button><button class="btn ghost" data-act="sv-skip">Skip</button></div><div class="r"><button class="btn primary" data-act="sv-submit"${M.preview?' disabled':''}>Send answers</button></div></div>`}
+async function svSubmit(){const c=M.sv,a=M.ans||{};if(!Object.values(a).some(v=>String(v||'').trim())){toast('Answer at least one question, or skip');return}
+  const body=c.questions.map((q,i)=>`${i+1}. ${q.q}\n${a[q.id]!=null&&String(a[q.id]).trim()?a[q.id]:'(no answer)'}`).join('\n\n');
+  try{await run(sb.from('feedback').insert({id:newId(),created_by:myId(),created_by_name:myName(),created_by_role:role(),kind:'survey',area:'survey:'+c.id,title:c.title,body,importance:'normal',context:{survey:c.id,answers:a},status:'New',priority:'',dev_notes:'',reply:''}));
+    svSet('done.'+c.id,'1');closeModal();toast('Thanks! Your answers were sent.');if(isDev())loadTable('feedback')}catch(e){toast(errMsg(e))}}
+// pop the survey once per person; checks the person's own feedback so it doesn't come back on another computer
+let svTimer=null;
+function svCheck(){const c=svCur();if(!c||!c.open||M||!S.session||!S.profile||role()==='pending'||S.needPassword||(S.profile&&S.profile.must_change_pw))return;
+  if(svGet('done.'+c.id)||svGet('skip.'+c.id))return;const snooze=+svGet('later.'+c.id)||0;if(snooze>Date.now())return;
+  if(S.myFb==null){if(!svCheck.asked){svCheck.asked=true;loadMyFb()}return}
+  if((S.myFb||[]).some(f=>f.kind==='survey'&&f.area==='survey:'+c.id)){svSet('done.'+c.id,'1');return}
+  if(svTimer||svCheck.shown===c.id)return;svTimer=setTimeout(()=>{svTimer=null;if(M||!svCur()||svCur().id!==c.id)return;svCheck.shown=c.id;M={kind:'survey',sv:c,ans:{}};showModal()},4000)}
+document.addEventListener('input',e=>{const t=e.target;if(M&&M.kind==='survey'&&t.dataset&&t.dataset.sva){M.ans[t.dataset.sva]=t.value;return}
+  if(S.dev&&S.dev.svDraft&&t.dataset){if(t.dataset.svf){S.dev.svDraft[t.dataset.svf]=t.value}else if(t.dataset.svq!=null){S.dev.svDraft.questions[+t.dataset.svq][t.dataset.k]=t.value}}});
+document.addEventListener('change',e=>{const t=e.target;if(S.dev&&S.dev.svDraft&&t.dataset&&t.dataset.svq!=null&&t.dataset.k==='type'){S.dev.svDraft.questions[+t.dataset.svq].type=t.value}});
+document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest('[data-act^="sv-"]');if(!t)return;const a=t.dataset.act;
+  if(a==='sv-send')svSend();else if(a==='sv-close')svSetOpen(false);else if(a==='sv-reopen')svSetOpen(true);
+  else if(a==='sv-preview'){const c=svCur();if(c){M={kind:'survey',sv:c,ans:{},preview:true};showModal()}}
+  else if(a==='sv-qadd'){S.dev.svDraft.questions.push({id:'',type:'text',q:''});render()}
+  else if(a==='sv-qdel'){S.dev.svDraft.questions.splice(+t.dataset.i,1);render()}
+  else if(a==='sv-rate'){M.ans[t.dataset.q]=+t.dataset.v;t.parentElement.querySelectorAll('.sv-star').forEach(b=>b.classList.toggle('on',b===t))}
+  else if(a==='sv-submit')svSubmit();
+  else if(a==='sv-later'){const pv=M.preview;if(!pv)svSet('later.'+M.sv.id,String(Date.now()+20*3600e3));closeModal();if(!pv)toast('We’ll ask again tomorrow')}
+  else if(a==='sv-skip'){if(!M.preview)svSet('skip.'+M.sv.id,'1');closeModal()}});
+setInterval(()=>{if(!document.hidden)svCheck()},30000);
 function devInbox(F){const D=S.dev;const q=(D.q||'').trim().toLowerCase();
   let L=F.filter(f=>(D.status==='open'?FB_OPEN.has(f.status):D.status==='all'?true:f.status===D.status)&&(!D.kind||f.kind===D.kind)&&(!D.area||f.area===D.area)&&(!q||[f.title,f.body,f.created_by_name,f.area,f.dev_notes].join(' ').toLowerCase().includes(q)));
   L.sort(D.sort==='pri'?(a,b)=>PRI_ORDER[a.priority||'']-PRI_ORDER[b.priority||'']||IMP_ORDER[a.importance]-IMP_ORDER[b.importance]||String(b.created_at).localeCompare(String(a.created_at)):(a,b)=>String(b.created_at).localeCompare(String(a.created_at)));
