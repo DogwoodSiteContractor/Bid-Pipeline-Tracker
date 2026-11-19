@@ -229,7 +229,9 @@ function clientsLine(b,max=2){const ids=propIds(b);if(!ids.length)return 'No cli
   return ids.slice(0,max).map(id=>esc(clientName(id))).join(', ')+(ids.length>max?` +${ids.length-max} more`:'')}
 // re-bids: a bid can point at the earlier bid for the same job (Best & Final, revised plans…). A job counts once, at its latest proposal.
 const rebidOf=b=>b&&b.rfq&&b.rfq.rebidOf||null;
-function jobRoot(b){let x=b,n=0;while(x&&rebidOf(x)&&n<20){const p=byId(S.bids,rebidOf(x));if(!p)break;x=p;n++}return x?x.id:b.id}
+const supOf=b=>b&&b.rfq&&b.rfq.supersedes||null;           // this bid replaces that one
+const supByOf=b=>b&&b.rfq&&b.rfq.supersededBy||null;      // this bid was replaced by that one
+function jobRoot(b){let x=b,n=0;while(x&&(rebidOf(x)||supOf(x))&&n<20){const p=byId(S.bids,rebidOf(x)||supOf(x));if(!p)break;x=p;n++}return x?x.id:b.id}
 const bidWhen=b=>sentOn(b)||b.submitted_date||b.due_date||String(b.created_at||'').slice(0,10);
 // keep only the latest bid of each job in a list
 function jobsOnce(list){const m=new Map();list.forEach(b=>{const k=jobRoot(b);const o=m.get(k);if(!o||bidWhen(b)>bidWhen(o))m.set(k,b)});return list.filter(b=>m.get(jobRoot(b))===b)}
@@ -1438,7 +1440,7 @@ function bidModal(){
       ${isNew&&work?'<button class="btn primary" data-act="save">Create bid</button>':''}</div></div>
   <div class="bp-tabs" role="tablist">${tabs}${b.status==='On Hold'?'<span class="bp-hold">'+pill('On hold','warn')+'</span>':''}</div>
   <div class="mbody bp-body"><div class="bp-grid"><div class="bp-main">${archNote}${cuBanner(b)}${supBanner(b)}${bidReqBanner(b)}${trkStrip(b)}${body}</div><aside class="bp-aside">${bpAside(b,work,admin,isNew)}</aside></div></div>
-  <div class="mfoot bp-foot"><div style="display:flex;gap:8px;flex-wrap:wrap">${b.status==='Awarded'&&!isNew&&!b._sample&&can('awards')?`<button class="btn" data-act="aw-frombid" data-id="${b.id}">🏗️ Open on the Awarded tab</button>`:''}${b._sample?'<span class="pill info">Practice bid · nothing is saved</span>':''}${work&&!isNew&&!b._sample&&bpBackTo(b)?`<button class="btn bp-backst" data-act="bp-back" title="Undo a stage move: changes the bid’s stage back to ${esc(bpBackTo(b).l)}">↩ Move stage back to ${esc(bpBackTo(b).l)}</button>`:''}${work&&!isNew&&!b._sample?'<button class="btn" data-act="sup-start" title="Same project, new name or details — keeps everything and records the change">↻ Supersede</button>':''}${admin&&!isNew&&!b._sample?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button><button class="btn" data-act="${b.archived_at?'bid-restore':'bid-archive'}">${b.archived_at?'Restore':'Archive'}</button>${b.status==='Awarded'?`<button class="btn" data-act="create-job">${S.jobs.some(j=>j.bid_id===b.id)?'Open job':'Create job'}</button>`:''}`:''}</div>
+  <div class="mfoot bp-foot"><div style="display:flex;gap:8px;flex-wrap:wrap">${b.status==='Awarded'&&!isNew&&!b._sample&&can('awards')?`<button class="btn" data-act="aw-frombid" data-id="${b.id}">🏗️ Open on the Awarded tab</button>`:''}${b._sample?'<span class="pill info">Practice bid · nothing is saved</span>':''}${work&&!isNew&&!b._sample&&bpBackTo(b)?`<button class="btn bp-backst" data-act="bp-back" title="Undo a stage move: changes the bid’s stage back to ${esc(bpBackTo(b).l)}">↩ Move stage back to ${esc(bpBackTo(b).l)}</button>`:''}${work&&!isNew&&!b._sample?(supByOf(b)?'':'<button class="btn" data-act="sup-start" title="Archive this bid as superseded (everything on it is kept) and start a new bid for the project">↻ Supersede</button>'):''}${admin&&!isNew&&!b._sample?`<button class="btn danger ${M.arm?'arm':''}" data-act="del">${M.arm?'Click again to delete':'Delete bid'}</button><button class="btn" data-act="${b.archived_at?'bid-restore':'bid-archive'}">${b.archived_at?'Restore':'Archive'}</button>${b.status==='Awarded'?`<button class="btn" data-act="create-job">${S.jobs.some(j=>j.bid_id===b.id)?'Open job':'Create job'}</button>`:''}`:''}</div>
   <div class="r">${bpAdvanceHtml(b,work,isNew)}</div></div>`;
 }
 const estOn=()=>!tabOff('estimates');
@@ -1478,6 +1480,11 @@ function bpProject(b,work,admin){
       const o=x=>`<option value="${x.id}"${cur===x.id?' selected':''}>${esc(x.name||'Untitled')}${bidWhen(x)?` · ${fmtShort(bidWhen(x))}`:''}</option>`;
       const newer=S.bids.filter(x=>rebidOf(x)===b.id);
       return `<label class="f s2" title="Best & Final, revised plans, a second round… The job counts once in yearly totals and reports, at its latest proposal.">Re-bid of<select class="field" data-act="rebid-sel"${DIS()}><option value="">— Not a re-bid (its own job) —</option>${same.length?`<optgroup label="Same GC">${same.map(o).join('')}</optgroup>`:''}<optgroup label="All bids">${rest.map(o).join('')}</optgroup></select>${newer.length?`<span class="small dim">Re-bid later as ${newer.map(x=>`<button class="linkbtn" data-act="open-bid" data-id="${x.id}">${esc(x.name)}</button>`).join(', ')}</span>`:''}</label>`})()}
+    ${(()=>{if(supByOf(b))return '';const cur=supOf(b);const on=!!(cur||M.supOn);const gcs=new Set(b.client_ids||[]);
+      const others=S.bids.filter(x=>x.id!==b.id&&!x._new&&!(supByOf(x)&&supByOf(x)!==b.id));
+      const same=others.filter(x=>(x.client_ids||[]).some(id=>gcs.has(id))).sort((x,y)=>(bidWhen(y)||'').localeCompare(bidWhen(x)||'')),rest=others.filter(x=>!same.includes(x)).sort((x,y)=>(x.name||'').localeCompare(y.name||''));
+      const o=x=>`<option value="${x.id}"${cur===x.id?' selected':''}>${esc(x.name||'Untitled')}${bidWhen(x)?` · ${fmtShort(bidWhen(x))}`:''}${x.archived_at?' · archived':''}</option>`;
+      return `<div class="f s2 sup-pick" title="The old bid is archived as superseded and kept on record; both bids link to each other. The job counts once in yearly totals."><label class="check"><input type="checkbox" data-act="sup-on"${on?' checked':''}${DIS()}> This project supersedes another project</label>${on?`<select class="field" data-act="sup-sel"${DIS()}><option value="">— Pick the project it replaces —</option>${same.length?`<optgroup label="Same GC">${same.map(o).join('')}</optgroup>`:''}<optgroup label="All bids">${rest.map(o).join('')}</optgroup></select><span class="small dim">${cur?'When this bid is saved, the old one is archived as superseded and linked here.':'The old bid is archived as superseded when this one is saved.'}</span>`:''}</div>`})()}
     <label class="f">Size<input class="field" ${bf('size')} placeholder="e.g. 14 acres"></label>
     <label class="f">Number of units<input type="number" min="0" step="1" class="field" ${bf('units','n')} placeholder="e.g. 240"></label>
   </div></fieldset>
@@ -2026,11 +2033,14 @@ async function saveBid(opt={},m=M){
   // kept out of the main save so bids still save before update-28 has been run
   if(d.proposal_eta!==undefined&&(wasNew?d.proposal_eta:true)){try{await sb.from('bids').update({proposal_eta:nullIfEmpty(d.proposal_eta)}).eq('id',row.id)}catch(e){}}
   if(d.grab&&typeof d.grab==='object'&&!S.grabMissing){try{const {error}=await sb.from('bids').update({grab:d.grab}).eq('id',row.id);if(error){if(/grab/i.test(error.message||''))S.grabMissing=true;else throw error}else if(typeof grabLoad==='function')setTimeout(grabLoad,300)}catch(e){if(!/grab/i.test(errMsg(e)))throw e}}
+  const prevSup=supOf(byId(S.bids,row.id)||{});
   // RFQ details (quotes due, plans link, engineer…): own column so bids still save before update-39 is run
   if(d.rfq&&typeof d.rfq==='object'){try{localStorage.setItem('rfq:'+row.id,JSON.stringify(d.rfq))}catch(e){}
     if(!S.rfqMissing){try{const {error}=await sb.from('bids').update({rfq:d.rfq}).eq('id',row.id);if(error)S.rfqMissing=true}catch(e){S.rfqMissing=true}}}
   // final review: its own column (update-42). Sign-offs are written the moment they happen, so keep whatever is on the server
   if(d.review&&typeof d.review==='object'&&!S.reviewMissing&&JSON.stringify(d.review)!==JSON.stringify((byId(S.bids,row.id)||{}).review||{})){try{const {data:cur,error:e1}=await sb.from('bids').select('review').eq('id',row.id).maybeSingle();if(e1)throw e1;const rv={...d.review,sign:(cur&&cur.review&&cur.review.sign)||{}};const {error}=await sb.from('bids').update({review:rv}).eq('id',row.id);if(error)throw error;d.review=rv}catch(e){if(/review/i.test(errMsg(e))&&/column|schema/i.test(errMsg(e)))S.reviewMissing=true;else throw e}}
+  // "supersedes" picked on the form: archive the old bid as superseded and link it back (or undo a link that was removed)
+  if((supOf(d)||null)!==(prevSup||null)){try{if(prevSup)await supUnlinkOld(prevSup,row.id);if(supOf(d))await supLinkOld(supOf(d),row.id,todayStr(),'');if(supOf(d))toast(`“${(byId(S.bids,supOf(d))||{}).name||'The old bid'}” archived as superseded`)}catch(e){toast('Saved, but the old bid couldn’t be marked superseded: '+errMsg(e))}}
   if(wasNew&&propIds(d).length&&!S.trackMissing)setTimeout(()=>{if(!M)trackOpen(propIds(d),row.id)},400);
   if(isAdmin()){const gone=(m.origQuoteIds||[]).filter(id=>!d.quotes.some(q=>q.id===id));if(gone.length)await run(sb.from('quotes').delete().in('id',gone))}
   if(d.quotes.length)await run(sb.from('quotes').upsert(d.quotes.map(quoteRowData)));
@@ -3763,65 +3773,58 @@ const supHistory=b=>Array.isArray(b?.supersede_history)?b.supersede_history:[];
 const supFirstName=b=>{const h=supHistory(b);const c=h.length&&(h[0].changes||[]).find(x=>x.field==='name');return c?c.from:null};
 const supFormerNames=b=>[...new Set(supHistory(b).flatMap(h=>(h.changes||[]).filter(x=>x.field==='name').map(x=>x.from)).filter(n=>n&&n!==b.name))];
 const supVal=(k,v)=>k==='client_ids'?(v||[]).map(clientName).join(', ')||'—':k==='due_date'||k==='walk_date'||k==='rfi_date'?(v?fmtDate(v):'—'):k==='units'?(v==null||v===''?'—':String(v)):String(v??'')||'—';
-function supTag(b,small){const h=supHistory(b);if(!h.length)return '';const last=h[h.length-1];const was=supFormerNames(b);
+function supTag(b,small){if(supByOf(b))return `<span class="sup-tag" title="Superseded by ${esc((byId(S.bids,supByOf(b))||{}).name||'a newer bid')}">↻ Superseded</span>`;if(supOf(b))return `<span class="sup-tag sup-tag-new" title="Supersedes ${esc((byId(S.bids,supOf(b))||{}).name||'an older bid')}">↻ Supersedes ${esc(((byId(S.bids,supOf(b))||{}).name||'').slice(0,28))}</span>`;const h=supHistory(b);if(!h.length)return '';const last=h[h.length-1];const was=supFormerNames(b);
   return `<span class="sup-tag" title="Superseded ${esc(fmtDate(last.date))}${was.length?' · formerly '+esc(was.join(', ')):''}">↻ Superseded ${esc(fmtShort(last.date))}</span>${small&&was.length?`<div class="dim small sup-was">Formerly ${esc(was[was.length-1])}</div>`:''}`}
 function supBanner(b){
-  const h=supHistory(b);if(!h.length||b._new)return '';const last=h[h.length-1];const orig=supFirstName(b);
+  if(b._new)return '';const by=supByOf(b)&&byId(S.bids,supByOf(b)),of=supOf(b)&&byId(S.bids,supOf(b));let out='';
+  if(supByOf(b))out+=`<div class="notice sup-banner sup-old"><div><b>↻ Superseded${rfqOf(b).supersededOn?' '+esc(fmtDate(rfqOf(b).supersededOn)):''}</b> by ${by?`<button class="linkbtn" data-act="open-bid" data-id="${by.id}">${esc(by.name)}</button>`:'a newer bid'}${rfqOf(b).supReason?` <span class="dim">· ${esc(rfqOf(b).supReason)}</span>`:''}<div class="small">This bid is kept on record and archived. Work continues on the new bid.</div></div></div>`;
+  if(supOf(b))out+=`<div class="notice sup-banner sup-new"><div><b>↻ Supersedes</b> ${of?`<button class="linkbtn" data-act="open-bid" data-id="${of.id}">${esc(of.name)}</button>`:'an older bid'}${of&&bidWhen(of)?` <span class="dim">· ${esc(fmtShort(bidWhen(of)))}</span>`:''}</div></div>`;
+  if(out)return out;
+  const h=supHistory(b);if(!h.length)return '';const last=h[h.length-1];const orig=supFirstName(b);
   return `<div class="notice sup-banner"><div><b>↻ Superseded ${esc(fmtDate(last.date))}</b>${h.length>1?` <span class="dim">(${h.length} times)</span>`:''}
     <div class="small">Originally entered ${b.created_at?esc(fmtDate(String(b.created_at).slice(0,10))):'—'}${orig?` as “${esc(orig)}”`:''}</div></div>
     <details class="sup-hist"><summary>History</summary>${h.slice().reverse().map(x=>`<div class="sup-rec"><div class="small"><b>${esc(fmtDate(x.date))}</b> · ${esc(x.by||'Someone')}${x.reason?` — ${esc(x.reason)}`:''}</div>
       ${(x.changes||[]).length?`<ul>${x.changes.map(c=>`<li><span class="dim">${esc(c.label)}:</span> <s>${esc(supVal(c.field,c.from))}</s> → <b>${esc(supVal(c.field,c.to))}</b></li>`).join('')}</ul>`:'<div class="dim small">No details changed.</div>'}</div>`).join('')}
       <div class="sup-rec dim small">Originally entered ${b.created_at?esc(fmtDate(String(b.created_at).slice(0,10))):'—'}</div></details></div>`;
 }
-function supStart(){const b=M.draft;M.sup={draft:{name:b.name||'',location:b.location||'',project_type:b.project_type||'',units:b.units??'',bid_type:b.bid_type||'',size:b.size||'',status:b.status,due_date:b.due_date||'',due_time:b.due_time||'',walk_date:b.walk_date||'',rfi_date:b.rfi_date||'',client_ids:[...(b.client_ids||[])]},date:todayStr(),reason:'',busy:false};renderModal();setTimeout(()=>{const n=$('#sup-name');if(n){n.focus();n.select()}},0)}
-function supDiff(){const b=M.draft,d=M.sup.draft;return SUP_FIELDS.map(([k,label])=>{let from=b[k],to=d[k];
-  if(k==='client_ids'){from=[...(from||[])];to=[...(to||[])];return JSON.stringify(from.slice().sort())===JSON.stringify(to.slice().sort())?null:{field:k,label,from,to}}
-  if(k==='units'){from=num(from);to=num(to)}else{from=from??'';to=typeof to==='string'?to.trim():to??''}
-  return String(from??'')===String(to??'')?null:{field:k,label,from,to}}).filter(Boolean)}
-function supView(){
-  const b=M.draft,S2=M.sup,d=S2.draft;const ch=supDiff();const inp=(k,type='text',ph='')=>`<input class="field" type="${type}" id="sup-${k}" data-sup="${k}" value="${esc(d[k]??'')}"${ph?` placeholder="${esc(ph)}"`:''}>`;
-  const selx=(k,opts)=>`<select class="field" id="sup-${k}" data-sup="${k}">${opts.map(o=>`<option${d[k]===o?' selected':''}>${esc(o)}</option>`).join('')}</select>`;
-  const avail=gcClients().filter(c=>!d.client_ids.includes(c.id)).sort((a,c)=>a.company.localeCompare(c.company));
-  return mhead('Supersede this project',`Replaces the project details on “${b.name}”. Quotes, files, scopes and the estimator log stay with it.`)+`<div class="mbody">
-  <div class="notice" style="margin-bottom:14px">Originally entered <b>${b.created_at?esc(fmtDate(String(b.created_at).slice(0,10))):'—'}</b>${supHistory(b).length?` · superseded ${supHistory(b).length} time${supHistory(b).length===1?'':'s'} before`:''}. Change whatever is new — only the fields you change are recorded.</div>
-  <fieldset><legend>New project details</legend><div class="fg">
-    <label class="f s2">Project name <span class="req">required</span>${inp('name','text','New project name')}</label>
-    <label class="f s2">Location${inp('location','text','City, county or address')}</label>
-    <label class="f">Project type${selx('project_type',PROJECT_TYPES)}</label>
-    <label class="f">Number of units${inp('units','number')}</label>
-    <label class="f">Bid type${selx('bid_type',BID_TYPES)}</label>
-    <label class="f">Size${inp('size')}</label>
-    <label class="f">Bid status${selx('status',BID_ST)}</label>
-    <label class="f">Bid due date${inp('due_date','date')}</label>
-    <label class="f">Due time${inp('due_time','time')}</label>
-    <label class="f">Site walk / pre-bid${inp('walk_date','date')}</label>
-    <label class="f">RFI deadline${inp('rfi_date','date')}</label>
-  </div>
-  <div class="f" style="margin-top:12px;font-size:13px;font-weight:500;color:var(--ink-2)">Bidding to
-    <div class="tagrow">${d.client_ids.map(id=>`<span class="tag">${esc(clientName(id))}<button class="rm" data-act="sup-rmclient" data-id="${id}" aria-label="Remove">×</button></span>`).join('')||'<span class="dim">No GCs</span>'}
-    <select class="field" data-act="sup-addclient" style="width:auto"><option value="">+ Add GC</option>${avail.map(c=>`<option value="${c.id}">${esc(c.company)}</option>`).join('')}</select></div></div></fieldset>
-  <fieldset><legend>Supersede record</legend><div class="fg">
-    <label class="f">Superseded on<input class="field" type="date" id="sup-date" data-supx="date" value="${esc(S2.date)}"></label>
-    <label class="f s3">Reason<input class="field" id="sup-reason" data-supx="reason" value="${esc(S2.reason)}" placeholder="e.g. New developer — project renamed, rebid with revised plans"></label></div></fieldset>
-  <fieldset><legend>What will change (${ch.length})</legend><div id="sup-changes">${supChangesHtml(ch)}</div></fieldset>
-  </div><div class="mfoot"><div></div><div class="r"><button class="btn" data-act="sup-cancel">Back</button><button class="btn primary" data-act="sup-save"${S2.busy?' disabled':''}>${S2.busy?'Saving…':'Supersede project'}</button></div></div>`;
-}
-function supChangesHtml(ch){return ch.length?`<ul class="sup-list">${ch.map(c=>`<li><span class="dim">${esc(c.label)}:</span> <s>${esc(supVal(c.field,c.from))}</s> → <b>${esc(supVal(c.field,c.to))}</b></li>`).join('')}</ul>`:'<div class="dim small">Nothing changed yet. Edit the details above.</div>'}
-async function supSave(){
-  const S2=M.sup;const d=S2.draft;const b=M.draft;
-  if(!String(d.name||'').trim()){toast('Add a project name.');$('#sup-name')?.focus();return}
-  const ch=supDiff();if(!ch.length&&!S2.reason.trim()){toast('Change something or add a reason.');return}
-  const rec={id:newId(),date:S2.date||todayStr(),at:new Date().toISOString(),by:myName(),by_user:S.session.user.id,reason:S2.reason.trim(),changes:ch};
-  const hist=[...supHistory(byId(S.bids,b.id)||b),rec];
-  const upd={supersede_history:hist,superseded_at:new Date(rec.date+'T12:00:00').toISOString(),updated_by:S.session.user.id};
-  ch.forEach(c=>{upd[c.field]=c.field==='units'?c.to:c.field==='client_ids'?c.to:(['due_date','due_time','walk_date','rfi_date'].includes(c.field)?nullIfEmpty(c.to):c.to)});
-  if(ch.some(c=>c.field==='client_ids')){const keep=new Set(d.client_ids);upd.client_proposals=Object.fromEntries(Object.entries(b.client_proposals||{}).filter(([k])=>keep.has(k)));upd.client_contacts=Object.fromEntries(Object.entries(b.client_contacts||{}).filter(([k])=>keep.has(k)));if(b.awarded_client_id&&!keep.has(b.awarded_client_id))upd.awarded_client_id=null}
-  S2.busy=true;renderModal();
-  try{await run(sb.from('bids').update(upd).eq('id',b.id));await loadTable('bids');
-    ch.forEach(c=>b[c.field]=c.to??'');b.supersede_history=hist;b.superseded_at=upd.superseded_at;if(upd.client_proposals){b.client_proposals=upd.client_proposals;b.client_contacts=upd.client_contacts;if('awarded_client_id' in upd)b.awarded_client_id=''}
-    M.sup=null;renderModal();toast(`Superseded — now “${b.name}”`)}
-  catch(e){S2.busy=false;renderModal();toast(/supersede_history|superseded_at/.test(errMsg(e))?'Run supabase/update-12-supersede.sql in Supabase first.':errMsg(e))}
-}
+function supStart(){const b=M.draft;if(!canAssign()){toast('Superseding starts a new bid, which takes someone who manages all bids.');return}
+  M.sup={name:b.name||'',due_date:'',date:todayStr(),reason:'',carry:{gcs:true,team:true,details:true},busy:false};renderModal();setTimeout(()=>{const n=$('#sup-name');if(n){n.focus();n.select()}},0)}
+function supView(){const b=M.draft,X=M.sup;const ck=(k,l,sub)=>`<label class="check sup-ck"><input type="checkbox" data-supc="${k}"${X.carry[k]?' checked':''}> <span><b>${l}</b>${sub?`<small class="dim"> · ${sub}</small>`:''}</span></label>`;
+  const gcs=(b.client_ids||[]).map(clientName).join(', ');const team=[estName(b.lead_estimator_id),...(b.support_estimator_ids||[]).map(estName)].filter(Boolean).join(', ');
+  return mhead('Supersede this project',`Starts a new bid for the project and keeps “${b.name}” on record.`)+`<div class="mbody">
+  <div class="notice sup-how"><b>What happens</b><ol><li><b>${esc(b.name)}</b> is archived and marked <b>superseded</b>. Its quotes, files, estimate, scopes and log all stay on it, and it links to the new bid.</li>
+    <li>A new bid starts at <b>Project Created</b> and links back to this one. Yearly totals count the project once, at its latest proposal.</li></ol></div>
+  <fieldset><legend>New bid</legend><div class="fg">
+    <label class="f s2">Project name <span class="req">required</span><input class="field" id="sup-name" data-supx="name" value="${esc(X.name)}"></label>
+    <label class="f">Bid due date<input class="field" type="date" data-supx="due_date" value="${esc(X.due_date)}"></label></div>
+    <div class="sup-carry"><div class="small dim" style="margin:10px 0 4px">Carry over to the new bid</div>
+    ${ck('gcs','Bidding to and contacts',esc(gcs||'none'))}${ck('team','Estimators',esc(team||'none'))}${ck('details','Project details','location, type, asset class, bid type, size, units, engineer, plans link')}
+    <div class="small dim" style="margin-top:6px">Quotes, files, estimate and proposal amounts don’t carry over. The new bid starts clean.</div></div></fieldset>
+  <fieldset><legend>Record</legend><div class="fg">
+    <label class="f">Superseded on<input class="field" type="date" data-supx="date" value="${esc(X.date)}"></label>
+    <label class="f s3">Reason<input class="field" data-supx="reason" value="${esc(X.reason)}" placeholder="e.g. Revised plans, new developer, project renamed"></label></div></fieldset>
+  </div><div class="mfoot"><div></div><div class="r"><button class="btn" data-act="sup-cancel">Back</button><button class="btn primary" data-act="sup-save"${X.busy?' disabled':''}>${X.busy?'Working…':'↻ Supersede and start new bid'}</button></div></div>`}
+// link old → new: archive the old bid and note who replaced it (also used when a new bid is saved with "supersedes" checked)
+async function supLinkOld(oldId,newId,date,reason){const o=byId(S.bids,oldId);if(!o)return;const r={...(o.rfq||{}),supersededBy:newId,supersededOn:date||todayStr()};if(reason)r.supReason=reason;
+  const rec={id:newIdX(),date:date||todayStr(),at:new Date().toISOString(),by:myName(),by_user:S.session.user.id,reason:reason||'',changes:[],supersededBy:newId};
+  await run(sb.from('bids').update({rfq:r,archived_at:o.archived_at||new Date().toISOString(),supersede_history:[...supHistory(o),rec],superseded_at:new Date((date||todayStr())+'T12:00:00').toISOString(),updated_by:S.session.user.id}).eq('id',oldId))}
+async function supUnlinkOld(oldId,newId){const o=byId(S.bids,oldId);if(!o||supByOf(o)!==newId)return;const r={...(o.rfq||{})};delete r.supersededBy;delete r.supersededOn;delete r.supReason;
+  await run(sb.from('bids').update({rfq:r,archived_at:null,updated_by:S.session.user.id}).eq('id',oldId))}
+const newIdX=()=>newId();
+async function supSave(){const X=M.sup,b=M.draft;const name=String(X.name||'').trim();if(!name){toast('Add a project name.');$('#sup-name')?.focus();return}
+  X.busy=true;renderModal();
+  try{const d=newBid();delete d._new;Object.assign(d,{name,status:'Project Created',due_date:X.due_date||null});
+    if(X.carry.details)['location','project_type','asset_class','bid_type','size','units'].forEach(k=>{if(b[k]!=null&&b[k]!=='')d[k]=b[k]});
+    if(X.carry.gcs){d.client_ids=[...(b.client_ids||[])];d.client_contacts=clone(b.client_contacts||{});d.client_proposals={}}
+    if(X.carry.team){d.lead_estimator_id=b.lead_estimator_id||null;d.support_estimator_ids=[...(b.support_estimator_ids||[])]}
+    const row={};(has61()?BID_COLS.concat(BID_COLS61):BID_COLS).forEach(k=>row[k]=d[k]);
+    ['due_date','due_time','walk_date','rfi_date','submitted_date','awarded_date','contract_date','start_date','lead_estimator_id','awarded_client_id'].forEach(k=>{if(k in row)row[k]=nullIfEmpty(row[k])});if('asset_class' in row)row.asset_class=row.asset_class||assetOf(row.project_type)||'';row.updated_by=S.session.user.id;
+    await run(sb.from('bids').insert(row));
+    const ro=rfqOf(b);const rfq={intake:todayStr(),supersedes:b.id};if(X.carry.details)['engineer','plans','plansLink','owner','dueTarget'].forEach(k=>{if(ro[k]!=null&&ro[k]!=='')rfq[k]=ro[k]});
+    try{await run(sb.from('bids').update({rfq}).eq('id',d.id))}catch(e){}
+    await supLinkOld(b.id,d.id,X.date,String(X.reason||'').trim());
+    await loadTable('bids');toast(`“${b.name}” archived as superseded · new bid started`);M=null;closeModal();openBid(d.id)}
+  catch(e){X.busy=false;renderModal();toast(errMsg(e))}}
 
 
 /* =====================================================================
@@ -4598,10 +4601,9 @@ document.addEventListener('click',e=>{
     case 'lg-rmfile':logState().files.splice(+t.dataset.i,1);renderModal();break;
     case 'lg-open':openLogFile(t.dataset.path,t.dataset.name);break;
     case 'jn-filter':S.jt.nf=t.dataset.v;render();break;
-    case 'sup-start':if(M&&M.kind==='bid'&&canWork(M.draft)){supStart();M.sup.draft.project_type=normProjectType(M.sup.draft.project_type)||'Commercial'}break;
+    case 'sup-start':if(M&&M.kind==='bid'&&canWork(M.draft))supStart();break;
     case 'sup-cancel':M.sup=null;renderModal();break;
     case 'sup-save':if(!M.sup.busy)supSave();break;
-    case 'sup-rmclient':M.sup.draft.client_ids=M.sup.draft.client_ids.filter(x=>x!==t.dataset.id);renderModal();break;
     case 'tk-tool':{const k=S.tk;k.tool=t.dataset.v;k.cur=[];k.pending=null;k.align=k.tool==='align'?{step:0}:null;if(k.tool!=='select')k.sel=null;if(k.tool==='align'&&!tkScaled(k.page)){toast('Set the scale on this sheet first.');k.tool='scale';k.align=null}if(k.tool==='align'){k.others=true;tkEnsureSheets().then(()=>{tkFit(true);tkDraw()})}tkDraw();tkUI();break}
     case 'tk-align-done':{const k=S.tk;k.align=null;k.tool='pan';tkDraw();tkUI();break}
     case 'tk-align-restart':S.tk.align={step:0};tkDraw();tkUI();break;
@@ -4717,7 +4719,7 @@ document.addEventListener('input',e=>{
   if(t.dataset.t3exag!=null){T3.exag=+t.value;const v=$('#t3-exv');if(v)v.textContent=T3.exag;t3Build();t3Draw();return}
   if(t.dataset.tkset==='otherAlpha'){S.tk.otherAlpha=+t.value;tkDraw();return}
   if(t.dataset.tkset&&t.type!=='checkbox'){if(t.tagName==='SELECT')return;S.tk[t.dataset.tkset]=t.value;return}
-  if(M&&M.sup&&t.dataset.sup){M.sup.draft[t.dataset.sup]=t.value;const c=$('#sup-changes');if(c){const ch=supDiff();c.innerHTML=supChangesHtml(ch);const lg=c.closest('fieldset')?.querySelector('legend');if(lg)lg.textContent=`What will change (${ch.length})`}return}
+  if(M&&M.sup&&t.dataset.supc){M.sup.carry[t.dataset.supc]=t.checked;return}
   if(M&&M.sup&&t.dataset.supx){M.sup[t.dataset.supx]=t.value;return}
   if(M&&t.dataset.lg){logState()[t.dataset.lg]=t.value;return}
   if(M&&t.dataset.lge&&M.lg?.edit){M.lg.edit[t.dataset.lge]=t.value;return}
@@ -4798,7 +4800,6 @@ document.addEventListener('change',e=>{
     case 'tradeF':S.q.trade=t.value;render();break;
     case 'vscopeF':S.q.vscope=t.value;render();break;
     case 'vtypeF':S.q.vtype=t.value;render();break;
-    case 'sup-addclient':if(t.value&&M.sup){M.sup.draft.client_ids.push(t.value);renderModal()}break;
     case 'add-support':if(t.value==='__all'){const d=M.draft;S.estimators.filter(e=>e.active!==false&&e.id!==d.lead_estimator_id&&!d.support_estimator_ids.includes(e.id)).sort((a,c)=>a.name.localeCompare(c.name)).forEach(e=>d.support_estimator_ids.push(e.id));renderModal()}else if(t.value){M.draft.support_estimator_ids.push(t.value);renderModal()}break;
     case 'add-client':if(t.value==='__new'){M.newCo={name:'',kind:'gc'};renderModal();setTimeout(()=>$('#newco-name')?.focus(),20);break}if(t.value){M.draft.client_ids.push(t.value);{const own=isOwnerCo(byId(S.clients,t.value));M.draft.client_proposals={...(M.draft.client_proposals||{}),[t.value]:{...((M.draft.client_proposals||{})[t.value]||{}),role:{gc:!own,own}}}}const first=byId(S.clients,t.value)?.contacts?.[0]?.name;if(first)M.draft.client_contacts[t.value]=first;renderModal()}break;
     case 'add-quote':if(t.value){addQuote(t.value);renderModal()}break;
@@ -12901,6 +12902,8 @@ document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')re
   if(t.dataset.qf&&t.dataset.qf.endsWith('.received_date')){const q=M.draft.quotes[+t.dataset.qf.split('.')[0]];if(q&&t.value&&q.status!=='Received'){q.status='Received';renderModal()}}});
 document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')return;
   if(t.dataset.act==='asset-sel'){M.draft.asset_class=t.value;bpSaveUI('Editing…');return}
+  if(t.dataset.act==='sup-on'){M.supOn=t.checked;if(!t.checked){const r=rfqOf(M.draft);delete r.supersedes;bpSaveUI('Editing…')}renderModal();return}
+  if(t.dataset.act==='sup-sel'){const r=rfqOf(M.draft);if(t.value)r.supersedes=t.value;else delete r.supersedes;bpSaveUI('Editing…');renderModal();return}
   if(t.dataset.act==='rebid-sel'){const r=rfqOf(M.draft);if(t.value)r.rebidOf=t.value;else delete r.rebidOf;bpSaveUI('Editing…');return}
   if(t.dataset.act==='likely-sel'){const r=rfqOf(M.draft);if(t.value)r.likely=+t.value;else delete r.likely;bpSaveUI('Editing…');return}
   if(t.dataset.bf==='project_type'){M.draft.asset_class=assetOf(t.value);setTimeout(()=>{const s=$('[data-act=asset-sel]');if(s)s.value=M.draft.asset_class},0)}});
@@ -16616,7 +16619,12 @@ async function npLoad(){
   if(!S.session||role()==='pending')return;
   const {data,error}=await sb.from('notifications').select('*').order('created_at',{ascending:false}).limit(60);
   if(error){S.np.missing=/does not exist|schema cache/i.test(error.message||'');S.np.rows=[];S.np.loaded=true;npPaint();return}
-  S.np.rows=data||[];S.np.loaded=true;S.np.missing=false;if(npOpen())npSetSeen();npPaint();
+  S.np.rows=data||[];S.np.loaded=true;S.np.missing=false;
+  // a pop-up the moment someone puts you on a bid (once per notification, on this computer)
+  try{const k='bp-np-toast.'+myId();const last=localStorage.getItem(k);const fresh=S.np.rows.filter(r=>/^assign:/.test(r.source||'')&&r.user_id===myId()&&(!last||r.created_at>last));
+    if(last&&fresh.length)toast(fresh.length===1?`🔔 ${fresh[0].title}`:`🔔 You were put on ${fresh.length} bids. See the bell.`);
+    const top=S.np.rows[0];if(top&&(!last||top.created_at>last))localStorage.setItem(k,top.created_at);else if(!last)localStorage.setItem(k,new Date().toISOString())}catch(e){}
+  if(npOpen())npSetSeen();npPaint();
 }
 function npLoadSoon(){clearTimeout(npLoadSoon._t);npLoadSoon._t=setTimeout(npLoad,300)}
 // light markdown: "## heading", "- bullet", "**bold**", blank line = paragraph break
@@ -16629,14 +16637,14 @@ function npMd(t){const inl=s=>esc(s).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>');let o
   if(list)out+='</ul>';return out}
 function npWhen(r){const d=new Date(r.created_at);const today=new Date();const same=d.toDateString()===today.toDateString();
   const t=d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});return same?'Today '+t:fmtShort(r.for_date||r.created_at.slice(0,10))+' · '+t}
-function npTabs(){const t=[['personal','My summary']];if(npTeamOk())t.push(['team','Team']);return t}
+function npTabs(){const t=[['personal','For me']];if(npTeamOk())t.push(['team','Team']);return t}
 function npHtml(){
   const tabs=npTabs();if(!tabs.some(x=>x[0]===S.np.tab))S.np.tab=tabs[0][0];
   const rows=S.np.rows.filter(r=>r.kind===S.np.tab);const seen=npSeen();
   const body=!S.np.loaded?`<p class="np-empty">Loading…</p>`
     :S.np.missing?`<p class="np-empty">Notifications aren’t set up yet. An admin needs to run <code>supabase/update-63-notifications.sql</code> once in Supabase.</p>`
     :!rows.length?`<p class="np-empty">${S.np.tab==='team'?'No team summaries yet. They’ll show up here after the morning run.':'No personal summaries yet.'}</p>`
-    :rows.map((r,i)=>`<details class="np-item${seen&&r.created_at>seen?' new':''}"${i===0?' open':''}><summary><span class="np-title">${esc(r.title||(r.kind==='team'?'Team summary':'My summary'))}</span><small>${esc(npWhen(r))}</small></summary><div class="np-body">${npMd(r.body)}</div>${isAdmin()||(r.kind==='personal'&&r.user_id===myId())?`<button class="np-del" data-act="np-del" data-id="${esc(r.id)}" title="Remove this summary">Remove</button>`:''}</details>`).join('');
+    :rows.map((r,i)=>`<details class="np-item${seen&&r.created_at>seen?' new':''}"${i===0?' open':''}><summary><span class="np-title">${esc(r.title||(r.kind==='team'?'Team summary':'My summary'))}</span><small>${esc(npWhen(r))}</small></summary><div class="np-body">${npMd(String(r.body||'').replace(/\n?Open it from the Pipeline\.\s*$/,''))}${/^assign:/.test(r.source||'')&&byId(S.bids,r.source.slice(7))?`<button class="btn sm np-open" data-act="np-open" data-id="${esc(r.source.slice(7))}">Open the bid</button>`:''}</div>${isAdmin()||(r.kind==='personal'&&r.user_id===myId())?`<button class="np-del" data-act="np-del" data-id="${esc(r.id)}" title="Remove this summary">Remove</button>`:''}</details>`).join('');
   return `<div class="np-head"><b>Notifications</b><button class="np-x" data-act="np-toggle" aria-label="Collapse notifications">»</button></div>
   ${tabs.length>1?`<div class="np-tabs">${tabs.map(([k,l])=>{const n=S.np.rows.filter(r=>r.kind===k&&(!seen||r.created_at>seen)).length;return `<button class="${S.np.tab===k?'on':''}" data-act="np-tab" data-v="${k}">${l}${n?` <i>${n}</i>`:''}</button>`}).join('')}</div>`:''}
   <div class="np-list">${body}</div>`}
@@ -16655,6 +16663,7 @@ const npBtn=()=>`<button class="np-btn" data-act="np-toggle" title="Notification
 document.addEventListener('click',async e=>{const t=e.target.closest&&e.target.closest('[data-act^="np-"]');if(!t)return;const a=t.dataset.act;
   if(a==='np-toggle'){const o=!npOpen();try{localStorage.setItem(NP_OPEN_KEY,o?'1':'0')}catch(er){}if(o)npSetSeen();const el=document.getElementById('np');if(el)el._h='';npPaint();return}
   if(a==='np-tab'){S.np.tab=t.dataset.v;npSetSeen();npPaint();return}
+  if(a==='np-open'){e.preventDefault();if(M)closeModal();openBid(t.dataset.id);return}
   if(a==='np-del'){e.preventDefault();if(!confirm('Remove this summary for everyone who can see it?'))return;try{await run(sb.from('notifications').delete().eq('id',t.dataset.id));S.np.rows=S.np.rows.filter(r=>r.id!==t.dataset.id);npPaint()}catch(er){toast(errMsg(er))}}
 });
 // Team → Access chart: which roles see the Notifications panel (bell + My summary + Team)

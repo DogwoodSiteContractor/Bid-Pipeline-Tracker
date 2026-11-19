@@ -3308,3 +3308,9 @@ input.uncommitted{border-color:var(--warn,#d9a441)!important;box-shadow:0 0 0 2p
 .sv-form{display:flex;flex-direction:column;gap:14px}.sv-fq label{display:block;font-weight:600;margin-bottom:6px}
 .sv-stars{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.sv-star{width:40px;height:36px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:inherit;font:inherit;font-weight:700;cursor:pointer}
 .sv-star.on{background:#4C7E5B;border-color:#4C7E5B;color:#fff}
+
+.sup-pick{display:flex;flex-direction:column;gap:6px}.sup-pick .check{font-weight:500}
+.sup-how ol{margin:6px 0 0;padding-left:18px}.sup-how li{margin:3px 0}
+.sup-carry .sup-ck{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
+.sup-tag-new{background:color-mix(in srgb,#217346 14%,transparent)}
+.np-open{margin-top:8px}
