@@ -3309,8 +3309,17 @@ input.uncommitted{border-color:var(--warn,#d9a441)!important;box-shadow:0 0 0 2p
 .sv-stars{display:flex;gap:6px;align-items:center;flex-wrap:wrap}.sv-star{width:40px;height:36px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:inherit;font:inherit;font-weight:700;cursor:pointer}
 .sv-star.on{background:#4C7E5B;border-color:#4C7E5B;color:#fff}
 
-.sup-pick{display:flex;flex-direction:column;gap:6px}.sup-pick .check{font-weight:500}
 .sup-how ol{margin:6px 0 0;padding-left:18px}.sup-how li{margin:3px 0}
 .sup-carry .sup-ck{display:flex;gap:8px;align-items:flex-start;margin:6px 0}
 .sup-tag-new{background:color-mix(in srgb,#217346 14%,transparent)}
 .np-open{margin-top:8px}
+
+/* bid form: related bids row (re-bid of / supersedes) */
+.bp-rel{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;align-items:start}
+.bp-rel:empty{display:none}.bp-rel>.f{grid-column:auto;min-width:0}
+.sup-pick{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:500;color:var(--ink-2)}
+.sup-row{display:flex;gap:8px;align-items:stretch;min-width:0}.sup-row select{flex:1;min-width:0}
+.sup-box{display:flex;align-items:center;gap:8px;flex:none;padding:0 12px;min-height:38px;border:1px solid var(--line);border-radius:7px;background:var(--surface);color:var(--ink);font-weight:500;cursor:pointer;white-space:nowrap}
+.sup-box:hover{border-color:var(--ink-3,#999)}.sup-box.on{border-color:var(--accent,#4C7E5B);background:color-mix(in srgb,var(--accent,#4C7E5B) 10%,var(--surface))}
+.sup-box input{margin:0;accent-color:var(--accent,#4C7E5B)}
+.sup-hint{font-size:12px;font-weight:400;color:var(--ink-3,#888)}
