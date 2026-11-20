@@ -382,7 +382,7 @@ function renderNow(){
   main.innerHTML=(estsTabFor()?estsTabs(estsTabFor()):subNav())+(typeof tourBanner==='function'&&S.view===(navItems()[0]||[])[0]?tourBanner():'')+views[S.view]();
   keep.forEach(([id,top,left,ks])=>{const e=id&&document.getElementById(id);if(e&&(e.dataset.ksel||'')===ks){e.scrollTop=top;e.scrollLeft=left}});
   if(cellSel){const n=main.querySelector(cellSel);if(n){if(cellVal!=null)n.value=cellVal;n.focus({preventScroll:true});try{if(cellPos&&cellPos[0]!=null)n.setSelectionRange(cellPos[0],cellPos[1])}catch(e){}}}
-  if(typeof wbPaint==='function'&&main.querySelector('#wb-grid'))requestAnimationFrame(()=>wbPaint());if(typeof xsPaint==='function'&&main.querySelector('#sh-wrap'))requestAnimationFrame(()=>xsPaint());
+  if(typeof wbPaint==='function'&&main.querySelector('#wb-grid'))requestAnimationFrame(()=>wbPaint());if(typeof xsPaint==='function'&&main.querySelector('#sh-wrap'))requestAnimationFrame(()=>xsPaint());if(main.querySelector('#prop-paper'))requestAnimationFrame(()=>ppPaginate());
   if(fid){const n=document.getElementById(fid);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});try{n.setSelectionRange(pos,pe??pos)}catch(e){}if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();if(S.view==='calc'&&$('#tk-canvas'))tkMount();if(S.view==='tw')twMount();
   // the page content can add a scrollbar after the top bar was fitted, so fit it again once laid out
@@ -6448,19 +6448,26 @@ function propData(){const E=S.est,d=E.data,b=byId(S.bids,E.bidId)||{};const L=pr
   const P=d.prop;['incl','excl','clar','to'].forEach(k=>{if(!Array.isArray(P[k]))P[k]=[]});return P}
 const propLines=t=>String(t||'').split(/\n+/).map(x=>x.trim()).filter(Boolean);
 // what the client sees for each line, depending on the format
+// item numbers on the proposal only: the estimate's codes, your own sequence (start at / count by), or none
+function propNums(P,PR,alts){const mode=P.numMode||'code';const st=String(P.numStart??'1').trim()||'1',inc=String(P.numInc??'1').trim()||'1';
+  const dp=Math.max(...[st,inc].map(v=>(v.split('.')[1]||'').length));const S0=num(st)??1,I=num(inc)??1;let k=0;
+  const fmt=v=>dp?v.toFixed(dp):String(Math.round(v));
+  const set=o=>{o.no=mode==='none'?'':mode==='custom'?(P.numPrefix||'')+fmt(S0+I*(k++)):(o.it.code||'')};
+  (PR.groups||[]).forEach(g=>{if(mode==='custom'&&P.numRestart)k=0;g.items.forEach(set)});
+  if(mode==='custom'&&P.numRestart)k=0;(alts||[]).forEach(set);return PR}
 function propRows(d,R,P){const base=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>!o.it.alt);
   if(P.format==='total')return {total:R.gross,groups:[]};
   const groups=(d.sections||[]).map(s=>{const items=base.filter(o=>o.it.sec===s.id);return {name:s.name||'General',items,total:items.reduce((a,o)=>a+o.x.price,0)}}).filter(g=>g.items.length);
   if(R.gc){const nm=d.markup.gcName||'General conditions';groups.unshift({name:nm,items:[{it:{code:'',desc:nm,qty:1,unit:'LS'},x:{price:R.gc,unitPrice:R.gc,q:1}}],total:R.gc})}
   return {total:R.gross,groups}}
 function propPaper(d,R,b,P){const L=propLib();const co=S.settings.general?.companyName||CFG.companyName||'';const logo=BRAND.loginLogo||'';
-  const to=P.to.map(id=>byId(S.clients,id)).filter(Boolean);const PR=propRows(d,R,P);const GT=P.showDur||P.showGantt?ganttCalc(d,R):{total:0};const alts=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>o.it.alt);
+  const to=P.to.map(id=>byId(S.clients,id)).filter(Boolean);const PR=propRows(d,R,P);const GT=P.showDur||P.showGantt?ganttCalc(d,R):{total:0};const alts=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>o.it.alt);propNums(P,PR,alts);
   const list=(arr,extra)=>{const all=[...arr,...propLines(extra)];return all.length?`<ul>${all.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''};
   const UP=P.showQty&&!P.hideUnit;const NQ=(P.showQty?2:0)+(UP?1:0);
   const table=P.format==='total'?`<table class="pp-t"><tbody><tr class="pp-grand"><td>Lump sum — ${esc((d.sections||[]).filter(s=>d.items.some(i=>!i.alt&&i.sec===s.id)).map(s=>s.name).join(', ')||'site work as described')}</td><td class="r">${money2(PR.total)}</td></tr></tbody></table>`
     :P.format==='scope'?`<table class="pp-t"><thead><tr><th>Scope</th><th class="r">Amount</th></tr></thead><tbody>${PR.groups.map(g=>`<tr><td>${esc(g.name)}</td><td class="r">${money2(g.total)}</td></tr>`).join('')}</tbody><tfoot><tr class="pp-grand"><td>Total base bid</td><td class="r">${money2(PR.total)}</td></tr></tfoot></table>`
     :`<table class="pp-t"><thead><tr><th>Item</th><th>Description</th>${P.showQty?'<th class="r">Qty</th><th>Unit</th>':''}${UP?'<th class="r">Unit price</th>':''}<th class="r">${P.hideExt?'':'Amount'}</th></tr></thead><tbody>
-      ${PR.groups.map(g=>`${PR.groups.length>1||g.name!=='General'?`<tr class="pp-g"><td colspan="${3+NQ}">${esc(g.name)}</td></tr>`:''}${g.items.map(o=>`<tr><td>${esc(o.it.code)}</td><td>${esc(o.it.desc)}</td>${P.showQty?`<td class="r">${qtyFmt(o.it.qty)}</td><td>${esc(o.it.unit||'')}</td>`:''}${UP?`<td class="r">${o.x.q?money2(o.x.unitPrice):''}</td>`:''}<td class="r">${P.hideExt?'':money2(o.x.price)}</td></tr>`).join('')}
+      ${PR.groups.map(g=>`${PR.groups.length>1||g.name!=='General'?`<tr class="pp-g"><td colspan="${3+NQ}">${esc(g.name)}</td></tr>`:''}${g.items.map(o=>`<tr><td>${esc(o.no??o.it.code)}</td><td>${esc(o.it.desc)}</td>${P.showQty?`<td class="r">${qtyFmt(o.it.qty)}</td><td>${esc(o.it.unit||'')}</td>`:''}${UP?`<td class="r">${o.x.q?money2(o.x.unitPrice):''}</td>`:''}<td class="r">${P.hideExt?'':money2(o.x.price)}</td></tr>`).join('')}
         ${P.subtotals&&PR.groups.length>1?`<tr class="pp-sub"><td></td><td>${esc(g.name)} subtotal</td>${'<td></td>'.repeat(NQ)}<td class="r">${money2(g.total)}</td></tr>`:''}`).join('')}</tbody>
       <tfoot><tr class="pp-grand"><td></td><td>Total base bid</td>${'<td></td>'.repeat(NQ)}<td class="r">${money2(PR.total)}</td></tr></tfoot></table>`;
   return `<div class="pp" id="prop-paper"><div class="pp-head">${logo?`<img src="${esc(logo)}" alt="" class="pp-logo">`:`<div class="pp-co">${esc(co)}</div>`}<div class="pp-lh">${propLines(L.letterhead).map(esc).join('<br>')}</div></div>
@@ -6471,7 +6478,7 @@ function propPaper(d,R,b,P){const L=propLib();const co=S.settings.general?.compa
     ${P.showDur&&GT.total?`<p class="pp-basis"><b>Schedule:</b> approximately ${ganttWeeksText(GT)}${GT.hasStart?`, ${fmtDate(GT.startDate)} to ${fmtDate(GT.finishDate)}`:' from notice to proceed'}, weather permitting.</p>`:''}
     <h2>Pricing</h2>${table}
     ${R.credits&&R.credits.length?propCredits(R):''}
-    ${alts.length?`<h2>Alternates</h2><table class="pp-t"><tbody>${alts.map(o=>`<tr><td>${esc(o.it.code)}</td><td>${esc(o.it.desc)}${o.x.q&&P.format==='unit'?` <span class="pp-dim">(${qtyFmt(o.it.qty)} ${esc(o.it.unit||'')} @ ${money2(o.x.unitPrice)})</span>`:''}</td><td class="r">${o.x.price<0?'Deduct ':'Add '}${money2(Math.abs(o.x.price))}</td></tr>`).join('')}</tbody></table>`:''}
+    ${alts.length?`<h2>Alternates</h2><table class="pp-t"><tbody>${alts.map(o=>`<tr><td>${esc(o.no??o.it.code)}</td><td>${esc(o.it.desc)}${o.x.q&&P.format==='unit'?` <span class="pp-dim">(${qtyFmt(o.it.qty)} ${esc(o.it.unit||'')} @ ${money2(o.x.unitPrice)})</span>`:''}</td><td class="r">${o.x.price<0?'Deduct ':'Add '}${money2(Math.abs(o.x.price))}</td></tr>`).join('')}</tbody></table>`:''}
     ${P.showGantt&&GT.total?`<h2>Schedule</h2>${ganttPaper(d,R)}<p class="pp-dim" style="font-size:11px;margin:4px 0 0">${ganttWeeksText(GT)}. Working days only; durations are estimates.</p>`:''}
     ${P.incl.length||propLines(P.inclX).length?`<h2>Inclusions</h2>${list(P.incl,P.inclX)}`:''}
     ${P.excl.length||propLines(P.exclX).length?`<h2>Exclusions</h2>${list(P.excl,P.exclX)}`:''}
@@ -6479,6 +6486,56 @@ function propPaper(d,R,b,P){const L=propLib();const co=S.settings.general?.compa
     ${P.terms||P.valid?`<h2>Terms</h2><p>${esc(P.terms||'')}${P.valid?` This proposal is valid for ${esc(P.valid)} days from the date above.`:''}${num(d.markup.ret)?` Retainage of ${fmtN(d.markup.ret,1)}% as held by contract.`:''}</p>`:''}
     <div class="pp-sign"><div><p>Respectfully submitted,</p><div class="pp-line"></div><b>${esc(P.sign||'')}</b>${P.title?`<div>${esc(P.title)}</div>`:''}<div>${esc(co)}</div></div>
       <div><p>Accepted by:</p><div class="pp-line"></div><div>Name / title</div><div class="pp-line" style="margin-top:28px"></div><div>Date</div></div></div></div>`}
+// Word-style page view: lay the proposal out on real 8.5x11 pages (same size and margins as the PDF),
+// show where each page ends, and let people start any line on a new page or add space above it (P.lay).
+const PP_PH=9.9*96-4; // printable height of a Letter page with .55in margins, in CSS px, with a little slack
+function ppBlocks(paper){const out=[];for(const c of paper.children){if(c.classList.contains('pp-x'))continue;
+  if(c.matches('table.pp-t')){[...c.querySelectorAll(':scope>tbody>tr,:scope>tfoot>tr')].forEach(r=>{if(!r.classList.contains('pp-x'))out.push(r)})}
+  else if(c.matches('ul')){[...c.children].forEach(li=>{if(!li.classList.contains('pp-x'))out.push(li)})}else out.push(c)}return out}
+function ppKey(el,seen){const tx=el.tagName==='TR'?((el.cells[1]||el.cells[0])?.textContent||''):el.textContent;
+  let k=(el.tagName==='TR'?(el.classList.contains('pp-g')?'g':'r'):el.tagName.toLowerCase())+':'+tx.replace(/\s+/g,' ').trim().slice(0,60);
+  seen[k]=(seen[k]||0)+1;return seen[k]>1?k+'#'+seen[k]:k}
+function ppFill(el,h,cls){const isTr=el.tagName==='TR',isLi=el.tagName==='LI';const x=document.createElement(isTr?'tr':isLi?'li':'div');x.className='pp-x '+cls;
+  if(isTr){const td=document.createElement('td');td.colSpan=99;td.style.cssText=`height:${h}px;padding:0;border:0;background:none`;x.appendChild(td)}else x.style.height=h+'px';
+  if(isLi)x.style.listStyle='none';el.before(x);return x}
+if(document.fonts)document.fonts.ready.then(()=>{if($('#prop-paper'))ppPaginate()});
+function ppPaginate(){const paper=$('#prop-paper');if(!paper)return;const P=propData();const lay=P.lay||{};
+  paper.querySelectorAll('.pp-x').forEach(x=>x.remove());paper.querySelectorAll('.pp-pb').forEach(x=>x.classList.remove('pp-pb'));
+  const blocks=ppBlocks(paper);const seen={};
+  blocks.forEach(b=>{const k=ppKey(b,seen);b.dataset.pk=k;b.classList.toggle('pp-has',!!lay[k]);const sp=+lay[k]?.sp||0;if(sp>0)ppFill(b,sp,'pp-spc keep')});
+  const pad=parseFloat(getComputedStyle(paper).paddingTop)||0;const top0=()=>paper.getBoundingClientRect().top+pad;
+  const T=el=>el.getBoundingClientRect().top-top0(),B=el=>el.getBoundingClientRect().bottom-top0();
+  const isHead=el=>el.tagName==='H2'||el.classList.contains('pp-g');
+  let start=0,pages=1;const broke=new Set();
+  const brk=(el)=>{if(broke.has(el))return;broke.add(el);const rem=Math.max(0,start+PP_PH-T(el));const G=pad*2+22;
+    const g=ppFill(el,rem+G,'pp-gap');const pr=paper.getBoundingClientRect(),gr=g.getBoundingClientRect();
+    const band=document.createElement('div');band.className='pp-band';band.style.cssText=`left:${pr.left-gr.left}px;width:${pr.width}px;top:${rem+pad}px`;band.innerHTML=`<span>Page ${pages+1}</span>`;
+    (g.firstChild||g).appendChild(band);if(g.firstChild)g.firstChild.style.position='relative';
+    el.classList.add('pp-pb');let first=el;const tbl=el.closest('table');const th=tbl&&el.tagName==='TR'&&tbl.tHead?.rows[0];
+    if(th&&el.parentElement.tagName!=='THEAD'){const c=th.cloneNode(true);c.classList.add('pp-x');el.before(c);first=c}
+    start=T(first);pages++};
+  for(let i=0;i<blocks.length;i++){const b=blocks[i];const k=b.dataset.pk;
+    if(lay[k]?.pb&&i>0&&T(b)>start+1){brk(b);continue}
+    if(P.keepScope&&b.classList.contains('pp-g')){let j=i;while(j+1<blocks.length&&blocks[j+1].tagName==='TR'&&!blocks[j+1].classList.contains('pp-g')&&!blocks[j+1].classList.contains('pp-grand'))j++;
+      const h=B(blocks[j])-T(b);if(h<=PP_PH&&B(blocks[j])>start+PP_PH&&T(b)>start+1){brk(b);continue}}
+    if(B(b)>start+PP_PH&&T(b)>start+1){let e=b;let j=i;while(j>0&&isHead(blocks[j-1])&&T(blocks[j-1])>start+1&&!broke.has(blocks[j-1])){j--;e=blocks[j]}
+      if(e!==b){brk(e);i=j}else brk(b)}}
+  const cnt=$('#pp-count');if(cnt)cnt.textContent=pages+' page'+(pages===1?'':'s');paper.dataset.pages=pages;
+  // the hover tools hang off the page; hide them when the page is redrawn
+  const tl=$('#pp-tool');if(tl)tl.hidden=true}
+function ppToolAt(el){const tl=$('#pp-tool'),box=$('.pr-prev');if(!tl||!box||!el)return;const k=el.dataset.pk;const L=(propData().lay||{})[k]||{};
+  tl.dataset.pk=k;tl.querySelector('[data-ppt=pb]').classList.toggle('on',!!L.pb);tl.querySelector('[data-ppt=dn]').disabled=!(+L.sp>0);
+  const r=el.getBoundingClientRect(),br=box.getBoundingClientRect(),pr=$('#prop-paper').getBoundingClientRect();
+  tl.style.top=(r.top-br.top+box.scrollTop+r.height/2)+'px';tl.hidden=false;const lx=pr.left-br.left+box.scrollLeft;const roomy=pr.left-br.left>tl.offsetWidth+12;tl.classList.toggle('in',!roomy);tl.style.left=(roomy?lx:lx+4)+'px';
+  document.querySelectorAll('#prop-paper .pp-hot').forEach(x=>x.classList.remove('pp-hot'));el.classList.add('pp-hot')}
+document.addEventListener('mouseover',e=>{const t=e.target;if(!(t instanceof Element))return;if(t.closest('#pp-tool'))return;const tl=$('#pp-tool');if(!tl)return;
+  const el=t.closest('#prop-paper [data-pk]');if(el){ppToolAt(el);return}
+  if(!t.closest('.pr-prev')){tl.hidden=true;document.querySelectorAll('#prop-paper .pp-hot').forEach(x=>x.classList.remove('pp-hot'))}});
+document.addEventListener('click',e=>{const b=e.target instanceof Element&&e.target.closest('[data-ppt]');if(!b)return;const tl=$('#pp-tool');const k=tl?.dataset.pk;if(!k)return;
+  const P=propData();P.lay=P.lay||{};const L=P.lay[k]=P.lay[k]||{};const a=b.dataset.ppt;
+  if(a==='pb')L.pb=!L.pb;else if(a==='up')L.sp=Math.min(480,(+L.sp||0)+12);else if(a==='dn')L.sp=Math.max(0,(+L.sp||0)-12);
+  if(!L.pb&&!(+L.sp>0))delete P.lay[k];estTouch();render();
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{const el=[...document.querySelectorAll('#prop-paper [data-pk]')].find(x=>x.dataset.pk===k);if(el)ppToolAt(el)}))});
 function estPropView(d,R,b,ro){const P=propData();const L=propLib();const dis=ro?' disabled':'';
   const chk=(k,arr)=>`<div class="pr-chks">${[...new Set([...arr,...P[k].filter(x=>!arr.includes(x))])].map(x=>`<label class="check small"><input type="checkbox" data-prl="${k}" value="${esc(x)}"${P[k].includes(x)?' checked':''}${dis}> ${esc(x)}</label>`).join('')}</div>`;
   const pin=(k,o={})=>`<input class="field" id="pr-${k}" data-pr="${k}"${o.n?' type="number"':o.date?' type="date"':''} value="${esc(P[k]??'')}"${o.ph?` placeholder="${esc(o.ph)}"`:''}${dis}>`;
@@ -6493,6 +6550,14 @@ function estPropView(d,R,b,ro){const P=propData();const L=propLib();const dis=ro
     <div class="panel pad"><h3 class="pr-h">Pricing</h3><div class="radio pr-fmt">${[['unit','Unit prices — every bid item'],['scope','Lump sum by scope'],['total','One lump sum']].map(([k,l])=>`<label><input type="radio" name="prfmt" data-prf value="${k}"${P.format===k?' checked':''}${dis}> ${l}</label>`).join('')}</div>
       ${P.format==='unit'?`<label class="check small"><input type="checkbox" data-prb="showQty"${P.showQty?' checked':''}${dis}> Show quantities and units</label><label class="check small"><input type="checkbox" data-prb="hideUnit"${P.hideUnit?' checked':''}${dis||(P.showQty?'':' disabled')}> Hide unit prices</label><label class="check small"><input type="checkbox" data-prb="hideExt"${P.hideExt?' checked':''}${dis}> Hide line amounts (extensions)</label><label class="check small"><input type="checkbox" data-prb="subtotals"${P.subtotals?' checked':''}${dis}> Subtotal by scope</label>`:''}
       <p class="hint">Scopes are the estimate’s sections. Alternates are always listed separately.</p></div>
+    ${P.format==='unit'?(()=>{const nm=P.numMode||'code';return `<div class="panel pad"><h3 class="pr-h">Item numbers</h3><div class="radio pr-fmt">${[['code','Estimate codes (100.010, 200.020…)'],['custom','Custom numbering'],['none','No item numbers']].map(([k,l])=>`<label><input type="radio" name="prnum" data-prnum value="${k}"${nm===k?' checked':''}${dis}> ${l}</label>`).join('')}</div>
+      ${nm==='custom'?`<div class="fg pr-fg pr-num"><label class="f">Start at<input class="field" data-pr="numStart" value="${esc(P.numStart??'1')}" placeholder="1"${dis}></label><label class="f">Count by<input class="field" data-pr="numInc" value="${esc(P.numInc??'1')}" placeholder="1"${dis}></label><label class="f">Prefix <span class="dim small">optional</span><input class="field" data-pr="numPrefix" value="${esc(P.numPrefix||'')}" placeholder="e.g. A-"${dis}></label></div>
+        <label class="check small"><input type="checkbox" data-prb="numRestart"${P.numRestart?' checked':''}${dis}> Start over in each scope</label>
+        <p class="hint">${(()=>{const pr={groups:[{items:[{it:{}},{it:{}},{it:{}}]}]};propNums(P,pr,[]);return 'Numbers will read '+pr.groups[0].items.map(o=>esc(o.no)).join(', ')+'…'})()} Only the proposal changes; the estimate keeps its codes.</p>`:''}</div>`})():''}
+    <div class="panel pad"><h3 class="pr-h">Page layout <span class="dim small" id="pp-count"></span></h3>
+      <label class="check small"><input type="checkbox" data-prb="keepScope"${P.keepScope?' checked':''}${dis}> Keep each scope on one page when it fits</label>
+      <p class="hint">The preview shows the real pages of the PDF. Point at any line on the page to start it on a new page or add space above it.</p>
+      ${Object.keys(P.lay||{}).length&&!ro?`<button class="btn small" data-act="pr-layreset">Undo all page changes (${Object.keys(P.lay).length})</button>`:''}</div>
     <div class="panel pad"><h3 class="pr-h">Schedule</h3><label class="check small"><input type="checkbox" data-prb="showDur"${P.showDur?' checked':''}${dis}> Show the estimated duration</label><label class="check small"><input type="checkbox" data-prb="showGantt"${P.showGantt?' checked':''}${dis}> Include the schedule chart</label>
       <p class="hint">From the <b>Gantt schedule</b> tab: ${ganttWeeksText(ganttCalc(d,R))||'no bid items yet'}.</p></div>
     <div class="panel pad"><h3 class="pr-h">Opening</h3><label class="f">Intro${ptx('intro','A sentence or two before the pricing')}</label><label class="f">Basis of the proposal${ptx('basis','Plans dated …, Addenda …')}</label></div>
@@ -6500,7 +6565,7 @@ function estPropView(d,R,b,ro){const P=propData();const L=propLib();const dis=ro
     <div class="panel pad"><h3 class="pr-h">Exclusions</h3>${chk('excl',L.excl)}<label class="f">More, one per line${ptx('exclX','Anything else that’s excluded')}</label></div>
     <div class="panel pad"><h3 class="pr-h">Clarifications</h3>${chk('clar',L.clar)}<label class="f">More, one per line${ptx('clarX','Assumptions and qualifications')}</label></div>
     <div class="panel pad"><h3 class="pr-h">Terms & signature</h3><label class="f">Terms${ptx('terms','Payment terms',2)}</label><div class="fg pr-fg"><label class="f">Signed by${pin('sign')}</label><label class="f">Title${pin('title',{ph:'e.g. Chief Estimator'})}</label></div></div>
-  </div><div class="pr-prev">${propPaper(d,R,b,P)}</div></div>`}
+  </div><div class="pr-prev" id="pr-prev" data-keepscroll>${propPaper(d,R,b,P)}${ro?'':`<div id="pp-tool" class="pp-tool" hidden><button data-ppt="pb" title="Start this line at the top of a new page">↧ New page</button><button data-ppt="up" title="Add space above this line">+ Space</button><button data-ppt="dn" title="Take away space above this line">− Space</button></div>`}</div></div>`}
 function propLibModal(){const x=M.draft;const ta=(k,l,h,rows=8)=>`<label class="f s4">${l}<textarea class="field" rows="${rows}" data-plib="${k}">${esc(x[k])}</textarea>${h?`<span class="hint">${h}</span>`:''}</label>`;
   return mhead('Proposal library','The lines estimators check off on every proposal, and your letterhead')+`<div class="mbody"><fieldset><legend>Lists — one per line</legend><div class="fg">
     ${ta('incl','Inclusions')}${ta('excl','Exclusions')}${ta('clar','Clarifications')}${ta('terms','Default terms','',2)}${ta('letterhead','Letterhead','Address, phone, email, license # — printed at the top of every proposal.',4)}</div></fieldset>
@@ -6513,8 +6578,9 @@ async function propMarkSent(){const E=S.est;const b=byId(S.bids,E.bidId);const P
 FOCUS_ATTRS.push('data-plib');
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;if(!a.startsWith('pr-'))return;
   switch(a){
-    case 'pr-print':{const b=byId(S.bids,S.est.bidId);const old=document.title;document.title=`Proposal - ${b?.name||''}`;const pr=document.createElement('div');pr.id='print-root';pr.innerHTML=$('#prop-paper')?.outerHTML.replace('id="prop-paper"','')||'';document.body.appendChild(pr);document.body.classList.add('printing-prop');window.print();setTimeout(()=>{document.body.classList.remove('printing-prop');pr.remove();document.title=old},500);break}
+    case 'pr-print':{const b=byId(S.bids,S.est.bidId);const old=document.title;document.title=`Proposal - ${b?.name||''}`;const pr=document.createElement('div');pr.id='print-root';pr.innerHTML=$('#prop-paper')?.outerHTML.replace('id="prop-paper"','')||'';pr.querySelectorAll('.pp-x:not(.keep)').forEach(x=>x.remove());pr.querySelectorAll('.pp-hot').forEach(x=>x.classList.remove('pp-hot'));document.body.appendChild(pr);document.body.classList.add('printing-prop');window.print();setTimeout(()=>{document.body.classList.remove('printing-prop');pr.remove();document.title=old},500);break}
     case 'pr-sent':propMarkSent();break;
+    case 'pr-layreset':{const P=propData();P.lay={};estTouch();render();break}
     case 'pr-lib':{const L=propLib();M={kind:'proplib',draft:{incl:L.incl.join('\n'),excl:L.excl.join('\n'),clar:L.clar.join('\n'),terms:L.terms||'',letterhead:L.letterhead||''}};showModal();break}
     case 'pr-libdefault':M.draft={incl:PROP_DEFAULT_LIB.incl.join('\n'),excl:PROP_DEFAULT_LIB.excl.join('\n'),clar:PROP_DEFAULT_LIB.clar.join('\n'),terms:PROP_DEFAULT_LIB.terms,letterhead:M.draft.letterhead};renderModal();break;
     case 'pr-libsave':(async()=>{const x=M.draft;const v={incl:propLines(x.incl),excl:propLines(x.excl),clar:propLines(x.clar),terms:String(x.terms||'').trim(),letterhead:String(x.letterhead||'').trim()};
@@ -6528,6 +6594,7 @@ document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data||
   if(t.dataset.prl){const p=P(),k=t.dataset.prl;p[k]=p[k].filter(x=>x!==t.value);if(t.checked){const L=propLib()[k];p[k].push(t.value);p[k].sort((a,b)=>{const i=L.indexOf(a),j=L.indexOf(b);return (i<0?999:i)-(j<0?999:j)})}estTouch();render();return}
   if(t.dataset.prto!=null){const p=P();p.to=p.to.filter(x=>x!==t.value);if(t.checked)p.to.push(t.value);estTouch();render();return}
   if(t.dataset.prf!=null){P().format=t.value;estTouch();render();return}
+  if(t.dataset.prnum!=null){P().numMode=t.value;estTouch();render();return}
   if(t.dataset.prb){P()[t.dataset.prb]=t.checked;estTouch();render();return}});
 
 /* =====================================================================
@@ -9153,8 +9220,8 @@ const PT_FIELDS=[['Project',[['project','Project name'],['location','Project loc
 function ptData(){const E=S.est,d=E.data,b=byId(S.bids,E.bidId)||{};const R=estCalc(d);const P=propData();const L=propLib();
   const to=P.to.map(id=>byId(S.clients,id)).filter(Boolean);const m=v=>({n:r2(num(v)||0),t:money2(num(v)||0)});const T=v=>({t:String(v==null?'':v)});
   const lines=(arr,x)=>[...arr,...propLines(x)].join('\n');const dt=v=>v?fmtDate(v):'';
-  const row=(o,sec)=>({code:T(o.it.code),desc:T(o.it.desc),qty:{n:num(o.it.qty)||0,t:qtyFmt(num(o.it.qty)||0)},unit:T(o.it.unit),unit_price:o.x.q?m(o.x.unitPrice):T(''),amount:m(o.x.price),section:T(sec!=null?sec:(secOf(d,o.it.sec)||{}).name)});
-  const PR=propRows(d,R,{...P,format:'unit'});const GTD=ganttCalc(d,R);const alts=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>o.it.alt);
+  const row=(o,sec)=>({code:T(o.no??o.it.code),desc:T(o.it.desc),qty:{n:num(o.it.qty)||0,t:qtyFmt(num(o.it.qty)||0)},unit:T(o.it.unit),unit_price:o.x.q?m(o.x.unitPrice):T(''),amount:m(o.x.price),section:T(sec!=null?sec:(secOf(d,o.it.sec)||{}).name)});
+  const PR=propRows(d,R,{...P,format:'unit'});const GTD=ganttCalc(d,R);const alts=d.items.map((it,i)=>({it,x:R.items[i]})).filter(o=>o.it.alt);propNums(P,PR,alts);
   return {items:PR.groups.flatMap(g=>g.items.map(o=>row(o,g.name))),scopes:PR.groups.map(g=>({name:T(g.name),total:m(g.total)})),alts:alts.map(o=>row(o)),
     f:{project:T(b.name),location:T(b.location),date:T(dt(P.date)),bid_date:T(dt(b.due_date)),revision:T(estRevName(d)),estimator:T(b.lead_estimator_id?estName(b.lead_estimator_id):''),
       client:T(to[0]?.company),clients:T(to.map(c=>c.company).join(', ')),attn:T(to[0]?(b.client_contacts||{})[to[0].id]:''),

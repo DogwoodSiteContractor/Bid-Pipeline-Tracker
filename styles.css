@@ -968,8 +968,8 @@ button.est-opt:disabled{opacity:.55;cursor:default;box-shadow:none;border-color:
 .pr-fg{grid-template-columns:1fr 1fr;margin-top:10px}
 .pr-fmt{flex-direction:column;align-items:flex-start;gap:6px;margin-bottom:8px}
 .pr-form .f{margin-top:8px}
-.pr-prev{position:sticky;top:76px;max-height:calc(100vh - 96px);overflow:auto;background:#d9dcd6;border-radius:10px;padding:18px}
-.pp{background:#fff;color:#1b1b1b;max-width:8.5in;margin:0 auto;padding:.6in .65in;box-shadow:0 2px 12px rgba(0,0,0,.18);font:13px/1.45 "Barlow",system-ui,sans-serif}
+.pr-prev{position:sticky;overflow-x:auto;top:76px;max-height:calc(100vh - 96px);overflow:auto;background:#d9dcd6;border-radius:10px;padding:18px}
+.pp{background:#fff;color:#1b1b1b;width:8.5in;box-sizing:border-box;margin:0 auto;padding:.55in;box-shadow:0 2px 12px rgba(0,0,0,.18);font:13px/1.45 "Barlow",system-ui,sans-serif}
 .pp-head{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;border-bottom:3px solid var(--accent);padding-bottom:12px}
 .pp-logo{max-height:64px;max-width:260px}
 .pp-co{font-family:"Montserrat",system-ui,sans-serif;font-size:20px;font-weight:700}
@@ -990,7 +990,7 @@ button.est-opt:disabled{opacity:.55;cursor:default;box-shadow:none;border-color:
 .pp-t tr.pp-grand td{font-weight:700;font-size:14px;border-top:2px solid #333;border-bottom:0}
 .pp-sign{display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:30px;font-size:12.5px}
 .pp-line{border-bottom:1px solid #333;height:34px;margin-bottom:4px}
-@media (max-width:1100px){.pr-grid{grid-template-columns:1fr}.pr-prev{position:static;max-height:none;padding:8px}.pp{padding:.35in}}
+@media (max-width:1100px){.pr-grid{grid-template-columns:1fr}.pr-prev{position:static;max-height:none;padding:8px}}
 #print-root{display:none}
 @media print{
   body.printing-prop>*:not(#print-root){display:none!important}
@@ -998,6 +998,8 @@ button.est-opt:disabled{opacity:.55;cursor:default;box-shadow:none;border-color:
   body.printing-prop #print-root{display:block}
   #print-root .pp{box-shadow:none;padding:0;max-width:none;margin:0}
   @page{margin:.55in}
+  #print-root .pp-pb{break-before:page}
+  #print-root .pp-t tr,#print-root .pp li{break-inside:avoid}
 }
 
 /* ---------- estimate builder v2: outline + sheet ---------- */
@@ -3388,3 +3390,18 @@ input.uncommitted{border-color:var(--warn,#d9a441)!important;box-shadow:0 0 0 2p
 .pe-r.st-sup td:not(.pe-st),.pe-r.st-lost td:not(.pe-st){opacity:.7}
 .pe-st.pending{background:#D9B23A;color:#1d1606}.pe-st.rev{background:#2F6FD6;color:#fff}.pe-st.budget{background:#1F9AA0;color:#fff}.pe-st.hold{background:#6B7280;color:#fff}
 .pe-st.wip{color:var(--ink-2)}.pe-man{opacity:.7;font-size:11px;margin-left:3px}
+
+/* Word-style page view on the proposal */
+.pp .pp-gap{position:relative}
+.pp-band{position:absolute;height:22px;background:#d9dcd6;box-shadow:inset 0 6px 6px -6px rgba(0,0,0,.25),inset 0 -6px 6px -6px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:flex-end;padding-right:10px;box-sizing:border-box;pointer-events:none}
+.pp-band span{font:600 10px/1 "Barlow",system-ui,sans-serif;color:#666;text-transform:uppercase;letter-spacing:.06em}
+.pr-prev{position:sticky}
+.pp-tool{position:absolute;z-index:5;transform:translate(calc(-100% - 8px),-50%);display:flex;flex-direction:column;gap:3px;background:var(--panel,#1f2420);border:1px solid var(--line,#3a403b);border-radius:8px;padding:4px;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+.pp-tool button{font:600 11px/1 inherit;font-family:inherit;white-space:nowrap;background:transparent;color:var(--text,#e8ece8);border:0;border-radius:5px;padding:5px 7px;text-align:left;cursor:pointer}
+.pp-tool button:hover:not(:disabled){background:rgba(127,127,127,.18)}.pp-tool button:disabled{opacity:.35;cursor:default}
+.pp-tool button.on{background:var(--accent);color:#fff}
+#prop-paper .pp-hot{outline:1.5px dashed var(--accent);outline-offset:2px}
+#prop-paper .pp-has:not(.pp-hot){box-shadow:-3px 0 0 var(--accent)}
+#prop-paper tr.pp-has:not(.pp-hot) td:first-child{box-shadow:inset 3px 0 0 var(--accent)}#prop-paper tr.pp-has{box-shadow:none}
+@media print{#print-root .pp-hot,#print-root .pp-has{outline:0!important;box-shadow:none!important}#print-root .pp-has td{box-shadow:none!important}}
+.pp-tool.in{transform:translate(0,-50%)}
