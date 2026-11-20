@@ -3323,3 +3323,21 @@ input.uncommitted{border-color:var(--warn,#d9a441)!important;box-shadow:0 0 0 2p
 .sup-box:hover{border-color:var(--ink-3,#999)}.sup-box.on{border-color:var(--accent,#4C7E5B);background:color-mix(in srgb,var(--accent,#4C7E5B) 10%,var(--surface))}
 .sup-box input{margin:0;accent-color:var(--accent,#4C7E5B)}
 .sup-hint{font-size:12px;font-weight:400;color:var(--ink-3,#888)}
+/* estimate build: bid item + activities in one pane */
+.eb-acts{padding:10px 12px;margin:12px 0}
+.eb-acts-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px}.eb-acts-h b{font-size:14px}
+.eb-chips{display:flex;flex-wrap:wrap;gap:6px}
+.eb-chip{display:flex;align-items:center;gap:8px;max-width:100%;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:6px 10px;font:inherit;font-size:12.5px;cursor:pointer;text-align:left}
+.eb-chip:hover{border-color:var(--ink-3,#999)}
+.eb-chip .num{opacity:.65;font-variant-numeric:tabular-nums}.eb-chip-d{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+.eb-chip b{font-variant-numeric:tabular-nums}
+.eb-chip.on{border-color:var(--accent,#4C7E5B);background:color-mix(in srgb,var(--accent,#4C7E5B) 16%,var(--surface));box-shadow:inset 3px 0 0 var(--accent,#4C7E5B)}
+.eb-noact{padding:4px 0}
+.eb-actbox{border-left:3px solid var(--accent,#4C7E5B);padding-left:10px;margin-bottom:12px}
+.eo-item.selp td{background:color-mix(in srgb,var(--accent,#4C7E5B) 7%,transparent)}
+/* compact bid item block in the combined pane so the activity sits higher */
+.eb-combo .eb-fg{grid-template-columns:minmax(80px,.8fr) repeat(5,minmax(0,1fr));gap:8px}
+.eb-combo .eb-fg .s3{grid-column:span 3}.eb-combo .eb-fg .s4{grid-column:span 3}
+.eb-combo .est-isum{margin-top:8px;gap:18px}.eb-combo .est-isum b{font-size:15px}.eb-combo .est-isum span{font-size:11px}
+.eb-combo .est-mix{margin-top:6px;height:6px}
+@media (max-width:1400px){.eb-combo .eb-fg{grid-template-columns:repeat(4,minmax(0,1fr))}.eb-combo .eb-fg .s3{grid-column:span 3}.eb-combo .eb-fg .s4{grid-column:1/-1}}
