@@ -5761,7 +5761,7 @@ function estCalc(d){const ctx=estCtx(d);const items=d.items.map(it=>itemCalc(it,
   const selfOf=x=>x.total-(x.c.sub||0),subOf=x=>x.c.sub||0;
   const selfCost=bi.reduce((s,i)=>s+Math.max(0,selfOf(items[i])),0),subCost=bi.reduce((s,i)=>s+Math.max(0,subOf(items[i])),0);
   const costPct=selfCost+subCost>0?selfCost/(selfCost+subCost)*100:100;
-  let indAmt=items.map(()=>0),split=null;
+  let indAmt=items.map(()=>0),split=null,indInfo=null;
   if(si==='sub'||si==='split'){const wS=wBy(selfOf),wU=wBy(subOf),wA=wts('cost');
     const set=num(m.indSelf);const pS=si==='sub'?0:Math.min(100,Math.max(0,set!=null?set:costPct))/100;
     let poolS=ind*pS,poolU=ind-poolS;const sp={self:poolS,sub:poolU};
@@ -5770,6 +5770,8 @@ function estCalc(d){const ctx=estCtx(d);const items=d.items.map(it=>itemCalc(it,
     indAmt=items.map((x,i)=>poolS*(wS||wA)[i]+poolU*(wU||wA)[i]);
     split={mode:si,pct:pS*100,set:set!=null&&si==='split',costPct,selfCost,subCost,planned:sp,self:poolS,sub:poolU,
       nSelf:bi.filter(i=>selfOf(items[i])>0).length,nSub:bi.filter(i=>subOf(items[i])>0).length,moved:(sp.sub>0.005&&!wU)||(sp.self>0.005&&!wS)}}
+  else if(IND_W[si]){const w=wBy(IND_W[si]);indAmt=items.map((x,i)=>ind*(w||wts('cost'))[i]);
+    indInfo={mode:si,n:bi.filter(i=>IND_W[si](items[i])>0).length,fell:!w&&ind>0}}
   else{const wI=wts(si==='select'?'select':'cost');indAmt=items.map((x,i)=>ind*wI[i])}
   items.forEach((x,i)=>{x.ind=!isBase(i)||lump?0:indAmt[i];x.mk0=mkOf(x.c)+x.ind*R.ind.eff;x.oh0=ohOf(x.c)+x.ind*R.ind.o});
   const gcMk=lump?ind*R.ind.eff:0;
@@ -5789,7 +5791,7 @@ function estCalc(d){const ctx=estCtx(d);const items=d.items.map(it=>itemCalc(it,
   const creditBase=credits.filter(o=>!o.opt).reduce((s,o)=>s+o.amt,0),creditOpt=credits.filter(o=>o.opt).reduce((s,o)=>s+o.amt,0);const total=gross-creditBase;
   const F=cost>0?calcTotal/cost:1;
   const fuel={diesel:{gal:0,cost:0,adj:0},gas:{gal:0,cost:0,adj:0}};bi.forEach(i=>items[i].acts.forEach(a=>Object.entries(a.fuel||{}).forEach(([k,v])=>{const o=fuel[k];if(!o)return;o.gal+=v.gal;o.cost+=v.cost;o.adj+=v.adj})));
-  return {ctx,items,c,cost,mh,ot,ind,indLines,dur:{crewDays,conc,autoDays,days,weeks,months},oh,profit,bond,calcTotal,F,gc,adjSum,total,gross,credits,creditBase,creditOpt,alts,adj:gross-calcTotal,ret:total*(num(m.ret)||0)/100,split,fuel,margin:total-cost-ind,marginPct:total?(total-cost-ind)/total*100:0,rates:R}}
+  return {ctx,items,c,cost,mh,ot,ind,indLines,dur:{crewDays,conc,autoDays,days,weeks,months},oh,profit,bond,calcTotal,F,gc,adjSum,total,gross,credits,creditBase,creditOpt,alts,adj:gross-calcTotal,ret:total*(num(m.ret)||0)/100,split,indInfo,fuel,margin:total-cost-ind,marginPct:total?(total-cost-ind)/total*100:0,rates:R}}
 
 // codebook prices that moved since they were copied in
 function estStale(d){const out=[];const acts=[];(d.items||[]).forEach(it=>(it.acts||[]).forEach(a=>acts.push(a)));if(d.act)acts.push(d.act);if(d.item)(d.item.acts||[]).forEach(a=>acts.push(a));
@@ -7332,8 +7334,12 @@ function estIndView(d,R,ro){const st=d.settings;const D=estDefaultsRaw();const s
       ${ro?'':`<div class="adders"><button class="btn sm primary" data-act="ind-add">+ Indirect cost</button><button class="btn sm" data-act="ind-defaults">Load company list</button>${can('codebook','edit')?'<button class="btn sm ghost" data-act="mk-tocompany" data-v="ind" title="Use this list, schedule and crew count on every new estimate">Make these the company defaults</button>':''}</div>`}
       <div class="fg" style="margin-top:12px"><label class="f s2">How indirects get into the price<select class="field" data-ep="markup.spreadInd"${dis}>${IND_SPREAD.map(([k,l])=>`<option value="${k}"${(m.spreadInd||'cost')===k?' selected':''}>${l}</option>`).join('')}</select></label>
         ${m.spreadInd==='lump'?`<label class="f s2">Lump-sum line name${epIn('markup.gcName',m.gcName,{ph:'General conditions'})}</label>`:''}</div>
-      ${m.spreadInd==='select'?estCarryList(d,R,ro):''}${R.split?estSplitView(R,ro):''}</div></div></div>`}
-const IND_SPREAD=[['cost','Spread over every bid item by cost'],['sub','Only bid items with sub work (by sub cost)'],['split','Split between self-perform and subs'],['select','Carried only by the items I pick'],['lump','Shown as its own lump-sum line']];
+      ${m.spreadInd==='select'?estCarryList(d,R,ro):''}${R.split?estSplitView(R,ro):''}
+      ${R.indInfo?`<p class="${R.indInfo.fell?'notice':'hint'} small" style="margin:8px 0 0">${R.indInfo.fell?`No ${IND_WHO[R.indInfo.mode]} yet, so the indirects are spread over every bid item by cost for now.`:`${money(R.ind)} of indirects spread over ${R.indInfo.n} ${IND_WHO[R.indInfo.mode]}.`}</p>`:''}</div></div></div>`}
+const IND_SPREAD=[['cost','Spread over every bid item by cost'],['nosub','Sub-less: only bid items with no sub work (by cost)'],['self','By self-perform cost (sub dollars carry none)'],['labor','By labor cost'],['le','By labor + equipment cost'],['mh','By man-hours'],['even','The same amount on every bid item'],['sub','Only bid items with sub work (by sub cost)'],['split','Split between self-perform and subs'],['select','Carried only by the items I pick'],['lump','Shown as its own lump-sum line']];
+// weight for each "spread by" choice; items with nothing for it carry no indirects
+const IND_W={nosub:x=>(x.c.sub||0)>0?0:x.total,self:x=>x.total-(x.c.sub||0),labor:x=>x.c.labor||0,le:x=>(x.c.labor||0)+(x.c.equipment||0),mh:x=>x.mh||0,even:()=>1};
+const IND_WHO={nosub:'bid items with no sub work',self:'bid items with self-perform cost',labor:'bid items with labor',le:'bid items with labor or equipment',mh:'bid items with man-hours',even:'base bid items'};
 // self-perform vs sub breakdown for the two sub-aware spreads
 function estSplitView(R,ro){const x=R.split;const pc=(a,b)=>b>0?fmtN(a/b*100,1)+'%':'—';
   const row=(l,n,cost,pct,amt)=>`<tr><td><b>${l}</b><div class="dim small">${n} bid item${n===1?'':'s'}</div></td><td class="r num">${money(cost)}</td><td class="r num">${fmtN(pct,1)}%</td><td class="r num"><b>${money(amt)}</b></td><td class="r num">${pc(amt,cost)}</td></tr>`;
@@ -7382,6 +7388,8 @@ const BAL_INC=[['smart','Smart (by size)'],['0.01','$0.01'],['0.05','$0.05'],['0
 function balInc(v,inc){if(inc!=='smart')return +inc;const a=Math.abs(v);return a<1?.01:a<10?.05:a<100?.1:a<1000?1:a<10000?10:100}
 function balRound(v,inc,dir){const i=balInc(v,inc);const k=v/i;const n=dir==='down'?Math.floor(k+1e-9):dir==='nearest'?Math.round(k):Math.ceil(k-1e-9);return Math.round(n*i*100)/100}
 function balState(){const E=S.est;return E.bal=E.bal||{sel:new Set(),inc:'smart',dir:'up',by:'price',target:'',q:'',shut:new Set()}}
+const BAL_ON=[['all','on every item',()=>true],['nosub','on sub-less items',x=>!((x.c.sub||0)>0)],['sub','on items with subs',x=>(x.c.sub||0)>0],['self','on self-perform items (labor or equipment)',x=>(x.c.labor||0)+(x.c.equipment||0)>0],['mat','on items with material',x=>(x.c.material||0)>0]];
+const BAL_BY=[['price','by item price',x=>x.price],['cost','by item cost',x=>x.total],['mu','by item markup',x=>x.price-x.total],['self','by self-perform cost',x=>x.total-(x.c.sub||0)],['labor','by labor cost',x=>x.c.labor||0],['le','by labor + equipment',x=>(x.c.labor||0)+(x.c.equipment||0)],['mh','by man-hours',x=>x.mh||0],['even','evenly (same $ per item)',()=>1]];
 function balTargets(d,R){const B=balState();const ok=(it,i)=>!it.alt&&!it.lock&&(num(R.items[i].q)||0)>0;const all=d.items.map((it,i)=>i).filter(i=>ok(d.items[i],i));const sel=all.filter(i=>B.sel.has(d.items[i].id));return sel.length?sel:all}
 function estBalView(d,R,ro){const B=balState();const dis=ro?' disabled':'';const q=normH(B.q);
   const secs=[...(d.sections||[])];const known=new Set(secs.map(x=>x.id));const groups=secs.map(sc=>({sc,ix:d.items.map((it,i)=>i).filter(i=>d.items[i].sec===sc.id&&!d.items[i].alt)}));
@@ -7410,7 +7418,8 @@ function estBalView(d,R,ro){const B=balState();const dis=ro?' disabled':'';const
         <select class="field sm" data-balset="dir">${[['up','Up'],['nearest','Nearest'],['down','Down']].map(([k,l])=>`<option value="${k}"${B.dir===k?' selected':''}>${l}</option>`).join('')}</select>
         <button class="btn sm primary" data-act="bal-round" title="Rounds the unit price of ${scope}">Round ${nSel?'selected':'all'}</button></div>
       <div class="bal-tool"><b>Respread to</b><input class="field sm num bal-tgt" data-balset="target" inputmode="decimal" value="${esc(B.target)}" placeholder="${fmtN(R.calcTotal,2)}" title="The bid total you want. Blank = the calculated total.">
-        <select class="field sm" data-balset="by" title="How the difference is shared out">${[['price','by item price'],['cost','by item cost'],['mu','by item markup']].map(([k,l])=>`<option value="${k}"${B.by===k?' selected':''}>${l}</option>`).join('')}</select>
+        <select class="field sm" data-balset="on" title="Which bid items take the difference">${BAL_ON.map(([k,l])=>`<option value="${k}"${(B.on||'all')===k?' selected':''}>${l}</option>`).join('')}</select>
+        <select class="field sm" data-balset="by" title="How the difference is shared out">${BAL_BY.map(([k,l])=>`<option value="${k}"${B.by===k?' selected':''}>${l}</option>`).join('')}</select>
         <button class="btn sm primary" data-act="bal-spread" title="Spreads the difference over ${scope}">Respread ${nSel?'selected':'all'}</button></div>
       <div class="bal-tool"><button class="btn sm" data-act="bal-calc" title="Clears the balanced price on ${scope}, back to the calculated price">↺ Back to calculated</button>
         <button class="btn sm ghost" data-act="bal-lockall" data-v="1">Lock ${nSel?'selected':'all'}</button><button class="btn sm ghost" data-act="bal-lockall" data-v="0">Unlock ${nSel?'selected':'all'}</button>
@@ -7446,7 +7455,9 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act^=bal-]
   if(a==='bal-round'){let n=0;const before=R.gross;T.forEach(i=>{const x=R.items[i];const v=balRound(x.unitPrice,B.inc,B.dir);if(Math.abs(v-x.unitPrice)>=.005||num(d.items[i].override)==null){d.items[i].override=v;n++}});estTouch();render();const R2=estCalc(d);toast(`Rounded ${n} unit price${n===1?'':'s'}: total ${R2.gross-before>=0?'+':'−'}${money2(Math.abs(R2.gross-before))}`);return}
   if(a==='bal-calc'){if(!confirm(`Set ${B.sel.size?'the selected items':'every unlocked item'} (${T.length}) back to the calculated unit price?`))return;T.forEach(i=>{d.items[i].override=null});estTouch();render();toast(`${T.length} item${T.length===1?'':'s'} back to calculated`);return}
   if(a==='bal-spread'){const tgt=num(String(B.target).replace(/[,$\s]/g,''));const target=tgt!=null?tgt:R.calcTotal;const diff=target-R.gross;if(Math.abs(diff)<.005){toast('Already at that total');return}
-    const w=T.map(i=>{const x=R.items[i];return Math.max(0,B.by==='cost'?x.total:B.by==='mu'?x.price-x.total:x.price)});let W=w.reduce((s,v)=>s+v,0);const ww=W>0?w:T.map(()=>1);W=ww.reduce((s,v)=>s+v,0);
+    const on=BAL_ON.find(o=>o[0]===(B.on||'all'))||BAL_ON[0];const T0=T;const T1=T0.filter(i=>on[2](R.items[i]));if(!T1.length){toast(`No ${B.sel.size?'selected':'unlocked'} items fit “${on[1]}”`);return}
+    const wf=(BAL_BY.find(o=>o[0]===B.by)||BAL_BY[0])[2];T.length=0;T.push(...T1);
+    const w=T.map(i=>Math.max(0,wf(R.items[i])));let W=w.reduce((s,v)=>s+v,0);const ww=W>0?w:T.map(()=>1);W=ww.reduce((s,v)=>s+v,0);
     T.forEach((i,k)=>{const x=R.items[i];const share=diff*ww[k]/W;d.items[i].override=Math.max(0,Math.round((x.price+share)/x.q*100)/100)});
     // whatever cents are left go on the item with the smallest quantity among the targets, so the total lands as close as it can
     let R2=estCalc(d);let left=target-R2.gross;if(Math.abs(left)>=.01){const j=T.slice().sort((a,b)=>R.items[a].q-R.items[b].q)[0];const x=R2.items[j];d.items[j].override=Math.max(0,Math.round((x.price+left)/x.q*100)/100);R2=estCalc(d);left=target-R2.gross}
@@ -7507,7 +7518,7 @@ function vSettings(){const x=setDraft();const m=x.markup;const sf=(path,v,o={})=
     ${m.mode==='type'?typeT:`<div class="fg"><label class="f">Overhead %${sf('markup.oh',m.oh,{n:1})}</label><label class="f">Markup / profit %${sf('markup.profit',m.profit,{n:1})}</label></div>`}
     <label class="check small" style="margin-top:10px"><input type="checkbox" data-sfb="markup.compound"${m.compound!==false?' checked':''}> Markup is figured on cost + overhead</label>
     <div class="fg" style="margin-top:12px"><label class="f">Bond %${sf('markup.bond',m.bond,{n:1,ph:'0'})}</label><label class="f">Sales tax %${sf('markup.tax',m.tax,{n:1,ph:'0'})}</label><label class="f">Retainage %${sf('markup.ret',m.ret,{n:1,ph:'0'})}</label></div>
-    <div class="fg" style="margin-top:12px"><label class="f s2">Spread indirects${sel('markup.spreadInd',m.spreadInd||'cost',[['cost','Over every item by cost'],['sub','Only items with sub work'],['split','Split self-perform / subs'],['select','Only items picked on each bid'],['lump','As a lump-sum line']])}</label>
+    <div class="fg" style="margin-top:12px"><label class="f s2">Spread indirects${sel('markup.spreadInd',m.spreadInd||'cost',IND_SPREAD.map(([k,l])=>[k,k==='select'?'Only items picked on each bid':l]))}</label>
       <label class="f s2">Spread markup${sel('markup.spreadMu',m.spreadMu||'cost',[['cost','Each item carries its share'],['select','Only items picked on each bid'],['manual','Adjust by hand (unbalanced)']])}</label>
       ${m.spreadInd==='lump'?`<label class="f s2">Lump-sum line name${sf('markup.gcName',m.gcName,{ph:'General conditions'})}</label>`:''}
       ${m.spreadInd==='split'?`<label class="f">Self-perform share %${sf('markup.indSelf',m.indSelf,{n:1,ph:'by cost'})}</label>`:''}</div></div></div>
