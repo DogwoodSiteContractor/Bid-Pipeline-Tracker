@@ -5719,7 +5719,7 @@ function estDefaultsRaw(){const D=S.settings.est_settings||{};const sch=Array.is
   return {markup:{mode:'simple',oh:10,profit:10,compound:true,bond:0,tax:0,ret:5,spreadInd:'cost',spreadMu:'cost',byType:Object.fromEntries(MK_TYPES.map(k=>[k,{oh:10,mu:10}])),...(D.markup||{})},
     ind:Array.isArray(D.ind)?D.ind:IND_DEFAULT,schedules:sch,defSched:D.defSched||sch.find(s=>s.name==='5 × 10s')?.id||sch[0].id,crews:num(D.crews)||2}}
 function estBlank(){const D=estDefaultsRaw();const sched=D.schedules.find(s=>s.id===D.defSched)||D.schedules[0];
-  return {v:3,settings:{hpd:10,sched:clone(sched),crews:D.crews,durDays:null,rateFile:rfDefault(),eqRateFile:rfDefault('equipment')},markup:clone(D.markup),ind:D.ind.map(l=>({...l,id:newId(),qty:null})),items:[]}}
+  return {v:3,settings:{hpd:10,sched:clone(sched),crews:D.crews,durDays:null,rateFile:rfDefault(),eqRateFile:rfDefault('equipment')},markup:clone(D.markup),ind:D.ind.map(({dq,...l})=>({...l,id:newId(),qty:num(dq)??null})),items:[]}}
 
 /* ---------- calendar & overtime ---------- */
 function schedCalc(s){const h=(s&&Array.isArray(s.days)?s.days:[10,10,10,10,10,0,0]).map(x=>Math.max(0,num(x)||0));const H=h.reduce((a,b)=>a+b,0);const days=h.filter(x=>x>0).length;
@@ -7638,15 +7638,15 @@ function vSettings(){const x=setDraft();const m=x.markup;const sf=(path,v,o={})=
       ${m.spreadInd==='lump'?`<label class="f s2">Lump-sum line name${sf('markup.gcName',m.gcName,{ph:'General conditions'})}</label>`:''}
       ${m.spreadInd==='split'?`<label class="f">Self-perform share %${sf('markup.indSelf',m.indSelf,{n:1,ph:'by cost'})}</label>`:''}</div></div></div>
   <div class="sec"><div class="sec-h"><h2>Indirect costs</h2><span>Starting list on new estimates</span></div><div class="panel pad">
-    <div class="panel scroll"><table><thead><tr><th>Indirect cost</th><th>Basis</th><th>Rate</th><th></th></tr></thead><tbody>${x.ind.map((l,i)=>`<tr><td>${sf(`ind.${i}.desc`,l.desc,{ph:'Description'})}</td><td>${sel(`ind.${i}.basis`,l.basis,IND_BASIS)}</td><td>${sf(`ind.${i}.rate`,l.rate,{n:1,cls:'ind-n',ph:'0'})}</td><td><button class="rm" data-act="sf-indrm" data-i="${i}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table></div>
+    <div class="panel scroll"><table><thead><tr><th>Indirect cost</th><th>Basis</th><th>Rate</th><th title="Leave blank to figure it from the job duration">Qty</th><th class="r">Total</th><th></th></tr></thead><tbody>${x.ind.map((l,i)=>`<tr><td>${sf(`ind.${i}.desc`,l.desc,{ph:'Description'})}</td><td>${sel(`ind.${i}.basis`,l.basis,IND_BASIS)}</td><td>${sf(`ind.${i}.rate`,l.rate,{n:1,cls:'ind-n',ph:'0'})}</td><td>${['pct_labor','pct_direct'].includes(l.basis)?'<span class="dim small">—</span>':sf(`ind.${i}.dq`,l.dq,{n:1,cls:'ind-n',ph:l.basis==='ls'?'1':'auto'})}</td><td class="r num">${(()=>{const q=num(l.dq)??(l.basis==='ls'?1:null);return q!=null&&!['pct_labor','pct_direct'].includes(l.basis)?money((num(l.rate)||0)*q):'<span class="dim small">by job</span>'})()}</td><td><button class="rm" data-act="sf-indrm" data-i="${i}" aria-label="Remove">×</button></td></tr>`).join('')}</tbody></table></div>
     <div class="adders"><button class="btn sm" data-act="sf-indadd">+ Indirect cost</button></div>
     <div class="fg"><label class="f">Crews working at once (default)${sf('crews',x.crews,{n:1,ph:'2'})}</label></div>
-    <p class="hint">Weekly, monthly and daily costs are multiplied by the job duration; % lines are figured on labor or direct cost; lump sums are fixed. Every estimate can change its own list.</p></div></div>
+    <p class="hint">Leave Qty blank and weekly, monthly and daily costs are multiplied by each job’s duration; type a Qty to start every estimate with that number instead. % lines are figured on labor or direct cost. Every estimate can change its own list.</p></div></div>
   <div class="sec set-wide"><div class="sec-h"><h2>Work schedules & overtime</h2><span>Hours per day drive production; overtime adds the premium to labor</span></div>
     <div class="sched-list">${x.schedules.map(sched).join('')}</div><div class="adders"><button class="btn sm" data-act="sf-schadd">+ Schedule</button>${SCHED_PRESETS.filter(p=>!x.schedules.some(s=>s.name===p.name)).map(p=>`<button class="btn sm ghost" data-act="sf-preset" data-v="${esc(p.name)}">+ ${esc(p.name)}</button>`).join('')}</div>
     <p class="hint">Overtime premium = base wage × burden × (OT rate − 1) for the overtime share of hours; fringe isn’t marked up. Estimates keep a copy of their schedule, so changing one here doesn’t move bids already priced — pick it again on the estimate to update.</p></div>
   ${rateSheetHtml(x,sf,sel)}</div>`}
-async function setSave(){const x=S.setDraft;if(!x)return;const clean={...x,ind:x.ind.filter(l=>String(l.desc||'').trim()).map(({id,qty,...l})=>l),schedules:x.schedules.map(s=>({...s,days:DAYS.map((_,j)=>num(s.days[j])||0)}))};
+async function setSave(){const x=S.setDraft;if(!x)return;const clean={...x,ind:x.ind.filter(l=>String(l.desc||'').trim()).map(({id,qty,...l})=>({...l,dq:num(l.dq)??undefined})),schedules:x.schedules.map(s=>({...s,days:DAYS.map((_,j)=>num(s.days[j])||0)}))};
   try{await run(sb.from('settings').upsert({key:'est_settings',value:clean}));let n=0;try{n=await rbSync(clean.rates)}catch(e){toast(cbErr(e))}
     await loadTable('settings');if(n)await loadTable('codebook');S.setDraft=null;S.setDirty=false;toast(`Bid settings saved${n?` · repriced ${n} built labor & equipment rate${n===1?'':'s'}`:' — new estimates will use them'}`);render()}catch(e){toast(errMsg(e))}}
 
@@ -7664,11 +7664,11 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   const E=S.est;if(!E||!E.data||EC().ro)return;const d=E.data;
   switch(a){case 'ind-splitcost':d.markup.indSelf=null;estTouch();render();break;
     case 'ind-add':(d.ind=d.ind||[]).push({id:newId(),desc:'',basis:'week',rate:null,qty:null});estTouch();render();focusSoon(`ind.${d.ind.length-1}.desc`);break;
-    case 'ind-defaults':{const D=estDefaultsRaw();const have=new Set((d.ind||[]).map(l=>normH(l.desc)));D.ind.forEach(l=>{if(!have.has(normH(l.desc)))(d.ind=d.ind||[]).push({...l,id:newId(),qty:null})});estTouch();render();break}
+    case 'ind-defaults':{const D=estDefaultsRaw();const have=new Set((d.ind||[]).map(l=>normH(l.desc)));D.ind.forEach(({dq,...l})=>{if(!have.has(normH(l.desc)))(d.ind=d.ind||[]).push({...l,id:newId(),qty:num(dq)??null})});estTouch();render();break}
     case 'mk-mode':d.markup.mode=t.dataset.v;if(t.dataset.v==='type'&&!d.markup.byType)d.markup.byType=clone(estDefaultsRaw().markup.byType);estTouch();render();break;
     case 'mk-tocompany':{const cur=S.settings.est_settings||{};const D=estDefaultsRaw();const v={...cur};
       if(t.dataset.v==='markup'){const {carry,adj,fuel,...mk}=clone(d.markup);v.markup=mk}
-      else{v.ind=(d.ind||[]).filter(l=>String(l.desc||'').trim()).map(({id,qty,...l})=>l);v.crews=num(d.settings.crews)||D.crews;const sc=d.settings.sched;if(sc){const sch=(cur.schedules||D.schedules).slice();const i=sch.findIndex(z=>z.name===sc.name);const keep={...clone(sc),id:i>=0?sch[i].id:newId()};if(i>=0)sch[i]=keep;else sch.push(keep);v.schedules=sch;v.defSched=keep.id}}
+      else{v.ind=(d.ind||[]).filter(l=>String(l.desc||'').trim()).map(({id,qty,...l})=>({...l,...(num(qty)!=null?{dq:num(qty)}:{})}));v.crews=num(d.settings.crews)||D.crews;const sc=d.settings.sched;if(sc){const sch=(cur.schedules||D.schedules).slice();const i=sch.findIndex(z=>z.name===sc.name);const keep={...clone(sc),id:i>=0?sch[i].id:newId()};if(i>=0)sch[i]=keep;else sch.push(keep);v.schedules=sch;v.defSched=keep.id}}
       run(sb.from('settings').upsert({key:'est_settings',value:v})).then(()=>loadTable('settings')).then(()=>{S.setDraft=null;toast(t.dataset.v==='markup'?'Markup is now the company default for new estimates':'Schedule, crews and indirects are now the company defaults');render()}).catch(err=>toast(errMsg(err)));break}
     case 'mk-defaults':{const D=estDefaultsRaw().markup;const keep={carry:d.markup.carry,adj:d.markup.adj};d.markup={...clone(D),...keep};estTouch();render();toast('Company markup defaults loaded');break}}});
 document.addEventListener('input',e=>{const t=e.target;if(t.dataset.sf2==null||S.view!=='settings'||t.tagName==='SELECT')return;const x=setDraft();const ks=t.dataset.sf2.split('.');let o=x;
