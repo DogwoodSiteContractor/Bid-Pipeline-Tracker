@@ -6507,15 +6507,15 @@ function ppPaginate(){const paper=$('#prop-paper');if(!paper)return;const P=prop
   const T=el=>el.getBoundingClientRect().top-top0(),B=el=>el.getBoundingClientRect().bottom-top0();
   const isHead=el=>el.tagName==='H2'||el.classList.contains('pp-g');
   let start=0,pages=1;const broke=new Set();
-  const brk=(el)=>{if(broke.has(el))return;broke.add(el);const rem=Math.max(0,start+PP_PH-T(el));const G=pad*2+22;
+  const brk=(el,mine)=>{if(broke.has(el))return;broke.add(el);const rem=Math.max(0,start+PP_PH-T(el));const G=pad*2+22;
     const g=ppFill(el,rem+G,'pp-gap');const pr=paper.getBoundingClientRect(),gr=g.getBoundingClientRect();
-    const band=document.createElement('div');band.className='pp-band';band.style.cssText=`left:${pr.left-gr.left}px;width:${pr.width}px;top:${rem+pad}px`;band.innerHTML=`<span>Page ${pages+1}</span>`;
+    const band=document.createElement('div');band.className='pp-band';band.style.cssText=`left:${pr.left-gr.left}px;width:${pr.width}px;top:${rem+pad}px`;band.innerHTML=mine?`<button class="pp-unbrk" data-ppx="${esc(el.dataset.pk)}" title="Take this page break out">✕ Remove page break</button><span>Page ${pages+1} · page break you added</span>`:`<span>Page ${pages+1}</span>`;
     (g.firstChild||g).appendChild(band);if(g.firstChild)g.firstChild.style.position='relative';
     el.classList.add('pp-pb');let first=el;const tbl=el.closest('table');const th=tbl&&el.tagName==='TR'&&tbl.tHead?.rows[0];
     if(th&&el.parentElement.tagName!=='THEAD'){const c=th.cloneNode(true);c.classList.add('pp-x');el.before(c);first=c}
     start=T(first);pages++};
   for(let i=0;i<blocks.length;i++){const b=blocks[i];const k=b.dataset.pk;
-    if(lay[k]?.pb&&i>0&&T(b)>start+1){brk(b);continue}
+    if(lay[k]?.pb&&i>0&&T(b)>start+1){brk(b,true);continue}
     if(P.keepScope&&b.classList.contains('pp-g')){let j=i;while(j+1<blocks.length&&blocks[j+1].tagName==='TR'&&!blocks[j+1].classList.contains('pp-g')&&!blocks[j+1].classList.contains('pp-grand'))j++;
       const h=B(blocks[j])-T(b);if(h<=PP_PH&&B(blocks[j])>start+PP_PH&&T(b)>start+1){brk(b);continue}}
     if(B(b)>start+PP_PH&&T(b)>start+1){let e=b;let j=i;while(j>0&&isHead(blocks[j-1])&&T(blocks[j-1])>start+1&&!broke.has(blocks[j-1])){j--;e=blocks[j]}
@@ -6524,7 +6524,7 @@ function ppPaginate(){const paper=$('#prop-paper');if(!paper)return;const P=prop
   // the hover tools hang off the page; hide them when the page is redrawn
   const tl=$('#pp-tool');if(tl)tl.hidden=true}
 function ppToolAt(el){const tl=$('#pp-tool'),box=$('.pr-prev');if(!tl||!box||!el)return;const k=el.dataset.pk;const L=(propData().lay||{})[k]||{};
-  tl.dataset.pk=k;tl.querySelector('[data-ppt=pb]').classList.toggle('on',!!L.pb);tl.querySelector('[data-ppt=dn]').disabled=!(+L.sp>0);
+  tl.dataset.pk=k;const pbB=tl.querySelector('[data-ppt=pb]');pbB.classList.toggle('on',!!L.pb);pbB.textContent=L.pb?'✕ Remove page break':'↧ New page';tl.querySelector('[data-ppt=dn]').disabled=!(+L.sp>0);
   const r=el.getBoundingClientRect(),br=box.getBoundingClientRect(),pr=$('#prop-paper').getBoundingClientRect();
   tl.style.top=(r.top-br.top+box.scrollTop+r.height/2)+'px';tl.hidden=false;const lx=pr.left-br.left+box.scrollLeft;const roomy=pr.left-br.left>tl.offsetWidth+12;tl.classList.toggle('in',!roomy);tl.style.left=(roomy?lx:lx+4)+'px';
   document.querySelectorAll('#prop-paper .pp-hot').forEach(x=>x.classList.remove('pp-hot'));el.classList.add('pp-hot')}
@@ -6532,10 +6532,13 @@ document.addEventListener('mouseover',e=>{const t=e.target;if(!(t instanceof Ele
   const el=t.closest('#prop-paper [data-pk]');if(el){ppToolAt(el);return}
   if(!t.closest('.pr-prev')){tl.hidden=true;document.querySelectorAll('#prop-paper .pp-hot').forEach(x=>x.classList.remove('pp-hot'))}});
 document.addEventListener('click',e=>{const b=e.target instanceof Element&&e.target.closest('[data-ppt]');if(!b)return;const tl=$('#pp-tool');const k=tl?.dataset.pk;if(!k)return;
-  const P=propData();P.lay=P.lay||{};const L=P.lay[k]=P.lay[k]||{};const a=b.dataset.ppt;
+  const P=propData();ppPush(P);P.lay=P.lay||{};const L=P.lay[k]=P.lay[k]||{};const a=b.dataset.ppt;
   if(a==='pb')L.pb=!L.pb;else if(a==='up')L.sp=Math.min(480,(+L.sp||0)+12);else if(a==='dn')L.sp=Math.max(0,(+L.sp||0)-12);
   if(!L.pb&&!(+L.sp>0))delete P.lay[k];estTouch();render();
   requestAnimationFrame(()=>requestAnimationFrame(()=>{const el=[...document.querySelectorAll('#prop-paper [data-pk]')].find(x=>x.dataset.pk===k);if(el)ppToolAt(el)}))});
+function ppPush(P){(S.ppUndo=S.ppUndo||[]).push(JSON.stringify(P.lay||{}));if(S.ppUndo.length>50)S.ppUndo.shift()}
+document.addEventListener('click',e=>{const b=e.target instanceof Element&&e.target.closest('[data-ppx]');if(!b)return;const P=propData();const k=b.dataset.ppx;
+  if(P.lay?.[k]){ppPush(P);delete P.lay[k].pb;if(!(+P.lay[k].sp>0))delete P.lay[k];estTouch();render();toast('Page break removed')}});
 function estPropView(d,R,b,ro){const P=propData();const L=propLib();const dis=ro?' disabled':'';
   const chk=(k,arr)=>`<div class="pr-chks">${[...new Set([...arr,...P[k].filter(x=>!arr.includes(x))])].map(x=>`<label class="check small"><input type="checkbox" data-prl="${k}" value="${esc(x)}"${P[k].includes(x)?' checked':''}${dis}> ${esc(x)}</label>`).join('')}</div>`;
   const pin=(k,o={})=>`<input class="field" id="pr-${k}" data-pr="${k}"${o.n?' type="number"':o.date?' type="date"':''} value="${esc(P[k]??'')}"${o.ph?` placeholder="${esc(o.ph)}"`:''}${dis}>`;
@@ -6556,8 +6559,8 @@ function estPropView(d,R,b,ro){const P=propData();const L=propLib();const dis=ro
         <p class="hint">${(()=>{const pr={groups:[{items:[{it:{}},{it:{}},{it:{}}]}]};propNums(P,pr,[]);return 'Numbers will read '+pr.groups[0].items.map(o=>esc(o.no)).join(', ')+'…'})()} Only the proposal changes; the estimate keeps its codes.</p>`:''}</div>`})():''}
     <div class="panel pad"><h3 class="pr-h">Page layout <span class="dim small" id="pp-count"></span></h3>
       <label class="check small"><input type="checkbox" data-prb="keepScope"${P.keepScope?' checked':''}${dis}> Keep each scope on one page when it fits</label>
-      <p class="hint">The preview shows the real pages of the PDF. Point at any line on the page to start it on a new page or add space above it.</p>
-      ${Object.keys(P.lay||{}).length&&!ro?`<button class="btn small" data-act="pr-layreset">Undo all page changes (${Object.keys(P.lay).length})</button>`:''}</div>
+      <p class="hint">The preview shows the real pages of the PDF. Point at any line on the page to start it on a new page or add space above it. To take a page break out, click <b>✕ Remove page break</b> in the gray gap above it.</p>
+      ${(S.ppUndo||[]).length&&!ro?`<button class="btn small" data-act="pr-layundo">↶ Undo last page change</button> `:''}${Object.keys(P.lay||{}).length&&!ro?`<button class="btn small" data-act="pr-layreset">Undo all page changes (${Object.keys(P.lay).length})</button>`:''}</div>
     <div class="panel pad"><h3 class="pr-h">Schedule</h3><label class="check small"><input type="checkbox" data-prb="showDur"${P.showDur?' checked':''}${dis}> Show the estimated duration</label><label class="check small"><input type="checkbox" data-prb="showGantt"${P.showGantt?' checked':''}${dis}> Include the schedule chart</label>
       <p class="hint">From the <b>Gantt schedule</b> tab: ${ganttWeeksText(ganttCalc(d,R))||'no bid items yet'}.</p></div>
     <div class="panel pad"><h3 class="pr-h">Opening</h3><label class="f">Intro${ptx('intro','A sentence or two before the pricing')}</label><label class="f">Basis of the proposal${ptx('basis','Plans dated …, Addenda …')}</label></div>
@@ -6580,7 +6583,8 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   switch(a){
     case 'pr-print':{const b=byId(S.bids,S.est.bidId);const old=document.title;document.title=`Proposal - ${b?.name||''}`;const pr=document.createElement('div');pr.id='print-root';pr.innerHTML=$('#prop-paper')?.outerHTML.replace('id="prop-paper"','')||'';pr.querySelectorAll('.pp-x:not(.keep)').forEach(x=>x.remove());pr.querySelectorAll('.pp-hot').forEach(x=>x.classList.remove('pp-hot'));document.body.appendChild(pr);document.body.classList.add('printing-prop');window.print();setTimeout(()=>{document.body.classList.remove('printing-prop');pr.remove();document.title=old},500);break}
     case 'pr-sent':propMarkSent();break;
-    case 'pr-layreset':{const P=propData();P.lay={};estTouch();render();break}
+    case 'pr-layreset':{const P=propData();ppPush(P);P.lay={};estTouch();render();break}
+    case 'pr-layundo':{const P=propData();const v=(S.ppUndo||[]).pop();if(v!=null){P.lay=JSON.parse(v);estTouch();render()}break}
     case 'pr-lib':{const L=propLib();M={kind:'proplib',draft:{incl:L.incl.join('\n'),excl:L.excl.join('\n'),clar:L.clar.join('\n'),terms:L.terms||'',letterhead:L.letterhead||''}};showModal();break}
     case 'pr-libdefault':M.draft={incl:PROP_DEFAULT_LIB.incl.join('\n'),excl:PROP_DEFAULT_LIB.excl.join('\n'),clar:PROP_DEFAULT_LIB.clar.join('\n'),terms:PROP_DEFAULT_LIB.terms,letterhead:M.draft.letterhead};renderModal();break;
     case 'pr-libsave':(async()=>{const x=M.draft;const v={incl:propLines(x.incl),excl:propLines(x.excl),clar:propLines(x.clar),terms:String(x.terms||'').trim(),letterhead:String(x.letterhead||'').trim()};
@@ -6628,7 +6632,7 @@ function estAddSection(d,src,items,after){const s={id:newId(),code:estNextSecCod
 function estAddItem(d,secId,o={}){const it=estNewItem(d,{code:estNextItemCode(d,secId),sec:secId,qty:null,unit:'',...o});let at=-1;d.items.forEach((x,i)=>{if(x.sec===secId)at=i});d.items.splice(at<0?d.items.length:at+1,0,it);return it}
 
 /* ---------- open / create / save ---------- */
-async function estOpen(bidId,from){closeModal();S.view='estimate';S.estBid=bidId;const tab=S.est&&S.est.bidId===bidId?S.est.tab:'build';S.estFrom=from||S.estFrom||'pipeline';S.est={bidId,loading:true};render();window.scrollTo(0,0);
+async function estOpen(bidId,from){closeModal();S.view='estimate';S.estBid=bidId;const tab=S.est&&S.est.bidId===bidId?S.est.tab:'build';S.estFrom=from||S.estFrom||'pipeline';S.est={bidId,loading:true};S.ppUndo=[];render();window.scrollTo(0,0);
   try{const {data,error}=await sb.from('estimates').select('*').eq('bid_id',bidId).maybeSingle();if(error)throw error;
     S.est={bidId,row:data?{id:data.id,version:data.version,updated_at:data.updated_at,updated_by_name:data.updated_by_name}:null,data:data?estNorm(data.data):null,sel:null,tab:tab||'build',dirty:false};
     if(S.est.data&&S.est.data.sections[0])S.est.sel={t:'sec',id:S.est.data.sections[0].id}}
