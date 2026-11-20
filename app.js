@@ -7475,14 +7475,22 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act^=bal-]
     // 3. the plug takes whatever is left, to the cent
     let R2=estCalc(d);const px=R2.items[P];const left=target-R2.gross;const pu=Math.round((px.price+left)/px.q*100)/100;
     if(pu<0){balUndoLast(d);toast('The leftover is bigger than the plug item can take. Pick a bigger item or a coarser/finer rounding.');render();return}
-    d.items[P].override=pu;R2=estCalc(d);const off=R2.gross-target;
+    d.items[P].override=pu;R2=estCalc(d);
+    // no 1-unit item to plug with: the plug can only move in steps of (its quantity × 1¢), so let the next-smallest-quantity items mop up what's left, a cent at a time
+    const helpers=[];{const r=Math.round((target-R2.gross)*100);if(r){ // in cents. Moving item i by k cents a unit moves the total by k×qty cents.
+      const C=S1.filter(i=>Number.isInteger(R.items[i].q)||Math.abs(R.items[i].q-Math.round(R.items[i].q))<1e-9).sort((a,b)=>R.items[a].q-R.items[b].q).slice(0,10);let best={e:Math.abs(r),m:[]};
+      for(const i of C){const q=Math.round(R2.items[i].q);for(let k=-5;k<=5;k++){if(!k)continue;const e=Math.abs(r-k*q);if(e<best.e)best={e,m:[[i,k]]}}}
+      for(let a=0;a<C.length&&best.e;a++)for(let b=a+1;b<C.length&&best.e;b++){const qa=Math.round(R2.items[C[a]].q),qb=Math.round(R2.items[C[b]].q);
+        for(let ka=-5;ka<=5;ka++)for(let kb=-5;kb<=5;kb++){if(!ka||!kb)continue;const e=Math.abs(r-ka*qa-kb*qb);if(e<best.e-0.5)best={e,m:[[C[a],ka],[C[b],kb]]}}}
+      best.m.forEach(([i,k])=>{const nu=Math.round((R2.items[i].unitPrice*100+k))/100;if(nu>=0){d.items[i].override=nu;helpers.push(i)}});if(helpers.length)R2=estCalc(d)}}
+    const off=R2.gross-target;
     // 4. a report card so nothing changes silently
     const chg=T.map(i=>{const a0=R.items[i].unitPrice,a1=R2.items[i].unitPrice;return a0>0?(a1-a0)/a0*100:0});const big=T[chg.reduce((m,v,k)=>Math.abs(v)>Math.abs(chg[m])?k:m,0)];
     const below=d.items.map((it,i)=>i).filter(i=>!d.items[i].alt&&R2.items[i].q>0&&R2.items[i].price<R2.items[i].total-0.005);
     const plugChg=R2.items[P].price-R.items[P].price;const plugPct=R.items[P].price?plugChg/R.items[P].price*100:0;
     const warn=below.length>0||Math.abs(off)>=0.01||Math.abs(plugPct)>25;
-    B.last={warn,html:`<b>${Math.abs(off)<0.01?'Balanced':'Close'}:</b> ${money2(R2.gross)}${Math.abs(off)<0.01?' — right on the target':` — ${money2(Math.abs(off))} ${off>0?'over':'under'} the target (the plug has more than 1 unit, so it can only move in steps)`}.
-      ${T.length-1} item${T.length===2?'':'s'} spread and rounded${finer?` (${finer} with small unit prices used a finer step, so rounding never moved a price more than 2%)`:''}. Plug <b>${esc(d.items[P].code||'')} ${esc(d.items[P].desc||'')}</b> ${plugChg>=0?'+':'−'}${money2(Math.abs(plugChg))} (${plugPct>=0?'+':''}${fmtN(plugPct,1)}%).
+    B.last={warn,html:`<b>${Math.abs(off)<0.01?'Balanced':'Close'}:</b> ${money2(R2.gross)}${Math.abs(off)<0.01?' — right on the target':` — ${money2(Math.abs(off))} ${off>0?'over':'under'} the target. Every item has a big quantity, so prices can only move in steps of quantity × 1¢; this is as close as cents allow`}.
+      ${T.length-1} item${T.length===2?'':'s'} spread and rounded${finer?` (${finer} with small unit prices used a finer step, so rounding never moved a price more than 2%)`:''}. Plug <b>${esc(d.items[P].code||'')} ${esc(d.items[P].desc||'')}</b> ${plugChg>=0?'+':'−'}${money2(Math.abs(plugChg))} (${plugPct>=0?'+':''}${fmtN(plugPct,1)}%).${helpers.length?` No 1-unit item to plug with, so ${helpers.length} more item${helpers.length===1?'':'s'} (${helpers.map(i=>esc(d.items[i].code||'')).join(', ')}) moved a cent or so to land the total.`:''}
       Biggest unit-price change: ${esc(d.items[big].code||'')} ${fmtN(Math.abs(chg[T.indexOf(big)]),1)}%.
       ${below.length?`<span class="bad-t"><b>${below.length} item${below.length===1?' is':'s are'} now priced below cost</b> (${below.slice(0,4).map(i=>esc(d.items[i].code||'')).join(', ')}${below.length>4?'…':''}).</span>`:'Every item is still above cost.'}
       ${Math.abs(plugPct)>25?' <span class="warn-t">The plug moved more than 25% — consider a bigger plug item.</span>':''}`};
