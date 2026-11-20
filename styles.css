@@ -3386,3 +3386,5 @@ input.uncommitted{border-color:var(--warn,#d9a441)!important;box-shadow:0 0 0 2p
 .pe-st.sent{background:#E8862E;color:#1d1206}.pe-st.won{background:#2E8B57;color:#fff}.pe-st.lost{background:color-mix(in srgb,#C0392B 70%,var(--surface));color:#fff}
 .pe-st.sup{background:#5B3FD6;color:#fff}.pe-st.nobid{background:var(--surface-2);color:var(--ink-3)}.pe-st.wip{color:var(--ink-2)}
 .pe-r.st-sup td:not(.pe-st),.pe-r.st-lost td:not(.pe-st){opacity:.7}
+.pe-st.pending{background:#D9B23A;color:#1d1606}.pe-st.rev{background:#2F6FD6;color:#fff}.pe-st.budget{background:#1F9AA0;color:#fff}.pe-st.hold{background:#6B7280;color:#fff}
+.pe-st.wip{color:var(--ink-2)}.pe-man{opacity:.7;font-size:11px;margin-left:3px}

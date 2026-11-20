@@ -7006,7 +7006,10 @@ function vEstimates(){const tab=S.estsTab||'list';const canNew=can('bids','edit'
       ||`<tr><td colspan="7"><div class="empty"><b>No templates yet</b>${admin?'Open a finished estimate and click <b>Save as master template</b>, or start a blank one here. Save a single scope with <b>Save as section template</b> on any section.':'An admin sets these up.'}</div></td></tr>`}</tbody></table></div>`}
   return head+tabs+estsList(canNew)}
 // ProEstimate-style project list: dense grid grouped by estimator (or GC / status / month), status cells in colour
-const PE_ST=b=>supByOf(b)?['Old bid (superseded)','sup']:b.status==='Awarded'?['Won','won']:b.status==='Not Awarded'?['Lost','lost']:b.status==='No Bid'?['No bid','nobid']:b.status==='Submitted'?['Bid sent','sent']:[b.status||'(no status)','wip'];
+// a look-only status for the Estimates list: saved on the bid as rfq.estLabel, never touches the bid's real status, filters or totals
+const PE_LABELS=[['sent','Bid sent'],['pending','Pending'],['won','Won'],['lost','Lost'],['sup','Old bid (superseded)'],['rev','Revised'],['budget','Budget'],['hold','On hold'],['wip','In progress'],['nobid','No bid']];
+const PE_ST=b=>{const k=b&&b.rfq&&b.rfq.estLabel;const L=k&&PE_LABELS.find(x=>x[0]===k);return L?[L[1],L[0],true]:PE_AUTO(b)};
+const PE_AUTO=b=>supByOf(b)?['Old bid (superseded)','sup']:b.status==='Awarded'?['Won','won']:b.status==='Not Awarded'?['Lost','lost']:b.status==='No Bid'?['No bid','nobid']:b.status==='Submitted'?['Bid sent','sent']:[b.status||'(no status)','wip'];
 function estsList(canNew){const q=(S.q.ests||'').trim().toLowerCase();let f=S.estsF||'active';if(f==='arch')f='hist';
   const all=S.estIndex.map(x=>({x,b:byId(S.bids,x.bid_id)})).filter(o=>o.b);
   const F={active:o=>!DECIDED.includes(o.b.status)&&!o.b.archived_at&&!supByOf(o.b),pending:o=>o.b.status==='Submitted'&&!o.b.archived_at&&!supByOf(o.b),won:o=>o.b.status==='Awarded',lost:o=>o.b.status==='Not Awarded'||o.b.status==='No Bid',hist:o=>DECIDED.includes(o.b.status)||!!o.b.archived_at||!!supByOf(o.b),all:()=>true};
@@ -7026,7 +7029,7 @@ function estsList(canNew){const q=(S.q.ests||'').trim().toLowerCase();let f=S.es
     <td class="pe-name">${esc(b.name)}${vc?` <span class="pe-vc" title="Saved copies of earlier versions">${vc}</span>`:''}</td><td class="pe-loc">${esc(b.location||'')}</td><td class="pe-gc">${esc((b.client_ids||[]).map(clientName).filter(Boolean).join(', '))}</td>
     <td>${b.due_date?esc(fmtDate(b.due_date)):''}</td><td class="small">${esc(b.bid_type||'')}</td><td>${esc(estName(b.lead_estimator_id))}</td>
     <td class="r num">${money2(x.total_cost||0)}</td><td class="r num"><b>${money2(x.total_price||0)}</b></td><td class="r num">${num(x.total_price)?fmtN((x.total_price-x.total_cost)/x.total_price*100,1)+'%':''}</td>
-    <td>${d10(x.created_at)}</td><td title="${esc(x.updated_by_name||'')}">${d10(x.updated_at)}</td><td class="pe-st ${sc}">${esc(sl)}</td></tr>`};
+    <td>${d10(x.created_at)}</td><td title="${esc(x.updated_by_name||'')}">${d10(x.updated_at)}</td><td class="pe-st ${sc}" title="${PE_ST(b)[2]?`Set by hand on this list only. The bid’s real status is ${esc(b.status||'')}.`:''}">${esc(sl)}${PE_ST(b)[2]?' <span class="pe-man">✎</span>':''}</td></tr>`};
   const body=groups.map(([k,L])=>{if(!GK)return L.map(row).join('');const c=coll.has(g+':'+k);const tot=L.reduce((a,o)=>a+(+o.x.total_price||0),0);
     return `<tr class="pe-g" data-act="ests-grp" data-v="${esc(g+':'+k)}"><td colspan="${cols.length}"><span class="pe-tg">${c?'▸':'▾'}</span> ${GL}: <b>${esc(g==='mon'?mlabel(k):k)}</b><span class="pe-gm">${L.length} estimate${L.length===1?'':'s'} · ${money(tot)}</span></td></tr>${c?(n+=L.length,''):L.map(row).join('')}`}).join('');
   const cnt=k=>all.filter(F[k]).length;const tot=list.reduce((a,o)=>a+(+o.x.total_price||0),0);
@@ -7042,7 +7045,10 @@ document.addEventListener('click',e=>{const t=e.target.closest&&e.target.closest
   if(t.dataset.act==='ests-grp'){const c=S.estsColl||(S.estsColl=new Set());const v=t.dataset.v;c.has(v)?c.delete(v):c.add(v);try{localStorage.setItem('bp.estsColl',JSON.stringify([...c]))}catch(_){}render()}});
 document.addEventListener('change',e=>{if(e.target.dataset&&e.target.dataset.estsgrp!=null){S.estsGroup=e.target.value==='none'?'':e.target.value;if(e.target.value==='none')S.estsGroup='none';render()}});
 document.addEventListener('contextmenu',e=>{const tr=e.target.closest&&e.target.closest('[data-estsctx]');if(!tr||e.shiftKey)return;const b=byId(S.bids,tr.dataset.estsctx);if(!b)return;e.preventDefault();e.stopImmediatePropagation();
-  actmOpen(e.clientX,e.clientY,[['📂','Open estimate',()=>estOpen(b.id,'estimates')],['📋','Open the bid',()=>openBid(b.id)],
+  const X=e.clientX,Y=e.clientY;const cur=b.rfq&&b.rfq.estLabel;
+  const setL=async k=>{const r={...rfqOf(b)};if(k)r.estLabel=k;else delete r.estLabel;const old=b.rfq;b.rfq=r;render();try{await run(sb.from('bids').update({rfq:r}).eq('id',b.id))}catch(err){b.rfq=old;render();toast(errMsg(err))}};
+  actmOpen(X,Y,[['📂','Open estimate',()=>estOpen(b.id,'estimates')],['📋','Open the bid',()=>openBid(b.id)],
+    ...(canWork(b)?[['🏷','Status on this list ▸',()=>setTimeout(()=>actmOpen(X+30,Y+30,[...PE_LABELS.map(([k,l])=>[cur===k?'✓':'•',l,()=>setL(k)]),null,[cur?'↺':'✓',`Automatic (${PE_AUTO(b)[0]})`,()=>setL(null)]]),0)]]:[]),
     ...(canWork(b)&&can('estimates','edit')?[['⧉','Revise (keep a copy, start a revision)',()=>estOpen(b.id,'estimates').then(()=>{if(S.est&&S.est.bidId===b.id&&S.est.data)estRevOpen(b.id)})]]:[]),
     ...(isAdmin()?[null,['🗑','Delete estimate…',()=>{M={kind:'estdel',bidId:b.id,ok:''};showModal();setTimeout(()=>$('#estdel-ok')?.focus(),0)},'danger']]:[])])});
 function tplSettingsText(e){const m=e.markup||{};const s=e.settings||{};const bits=[];if(s.sched)bits.push(s.sched.name);
