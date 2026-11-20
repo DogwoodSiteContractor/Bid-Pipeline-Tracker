@@ -10464,33 +10464,59 @@ const INFO_PARTIES=[['owner','Owner'],['engineer','Engineer'],['designer','Desig
 function estInfo(d,b){if(!d.info||typeof d.info!=='object')d.info={location:(b&&b.location)||'',projectType:(b&&b.project_type)||''};const I=d.info;INFO_PARTIES.forEach(([k])=>{if(!I[k]||typeof I[k]!=='object')I[k]={}});if(!I.addr||typeof I.addr!=='object')I.addr={};return I}
 const infoList=k=>S.clients.filter(c=>k==='owner'?!isDesignCo(c):k==='engineer'?/engineer/i.test(c.type||''):isDesignCo(c)).sort((a,b)=>String(a.company).localeCompare(String(b.company)));
 const infoClient=name=>{const n=normH(name);return n?S.clients.find(c=>normH(c.company)===n):null};
-function estInfoView(d,b,ro){const I=estInfo(d,b);const dis=ro?' disabled':'';const lead=byId(S.estimators,b.lead_estimator_id);
+const II={cal:'<path d="M3 5h14v12H3zM3 9h14M7 3v4M13 3v4"/>',pin:'<path d="M10 18s-6-5.3-6-10a6 6 0 1 1 12 0c0 4.7-6 10-6 10z"/><circle cx="10" cy="8" r="2"/>',user:'<circle cx="10" cy="7" r="3.5"/><path d="M3 18c0-3.9 3.1-6 7-6s7 2.1 7 6"/>',
+  hash:'<path d="M8 3 6 17M14 3l-2 14M3 7.5h14M3 12.5h14"/>',flag:'<path d="M5 18V3M5 3h10l-2 4 2 4H5"/>',rate:'<path d="M3 17V9M8 17V5M13 17v-6M18 17V3"/>',note:'<path d="M4 3h9l3 3v11H4zM7 8h6M7 11h6M7 14h4"/>',bld:'<path d="M3 18h14M5 18V4h7v14M12 8h3v10M7.5 7h2M7.5 10h2M7.5 13h2"/>',
+  phone:'<path d="M5 3h3l1.5 4-2 1.2a9 9 0 0 0 4.3 4.3l1.2-2 4 1.5v3a2 2 0 0 1-2 2A14 14 0 0 1 3 5a2 2 0 0 1 2-2z"/>',mail:'<path d="M3 5h14v10H3zM3 5l7 6 7-6"/>',edit:'<path d="M4 16l1-4 8-8 3 3-8 8zM12 5l3 3"/>'};
+const ii=k=>`<svg class="ii" viewBox="0 0 20 20" aria-hidden="true">${II[k]}</svg>`;
+function estInfoView(d,b,ro){const I=estInfo(d,b);const dis=ro?' disabled':'';const lead=byId(S.estimators,b.lead_estimator_id);const E=S.est;E.infoEdit=E.infoEdit||{};
   const dt=(p,v)=>`<input type="date" class="field" id="${epId(p)}" data-ep="${p}" value="${esc(v||'')}"${dis}>`;const st=(p,v)=>epSel(p,v||'',INFO_STATES.map(x=>[x,x||'State']));
-  const fixed=(l,v)=>`<label class="f">${l}<div class="info-fixed">${v?esc(v):'<span class="dim">Not set</span>'}</div></label>`;
-  const party=([k,l])=>{const P=I[k];const c=infoClient(P.name);const p='info.'+k;
-    return `<fieldset class="info-party"><legend>${l}</legend><div class="fg">
-      <label class="f s4">Name<input class="field" id="${epId(p+'.name')}" data-ep="${p}.name" data-infoparty="${k}" list="info-cl-${k}" value="${esc(P.name||'')}" placeholder="Pick from Contacts or type a new one"${dis}></label>
+  // bid date with a countdown
+  const due=b.due_date?(()=>{const dd=Math.round((new Date(b.due_date+'T00:00')-new Date(todayStr()+'T00:00'))/864e5);return {d:fmtDate(b.due_date)+(b.due_time?' · '+String(b.due_time).slice(0,5):''),w:dd===0?'Due today':dd===1?'Due tomorrow':dd>1?`In ${dd} days`:dd===-1?'Yesterday':`${-dd} days ago`,cls:dd<0?'':dd<=2?'hot':dd<=7?'warn':''}})():null;
+  const dur=I.start&&I.finish?Math.round((new Date(I.finish)-new Date(I.start))/864e5):null;
+  const fact=(ic,l,v,sub,cls)=>`<div class="ih-f${cls?' '+cls:''}">${ii(ic)}<div><span>${l}</span><b>${v||'<i class="dim">Not set</i>'}</b>${sub?`<small>${sub}</small>`:''}</div></div>`;
+  const hero=`<div class="ih">${fact('cal','Bid date',due?esc(due.d):'',due?esc(due.w):'',due?.cls)}${fact('user','Estimator',lead?esc(lead.name):'')}
+    ${fact('flag','Status',b.status?`<span class="pill ${BID_CLS[b.status]||''}">${esc(b.status)}</span>`:'')}${fact('pin','Location',esc(I.location||''),I.projectType?esc(I.projectType):'')}
+    ${fact('cal','Construction',I.start?fmtShort(I.start)+(I.finish?' – '+fmtShort(I.finish):''):'',dur!=null&&dur>0?`about ${dur>=14?fmtN(dur/7,0)+' weeks':dur+' days'}`:'')}</div>
+    <p class="ih-note">Bid date, estimator and status come from the bid — change them there.</p>`;
+  const card=(ic,title,body,extra='')=>`<section class="ic"><header>${ii(ic)}<h3>${title}</h3>${extra}</header><div class="ic-b">${body}</div></section>`;
+  const rf=(attr,bk,key)=>`<select class="field" ${attr}${dis}>${[['','Codebook rates'],...rfAll(bk).map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${(rfGet((d.settings||{})[key])?d.settings[key]:'')===v?' selected':''}>${esc(l)}</option>`).join('')}</select>`;
+  const details=card('hash','Project details',`<div class="fg ic-g">
+      <label class="f s2">Location${epIn('info.location',I.location,{ph:'County, state'})}</label><label class="f s2">Project type${epIn('info.projectType',I.projectType)}</label>
+      <label class="f s2">Project #${epIn('info.projectNo',I.projectNo,{ph:'Owner / GC number'})}</label><label class="f s2">Internal project #${epIn('info.internalNo',I.internalNo,{ph:'Our job number'})}</label></div>`);
+  const sched=card('cal','Plans & schedule',`<div class="fg ic-g">
+      <label class="f">Plan revision date${dt('info.planRev',I.planRev)}</label><label class="f s3">Plan revision note${epIn('info.planRevNote',I.planRevNote,{ph:'e.g. Rev 2, addendum 1'})}</label>
+      <label class="f s2">Est. start${dt('info.start',I.start)}</label><label class="f s2">Est. completion${dt('info.finish',I.finish)}</label></div>`);
+  const rates=card('rate','Rates',`<div class="fg ic-g"><label class="f s2">Labor rate file${rf('data-estrf','labor','rateFile')}</label><label class="f s2">Equipment rate file${rf('data-estrfe','equipment','eqRateFile')}</label></div>
+      <p class="hint">Pay items come from the codebook’s bid items. Changing a rate file reprices every labor or equipment line on this estimate.</p>`);
+  const notes=card('note','Project notes',`<textarea class="field ic-notes" id="${epId('info.notes')}" data-ep="info.notes" rows="5" placeholder="Anything the team should know about this job"${dis}>${esc(I.notes||'')}</textarea>`);
+  const addrTxt=[I.addr.street,[I.addr.city,I.addr.state].filter(Boolean).join(', ')+(I.addr.zip?' '+I.addr.zip:'')].filter(x=>x&&x.trim()).join(', ');
+  const addr=card('pin','Project address',`<div class="fg ic-g"><label class="f s4">Street${epIn('info.addr.street',I.addr.street)}</label><label class="f s2">City${epIn('info.addr.city',I.addr.city)}</label><label class="f">State${st('info.addr.state',I.addr.state)}</label><label class="f">Zip${epIn('info.addr.zip',I.addr.zip)}</label>
+      <label class="f s4">Directions / site notes<textarea class="field" id="${epId('info.addr.notes')}" data-ep="info.addr.notes" rows="2" placeholder="Gate code, laydown area, access"${dis}>${esc(I.addr.notes||'')}</textarea></label></div>`,
+      addrTxt?`<a class="ic-act" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addrTxt)}" target="_blank" rel="noopener">Open map ↗</a>`:'');
+  const party=([k,l])=>{const P=I[k];const c=infoClient(P.name);const p='info.'+k;const edit=E.infoEdit[k]||(!P.name&&E.infoEdit[k]!==false&&E.infoEdit[k+'_new']);
+    const form=`<div class="fg ic-g">
+      <label class="f s4">Company<input class="field" id="${epId(p+'.name')}" data-ep="${p}.name" data-infoparty="${k}" list="info-cl-${k}" value="${esc(P.name||'')}" placeholder="Pick from Contacts or type a new one"${dis}></label>
       <label class="f s4">Address${epIn(p+'.address',P.address)}</label>
-      <label class="f">City${epIn(p+'.city',P.city)}</label><label class="f">State${st(p+'.state',P.state)}</label><label class="f">Zip${epIn(p+'.zip',P.zip)}</label><span></span>
-      <label class="f s2">Contact<input class="field" id="${epId(p+'.contact')}" data-ep="${p}.contact" data-infocontact="${k}" list="info-ct-${k}" value="${esc(P.contact||'')}"${dis}></label>
-      <label class="f">Phone${epIn(p+'.phone',P.phone)}</label><label class="f">Mobile${epIn(p+'.mobile',P.mobile)}</label>
-      <label class="f s2">Email${epIn(p+'.email',P.email)}</label></div>
+      <label class="f s2">City${epIn(p+'.city',P.city)}</label><label class="f">State${st(p+'.state',P.state)}</label><label class="f">Zip${epIn(p+'.zip',P.zip)}</label>
+      <label class="f s4">Contact<input class="field" id="${epId(p+'.contact')}" data-ep="${p}.contact" data-infocontact="${k}" list="info-ct-${k}" value="${esc(P.contact||'')}"${dis}></label>
+      <label class="f s2">Phone${epIn(p+'.phone',P.phone)}</label><label class="f s2">Mobile${epIn(p+'.mobile',P.mobile)}</label>
+      <label class="f s4">Email${epIn(p+'.email',P.email)}</label></div>
       <datalist id="info-ct-${k}">${((c&&c.contacts)||[]).map(x=>`<option value="${esc(x.name||'')}">`).join('')}</datalist>
       <datalist id="info-cl-${k}">${infoList(k).map(x=>`<option value="${esc(x.company)}">`).join('')}</datalist>
-      ${P.name&&!c?`<p class="hint" style="margin:6px 0 0">Not in Contacts. It is kept on this estimate only.${ro||!isAdmin()?'':` <button class="linkbtn" data-act="info-addco" data-k="${k}">Add to Contacts as ${k==='owner'?'an owner':k==='engineer'?'an engineer':'a designer'}</button>`}</p>`:''}</fieldset>`};
-  return `<div class="panel info-wrap">
-    <fieldset><legend>General</legend><div class="fg">
-      <label class="f s2">Location${epIn('info.location',I.location,{ph:'County, state'})}</label><label class="f">Project #${epIn('info.projectNo',I.projectNo)}</label><label class="f">Internal project #${epIn('info.internalNo',I.internalNo)}</label>
-      <label class="f s2">Project type${epIn('info.projectType',I.projectType)}</label>${fixed('Bid date',b.due_date?fmtShort(b.due_date)+(b.due_time?' · '+String(b.due_time).slice(0,5):''):'')}${fixed('Estimator',lead?lead.name:'')}
-      <label class="f">Plan rev. date${dt('info.planRev',I.planRev)}</label><label class="f">Plan rev. note${epIn('info.planRevNote',I.planRevNote)}</label><label class="f">Est. start date${dt('info.start',I.start)}</label><label class="f">Est. completion date${dt('info.finish',I.finish)}</label>
-      ${fixed('Project status',b.status||'')}${fixed('Pay item database','Codebook · Bid items')}
-      <label class="f s2">Labor rate file<select class="field" data-estrf${dis}>${[['','Codebook rates'],...rfAll().map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${(rfGet((d.settings||{}).rateFile)?d.settings.rateFile:'')===v?' selected':''}>${esc(l)}</option>`).join('')}</select></label>
-      <label class="f s2">Equipment rate file<select class="field" data-estrfe${dis}>${[['','Codebook rates'],...rfAll('equipment').map(f=>[f.id,f.name])].map(([v,l])=>`<option value="${v}"${(rfGet((d.settings||{}).eqRateFile)?d.settings.eqRateFile:'')===v?' selected':''}>${esc(l)}</option>`).join('')}</select></label>
-      <label class="f s4">Project notes<textarea class="field" id="${epId('info.notes')}" data-ep="info.notes" rows="4"${dis}>${esc(I.notes||'')}</textarea></label></div>
-      <p class="hint">Bid date, estimator and status come from the bid. Change them on the bid itself.</p></fieldset>
-    <div class="info-parties">${INFO_PARTIES.map(party).join('')}</div>
-    <fieldset><legend>Project address</legend><div class="fg"><label class="f s2">Street address${epIn('info.addr.street',I.addr.street)}</label><label class="f">City${epIn('info.addr.city',I.addr.city)}</label><label class="f">State${st('info.addr.state',I.addr.state)}</label><label class="f">Zip${epIn('info.addr.zip',I.addr.zip)}</label>
-      <label class="f s4">Address notes<textarea class="field" id="${epId('info.addr.notes')}" data-ep="info.addr.notes" rows="2"${dis}>${esc(I.addr.notes||'')}</textarea></label></div></fieldset></div>`}
+      ${P.name&&!c?`<p class="hint" style="margin:6px 0 0">Not in Contacts — kept on this estimate only.${ro||!isAdmin()?'':` <button class="linkbtn" data-act="info-addco" data-k="${k}">Add to Contacts</button>`}</p>`:''}
+      ${ro?'':`<div class="ic-done"><button class="btn sm" data-act="info-edit" data-k="${k}" data-v="0">Done</button></div>`}`;
+    const loc=[P.city,P.state].filter(Boolean).join(', ');
+    const view=P.name?`<div class="pc"><div class="pc-av">${esc(P.name.trim().split(/\s+/).slice(0,2).map(w=>w[0]).join('').toUpperCase())}</div><div class="pc-m"><b>${esc(P.name)}</b>${P.address||loc?`<span>${esc([P.address,loc].filter(Boolean).join(' · '))}</span>`:''}
+        ${P.contact?`<div class="pc-who">${ii('user')}${esc(P.contact)}</div>`:''}
+        <div class="pc-links">${P.phone?`<a href="tel:${esc(P.phone)}">${ii('phone')}${esc(P.phone)}</a>`:''}${P.mobile?`<a href="tel:${esc(P.mobile)}">${ii('phone')}${esc(P.mobile)} <i class="dim">mobile</i></a>`:''}${P.email?`<a href="mailto:${esc(P.email)}">${ii('mail')}${esc(P.email)}</a>`:''}</div>
+        ${!c?'<span class="pill small">Not in Contacts</span>':''}</div></div>`
+      :`<button class="pc-empty" data-act="info-edit" data-k="${k}" data-v="1"${dis}>＋ Add the ${l.toLowerCase()}</button>`;
+    return card('bld',l,edit?form:view,P.name&&!edit&&!ro?`<button class="ic-act" data-act="info-edit" data-k="${k}" data-v="1">${ii('edit')}Edit</button>`:'')};
+  return `<div class="info2">${hero}
+    <div class="info-cols"><div class="info-main">${details}${sched}${rates}${notes}</div>
+      <div class="info-side">${addr}${INFO_PARTIES.map(party).join('')}</div></div></div>`}
+document.addEventListener('click',e=>{const t=e.target instanceof Element&&e.target.closest('[data-act=info-edit]');if(!t||!S.est)return;const E=S.est;E.infoEdit=E.infoEdit||{};E.infoEdit[t.dataset.k]=t.dataset.v==='1';render();
+  if(t.dataset.v==='1')requestAnimationFrame(()=>{const el=document.getElementById(epId('info.'+t.dataset.k+'.name'));if(el&&!el.value)el.focus()})});
 // picking a company from Contacts fills in what Contacts knows; picking one of its people fills their phone and email
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset.qfmerge==null||!t.value||!S.est||!S.est.data||EC().ro)return;const from=S.est.pkg,to=t.value;t.value='';
   if(!confirm(`Merge “${from}” into “${to}”?\n\nIts lines move into “${to}”. A vendor in both keeps one quote with all of their prices.`))return;
