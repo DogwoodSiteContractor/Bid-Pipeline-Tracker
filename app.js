@@ -382,7 +382,7 @@ function renderNow(){
   main.innerHTML=(estsTabFor()?estsTabs(estsTabFor()):subNav())+(typeof tourBanner==='function'&&S.view===(navItems()[0]||[])[0]?tourBanner():'')+views[S.view]();
   keep.forEach(([id,top,left,ks])=>{const e=id&&document.getElementById(id);if(e&&(e.dataset.ksel||'')===ks){e.scrollTop=top;e.scrollLeft=left}});
   if(cellSel){const n=main.querySelector(cellSel);if(n){if(cellVal!=null)n.value=cellVal;n.focus({preventScroll:true});try{if(cellPos&&cellPos[0]!=null)n.setSelectionRange(cellPos[0],cellPos[1])}catch(e){}}}
-  if(typeof wbPaint==='function'&&main.querySelector('#wb-grid'))requestAnimationFrame(()=>wbPaint());if(typeof xsPaint==='function'&&main.querySelector('#sh-wrap'))requestAnimationFrame(()=>xsPaint());if(main.querySelector('#prop-paper'))requestAnimationFrame(()=>ppPaginate());if(main.querySelector('#eb'))ebFit();else document.documentElement.classList.remove('eb-lock');
+  if(typeof wbPaint==='function'&&main.querySelector('#wb-grid'))requestAnimationFrame(()=>wbPaint());if(typeof xsPaint==='function'&&main.querySelector('#sh-wrap'))requestAnimationFrame(()=>xsPaint());if(main.querySelector('#prop-paper'))requestAnimationFrame(()=>ppPaginate());if(main.querySelector('#eb,#bal-fit'))ebFit();else document.documentElement.classList.remove('eb-lock');
   if(fid){const n=document.getElementById(fid);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});try{n.setSelectionRange(pos,pe??pos)}catch(e){}if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();if(S.view==='calc'&&$('#tk-canvas'))tkMount();if(S.view==='tw')twMount();
   // the page content can add a scrollbar after the top bar was fitted, so fit it again once laid out
@@ -6989,11 +6989,11 @@ document.addEventListener('click',e=>{const b=e.target instanceof Element&&e.tar
   if(it.length){actmOpen(r.left,r.bottom+4,it);document.querySelector('#actm .actm-tip')?.remove()}},true);
 document.addEventListener('click',e=>{const b=e.target instanceof Element&&e.target.closest('[data-act=eb-rtab]');if(!b||!S.est)return;S.est.rtab=b.dataset.v;render()});
 // Build tab fills the window: the page stays put and only the outline and the resource grid scroll
-function ebFit(){const eb=$('#eb');const H=document.documentElement;if(!eb||window.innerWidth<=1180){H.classList.remove('eb-lock');if(eb)eb.style.height='';return}
+function ebFit(){const eb=$('#eb')||$('#bal-fit');const H=document.documentElement;if(!eb||window.innerWidth<=1180){H.classList.remove('eb-lock');if(eb)eb.style.height='';return}
   H.classList.add('eb-lock');if(window.scrollY)window.scrollTo(0,0);
   const top=eb.getBoundingClientRect().top;const h=window.innerHeight-top-14;
   if(h>=440)eb.style.height=h+'px';else{eb.style.height='';H.classList.remove('eb-lock')}}
-window.addEventListener('resize',()=>{if($('#eb'))ebFit();else document.documentElement.classList.remove('eb-lock')});
+window.addEventListener('resize',()=>{if($('#eb')||$('#bal-fit'))ebFit();else document.documentElement.classList.remove('eb-lock')});
 // Double-click a section, bid item or activity in the tree: one big read-only page with everything about it
 let eoDblWas=null;document.addEventListener('mousedown',e=>{if(e.detail===1)eoDblWas=document.activeElement},true);
 document.addEventListener('dblclick',e=>{const t=e.target instanceof Element?e.target:null;if(!t||!S.est||S.view!=='estimate')return;const row=t.closest('#eo-scroll tr[data-act=eo-sel]');if(!row)return;
@@ -7418,7 +7418,7 @@ function estBalView(d,R,ro){const B=balState();const dis=ro?' disabled':'';const
   const nSel=d.items.filter(it=>B.sel.has(it.id)).length,nLock=d.items.filter(it=>it.lock&&!it.alt).length,nOv=d.items.filter((it,i)=>!it.alt&&R.items[i].ov).length;
   const scope=nSel?`the ${nSel} selected item${nSel===1?'':'s'}`:`every unlocked item`;const variance=R.gross-R.calcTotal;const mu=R.gross-R.cost,prof=R.gross-R.cost-R.ind;
   const tgt=num(String(B.target).replace(/[,$\s]/g,''));
-  return `<div class="bal">
+  return `<div class="bal" id="bal-fit">
     ${ro?'':(()=>{const tv=tgt!=null?tgt:R.calcTotal;const dv=tv-R.gross;const k1=Math.ceil(R.calcTotal/1000)*1000,k0=Math.floor(R.calcTotal/1000)*1000;
       const plugSel=(()=>{const T=balTargets(d,R);const auto=balPlug({...d,balPlug:null},R,T);return `<option value="">Auto: ${auto!=null?esc((d.items[auto].code||'')+' '+(d.items[auto].desc||'')):'none'}</option>`+d.items.map((it,i)=>!it.alt&&R.items[i].q>0?`<option value="${it.id}"${d.balPlug===it.id?' selected':''}>${esc((it.code||'')+' '+(it.desc||''))} · ${qtyFmt(it.qty)} ${esc(it.unit||'')}</option>`:'').join('')})();
       return `<div class="panel pad bal-tools">

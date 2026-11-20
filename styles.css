@@ -3622,3 +3622,11 @@ table.dt-sum tr.click{cursor:pointer}table.dt-sum tr.click:hover td{background:v
 .bal-chips button{padding:0 9px;height:100%}
 .bal-rib .btn.sm{height:32px}
 .bal-chips button{font-size:12.5px;font-weight:600;font-family:inherit}
+
+/* Balance bid fits the window: only the item list scrolls */
+#bal-fit[style*=height]{display:flex;flex-direction:column;min-height:0}
+#bal-fit[style*=height]>*{flex:none}
+#bal-fit[style*=height]>.bal-wrap{flex:1 1 0;min-height:120px;max-height:none}
+#bal-fit[style*=height] .bal-tools{margin-bottom:8px}
+#bal-fit[style*=height] .bal-foot{margin-top:8px}
+#bal-fit[style*=height] .bal-tools{padding-top:10px;padding-bottom:10px}#bal-fit[style*=height] .bal-more{margin-top:4px}
