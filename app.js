@@ -7387,6 +7387,12 @@ function estSumView(d,R,b,ro){const m=d.markup;const p='markup';const dis=ro?' d
 const BAL_INC=[['smart','Smart (by size)'],['0.01','$0.01'],['0.05','$0.05'],['0.1','$0.10'],['0.25','$0.25'],['0.5','$0.50'],['1','$1'],['5','$5'],['10','$10'],['100','$100']];
 function balInc(v,inc){if(inc!=='smart')return +inc;const a=Math.abs(v);return a<1?.01:a<10?.05:a<100?.1:a<1000?1:a<10000?10:100}
 function balRound(v,inc,dir){const i=balInc(v,inc);const k=v/i;const n=dir==='down'?Math.floor(k+1e-9):dir==='nearest'?Math.round(k):Math.ceil(k-1e-9);return Math.round(n*i*100)/100}
+// every bulk change on this tab can be undone: a snapshot of each item's balanced price and lock
+function balSnap(d,label){const B=balState();(B.undo=B.undo||[]).push({label,v:d.items.map(it=>[it.id,it.override??null,!!it.lock])});if(B.undo.length>15)B.undo.shift()}
+// the item that soaks up the last few dollars: the one picked, else the biggest unlocked 1-unit (LS / EA) item, else the one with the smallest quantity
+function balPlug(d,R,T){const pick=d.balPlug&&d.items.findIndex(it=>it.id===d.balPlug);if(pick!=null&&pick>=0&&!d.items[pick].alt&&R.items[pick].q>0)return pick;
+  const ok=T.filter(i=>R.items[i].q>0);const cp=i=>R.items[i].calcUnit*R.items[i].q;const one=ok.filter(i=>Math.abs(R.items[i].q-1)<1e-9).sort((a,b)=>cp(b)-cp(a));return one.length?one[0]:ok.slice().sort((a,b)=>R.items[a].q-R.items[b].q)[0]}
+function balUndoLast(d){const B=balState();const u=(B.undo||[]).pop();if(!u)return;const m=new Map(u.v.map(x=>[x[0],x]));d.items.forEach(it=>{const x=m.get(it.id);if(x){it.override=x[1];it.lock=x[2]}})}
 function balState(){const E=S.est;return E.bal=E.bal||{sel:new Set(),inc:'smart',dir:'up',by:'price',target:'',q:'',shut:new Set()}}
 const BAL_ON=[['all','on every item',()=>true],['nosub','on sub-less items',x=>!((x.c.sub||0)>0)],['sub','on items with subs',x=>(x.c.sub||0)>0],['self','on self-perform items (labor or equipment)',x=>(x.c.labor||0)+(x.c.equipment||0)>0],['mat','on items with material',x=>(x.c.material||0)>0]];
 const BAL_BY=[['price','by item price',x=>x.price],['cost','by item cost',x=>x.total],['mu','by item markup',x=>x.price-x.total],['self','by self-perform cost',x=>x.total-(x.c.sub||0)],['labor','by labor cost',x=>x.c.labor||0],['le','by labor + equipment',x=>(x.c.labor||0)+(x.c.equipment||0)],['mh','by man-hours',x=>x.mh||0],['even','evenly (same $ per item)',()=>1]];
@@ -7421,6 +7427,11 @@ function estBalView(d,R,ro){const B=balState();const dis=ro?' disabled':'';const
         <select class="field sm" data-balset="on" title="Which bid items take the difference">${BAL_ON.map(([k,l])=>`<option value="${k}"${(B.on||'all')===k?' selected':''}>${l}</option>`).join('')}</select>
         <select class="field sm" data-balset="by" title="How the difference is shared out">${BAL_BY.map(([k,l])=>`<option value="${k}"${B.by===k?' selected':''}>${l}</option>`).join('')}</select>
         <button class="btn sm primary" data-act="bal-spread" title="Spreads the difference over ${scope}">Respread ${nSel?'selected':'all'}</button></div>
+      <div class="bal-tool bal-main"><b>Balance</b><span class="dim small">spread to the target, round every unit price, then put the last few dollars on</span>
+        <select class="field sm" data-balplug title="The item that takes the leftover so the total lands exactly. A 1 LS item works best.">${(()=>{const T=balTargets(d,R);const auto=balPlug({...d,balPlug:null},R,T);return `<option value="">Auto: ${auto!=null?esc((d.items[auto].code||'')+' '+(d.items[auto].desc||'')):'none'}</option>`+d.items.map((it,i)=>!it.alt&&R.items[i].q>0?`<option value="${it.id}"${d.balPlug===it.id?' selected':''}>${esc((it.code||'')+' '+(it.desc||''))} · ${qtyFmt(it.qty)} ${esc(it.unit||'')}</option>`:'').join('')})()}</select>
+        <button class="btn sm primary" data-act="bal-balance" title="Uses the target, the item choice and the rounding above">Balance ${nSel?'selected':'all'}</button>
+        ${(B.undo||[]).length?`<button class="btn sm" data-act="bal-undo" title="Put the prices back the way they were before: ${esc(B.undo[B.undo.length-1].label)}">↶ Undo ${esc(B.undo[B.undo.length-1].label)}</button>`:''}</div>
+      ${B.last?`<div class="bal-last${B.last.warn?' warn':''}">${B.last.html}</div>`:''}
       <div class="bal-tool"><button class="btn sm" data-act="bal-calc" title="Clears the balanced price on ${scope}, back to the calculated price">↺ Back to calculated</button>
         <button class="btn sm ghost" data-act="bal-lockall" data-v="1">Lock ${nSel?'selected':'all'}</button><button class="btn sm ghost" data-act="bal-lockall" data-v="0">Unlock ${nSel?'selected':'all'}</button>
         ${nSel?`<button class="btn sm ghost" data-act="bal-selnone">Clear selection (${nSel})</button>`:''}</div>
@@ -7442,6 +7453,7 @@ document.addEventListener('input',e=>{const t=e.target;if(t.dataset.balov!=null&
   if(t.dataset.balset&&S.est&&(t.dataset.balset==='q'||t.dataset.balset==='target')){balState()[t.dataset.balset]=t.value;clearTimeout(estBalView._t);estBalView._t=setTimeout(()=>render(),t.dataset.balset==='q'?150:500)}},true);
 document.addEventListener('change',e=>{const t=e.target;if(!S.est||!S.est.data)return;const B=balState();
   if(t.dataset.balset&&t.tagName==='SELECT'){B[t.dataset.balset]=t.value;render();return}
+  if(t.dataset.balplug!=null){S.est.data.balPlug=t.value||null;estTouch();render();return}
   if(t.dataset.balsel){t.checked?B.sel.add(t.dataset.balsel):B.sel.delete(t.dataset.balsel);render();return}
   if(t.dataset.balselall!=null){const d=S.est.data,R=estCalc(d);if(t.checked){B.sel.clear();balTargets(d,R).forEach(i=>B.sel.add(d.items[i].id))}else B.sel.clear();render()}});
 document.addEventListener('click',e=>{const t=e.target.closest('[data-act^=bal-]');if(!t||!S.est||!S.est.data)return;const a=t.dataset.act,d=S.est.data,B=balState();
@@ -7449,14 +7461,41 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act^=bal-]
   if(a==='bal-shutall'){B.shut.clear();if(t.dataset.v==='1'){(d.sections||[]).forEach(x=>B.shut.add(x.id));B.shut.add('_none');B.shut.add('_alt')}render();return}
   if(a==='bal-selnone'){B.sel.clear();render();return}
   if(EC().ro)return;const R=estCalc(d);
+  if(a==='bal-undo'){const u=(B.undo||[]).pop();if(!u)return;const m=new Map(u.v.map(x=>[x[0],x]));d.items.forEach(it=>{const x=m.get(it.id);if(x){it.override=x[1];it.lock=x[2]}});B.last=null;estTouch();render();toast(`Undid ${u.label}`);return}
+  if(a==='bal-balance'){const tgt=num(String(B.target).replace(/[,$\s]/g,''));const target=tgt!=null?tgt:R.calcTotal;
+    const on=BAL_ON.find(o=>o[0]===(B.on||'all'))||BAL_ON[0];const T=balTargets(d,R).filter(i=>on[2](R.items[i]));if(!T.length){toast('No unlocked items to balance with these settings');return}
+    const P=balPlug(d,R,T);if(P==null){toast('Pick an item to take the leftover');return}
+    balSnap(d,'balance');const wf=(BAL_BY.find(o=>o[0]===B.by)||BAL_BY[0])[2];
+    // 1. spread the difference over the items (not the plug), by the chosen weight
+    const S1=T.filter(i=>i!==P);const diff=target-R.gross;const w=S1.map(i=>Math.max(0,wf(R.items[i])));let W=w.reduce((x,v)=>x+v,0);const ww=W>0?w:S1.map(()=>1);W=ww.reduce((x,v)=>x+v,0)||1;
+    // 2. round each unit price to the increment (nearest, so rounding doesn't pile up in one direction)
+    // a step too big for an item (rounding $0.32/SF to $1) would wreck its price, so those items drop to a finer step that moves them 2% or less
+    let finer=0;S1.forEach((i,k)=>{const x=R.items[i];const raw=Math.max(0,(x.price+diff*ww[k]/W)/x.q);let v=balRound(raw,B.inc,'nearest');
+      if(raw>0&&(v<=0||Math.abs(v-raw)/raw>0.02)){v=balRound(raw,'smart','nearest');if(v<=0||Math.abs(v-raw)/raw>0.02)v=Math.round(raw*100)/100;finer++}d.items[i].override=Math.max(0,v)});
+    // 3. the plug takes whatever is left, to the cent
+    let R2=estCalc(d);const px=R2.items[P];const left=target-R2.gross;const pu=Math.round((px.price+left)/px.q*100)/100;
+    if(pu<0){balUndoLast(d);toast('The leftover is bigger than the plug item can take. Pick a bigger item or a coarser/finer rounding.');render();return}
+    d.items[P].override=pu;R2=estCalc(d);const off=R2.gross-target;
+    // 4. a report card so nothing changes silently
+    const chg=T.map(i=>{const a0=R.items[i].unitPrice,a1=R2.items[i].unitPrice;return a0>0?(a1-a0)/a0*100:0});const big=T[chg.reduce((m,v,k)=>Math.abs(v)>Math.abs(chg[m])?k:m,0)];
+    const below=d.items.map((it,i)=>i).filter(i=>!d.items[i].alt&&R2.items[i].q>0&&R2.items[i].price<R2.items[i].total-0.005);
+    const plugChg=R2.items[P].price-R.items[P].price;const plugPct=R.items[P].price?plugChg/R.items[P].price*100:0;
+    const warn=below.length>0||Math.abs(off)>=0.01||Math.abs(plugPct)>25;
+    B.last={warn,html:`<b>${Math.abs(off)<0.01?'Balanced':'Close'}:</b> ${money2(R2.gross)}${Math.abs(off)<0.01?' — right on the target':` — ${money2(Math.abs(off))} ${off>0?'over':'under'} the target (the plug has more than 1 unit, so it can only move in steps)`}.
+      ${T.length-1} item${T.length===2?'':'s'} spread and rounded${finer?` (${finer} with small unit prices used a finer step, so rounding never moved a price more than 2%)`:''}. Plug <b>${esc(d.items[P].code||'')} ${esc(d.items[P].desc||'')}</b> ${plugChg>=0?'+':'−'}${money2(Math.abs(plugChg))} (${plugPct>=0?'+':''}${fmtN(plugPct,1)}%).
+      Biggest unit-price change: ${esc(d.items[big].code||'')} ${fmtN(Math.abs(chg[T.indexOf(big)]),1)}%.
+      ${below.length?`<span class="bad-t"><b>${below.length} item${below.length===1?' is':'s are'} now priced below cost</b> (${below.slice(0,4).map(i=>esc(d.items[i].code||'')).join(', ')}${below.length>4?'…':''}).</span>`:'Every item is still above cost.'}
+      ${Math.abs(plugPct)>25?' <span class="warn-t">The plug moved more than 25% — consider a bigger plug item.</span>':''}`};
+    estTouch();render();return}
   if(a==='bal-lock'){const it=d.items[+t.dataset.i];it.lock=!it.lock;if(it.lock&&num(it.override)==null)it.override=R.items[+t.dataset.i].unitPrice;estTouch();render();return}
   if(a==='bal-lockall'){const on=t.dataset.v==='1';const ix=B.sel.size?d.items.map((it,i)=>i).filter(i=>B.sel.has(d.items[i].id)):d.items.map((it,i)=>i).filter(i=>!d.items[i].alt);ix.forEach(i=>{const it=d.items[i];it.lock=on;if(on&&num(it.override)==null&&R.items[i].q>0)it.override=R.items[i].unitPrice});estTouch();render();toast(on?`Locked ${ix.length} item${ix.length===1?'':'s'}`:`Unlocked ${ix.length} item${ix.length===1?'':'s'}`);return}
   const T=balTargets(d,R);if(!T.length){toast(B.sel.size?'The selected items are locked or have no quantity':'Every item is locked or has no quantity. Unlock some first.');return}
-  if(a==='bal-round'){let n=0;const before=R.gross;T.forEach(i=>{const x=R.items[i];const v=balRound(x.unitPrice,B.inc,B.dir);if(Math.abs(v-x.unitPrice)>=.005||num(d.items[i].override)==null){d.items[i].override=v;n++}});estTouch();render();const R2=estCalc(d);toast(`Rounded ${n} unit price${n===1?'':'s'}: total ${R2.gross-before>=0?'+':'−'}${money2(Math.abs(R2.gross-before))}`);return}
-  if(a==='bal-calc'){if(!confirm(`Set ${B.sel.size?'the selected items':'every unlocked item'} (${T.length}) back to the calculated unit price?`))return;T.forEach(i=>{d.items[i].override=null});estTouch();render();toast(`${T.length} item${T.length===1?'':'s'} back to calculated`);return}
+  if(a==='bal-round'||a==='bal-calc'||a==='bal-spread'||a==='bal-balance')B.last=null;
+  if(a==='bal-round'){balSnap(d,'round');let n=0;const before=R.gross;T.forEach(i=>{const x=R.items[i];const v=balRound(x.unitPrice,B.inc,B.dir);if(Math.abs(v-x.unitPrice)>=.005||num(d.items[i].override)==null){d.items[i].override=v;n++}});estTouch();render();const R2=estCalc(d);toast(`Rounded ${n} unit price${n===1?'':'s'}: total ${R2.gross-before>=0?'+':'−'}${money2(Math.abs(R2.gross-before))}`);return}
+  if(a==='bal-calc'){if(!confirm(`Set ${B.sel.size?'the selected items':'every unlocked item'} (${T.length}) back to the calculated unit price?`))return;balSnap(d,'back to calculated');T.forEach(i=>{d.items[i].override=null});estTouch();render();toast(`${T.length} item${T.length===1?'':'s'} back to calculated`);return}
   if(a==='bal-spread'){const tgt=num(String(B.target).replace(/[,$\s]/g,''));const target=tgt!=null?tgt:R.calcTotal;const diff=target-R.gross;if(Math.abs(diff)<.005){toast('Already at that total');return}
     const on=BAL_ON.find(o=>o[0]===(B.on||'all'))||BAL_ON[0];const T0=T;const T1=T0.filter(i=>on[2](R.items[i]));if(!T1.length){toast(`No ${B.sel.size?'selected':'unlocked'} items fit “${on[1]}”`);return}
-    const wf=(BAL_BY.find(o=>o[0]===B.by)||BAL_BY[0])[2];T.length=0;T.push(...T1);
+    const wf=(BAL_BY.find(o=>o[0]===B.by)||BAL_BY[0])[2];T.length=0;T.push(...T1);balSnap(d,'respread');
     const w=T.map(i=>Math.max(0,wf(R.items[i])));let W=w.reduce((s,v)=>s+v,0);const ww=W>0?w:T.map(()=>1);W=ww.reduce((s,v)=>s+v,0);
     T.forEach((i,k)=>{const x=R.items[i];const share=diff*ww[k]/W;d.items[i].override=Math.max(0,Math.round((x.price+share)/x.q*100)/100)});
     // whatever cents are left go on the item with the smallest quantity among the targets, so the total lands as close as it can

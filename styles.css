@@ -3534,3 +3534,8 @@ table.dt-sum tr.click{cursor:pointer}table.dt-sum tr.click:hover td{background:v
 .dt-none{padding:4px 2px}
 
 @media print{.dt-print{color:#111;font:12px/1.4 "Barlow",system-ui,sans-serif}.dt-print .mbody{max-height:none!important;overflow:visible!important}.dt-print .dt-act{break-inside:avoid}.dt-print .x{display:none}}
+
+.bal-main{flex-wrap:wrap;gap:6px;padding:6px 8px;border:1px solid var(--accent);border-radius:8px;background:var(--accent-soft)}
+.bal-main select{max-width:280px}
+.bal-last{font-size:12.5px;line-height:1.5;padding:6px 10px;border-radius:8px;background:var(--surface-2);border-left:3px solid var(--good,#3a8a55);margin:4px 0}
+.bal-last.warn{border-left-color:var(--warn,#c9922e)}
