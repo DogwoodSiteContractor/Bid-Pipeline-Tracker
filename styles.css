@@ -3498,3 +3498,12 @@ html.eb-lock .est-tabs button{padding-top:6px;padding-bottom:6px}
 .eb-hb .eb-chip{padding:3px 9px;gap:6px}
 .eb-hb .eb-chip-d{max-width:200px}
 .eb-hb .eb-acts-h{align-items:flex-start}.eb-hb .eb-acts-h>b{padding-top:5px}
+
+/* slim, modern scroll bars everywhere: a thin rounded bar, no arrows, no track box; darker on hover */
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+::-webkit-scrollbar-button{display:none;width:0;height:0}
+::-webkit-scrollbar-thumb{background:color-mix(in srgb,var(--ink-3,#888) 45%,transparent);border-radius:8px;border:2px solid transparent;background-clip:padding-box;min-height:32px}
+::-webkit-scrollbar-thumb:hover{background:color-mix(in srgb,var(--ink-3,#888) 80%,transparent);background-clip:padding-box}
+::-webkit-scrollbar-thumb:active{background:var(--accent);background-clip:padding-box}
+@supports not selector(::-webkit-scrollbar){*{scrollbar-width:thin;scrollbar-color:color-mix(in srgb,var(--ink-3,#888) 50%,transparent) transparent}}
