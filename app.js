@@ -132,12 +132,25 @@ const SBX_MSG='This is a test estimate, so nothing outside it is saved. Make a r
 const sbxOn=()=>typeof S!=='undefined'&&S.view==='estimate'&&S.est&&S.est.sbx;
 function sbxBlocked(){const res={data:null,error:{message:SBX_MSG}};const p=new Proxy(function(){},{get(t,k){if(k==='then')return (ok,bad)=>Promise.resolve(res).then(ok,bad);if(k==='catch'||k==='finally')return ()=>Promise.resolve(res);return ()=>p},apply(){return p}});return p}
 if(sb){const _from=sb.from.bind(sb),_rpc=sb.rpc.bind(sb);const READ_RPC=/^(perm|my_feedback|crew_directory|pm_directory|trophy_stats|dev_usage|admin_user_list|public_company|vendor_quotes|grab_list)$/;
-  sb.from=t=>{const q=_from(t);if(!sbxOn()||['last_seen','fun_stats'].includes(t))return q;['insert','update','upsert','delete'].forEach(m=>{q[m]=()=>{toast(SBX_MSG);return sbxBlocked()}});return q};
+  sb.from=t=>{const q=_from(t);if(!sbxOn()||['last_seen','fun_stats'].includes(t))return q;
+    if(t==='quotes'){['insert','update','upsert','delete'].forEach(m=>{q[m]=x=>sbxQB(m,x)});return q} /* a test estimate's quotes live with it, in this browser */
+   ['insert','update','upsert','delete'].forEach(m=>{q[m]=()=>{toast(SBX_MSG);return sbxBlocked()}});return q};
   sb.rpc=(f,a)=>sbxOn()&&!READ_RPC.test(f)?(toast(SBX_MSG),sbxBlocked()):_rpc(f,a)}
 function sbxAll(){try{return JSON.parse(localStorage.getItem('bp.sbx')||'{}')||{}}catch(e){return {}}}
 const SBX_IDS=new Set(Object.keys(sbxAll()));
 function sbxPut(id,rec){const A=sbxAll();A[id]={...(A[id]||{}),...rec,updated:new Date().toISOString()};SBX_IDS.add(id);try{localStorage.setItem('bp.sbx',JSON.stringify(A));return true}catch(e){toast('This browser is out of room for test estimates. Delete an old one.');return false}}
 function sbxDel(id){const A=sbxAll();delete A[id];SBX_IDS.delete(id);try{localStorage.setItem('bp.sbx',JSON.stringify(A))}catch(e){}}
+// quotes on a test estimate: same shape as the quotes table, kept inside the test record
+function sbxQ(){return (S.est&&sbxAll()[S.est.bidId]?.quotes)||[]}
+function sbxQMerge(){if(!S.quotes)return;S.quotes=S.quotes.filter(q=>!SBX_IDS.has(q.bid_id)).concat(sbxOn()?sbxQ():[])}
+function sbxQB(op,payload){const filters=[];const match=q=>filters.every(([c,v,isIn])=>isIn?v.includes(q[c]):q[c]===v);
+  const res=()=>{let list=sbxQ().slice();let out=[];const bid=S.est.bidId;
+    if(op==='insert'||op==='upsert'){const rows=[].concat(payload).map(r=>({created_at:new Date().toISOString(),...r,bid_id:bid}));rows.forEach(r=>{const i=list.findIndex(x=>x.id===r.id);if(i>=0)list[i]={...list[i],...r};else list.push(r)});out=rows}
+    else if(op==='update')list=list.map(q=>{if(!match(q))return q;const n={...q,...payload};out.push(n);return n});
+    else if(op==='delete'){out=list.filter(match);list=list.filter(q=>!match(q))}
+    sbxPut(bid,{quotes:list});sbxQMerge();return {data:out,error:null}};
+  const b={select(){return b},eq(c,v){filters.push([c,v]);return b},in(c,v){filters.push([c,v,true]);return b},order(){return b},limit(){return b},maybeSingle(){return b},single(){return b},
+    then(ok,bad){return Promise.resolve().then(res).then(ok,bad)}};return b}
 const SBX_BIDS={};function sbxBid(id){const r=sbxAll()[id];if(!r)return undefined;const b=SBX_BIDS[id]=SBX_BIDS[id]||{id,status:'Estimating',client_ids:[],client_contacts:{},location:'',_sbx:true};b.name=r.name||'Test estimate';b.location=r.location||'';return b}
 
 
@@ -331,6 +344,7 @@ async function loadTable(t){
   if(S.tableErr)delete S.tableErr[t];S.lastLoaded=new Date();
   if(t==='settings'){S.settings=Object.fromEntries((data||[]).map(r=>[r.key,r.value||{}]));tradesApply()}
   else S[t]=t==='bids'?(data||[]).map(normBid):(data||[]);
+  if(t==='quotes'&&typeof sbxQMerge==='function')sbxQMerge();
   if(t==='awards'&&typeof awMergePend==='function')awMergePend();
   if(t==='codebook'||t==='settings')rbRefreshAll();
   schedule();
@@ -374,7 +388,7 @@ let rq=0;
 function schedule(){if(rq)return;rq=requestAnimationFrame(()=>{rq=0;render()})}
 function render(){
   if(render._busy){schedule();return}render._busy=true;try{renderNow();npPaint()}finally{render._busy=false}try{svCheck()}catch(e){}}
-function renderNow(){
+function renderNow(){if(typeof S!=='undefined'&&S.quotes&&!sbxOn()&&S.quotes.some(q=>SBX_IDS.has(q.bid_id)))sbxQMerge();
   const main=$('#main');const top=$('#topwrap');
   if(!CONFIGURED){top.hidden=true;main.innerHTML=setupScreen();return}
   if(S.loading){top.hidden=true;main.innerHTML=`<div class="auth">${dozerLoader('Loading')}</div>`;return}
@@ -6648,7 +6662,7 @@ function estAddItem(d,secId,o={}){const it=estNewItem(d,{code:estNextItemCode(d,
 /* ---------- open / create / save ---------- */
 async function estOpen(bidId,from){closeModal();S.view='estimate';S.estBid=bidId;const tab=S.est&&S.est.bidId===bidId?S.est.tab:'build';S.estFrom=from||S.estFrom||'pipeline';S.est={bidId,loading:true};S.ppUndo=[];render();window.scrollTo(0,0);
   if(SBX_IDS.has(bidId)){const r=sbxAll()[bidId];if(!r){S.est={bidId,err:'That test estimate isn’t on this computer any more.'};render();return}
-    S.est={bidId,sbx:true,row:r.data?{id:bidId,version:1,updated_at:r.updated,updated_by_name:myName()}:null,data:r.data?estNorm(r.data):null,sel:null,tab:tab||'build',dirty:false};if(S.est.data&&S.est.data.sections[0])S.est.sel={t:'sec',id:S.est.data.sections[0].id};render();return}
+    S.est={bidId,sbx:true,row:r.data?{id:bidId,version:1,updated_at:r.updated,updated_by_name:myName()}:null,data:r.data?estNorm(r.data):null,sel:null,tab:tab||'build',dirty:false};if(S.est.data&&S.est.data.sections[0])S.est.sel={t:'sec',id:S.est.data.sections[0].id};sbxQMerge();render();return}
   try{const {data,error}=await sb.from('estimates').select('*').eq('bid_id',bidId).maybeSingle();if(error)throw error;
     S.est={bidId,row:data?{id:data.id,version:data.version,updated_at:data.updated_at,updated_by_name:data.updated_by_name}:null,data:data?estNorm(data.data):null,sel:null,tab:tab||'build',dirty:false};
     if(S.est.data&&S.est.data.sections[0])S.est.sel={t:'sec',id:S.est.data.sections[0].id}}
