@@ -6961,7 +6961,7 @@ function estRight(d,R,ro){const s=estSelResolve(d);if(!s)return `<div class="pan
   // bid item and its activities in one pane (HeavyBid-style): the bid item stays open while you switch activities
   const F=estFocus(d);const it=F.it,x=R.items[F.i],ip=`items.${F.i}`;const a=F.j>=0?it.acts[F.j]:null;
   const sp={p:ip};
-  const chips=it.acts.map((ac,j)=>{const ar=x.acts[j];return `<button class="eb-chip${j===F.j?' on':''}" data-act="eo-pick" data-t="act" data-id="${ac.id}" title="${esc(ac.desc||'')}"><span class="num">${esc(ac.code||'')}</span><span class="eb-chip-d">${esc(ac.desc)||'Untitled'}</span><b>${money(ar.total)}</b></button>`}).join('');
+  const chips=it.acts.map((ac,j)=>{const ar=x.acts[j];return `<button class="eb-chip${j===F.j?' on':''}" data-act="eo-pick" data-t="act" data-id="${ac.id}" title="${esc((ac.desc||'')+' · '+money(ar.total))}"><span class="num">${esc(ac.code||'')}</span><span class="eb-chip-d">${esc(ac.desc)||'Untitled'}</span></button>`}).join('');
   const AC=a?actCardHtml(a,`${ip}.acts.${F.j}`,x.acts[F.j],it.qty,{unit:it.unit,split:1}):null;const rt=S.est.rtab==='hist'&&!S.est.tpl?'hist':'res';
   return `<div class="eb-pane eb-combo eb-hb"><div class="eb-fix"><div class="eb-crumb">${esc(secOf(d,it.sec)?.name||'')} › ${esc(it.code)} ${esc(it.desc||'Bid item')}${a?` › <b>${esc(a.code)} ${esc(a.desc||'Activity')}</b>`:''}</div>
       ${estFold('ih','Bid item',`<div class="fg eb-fg"><label class="f">Item #${epIn(sp.p+'.code',it.code)}</label><label class="f s3">Description${epIn(sp.p+'.desc',it.desc,{ph:'e.g. 8″ PVC sanitary sewer'})}</label>

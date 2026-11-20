@@ -3493,3 +3493,8 @@ html.eb-lock .est-tabs button{padding-top:6px;padding-bottom:6px}
 .eb-bar .seg.sm button{padding:4px 9px;font-size:12.5px}
 .eb-split{display:inline-flex}.eb-split .btn:first-child:not(:last-child){border-top-right-radius:0;border-bottom-right-radius:0}
 .eb-split .eb-caret{border-top-left-radius:0;border-bottom-left-radius:0;padding-left:6px;padding-right:6px;border-left:1px solid rgba(255,255,255,.3)}
+
+.eb-hb .eb-chips{flex-wrap:wrap;overflow:visible;padding-bottom:0;gap:4px}
+.eb-hb .eb-chip{padding:3px 9px;gap:6px}
+.eb-hb .eb-chip-d{max-width:200px}
+.eb-hb .eb-acts-h{align-items:flex-start}.eb-hb .eb-acts-h>b{padding-top:5px}
