@@ -3539,3 +3539,24 @@ table.dt-sum tr.click{cursor:pointer}table.dt-sum tr.click:hover td{background:v
 .bal-main select{max-width:280px}
 .bal-last{font-size:12.5px;line-height:1.5;padding:6px 10px;border-radius:8px;background:var(--surface-2);border-left:3px solid var(--good,#3a8a55);margin:4px 0}
 .bal-last.warn{border-left-color:var(--warn,#c9922e)}
+
+/* Balance bid: four numbered steps */
+.bal-steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.bal-step{display:flex;gap:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);min-width:0}
+.bal-step.go{border-color:var(--accent);background:var(--accent-soft)}
+.bal-n{flex:none;width:24px;height:24px;border-radius:50%;background:var(--ink-3);color:var(--surface);display:grid;place-items:center;font-weight:700;font-size:13px}
+.bal-step.go .bal-n{background:var(--accent);color:#fff}
+.bal-sb{display:flex;flex-direction:column;gap:6px;min-width:0;flex:1}
+.bal-sb>b{font-size:14px}
+.bal-sb p{margin:0;font-size:12.5px;color:var(--ink-2);line-height:1.4}
+.bal-st{font-size:12px;color:var(--ink-3)}.bal-st b{color:var(--ink)}
+.bal-tgt{font-size:16px;font-weight:600;max-width:100%}
+.bal-quick{display:flex;gap:10px;flex-wrap:wrap;font-size:12.5px}.bal-quick .on{font-weight:700;text-decoration:underline}
+.bal-f{display:flex;flex-direction:column;gap:2px;font-size:11px;color:var(--ink-3)}.bal-f select{width:100%}
+.bal-go{width:100%;justify-content:center;font-weight:700}
+.bal-now{margin-top:8px}
+.bal-more{margin-top:8px}.bal-more summary{cursor:pointer;font-size:12.5px;color:var(--ink-3);font-weight:600}
+.bal-more .bal-tool{margin-top:6px}
+@media (max-width:1100px){.bal-steps{grid-template-columns:1fr 1fr}}
+@media (max-width:640px){.bal-steps{grid-template-columns:1fr}}
+.bal-tools .bal-more{display:block;width:100%;flex-basis:100%}.bal-tools .bal-last,.bal-tools .bal-now{flex-basis:100%}
