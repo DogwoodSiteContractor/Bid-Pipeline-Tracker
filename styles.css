@@ -3599,3 +3599,26 @@ table.dt-sum tr.click{cursor:pointer}table.dt-sum tr.click:hover td{background:v
 @media (max-width:1200px){.ih{grid-template-columns:repeat(3,minmax(0,1fr))}.info-cols{grid-template-columns:1fr}}
 @media (max-width:640px){.ih{grid-template-columns:1fr 1fr}.ic-g{grid-template-columns:1fr 1fr}.ic-g .s3,.ic-g .s4{grid-column:1/-1}}
 .pc-m>.pill{align-self:flex-start;margin-top:4px}
+
+/* Balance bid: compact tool ribbon */
+.bal-rib{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.bal-g{display:flex;flex-direction:column;gap:3px;min-width:0}
+.bal-l{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);font-weight:600}
+.bal-row{display:flex;gap:6px;align-items:center}
+.bal-rib select.field.sm{width:auto;min-width:130px}
+.bal-gp select.field.sm{max-width:260px}
+.bal-rib .bal-tgt{width:150px;font-size:13.5px;font-weight:600;text-align:right}
+.bal-chips{display:inline-flex;border:1px solid var(--line);border-radius:7px;overflow:hidden}
+.bal-chips button{background:none;border:0;border-left:1px solid var(--line);color:var(--ink-2);font:600 12px/1 inherit;font-family:inherit;padding:7px 9px;cursor:pointer;font-variant-numeric:tabular-nums}
+.bal-chips button:first-child{border-left:0}.bal-chips button:hover{background:var(--surface-2)}
+.bal-chips button.on{background:var(--accent-soft);color:var(--accent)}
+.bal-sep{width:1px;align-self:stretch;background:var(--line);margin:0 2px}
+.bal-info{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--ink-3);margin-top:8px;font-variant-numeric:tabular-nums}
+.bal-dot{opacity:.5}
+.bal-tip{margin-left:auto;cursor:help;border-bottom:1px dotted var(--ink-3)}
+.bal-sd{opacity:.5}
+.bal-info{width:100%}
+.bal-rib .field.sm,.bal-chips{height:32px;box-sizing:border-box}
+.bal-chips button{padding:0 9px;height:100%}
+.bal-rib .btn.sm{height:32px}
+.bal-chips button{font-size:12.5px;font-weight:600;font-family:inherit}

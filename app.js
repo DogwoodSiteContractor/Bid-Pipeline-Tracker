@@ -7422,25 +7422,21 @@ function estBalView(d,R,ro){const B=balState();const dis=ro?' disabled':'';const
     ${ro?'':(()=>{const tv=tgt!=null?tgt:R.calcTotal;const dv=tv-R.gross;const k1=Math.ceil(R.calcTotal/1000)*1000,k0=Math.floor(R.calcTotal/1000)*1000;
       const plugSel=(()=>{const T=balTargets(d,R);const auto=balPlug({...d,balPlug:null},R,T);return `<option value="">Auto: ${auto!=null?esc((d.items[auto].code||'')+' '+(d.items[auto].desc||'')):'none'}</option>`+d.items.map((it,i)=>!it.alt&&R.items[i].q>0?`<option value="${it.id}"${d.balPlug===it.id?' selected':''}>${esc((it.code||'')+' '+(it.desc||''))} · ${qtyFmt(it.qty)} ${esc(it.unit||'')}</option>`:'').join('')})();
       return `<div class="panel pad bal-tools">
-      <div class="bal-steps">
-        <div class="bal-step"><div class="bal-n">1</div><div class="bal-sb"><b>Lock fixed prices</b>
-          <p>Any price that can’t move (a number the GC already has, an allowance)? Type it in the item’s <b>Balanced unit</b> box below. That locks it 🔒.</p>
-          <div class="bal-st">${nLock} locked${nLock?` · <button class="linkbtn" data-act="bal-lockall" data-v="0">unlock ${nSel?'selected':'all'}</button>`:''}</div></div></div>
-        <div class="bal-step"><div class="bal-n">2</div><div class="bal-sb"><b>Bid total you want</b>
-          <input class="field num bal-tgt" data-balset="target" inputmode="decimal" value="${esc(B.target)}" placeholder="${fmtN(R.calcTotal,2)}" title="Blank = the calculated total">
-          <div class="bal-quick"><button class="linkbtn${tgt==null?' on':''}" data-act="bal-tgt" data-v="">Calculated</button><button class="linkbtn${tgt===k1?' on':''}" data-act="bal-tgt" data-v="${k1}">${money(k1)}</button>${k0!==k1?`<button class="linkbtn${tgt===k0?' on':''}" data-act="bal-tgt" data-v="${k0}">${money(k0)}</button>`:''}</div>
-          <div class="bal-st">${Math.abs(dv)<.005?'The prices already add up to this.':`${dv>0?'Adds':'Takes off'} <b>${money2(Math.abs(dv))}</b> from today’s ${money2(R.gross)}`}</div></div></div>
-        <div class="bal-step"><div class="bal-n">3</div><div class="bal-sb"><b>Who takes the difference</b>
-          <label class="bal-f">Items<select class="field sm" data-balset="on">${BAL_ON.map(([k,l])=>`<option value="${k}"${(B.on||'all')===k?' selected':''}>${l.replace(/^on /,'')}</option>`).join('')}</select></label>
-          <label class="bal-f">Shared<select class="field sm" data-balset="by">${BAL_BY.map(([k,l])=>`<option value="${k}"${B.by===k?' selected':''}>${l}</option>`).join('')}</select></label>
-          <label class="bal-f">Round to<select class="field sm" data-balset="inc">${BAL_INC.map(([k,l])=>`<option value="${k}"${B.inc===k?' selected':''}>${l}</option>`).join('')}</select></label>
-          ${nSel?`<div class="bal-st">Only the <b>${nSel}</b> ticked item${nSel===1?'':'s'} · <button class="linkbtn" data-act="bal-selnone">untick</button></div>`:''}</div></div>
-        <div class="bal-step go"><div class="bal-n">4</div><div class="bal-sb"><b>Balance</b>
-          <label class="bal-f">Last few dollars go on<select class="field sm" data-balplug title="So the total lands exactly. A 1 LS item works best.">${plugSel}</select></label>
-          <button class="btn primary bal-go" data-act="bal-balance">Balance ${nSel?'ticked items':'the bid'} → ${money(tv)}</button>
-          ${(B.undo||[]).length?`<button class="btn sm" data-act="bal-undo" title="Put the prices back the way they were before the last change">↶ Undo ${esc(B.undo[B.undo.length-1].label)}</button>`:''}</div></div>
+      <div class="bal-rib">
+        <div class="bal-g"><label class="bal-l">Target total</label><div class="bal-row"><input class="field sm num bal-tgt" data-balset="target" inputmode="decimal" value="${esc(B.target)}" placeholder="${fmtN(R.calcTotal,2)}" title="The bid total you want. Blank = the calculated total.">
+          <span class="bal-chips"><button class="${tgt==null?'on':''}" data-act="bal-tgt" data-v="" title="${money2(R.calcTotal)}">Calc</button><button class="${tgt===k1?'on':''}" data-act="bal-tgt" data-v="${k1}" title="Round up to the next $1,000">${money(k1)}</button>${k0!==k1?`<button class="${tgt===k0?'on':''}" data-act="bal-tgt" data-v="${k0}" title="Round down to the last $1,000">${money(k0)}</button>`:''}</span></div></div>
+        <div class="bal-sep"></div>
+        <div class="bal-g"><label class="bal-l">Spread on</label><select class="field sm" data-balset="on">${BAL_ON.map(([k,l])=>`<option value="${k}"${(B.on||'all')===k?' selected':''}>${l.replace(/^on /,'')}</option>`).join('')}</select></div>
+        <div class="bal-g"><label class="bal-l">Weighted</label><select class="field sm" data-balset="by">${BAL_BY.map(([k,l])=>`<option value="${k}"${B.by===k?' selected':''}>${l}</option>`).join('')}</select></div>
+        <div class="bal-g"><label class="bal-l">Round to</label><select class="field sm" data-balset="inc">${BAL_INC.map(([k,l])=>`<option value="${k}"${B.inc===k?' selected':''}>${l}</option>`).join('')}</select></div>
+        <div class="bal-g bal-gp"><label class="bal-l">Plug item</label><select class="field sm" data-balplug title="Takes the last few dollars so the total lands exactly. A 1 LS item works best.">${plugSel}</select></div>
+        <div class="bal-sep"></div>
+        <div class="bal-g"><label class="bal-l">&nbsp;</label><div class="bal-row"><button class="btn sm primary" data-act="bal-balance" title="Spread to the target, round each unit price, plug the remainder">Balance${nSel?` ${nSel} ticked`:''}</button>
+          ${(B.undo||[]).length?`<button class="btn sm" data-act="bal-undo" title="Undo ${esc(B.undo[B.undo.length-1].label)}">↶ Undo</button>`:''}</div></div>
       </div>
-      ${B.last?`<div class="bal-last${B.last.warn?' warn':''}">${B.last.html}</div>`:`<div class="bal-st bal-now">${nOv?`${nOv} item${nOv===1?' has':'s have'} a balanced price. `:'Nothing balanced yet — every item is at its calculated price. '}Then check the prices on the <b>Proposal</b> tab.</div>`}
+      <div class="bal-info"><span>${Math.abs(dv)<.005?'Prices already total the target':`${dv>0?'+':'−'}${money2(Math.abs(dv))} to go from ${money2(R.gross)}`}</span><span class="bal-sd">·</span><span>${nOv} balanced</span><span class="bal-sd">·</span><span>${nLock} locked</span>${nSel?`<span class="bal-sd">·</span><span>${nSel} ticked <button class="linkbtn" data-act="bal-selnone">clear</button></span>`:''}
+        <span class="bal-tip" title="Type a unit price in an item’s Balanced unit box to set it by hand. That locks it, and Balance leaves locked items alone. Tick items to balance only those.">ⓘ How locking works</span></div>
+      ${B.last?`<div class="bal-last${B.last.warn?' warn':''}">${B.last.html}</div>`:''}
       <details class="bal-more"${B.more?' open':''} data-balmore><summary>More tools</summary>
         <div class="bal-tool"><b>Round only</b><select class="field sm" data-balset="dir">${[['up','Up'],['nearest','Nearest'],['down','Down']].map(([k,l])=>`<option value="${k}"${B.dir===k?' selected':''}>${l}</option>`).join('')}</select>
           <button class="btn sm" data-act="bal-round" title="Rounds the unit price of ${scope} to the step in box 3; the total will move">Round ${nSel?'ticked':'all'}</button><span class="dim small">rounds unit prices, total moves</span></div>
