@@ -5729,10 +5729,14 @@ function schedCalc(s){const h=(s&&Array.isArray(s.days)?s.days:[10,10,10,10,10,0
   const otf=num(s?.otf)||1.5,dtf=num(s?.dtf)||2;const mult=H?(ot*(otf-1)+dt*(dtf-1))/H:0;
   return {h,H,days,hpd:days?H/days:10,st,ot,dt,otf,dtf,mult}}
 const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
-function schedText(s){const c=schedCalc(s);return `${fmtN(c.H,1)} hrs/week over ${c.days} day${c.days===1?'':'s'} · ${fmtN(c.st,1)} straight${c.ot?` · ${fmtN(c.ot,1)} OT ×${c.otf}`:''}${c.dt?` · ${fmtN(c.dt,1)} DT ×${c.dtf}`:''}${c.mult?` · labor +${fmtN(c.mult*100,1)}% premium`:''}`}
+function schedText(s){const c=schedCalc(s);return `${fmtN(c.H,1)} hrs/week over ${c.days} day${c.days===1?'':'s'} · ${fmtN(c.st,1)} straight${c.ot?` · ${fmtN(c.ot,1)} OT ×${c.otf}`:''}${c.dt?` · ${fmtN(c.dt,1)} DT ×${c.dtf}`:''}${c.mult?` · labor +${fmtN(c.mult*100,1)}% premium${s&&s.fringeOT?' (fringes too)':''}`:''}`}
 // straight-time base used for the overtime premium (base wage × burden, no fringe)
 function cbOtp(x){if(!x)return 0;if(x.book==='labor'){if(lPer(x)!=='HR')return 0;const d=rfData(x);return (num(d.base)||0)*(1+(num(d.burden)||0)/100)}
   if(x.book==='crew')return (cbD(x).members||[]).reduce((s,m)=>{const it=cbById(m.id);if(!(it&&it.book==='labor')||lPer(it)!=='HR')return s;const d=rfData(it,crewFile(x,'labor'));return s+(num(d.base)||0)*(1+(num(d.burden)||0)/100)*(num(m.qty)||0)},0);return 0}
+// hourly fringe, for schedules that pay fringes on overtime hours too
+function cbFr(x){if(!x)return 0;if(x.book==='labor'){if(lPer(x)!=='HR')return 0;return num(rfData(x).fringe)||0}
+  if(x.book==='crew')return (cbD(x).members||[]).reduce((s,m)=>{const it=cbById(m.id);if(!(it&&it.book==='labor')||lPer(it)!=='HR')return s;return s+(num(rfData(it,crewFile(x,'labor')).fringe)||0)*(num(m.qty)||0)},0);return 0}
+const crewFr=cr=>cbById(cr.id)?cbFr(cbById(cr.id)):0;const resFr=r=>r.cb&&cbById(r.cb)?cbFr(cbById(r.cb)):0;
 const crewOtp=cr=>cr.otp!=null?num(cr.otp)||0:cbById(cr.id)?cbOtp(cbById(cr.id)):(num(cr.labor)||0)*0.75;
 const resOtp=r=>r.otp!=null?num(r.otp)||0:r.cb&&cbById(r.cb)?cbOtp(cbById(r.cb)):(num(r.price)||0)*0.75;
 
@@ -5746,18 +5750,18 @@ function crewSnap(x){const C=cbCrew(x);const fu={};C.lines.forEach(l=>{const f=c
   const fuel=Object.values(fu).map(o=>({...o,g:r4(o.g),fg:r4(o.fg)}));return {id:x.id,code:x.code||'',name:x.description,labor:+C.labor.toFixed(4),equip:+C.equip.toFixed(4),men:C.men,otp:+cbOtp(x).toFixed(4),...(fuel.length?{fuel}:{})}}
 // fuel a codebook machine burns (gal/hr), its fuel+lube factor, and the $/gal its rate was built with
 function cbFuel(x){const d=cbD(x);if(!x||x.book!=='equipment'||!num(d.fgal)||!d.ft)return {};return {ft:d.ft,fp:num(d.fp)||0,fg:num(d.fgal),g:num(d.rb?.gal)||num(d.fgal)}}
-function estCtx(d){const s=d.settings||{};const fuel=d.markup?.fuel||null;if(s.sched){const c=schedCalc(s.sched);return {hpd:c.hpd,days:c.days||5,ot:c.mult,sc:c,tax:num(d.markup?.tax)||0,fuel}}return {hpd:num(s.hpd)||10,days:5,ot:0,sc:null,tax:num(d.markup?.tax)||0,fuel}}
+function estCtx(d){const s=d.settings||{};const fuel=d.markup?.fuel||null;if(s.sched){const c=schedCalc(s.sched);return {hpd:c.hpd,days:c.days||5,ot:c.mult,fot:!!s.sched.fringeOT,sc:c,tax:num(d.markup?.tax)||0,fuel}}return {hpd:num(s.hpd)||10,days:5,ot:0,sc:null,tax:num(d.markup?.tax)||0,fuel}}
 function actCalc(a,itemQty,ctx){const hpd=num(ctx.hpd)||10;const q=a.qty==null||a.qty===''?(num(itemQty)||0):(num(a.qty)||0);const pv=num(a.prod);let hrs=0;
   const sh=num(a.shift)||hpd,wk=ctx.sc&&ctx.sc.H?ctx.sc.H:hpd*(ctx.days||5);
   switch(a.mode){case 'hpu':hrs=(pv||0)*q;break;case 'ups':hrs=pv>0?q/pv*sh:0;break;case 'upd':hrs=pv>0?q/pv*hpd:0;break;case 'upw':hrs=pv>0?q/pv*wk:0;break;
     case 'hrs':hrs=pv||0;break;case 'shifts':hrs=(pv||0)*sh;break;case 'days':hrs=(pv||0)*hpd;break;case 'weeks':hrs=(pv||0)*wk;break;default:hrs=pv>0?q/pv:0}
-  const c={labor:0,equipment:0,material:0,sub:0,trucking:0,other:0,tax:0};let mh=0,otBase=0;const cr=a.crew;
+  const c={labor:0,equipment:0,material:0,sub:0,trucking:0,other:0,tax:0};let mh=0,otBase=0,otFr=0;const cr=a.crew;
   // fuel: gallons used, and the change when the estimate's $/gal differs from the price the rate was built with
   const fuel={};const fuelUse=(ft,fp,g,fg,h)=>{if(!ft||!h)return 0;const p=ctx.fuel?num(ctx.fuel[ft]):null;const pr=p!=null?p:num(fp)||0;const o=fuel[ft]=fuel[ft]||{gal:0,cost:0,adj:0};const dlt=(num(fg)||0)*(pr-(num(fp)||0));o.gal+=(num(g)||0)*h;o.cost+=(num(fg)||0)*pr*h;o.adj+=dlt*h;return dlt};
-  if(cr){c.labor+=(num(cr.labor)||0)*hrs;c.equipment+=(num(cr.equip)||0)*hrs;mh+=(num(cr.men)||0)*hrs;otBase+=crewOtp(cr)*hrs;(cr.fuel||[]).forEach(f=>{c.equipment+=fuelUse(f.ft,f.fp,f.g,f.fg,hrs)*hrs})}
+  if(cr){c.labor+=(num(cr.labor)||0)*hrs;c.equipment+=(num(cr.equip)||0)*hrs;mh+=(num(cr.men)||0)*hrs;otBase+=crewOtp(cr)*hrs;if(ctx.fot)otFr+=crewFr(cr)*hrs;(cr.fuel||[]).forEach(f=>{c.equipment+=fuelUse(f.ft,f.fp,f.g,f.fg,hrs)*hrs})}
   const res=(a.res||[]).map(r=>{const f=num(r.factor)||0;const base=r.basis==='unit'?f*q:r.basis==='hour'?f*hrs:f;const qty=base*(1+(num(r.waste)||0)/100);const fa=r.fg?fuelUse(r.ft,r.fp,r.g,r.fg,qty):0;const cost=qty*((num(r.price)||0)+fa);
-    const k=COST_KEYS.includes(r.kind)?r.kind:'other';c[k]+=cost;const tax=r.kind==='material'&&r.tax&&ctx.tax?cost*ctx.tax/100:0;c.tax+=tax;if(k==='labor'&&!r.lump){mh+=qty;otBase+=resOtp(r)*qty}return {qty,cost,tax}});
-  const ot=otBase*(ctx.ot||0);c.labor+=ot;
+    const k=COST_KEYS.includes(r.kind)?r.kind:'other';c[k]+=cost;const tax=r.kind==='material'&&r.tax&&ctx.tax?cost*ctx.tax/100:0;c.tax+=tax;if(k==='labor'&&!r.lump){mh+=qty;otBase+=resOtp(r)*qty;if(ctx.fot)otFr+=resFr(r)*qty}return {qty,cost,tax}});
+  const ot=(otBase+otFr)*(ctx.ot||0);c.labor+=ot;
   const total=COST_KEYS.reduce((s,k)=>s+c[k],0)+c.tax;return {q,hrs,days:hrs/hpd,shifts:hrs/sh,sh,mh,c,res,total,ot,fuel,unit:q?total/q:0,uph:hrs?q/hrs:0}}
 function itemCalc(it,ctx){const acts=(it.acts||[]).map(a=>actCalc(a,it.qty,ctx));const total=acts.reduce((s,a)=>s+a.total,0);const q=num(it.qty)||0;
   return {acts,c:sumC(acts),total,mh:acts.reduce((s,a)=>s+a.mh,0),ot:acts.reduce((s,a)=>s+a.ot,0),q,unit:q?total/q:0}}
@@ -7366,7 +7370,8 @@ function estIndView(d,R,ro){const st=d.settings;const D=estDefaultsRaw();const s
       <div class="fg"><label class="f s2">Schedule<select class="field" data-estsched${dis}>${st.sched?'':'<option value="" selected>Not set — 10 hr days, no overtime</option>'}${schOpts}</select></label>
       <label class="f">Crews working at once${epIn('settings.crews',st.crews,{n:1,ph:'1',title:'Used to turn total crew days into job duration'})}</label>
       <label class="f">Job duration (work days)${epIn('settings.durDays',st.durDays,{n:1,ph:fmtN(R.dur.autoDays,1),title:'Leave blank to use the calculated duration'})}</label></div>
-      ${sc?`<div class="sched-week">${DAYS.map((n,i)=>`<div class="${sc.h[i]?'on':''}"><span>${n}</span><b>${sc.h[i]||'—'}</b></div>`).join('')}</div><p class="small" style="margin:8px 0 0">${esc(schedText(st.sched))}</p>`:''}
+      ${sc?`<div class="sched-week">${DAYS.map((n,i)=>`<div class="${sc.h[i]?'on':''}"><span>${n}</span><b>${sc.h[i]||'—'}</b></div>`).join('')}</div><p class="small" style="margin:8px 0 0">${esc(schedText(st.sched))}</p>
+        <label class="check small" style="margin-top:6px" title="ProEstimate calls this “Pay fringes on OT”. When on, the overtime premium is figured on base wage + fringe instead of base wage alone."><input type="checkbox" data-ep="settings.sched.fringeOT" data-ept="b"${st.sched.fringeOT?' checked':''}${ro?' disabled':''}> Pay fringes on overtime</label>`:''}
       <div class="est-isum"><div><span>Crew days</span><b>${fmtN(R.dur.crewDays,1)}</b></div><div><span>Duration</span><b>${fmtN(R.dur.days,1)} days</b><small>${fmtN(R.dur.weeks,1)} weeks · ${fmtN(R.dur.months,1)} months</small></div><div><span>Overtime premium</span><b>${money(R.ot)}</b><small>in labor cost</small></div></div>
       <p class="hint">Duration = crew days ÷ crews working at once (type over it if you know the schedule). Schedules and overtime rules are set up under Estimates → Bid settings.</p></div></div>
     <div class="sec"><div class="sec-h"><h2>Indirects</h2><span>${money(R.ind)} · ${R.cost?fmtN(R.ind/R.cost*100,1)+'% of direct':''}</span></div><div class="panel pad">
@@ -7606,7 +7611,7 @@ function vSettings(){const x=setDraft();const m=x.markup;const sf=(path,v,o={})=
     <div class="fg sched-rules"><label class="f">Overtime rule${sel(`schedules.${i}.rule`,s.rule||'weekly',[['weekly','After hours per week'],['daily','After hours per day'],['both','Daily and weekly'],['none','No overtime']])}</label>
       <label class="f">OT after (hrs/week)${sf(`schedules.${i}.otWeek`,s.otWeek,{n:1,ph:'40'})}</label><label class="f">OT after (hrs/day)${sf(`schedules.${i}.otDay`,s.otDay,{n:1,ph:'8'})}</label><label class="f">OT rate ×${sf(`schedules.${i}.otf`,s.otf,{n:1,ph:'1.5'})}</label>
       <label class="f">Double time after (hrs/day)${sf(`schedules.${i}.dtDay`,s.dtDay,{n:1,ph:'none'})}</label><label class="f">Double time ×${sf(`schedules.${i}.dtf`,s.dtf,{n:1,ph:'2'})}</label>
-      <label class="check small"><input type="checkbox" data-sfb="schedules.${i}.satOT"${s.satOT?' checked':''}> Saturday is all overtime</label><label class="check small"><input type="checkbox" data-sfb="schedules.${i}.sunDT"${s.sunDT?' checked':''}> Sunday is all double time</label></div>
+      <label class="check small"><input type="checkbox" data-sfb="schedules.${i}.satOT"${s.satOT?' checked':''}> Saturday is all overtime</label><label class="check small"><input type="checkbox" data-sfb="schedules.${i}.sunDT"${s.sunDT?' checked':''}> Sunday is all double time</label><label class="check small"><input type="checkbox" data-sfb="schedules.${i}.fringeOT"${s.fringeOT?' checked':''}> Pay fringes on overtime</label></div>
     <p class="small sched-sum">${esc(schedText(s))}</p></div>`;
   const typeT=`<table class="mk-t"><thead><tr><th>Cost type</th><th>Overhead %</th><th>Markup %</th></tr></thead><tbody>${MK_TYPES.map(k=>`<tr><td>${MK_LABEL[k]}</td><td>${sf(`markup.byType.${k}.oh`,m.byType?.[k]?.oh,{n:1,cls:'mk-n',ph:'0'})}</td><td>${sf(`markup.byType.${k}.mu`,m.byType?.[k]?.mu,{n:1,cls:'mk-n',ph:'0'})}</td></tr>`).join('')}</tbody></table>`;
   return `<div class="head"><div><h1>Estimates</h1><p>Bid settings — how bids are built. Every new estimate starts with these; each one can still change its own.</p></div><div class="tools">${S.setDirty?'<span class="dim small">Unsaved changes</span>':''}<button class="btn" data-act="sf-reset"${S.setDirty?'':' disabled'}>Discard changes</button><button class="btn primary" data-act="sf-save"${S.setDirty?'':' disabled'}>Save settings</button></div></div>
