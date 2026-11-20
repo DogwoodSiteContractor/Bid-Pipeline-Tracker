@@ -3638,3 +3638,16 @@ table.dt-sum tr.click{cursor:pointer}table.dt-sum tr.click:hover td{background:v
 .sbx-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:14px;align-items:center;padding:5px 0;border-top:1px solid var(--line)}
 .sbx-row:first-of-type{border-top:0}
 .sbx-row>.linkbtn{justify-self:start;text-align:left}
+
+.lab-set{margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface-2)}
+.lab-h{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);font-weight:700;margin-bottom:6px}
+.lab-g{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end}
+.lab-g select{min-width:250px}
+.lab-otf>div{display:flex;gap:6px}.lab-otf label{display:flex;flex-direction:column;gap:2px}.lab-otf small{font-size:10.5px;color:var(--ink-3)}.lab-otf input{width:58px}
+.lab-pct{display:flex;align-items:center;gap:4px}.lab-pct .field{width:70px}.lab-pct i{font-style:normal;color:var(--ink-3)}
+.lab-chk{display:flex;flex-wrap:wrap;gap:4px 18px;margin-top:8px}
+.lab-set .lab-g>.f{flex:none;width:auto}
+.lab-set .lab-otf>span{font-size:12px;color:var(--ink-2)}
+.lab-set .lab-otf label{flex:none;width:64px}
+.lab-set .lab-otf input.field{width:64px}
+.lab-set .lab-g select.field{width:auto}

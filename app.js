@@ -5724,9 +5724,12 @@ function estBlank(){const D=estDefaultsRaw();const sched=D.schedules.find(s=>s.i
 /* ---------- calendar & overtime ---------- */
 function schedCalc(s){const h=(s&&Array.isArray(s.days)?s.days:[10,10,10,10,10,0,0]).map(x=>Math.max(0,num(x)||0));const H=h.reduce((a,b)=>a+b,0);const days=h.filter(x=>x>0).length;
   let st=0,ot=0,dt=0;const rule=s?.rule||'weekly';const od=num(s?.otDay)??8,ow=num(s?.otWeek)??40,dd=num(s?.dtDay);
-  h.forEach((x,i)=>{if(!x)return;if(i===6&&s?.sunDT){dt+=x;return}if(i===5&&s?.satOT){ot+=x;return}let a=x,d=0,o=0;if(dd&&a>dd){d=a-dd;a=dd}if((rule==='daily'||rule==='both')&&a>od){o=a-od;a=od}st+=a;ot+=o;dt+=d});
+  h.forEach((x,i)=>{if(!x)return;if(i===6&&s?.sunDT){dt+=x;return}if(i===5&&s?.satOT){ot+=x;return}let a=x,d=0,o=0;if(dd&&a>dd){d=a-dd;a=dd}if((rule==='daily'||rule==='both'||rule==='pe')&&a>od){o=a-od;a=od}st+=a;ot+=o;dt+=d});
   if((rule==='weekly'||rule==='both')&&st>ow){ot+=st-ow;st=ow}
-  const otf=num(s?.otf)||1.5,dtf=num(s?.dtf)||2;const mult=H?(ot*(otf-1)+dt*(dtf-1))/H:0;
+  // ProEstimate's "OT over 8 and over 40": its weekly rule scales the straight time left after the daily rule by 40 ÷ weekly hours, so the two rules stack
+  if(rule==='pe'&&H>ow&&st>0){const keep=st*ow/H;ot+=st-keep;st=keep}
+  const fB=Array.isArray(s?.otfB)?s.otfB.map(num):null;const fBr=fB&&(H>=70?fB[3]:H>=60?fB[2]:H>=50?fB[1]:fB[0]);
+  const otf=fBr||num(s?.otf)||1.5,dtf=num(s?.dtf)||2;const mult=H?(ot*(otf-1)+dt*(dtf-1))/H:0;
   return {h,H,days,hpd:days?H/days:10,st,ot,dt,otf,dtf,mult}}
 const DAYS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
 function schedText(s){const c=schedCalc(s);return `${fmtN(c.H,1)} hrs/week over ${c.days} day${c.days===1?'':'s'} · ${fmtN(c.st,1)} straight${c.ot?` · ${fmtN(c.ot,1)} OT ×${c.otf}`:''}${c.dt?` · ${fmtN(c.dt,1)} DT ×${c.dtf}`:''}${c.mult?` · labor +${fmtN(c.mult*100,1)}% premium${s&&s.fringeOT?' (fringes too)':''}`:''}`}
@@ -5734,9 +5737,10 @@ function schedText(s){const c=schedCalc(s);return `${fmtN(c.H,1)} hrs/week over 
 function cbOtp(x){if(!x)return 0;if(x.book==='labor'){if(lPer(x)!=='HR')return 0;const d=rfData(x);return (num(d.base)||0)*(1+(num(d.burden)||0)/100)}
   if(x.book==='crew')return (cbD(x).members||[]).reduce((s,m)=>{const it=cbById(m.id);if(!(it&&it.book==='labor')||lPer(it)!=='HR')return s;const d=rfData(it,crewFile(x,'labor'));return s+(num(d.base)||0)*(1+(num(d.burden)||0)/100)*(num(m.qty)||0)},0);return 0}
 // hourly fringe, for schedules that pay fringes on overtime hours too
-function cbFr(x){if(!x)return 0;if(x.book==='labor'){if(lPer(x)!=='HR')return 0;return num(rfData(x).fringe)||0}
-  if(x.book==='crew')return (cbD(x).members||[]).reduce((s,m)=>{const it=cbById(m.id);if(!(it&&it.book==='labor')||lPer(it)!=='HR')return s;return s+(num(rfData(it,crewFile(x,'labor')).fringe)||0)*(num(m.qty)||0)},0);return 0}
-const crewFr=cr=>cbById(cr.id)?cbFr(cbById(cr.id)):0;const resFr=r=>r.cb&&cbById(r.cb)?cbFr(cbById(r.cb)):0;
+// bur=true gives fringe × burden % (taxes / insurance on fringes) instead of the fringe itself
+function cbFr(x,bur){const one=d=>(num(d.fringe)||0)*(bur?(num(d.burden)||0)/100:1);if(!x)return 0;if(x.book==='labor'){if(lPer(x)!=='HR')return 0;return one(rfData(x))}
+  if(x.book==='crew')return (cbD(x).members||[]).reduce((s,m)=>{const it=cbById(m.id);if(!(it&&it.book==='labor')||lPer(it)!=='HR')return s;return s+one(rfData(it,crewFile(x,'labor')))*(num(m.qty)||0)},0);return 0}
+const crewFr=(cr,b)=>cbById(cr.id)?cbFr(cbById(cr.id),b):0;const resFr=(r,b)=>r.cb&&cbById(r.cb)?cbFr(cbById(r.cb),b):0;
 const crewOtp=cr=>cr.otp!=null?num(cr.otp)||0:cbById(cr.id)?cbOtp(cbById(cr.id)):(num(cr.labor)||0)*0.75;
 const resOtp=r=>r.otp!=null?num(r.otp)||0:r.cb&&cbById(r.cb)?cbOtp(cbById(r.cb)):(num(r.price)||0)*0.75;
 
@@ -5750,18 +5754,19 @@ function crewSnap(x){const C=cbCrew(x);const fu={};C.lines.forEach(l=>{const f=c
   const fuel=Object.values(fu).map(o=>({...o,g:r4(o.g),fg:r4(o.fg)}));return {id:x.id,code:x.code||'',name:x.description,labor:+C.labor.toFixed(4),equip:+C.equip.toFixed(4),men:C.men,otp:+cbOtp(x).toFixed(4),...(fuel.length?{fuel}:{})}}
 // fuel a codebook machine burns (gal/hr), its fuel+lube factor, and the $/gal its rate was built with
 function cbFuel(x){const d=cbD(x);if(!x||x.book!=='equipment'||!num(d.fgal)||!d.ft)return {};return {ft:d.ft,fp:num(d.fp)||0,fg:num(d.fgal),g:num(d.rb?.gal)||num(d.fgal)}}
-function estCtx(d){const s=d.settings||{};const fuel=d.markup?.fuel||null;if(s.sched){const c=schedCalc(s.sched);return {hpd:c.hpd,days:c.days||5,ot:c.mult,fot:!!s.sched.fringeOT,sc:c,tax:num(d.markup?.tax)||0,fuel}}return {hpd:num(s.hpd)||10,days:5,ot:0,sc:null,tax:num(d.markup?.tax)||0,fuel}}
+function estCtx(d){const s=d.settings||{};const fuel=d.markup?.fuel||null;if(s.sched){const c=schedCalc(s.sched);return {hpd:c.hpd,days:c.days||5,ot:c.mult,fot:!!s.sched.fringeOT,tfr:!!s.sched.taxFr,bf:(num(s.sched.baseF)??100)/100,sc:c,tax:num(d.markup?.tax)||0,fuel}}return {hpd:num(s.hpd)||10,days:5,ot:0,sc:null,tax:num(d.markup?.tax)||0,fuel}}
 function actCalc(a,itemQty,ctx){const hpd=num(ctx.hpd)||10;const q=a.qty==null||a.qty===''?(num(itemQty)||0):(num(a.qty)||0);const pv=num(a.prod);let hrs=0;
   const sh=num(a.shift)||hpd,wk=ctx.sc&&ctx.sc.H?ctx.sc.H:hpd*(ctx.days||5);
   switch(a.mode){case 'hpu':hrs=(pv||0)*q;break;case 'ups':hrs=pv>0?q/pv*sh:0;break;case 'upd':hrs=pv>0?q/pv*hpd:0;break;case 'upw':hrs=pv>0?q/pv*wk:0;break;
     case 'hrs':hrs=pv||0;break;case 'shifts':hrs=(pv||0)*sh;break;case 'days':hrs=(pv||0)*hpd;break;case 'weeks':hrs=(pv||0)*wk;break;default:hrs=pv>0?q/pv:0}
-  const c={labor:0,equipment:0,material:0,sub:0,trucking:0,other:0,tax:0};let mh=0,otBase=0,otFr=0;const cr=a.crew;
+  const c={labor:0,equipment:0,material:0,sub:0,trucking:0,other:0,tax:0};let mh=0,otBase=0,otFr=0,frBur=0;const cr=a.crew;
   // fuel: gallons used, and the change when the estimate's $/gal differs from the price the rate was built with
   const fuel={};const fuelUse=(ft,fp,g,fg,h)=>{if(!ft||!h)return 0;const p=ctx.fuel?num(ctx.fuel[ft]):null;const pr=p!=null?p:num(fp)||0;const o=fuel[ft]=fuel[ft]||{gal:0,cost:0,adj:0};const dlt=(num(fg)||0)*(pr-(num(fp)||0));o.gal+=(num(g)||0)*h;o.cost+=(num(fg)||0)*pr*h;o.adj+=dlt*h;return dlt};
-  if(cr){c.labor+=(num(cr.labor)||0)*hrs;c.equipment+=(num(cr.equip)||0)*hrs;mh+=(num(cr.men)||0)*hrs;otBase+=crewOtp(cr)*hrs;if(ctx.fot)otFr+=crewFr(cr)*hrs;(cr.fuel||[]).forEach(f=>{c.equipment+=fuelUse(f.ft,f.fp,f.g,f.fg,hrs)*hrs})}
+  if(cr){c.labor+=(num(cr.labor)||0)*hrs;c.equipment+=(num(cr.equip)||0)*hrs;mh+=(num(cr.men)||0)*hrs;otBase+=crewOtp(cr)*hrs;if(ctx.fot)otFr+=crewFr(cr)*hrs;if(ctx.tfr)frBur+=crewFr(cr,1)*hrs;(cr.fuel||[]).forEach(f=>{c.equipment+=fuelUse(f.ft,f.fp,f.g,f.fg,hrs)*hrs})}
   const res=(a.res||[]).map(r=>{const f=num(r.factor)||0;const base=r.basis==='unit'?f*q:r.basis==='hour'?f*hrs:f;const qty=base*(1+(num(r.waste)||0)/100);const fa=r.fg?fuelUse(r.ft,r.fp,r.g,r.fg,qty):0;const cost=qty*((num(r.price)||0)+fa);
-    const k=COST_KEYS.includes(r.kind)?r.kind:'other';c[k]+=cost;const tax=r.kind==='material'&&r.tax&&ctx.tax?cost*ctx.tax/100:0;c.tax+=tax;if(k==='labor'&&!r.lump){mh+=qty;otBase+=resOtp(r)*qty;if(ctx.fot)otFr+=resFr(r)*qty}return {qty,cost,tax}});
-  const ot=(otBase+otFr)*(ctx.ot||0);c.labor+=ot;
+    const k=COST_KEYS.includes(r.kind)?r.kind:'other';c[k]+=cost;const tax=r.kind==='material'&&r.tax&&ctx.tax?cost*ctx.tax/100:0;c.tax+=tax;if(k==='labor'&&!r.lump){mh+=qty;otBase+=resOtp(r)*qty;if(ctx.fot)otFr+=resFr(r)*qty;if(ctx.tfr)frBur+=resFr(r,1)*qty}return {qty,cost,tax}});
+  // base rate factor scales the wage part only; overtime premium on wage (× factor), plus fringe when fringes are paid on OT
+  const bf=ctx.bf??1;const ot=(otBase*bf+otFr)*(ctx.ot||0);c.labor+=ot+otBase*(bf-1)+frBur;
   const total=COST_KEYS.reduce((s,k)=>s+c[k],0)+c.tax;return {q,hrs,days:hrs/hpd,shifts:hrs/sh,sh,mh,c,res,total,ot,fuel,unit:q?total/q:0,uph:hrs?q/hrs:0}}
 function itemCalc(it,ctx){const acts=(it.acts||[]).map(a=>actCalc(a,it.qty,ctx));const total=acts.reduce((s,a)=>s+a.total,0);const q=num(it.qty)||0;
   return {acts,c:sumC(acts),total,mh:acts.reduce((s,a)=>s+a.mh,0),ot:acts.reduce((s,a)=>s+a.ot,0),q,unit:q?total/q:0}}
@@ -7371,7 +7376,14 @@ function estIndView(d,R,ro){const st=d.settings;const D=estDefaultsRaw();const s
       <label class="f">Crews working at once${epIn('settings.crews',st.crews,{n:1,ph:'1',title:'Used to turn total crew days into job duration'})}</label>
       <label class="f">Job duration (work days)${epIn('settings.durDays',st.durDays,{n:1,ph:fmtN(R.dur.autoDays,1),title:'Leave blank to use the calculated duration'})}</label></div>
       ${sc?`<div class="sched-week">${DAYS.map((n,i)=>`<div class="${sc.h[i]?'on':''}"><span>${n}</span><b>${sc.h[i]||'—'}</b></div>`).join('')}</div><p class="small" style="margin:8px 0 0">${esc(schedText(st.sched))}</p>
-        <label class="check small" style="margin-top:6px" title="ProEstimate calls this “Pay fringes on OT”. When on, the overtime premium is figured on base wage + fringe instead of base wage alone."><input type="checkbox" data-ep="settings.sched.fringeOT" data-ept="b"${st.sched.fringeOT?' checked':''}${ro?' disabled':''}> Pay fringes on overtime</label>`:''}
+        ${(()=>{const S2=st.sched;const rk=(S2.rule||'weekly')+(['daily','both','pe'].includes(S2.rule)?String(num(S2.otDay)??8):'');const fB=Array.isArray(S2.otfB)?S2.otfB:[];
+          return `<div class="lab-set"><div class="lab-h">Labor settings</div>
+          <div class="lab-g"><label class="f">Overtime<select class="field sm" data-schrule${ro?' disabled':''}>${[['pe8','OT over 8 and over 40 (ProEstimate)'],['pe10','OT over 10 and over 40 (ProEstimate)'],['both8','Over 8 a day or 40 a week'],['both10','Over 10 a day or 40 a week'],['weekly','Over 40 a week'],['daily8','Over 8 a day'],['none','No overtime']].map(([k,l])=>`<option value="${k}"${rk===k?' selected':''}>${l}</option>`).join('')}</select></label>
+            <div class="f lab-otf"><span>OT factor by hours / week</span><div>${['40–49','50–59','60–69','70+'].map((l,i)=>`<label><small>${l}</small><input class="field sm num" data-schotf="${i}" inputmode="decimal" value="${esc(fB[i]??'')}" placeholder="${esc(S2.otf||1.5)}"${ro?' disabled':''}></label>`).join('')}</div></div>
+            <label class="f lab-bf">Base rate factor<span class="lab-pct">${epIn('settings.sched.baseF',S2.baseF,{n:1,ph:'100'})}<i>%</i></span></label></div>
+          <div class="lab-chk"><label class="check small"><input type="checkbox" data-ep="settings.sched.fringeOT" data-ept="b"${S2.fringeOT?' checked':''}${ro?' disabled':''}> Pay fringes on OT</label>
+            <label class="check small" title="Applies each craft’s burden % (taxes and insurance) to its fringe too"><input type="checkbox" data-ep="settings.sched.taxFr" data-ept="b"${S2.taxFr?' checked':''}${ro?' disabled':''}> Pay taxes &amp; insurance on fringes</label></div>
+          ${S2.rule==='pe'?`<p class="hint">ProEstimate’s method stacks the daily and weekly rules, so on ${fmtN(sc.H,0)} hrs a week it counts ${fmtN(sc.ot,1)} OT hours instead of ${fmtN(schedCalc({...S2,rule:'both'}).ot,1)}. Pick “or 40 a week” to count each hour once.</p>`:''}</div>`})()}`:''}
       <div class="est-isum"><div><span>Crew days</span><b>${fmtN(R.dur.crewDays,1)}</b></div><div><span>Duration</span><b>${fmtN(R.dur.days,1)} days</b><small>${fmtN(R.dur.weeks,1)} weeks · ${fmtN(R.dur.months,1)} months</small></div><div><span>Overtime premium</span><b>${money(R.ot)}</b><small>in labor cost</small></div></div>
       <p class="hint">Duration = crew days ÷ crews working at once (type over it if you know the schedule). Schedules and overtime rules are set up under Estimates → Bid settings.</p></div></div>
     <div class="sec"><div class="sec-h"><h2>Indirects</h2><span>${money(R.ind)} · ${R.cost?fmtN(R.ind/R.cost*100,1)+'% of direct':''}</span></div><div class="panel pad">
@@ -7608,7 +7620,7 @@ function vSettings(){const x=setDraft();const m=x.markup;const sf=(path,v,o={})=
   const sched=(s,i)=>`<div class="panel pad sched${x.defSched===s.id?' def':''}"><div class="sched-h">${sf(`schedules.${i}.name`,s.name,{cls:'sched-name',ph:'Schedule name'})}
       <label class="check small"><input type="radio" name="defsched" data-sfdef="${esc(s.id)}"${x.defSched===s.id?' checked':''}> Default for new estimates</label><button class="btn sm ghost" data-act="sf-schdup" data-i="${i}">Duplicate</button><button class="btn sm ghost danger-t" data-act="sf-schrm" data-i="${i}"${x.schedules.length<2?' disabled':''}>Remove</button></div>
     <div class="sched-days">${DAYS.map((n,j)=>`<label><span>${n}</span>${sf(`schedules.${i}.days.${j}`,s.days[j]||'',{n:1,ph:'0'})}</label>`).join('')}</div>
-    <div class="fg sched-rules"><label class="f">Overtime rule${sel(`schedules.${i}.rule`,s.rule||'weekly',[['weekly','After hours per week'],['daily','After hours per day'],['both','Daily and weekly'],['none','No overtime']])}</label>
+    <div class="fg sched-rules"><label class="f">Overtime rule${sel(`schedules.${i}.rule`,s.rule||'weekly',[['weekly','After hours per week'],['daily','After hours per day'],['both','Daily and weekly'],['pe','Daily and weekly, stacked (ProEstimate)'],['none','No overtime']])}</label>
       <label class="f">OT after (hrs/week)${sf(`schedules.${i}.otWeek`,s.otWeek,{n:1,ph:'40'})}</label><label class="f">OT after (hrs/day)${sf(`schedules.${i}.otDay`,s.otDay,{n:1,ph:'8'})}</label><label class="f">OT rate ×${sf(`schedules.${i}.otf`,s.otf,{n:1,ph:'1.5'})}</label>
       <label class="f">Double time after (hrs/day)${sf(`schedules.${i}.dtDay`,s.dtDay,{n:1,ph:'none'})}</label><label class="f">Double time ×${sf(`schedules.${i}.dtf`,s.dtf,{n:1,ph:'2'})}</label>
       <label class="check small"><input type="checkbox" data-sfb="schedules.${i}.satOT"${s.satOT?' checked':''}> Saturday is all overtime</label><label class="check small"><input type="checkbox" data-sfb="schedules.${i}.sunDT"${s.sunDT?' checked':''}> Sunday is all double time</label><label class="check small"><input type="checkbox" data-sfb="schedules.${i}.fringeOT"${s.fringeOT?' checked':''}> Pay fringes on overtime</label></div>
@@ -7667,6 +7679,8 @@ document.addEventListener('change',e=>{const t=e.target;
     if(t.dataset.sfb){const ks=t.dataset.sfb.split('.');let o=x;for(let i=0;i<ks.length-1;i++)o=o[ks[i]];o[ks[ks.length-1]]=t.checked;S.setDirty=true;render();return}
     if(t.dataset.sfdef){x.defSched=t.dataset.sfdef;S.setDirty=true;render();return}}
   if(!S.est||!S.est.data||S.view!=='estimate'||EC().ro)return;const d=S.est.data;
+  if(t.dataset.schrule!=null&&d.settings.sched){const v=t.value;const S2=d.settings.sched;const m=/^(pe|both|daily)(\d+)$/.exec(v);if(m){S2.rule=m[1];S2.otDay=+m[2]}else S2.rule=v;S2.otWeek=S2.otWeek||40;estTouch();render();return}
+  if(t.dataset.schotf!=null&&d.settings.sched){const S2=d.settings.sched;const a=Array.isArray(S2.otfB)?S2.otfB.slice():[null,null,null,null];a[+t.dataset.schotf]=num(t.value);S2.otfB=a.some(x=>x!=null)?a:undefined;estTouch();render();return}
   if(t.dataset.estsched!=null){const s=estDefaultsRaw().schedules.find(z=>z.id===t.value);if(s){d.settings.sched=clone(s);estTouch();render()}return}
   if(t.dataset.carry){d.markup.carry=d.markup.carry||{};if(t.checked)d.markup.carry[t.dataset.carry]=true;else delete d.markup.carry[t.dataset.carry];estTouch();render();return}});
 window.addEventListener('beforeunload',e=>{if(S.setDirty){e.preventDefault();e.returnValue=''}});
