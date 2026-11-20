@@ -3630,3 +3630,11 @@ table.dt-sum tr.click{cursor:pointer}table.dt-sum tr.click:hover td{background:v
 #bal-fit[style*=height] .bal-tools{margin-bottom:8px}
 #bal-fit[style*=height] .bal-foot{margin-top:8px}
 #bal-fit[style*=height] .bal-tools{padding-top:10px;padding-bottom:10px}#bal-fit[style*=height] .bal-more{margin-top:4px}
+
+/* test estimates */
+.sbx-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;border-left:4px solid #8a6fd1;background:color-mix(in srgb,#8a6fd1 12%,var(--surface))}
+.sbx-list{padding:10px 14px;margin-bottom:12px;border-left:4px solid #8a6fd1}
+.sbx-h{margin-bottom:6px}
+.sbx-row{display:grid;grid-template-columns:minmax(0,1fr) auto auto auto;gap:14px;align-items:center;padding:5px 0;border-top:1px solid var(--line)}
+.sbx-row:first-of-type{border-top:0}
+.sbx-row>.linkbtn{justify-self:start;text-align:left}

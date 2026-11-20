@@ -127,6 +127,18 @@ const authStorage={
   removeItem:k=>{try{localStorage.removeItem(k);sessionStorage.removeItem(k)}catch(e){}}
 };
 const sb=CONFIGURED?window.supabase.createClient(CFG.supabaseUrl,CFG.supabaseAnonKey,{auth:{storage:authStorage,persistSession:true,autoRefreshToken:true,detectSessionInUrl:true}}):null;
+/* ---------- test estimates: kept only in this browser. While one is open, nothing can be written to the shared database ---------- */
+const SBX_MSG='This is a test estimate, so nothing outside it is saved. Make a real estimate to do that.';
+const sbxOn=()=>typeof S!=='undefined'&&S.view==='estimate'&&S.est&&S.est.sbx;
+function sbxBlocked(){const res={data:null,error:{message:SBX_MSG}};const p=new Proxy(function(){},{get(t,k){if(k==='then')return (ok,bad)=>Promise.resolve(res).then(ok,bad);if(k==='catch'||k==='finally')return ()=>Promise.resolve(res);return ()=>p},apply(){return p}});return p}
+if(sb){const _from=sb.from.bind(sb),_rpc=sb.rpc.bind(sb);const READ_RPC=/^(perm|my_feedback|crew_directory|pm_directory|trophy_stats|dev_usage|admin_user_list|public_company|vendor_quotes|grab_list)$/;
+  sb.from=t=>{const q=_from(t);if(!sbxOn()||['last_seen','fun_stats'].includes(t))return q;['insert','update','upsert','delete'].forEach(m=>{q[m]=()=>{toast(SBX_MSG);return sbxBlocked()}});return q};
+  sb.rpc=(f,a)=>sbxOn()&&!READ_RPC.test(f)?(toast(SBX_MSG),sbxBlocked()):_rpc(f,a)}
+function sbxAll(){try{return JSON.parse(localStorage.getItem('bp.sbx')||'{}')||{}}catch(e){return {}}}
+const SBX_IDS=new Set(Object.keys(sbxAll()));
+function sbxPut(id,rec){const A=sbxAll();A[id]={...(A[id]||{}),...rec,updated:new Date().toISOString()};SBX_IDS.add(id);try{localStorage.setItem('bp.sbx',JSON.stringify(A));return true}catch(e){toast('This browser is out of room for test estimates. Delete an old one.');return false}}
+function sbxDel(id){const A=sbxAll();delete A[id];SBX_IDS.delete(id);try{localStorage.setItem('bp.sbx',JSON.stringify(A))}catch(e){}}
+const SBX_BIDS={};function sbxBid(id){const r=sbxAll()[id];if(!r)return undefined;const b=SBX_BIDS[id]=SBX_BIDS[id]||{id,status:'Estimating',client_ids:[],client_contacts:{},location:'',_sbx:true};b.name=r.name||'Test estimate';b.location=r.location||'';return b}
 
 
 /* ---------- company branding (colors + logo from config.js) ---------- */
@@ -188,7 +200,7 @@ const fmtShort=s=>{if(!s)return '—';const d=parseD(s);return MONTHS[d.getMonth
 const fmtTime=t=>{if(!t)return '';const[h,m]=t.split(':').map(Number);return (h%12||12)+':'+pad(m)+(h<12?' am':' pm')};
 const fmtSize=b=>!b?'':b>1e6?(b/1e6).toFixed(1)+' MB':Math.max(1,Math.round(b/1e3))+' KB';
 const clone=o=>JSON.parse(JSON.stringify(o));
-const byId=(arr,id)=>arr.find(x=>x.id===id);
+const byId=(arr,id)=>arr.find(x=>x.id===id)||(typeof S!=='undefined'&&arr===S.bids&&typeof SBX_IDS!=='undefined'&&SBX_IDS.has(id)?sbxBid(id):undefined);
 const estName=id=>byId(S.estimators,id)?.name||'';
 const clientName=id=>byId(S.clients,id)?.company||'Removed client';
 const vendorOf=id=>byId(S.vendors,id);
@@ -5802,7 +5814,7 @@ function estApplyStale(list){list.forEach(s=>{if(s.crew){s.a.crew={...s.a.crew,.
 function actFromTpl(src){const a=clone(src);a.id=newId();a.qty=null;a.res=(a.res||[]).map(r=>({...r,id:newId()}));if(a.crew&&!num(a.prod)){const x=cbById(a.crew.id);if(x)crewProdTo(a,x)}estApplyStale(estStale({act:a}));return a}
 
 /* ---------- loading / saving ---------- */
-const estCanEdit=()=>{if(S.est&&S.est.ver)return false;if(S.est&&S.est.tpl)return cbEditable();const b=byId(S.bids,S.est?.bidId);return !!b&&canWork(b)&&can('estimates','edit')};
+const estCanEdit=()=>{if(S.est&&S.est.ver)return false;if(S.est&&S.est.sbx)return true;if(S.est&&S.est.tpl)return cbEditable();const b=byId(S.bids,S.est?.bidId);return !!b&&canWork(b)&&can('estimates','edit')};
 async function loadEstIndex(){if(!sb||!['admin','estimator','board'].includes(role()))return;
   const {data,error}=await sb.from('estimates').select('id,bid_id,version,total_cost,total_price,updated_at,updated_by_name,created_at');
   if(error){S.estMissing=/estimates|does not exist|schema cache/i.test(error.message||'');return}S.estMissing=false;S.estIndex=data||[];loadEstVers();loadPropTpls();schedule()}
@@ -6635,6 +6647,8 @@ function estAddItem(d,secId,o={}){const it=estNewItem(d,{code:estNextItemCode(d,
 
 /* ---------- open / create / save ---------- */
 async function estOpen(bidId,from){closeModal();S.view='estimate';S.estBid=bidId;const tab=S.est&&S.est.bidId===bidId?S.est.tab:'build';S.estFrom=from||S.estFrom||'pipeline';S.est={bidId,loading:true};S.ppUndo=[];render();window.scrollTo(0,0);
+  if(SBX_IDS.has(bidId)){const r=sbxAll()[bidId];if(!r){S.est={bidId,err:'That test estimate isn’t on this computer any more.'};render();return}
+    S.est={bidId,sbx:true,row:r.data?{id:bidId,version:1,updated_at:r.updated,updated_by_name:myName()}:null,data:r.data?estNorm(r.data):null,sel:null,tab:tab||'build',dirty:false};if(S.est.data&&S.est.data.sections[0])S.est.sel={t:'sec',id:S.est.data.sections[0].id};render();return}
   try{const {data,error}=await sb.from('estimates').select('*').eq('bid_id',bidId).maybeSingle();if(error)throw error;
     S.est={bidId,row:data?{id:data.id,version:data.version,updated_at:data.updated_at,updated_by_name:data.updated_by_name}:null,data:data?estNorm(data.data):null,sel:null,tab:tab||'build',dirty:false};
     if(S.est.data&&S.est.data.sections[0])S.est.sel={t:'sec',id:S.est.data.sections[0].id}}
@@ -6651,15 +6665,16 @@ async function estCreate(mode,src){const b=byId(S.bids,S.est.bidId);if(!b)return
     if(mode==='peq'){if(!peFilled(b).length)throw new Error('No bid item quantities on this bid yet.');peqFill(d,b)}
     if(!d.sections.length)d.sections.push({id:newId(),code:'100',name:'General',notes:''});
     const R=estCalc(d);const row={id:newId(),bid_id:b.id,data:d,version:1,total_cost:r2(R.cost),total_price:r2(R.total),updated_by_name:myName()};
-    await run(sb.from('estimates').insert(row));
-    S.est={bidId:b.id,row:{id:row.id,version:1,updated_at:new Date().toISOString(),updated_by_name:myName()},data:d,sel:{t:'sec',id:d.sections[0].id},tab:'build',dirty:false};
+    const isSbx=!!S.est.sbx;if(isSbx){row.id=b.id;sbxPut(b.id,{data:d,total:r2(R.total)})}else await run(sb.from('estimates').insert(row));
+    S.est={sbx:isSbx,bidId:b.id,row:{id:row.id,version:1,updated_at:new Date().toISOString(),updated_by_name:myName()},data:d,sel:{t:'sec',id:d.sections[0].id},tab:'build',dirty:false};
     if(mode==='tpl'){S.est.qtyMode=true;S.est.open=new Set(d.sections.map(s=>s.id));estOpenSave()}
     loadEstIndex();render();if(S.twPending&&S.twPending.bidId===b.id)twPendingApply()}catch(e){toast(errMsg(e))}}
 // a master or section template opened in the builder (saved back to the codebook)
 function estOpenTpl(id){const t=cbById(id);if(!t)return;closeModal();const D=cbD(t);
   const d=estNorm(clone(t.book==='section'?tplSecData(D,t.description):(D.est||{})));estApplyStale(estStale(d));
   S.view='estimate';S.estBid=null;S.est={tpl:t.id,tplBook:t.book,tplName:t.description,bidId:null,row:{id:t.id,version:0,updated_at:t.updated_at},data:d,sel:d.sections[0]?{t:'sec',id:d.sections[0].id}:null,tab:'build',dirty:false};render();window.scrollTo(0,0)}
-async function estSave(){const E=S.est;if(!E||!E.row||!E.dirty||E.saving||E.conflict||!estCanEdit())return;clearTimeout(E._t);E.saving=true;E.dirty=false;estStatus();
+async function estSave(){const E=S.est;if(!E||!E.row||!E.dirty||E.saving||E.conflict||!estCanEdit())return;clearTimeout(E._t);
+  if(E.sbx){const R=estCalc(E.data);if(sbxPut(E.bidId,{data:E.data,total:r2(R.total)})){E.dirty=false;E.row.updated_at=new Date().toISOString()}estStatus();return}E.saving=true;E.dirty=false;estStatus();
   const R=estCalc(E.data);const v=E.row.version;
   try{if(E.tpl){const data=E.tplBook==='section'?{sec:{name:E.data.sections[0]?.name||E.tplName,notes:E.data.sections[0]?.notes||''},items:E.data.items,markup:E.data.markup,settings:E.data.settings}:{est:E.data};
       await run(sb.from('codebook').update({data,cost:r2(R.cost),description:String(E.tplName||'').trim()||'Template'}).eq('id',E.tpl));E.row.updated_at=new Date().toISOString();E.row.updated_by_name=myName();clearTimeout(estSave._cb);estSave._cb=setTimeout(()=>loadTable('codebook'),800)}
@@ -6684,7 +6699,8 @@ function vEstimate(){const E=S.est;const tpl=!!(E&&E.tpl);const b=tpl?null:byId(
   const body=E.tab==='setup'?estSetupView(d,R,ro):E.tab==='info'?estInfoView(d,b||{},ro):E.tab==='ind'?estIndView(d,R,ro):E.tab==='prop'?estPropView(d,R,b,ro):E.tab==='res'?estResView(d,R):E.tab==='quotes'?estQuotesView(d,R,ro):E.tab==='gantt'?estGanttView(d,R,ro):E.tab==='sum'?estSumView(d,R,b||{},ro):E.tab==='bal'?estBalView(d,R,ro):E.tab==='cr'?estCrView(d,R,ro):estBuildView(d,R,ro);
   const title=tpl?`<input class="field est-tplname" id="est-tplname" data-tplname value="${esc(E.tplName||'')}" placeholder="Template name"${ro?' disabled':''}>`:`<h1>${esc(b.name)}</h1>`;
   return `<div class="head est-headrow"><div>${back}${title}<p class="small"><b>${tpl?(E.tplBook==='section'?'Section template':'Master template'):'Estimate'}</b>${tpl?'':` · <button class="linkbtn" data-act="est-revs" title="Saved copies and revisions">${esc(E.ver?E.ver.label:estRevName(d))}</button>`} · <span id="est-status">${estStatusText()}</span></p></div>
-    <div class="tools">${stale.length&&!ro?`<button class="btn" data-act="est-stale" title="Codebook prices changed since they were added">↻ Update ${stale.length} price${stale.length===1?'':'s'}</button>`:''}${tpl?'':`<button class="btn" data-act="est-revs">Revisions${estVersOf(E.bidId).length?` (${estVersOf(E.bidId).length})`:''}</button><button class="btn" data-act="est-xopen" title="Bid item cost breakdown, Foundation accounting export, Excel">Reports & exports</button>`}${!tpl&&cbEditable()?'<button class="btn" data-act="est-savetpl" data-v="estimate">Save as master template</button>':''}${tpl&&cbEditable()?`<button class="btn danger tpl-del" data-act="tpl-del" data-id="${E.tpl}">Delete template</button>`:''}</div></div>
+    <div class="tools">${stale.length&&!ro?`<button class="btn" data-act="est-stale" title="Codebook prices changed since they were added">↻ Update ${stale.length} price${stale.length===1?'':'s'}</button>`:''}${tpl?'':`${E.sbx?'':`<button class="btn" data-act="est-revs">Revisions${estVersOf(E.bidId).length?` (${estVersOf(E.bidId).length})`:''}</button>`}<button class="btn" data-act="est-xopen" title="Bid item cost breakdown, Foundation accounting export, Excel">Reports & exports</button>`}${!tpl&&!E.sbx&&cbEditable()?'<button class="btn" data-act="est-savetpl" data-v="estimate">Save as master template</button>':''}${tpl&&cbEditable()?`<button class="btn danger tpl-del" data-act="tpl-del" data-id="${E.tpl}">Delete template</button>`:''}</div></div>
+  ${E.sbx?`<div class="notice sbx-bar"><span>🧪 <b>Test estimate.</b> Saved only in this browser. It isn’t in the pipeline or reports, and nothing you do here changes anything else in the app.</span> <button class="btn sm${E.sbxArm?' danger':''}" data-act="sbx-del" data-id="${esc(E.bidId)}">${E.sbxArm?'Click again to delete':'Delete test estimate'}</button></div>`:''}
   ${E.ver?`<div class="notice est-verbar"><span>You’re looking at a saved copy: <b>${esc(E.ver.label)}</b>, kept ${fmtShort(String(E.ver.at).slice(0,10))}${E.ver.by?' by '+esc(E.ver.by):''}. It’s read-only.</span> <button class="btn sm primary" data-act="est-verback">Back to the working estimate</button>${b&&canWork(b)&&can('estimates','edit')?` <button class="btn sm${E.armR?' danger':''}" data-act="est-verrestore">${E.armR?'Click again — the current working estimate is kept as a copy':'Make this the working estimate'}</button>`:''}</div>`:''}
   ${E.conflict?`<div class="err est-conflict"><b>Someone else saved this estimate while you were working.</b> Your last changes haven’t been saved. <button class="btn sm" data-act="est-reload">Load their version</button> <button class="btn sm danger" data-act="est-keep">Keep mine (overwrite theirs)</button></div>`:''}
   ${ro&&!E.conflict?`<div class="notice">View only — ${tpl?'only admins change templates':'you’re not on this bid’s estimating team'}.</div>`:''}
@@ -7141,7 +7157,10 @@ function vEstimates(){const tab=S.estsTab||'list';const canNew=can('bids','edit'
     <div class="panel scroll"><table><thead><tr><th>Template</th><th>Type</th><th>Category</th><th>Settings it carries</th><th class="r">Sections</th><th class="r">Bid items</th><th class="r">Cost at today’s rates</th><th>Updated</th>${admin?'<th></th>':''}</tr></thead><tbody>
     ${ts.map(t=>{const D=cbD(t);const e=t.book==='estimate'?(D.est||{}):{sections:[D.sec||{}],items:D.items||[]};return `<tr class="click" data-act="ests-opentpl" data-id="${t.id}"><td class="proj">${esc(t.description)}</td><td>${t.book==='estimate'?pill('Master','hot'):pill('Section')}</td><td class="small">${esc(t.category||'')}</td><td class="small dim">${t.book==='estimate'?tplSettingsText(e):'—'}</td><td class="r num">${(e.sections||[]).length}</td><td class="r num">${(e.items||[]).length}</td><td class="r num">${money(t.cost)}</td><td class="small dim">${t.updated_at?fmtShort(String(t.updated_at).slice(0,10)):''}</td>${admin?`<td><button class="btn sm ghost tpl-del" data-act="tpl-del" data-id="${t.id}" title="Delete this template">Delete</button></td>`:''}</tr>`}).join('')
       ||`<tr><td colspan="7"><div class="empty"><b>No templates yet</b>${admin?'Open a finished estimate and click <b>Save as master template</b>, or start a blank one here. Save a single scope with <b>Save as section template</b> on any section.':'An admin sets these up.'}</div></td></tr>`}</tbody></table></div>`}
-  return head+tabs+estsList(canNew)}
+  const SB=Object.entries(sbxAll()).sort((a,b)=>String(b[1].updated||'').localeCompare(String(a[1].updated||'')));
+  const sbx=SB.length?`<div class="panel sbx-list"><div class="sbx-h">🧪 <b>Test estimates</b> <span class="dim small">only on this computer · not in the pipeline or reports</span></div>
+    ${SB.map(([id,r])=>`<div class="sbx-row"><button class="linkbtn" data-act="sbx-open" data-id="${esc(id)}"><b>${esc(r.name||'Test estimate')}</b></button><span class="dim small">${r.updated?'edited '+fmtShort(String(r.updated).slice(0,10)):''}</span><span class="num">${r.total!=null?money(r.total):''}</span><button class="btn sm ghost" data-act="sbx-del" data-id="${esc(id)}">Delete</button></div>`).join('')}</div>`:'';
+  return head+tabs+sbx+estsList(canNew)}
 // ProEstimate-style project list: dense grid grouped by estimator (or GC / status / month), status cells in colour
 // a look-only status for the Estimates list: saved on the bid as rfq.estLabel, never touches the bid's real status, filters or totals
 const PE_LABELS=[['sent','Bid sent'],['pending','Pending'],['won','Won'],['lost','Lost'],['sup','Old bid (superseded)'],['rev','Revised'],['budget','Budget'],['hold','On hold'],['wip','In progress'],['nobid','No bid']];
@@ -7196,8 +7215,10 @@ function estNewModal(){const x=M;const bids=S.bids.filter(b=>!b.archived_at&&!DE
   const eb=x.mode==='existing'?byId(S.bids,x.bidId):null;const sc=eb?scopeItems(eb):[];
   const opt=(v,l,dis)=>`<label class="est-sopt${x.start===v?' on':''}${dis?' dis':''}"><input type="radio" name="estst" data-estnew="start" value="${v}"${x.start===v?' checked':''}${dis?' disabled':''}> ${l}</label>`;
   return mhead('New estimate','Pick the project, then how to start')+`<div class="mbody">
-    <fieldset><legend>Project</legend><div class="seg" style="margin-bottom:12px"><button class="${x.mode==='existing'?'on':''}" data-act="estnew-mode" data-v="existing">A bid in the pipeline</button><button class="${x.mode==='new'?'on':''}" data-act="estnew-mode" data-v="new">New project</button></div>
-      ${x.mode==='existing'?`<label class="f">Bid<select class="field" data-estnew="bidId"><option value="">${bids.length?'Pick a bid…':'No open bids without an estimate'}</option>${bids.map(b=>`<option value="${b.id}"${x.bidId===b.id?' selected':''}>${esc(b.name)}${b.due_date?' — due '+fmtShort(b.due_date):''}</option>`).join('')}</select></label>`
+    <fieldset><legend>Project</legend><div class="seg" style="margin-bottom:12px"><button class="${x.mode==='existing'?'on':''}" data-act="estnew-mode" data-v="existing">A bid in the pipeline</button><button class="${x.mode==='new'?'on':''}" data-act="estnew-mode" data-v="new">New project</button><button class="${x.mode==='test'?'on':''}" data-act="estnew-mode" data-v="test">🧪 Test estimate</button></div>
+      ${x.mode==='test'?`<label class="f">Name<input class="field" id="estnew-name" data-estnew="name" value="${esc(x.name)}" placeholder="e.g. Practice — Hickory Flat"></label>
+        <p class="hint">A scratch pad. It’s saved only in this browser on this computer, doesn’t show up in the pipeline, dashboards or reports, and can’t change anything else in the app (codebooks, vendors, bids). Delete it whenever you like.</p>`
+      :x.mode==='existing'?`<label class="f">Bid<select class="field" data-estnew="bidId"><option value="">${bids.length?'Pick a bid…':'No open bids without an estimate'}</option>${bids.map(b=>`<option value="${b.id}"${x.bidId===b.id?' selected':''}>${esc(b.name)}${b.due_date?' — due '+fmtShort(b.due_date):''}</option>`).join('')}</select></label>`
       :`<div class="fg"><label class="f s2">Project name<input class="field" id="estnew-name" data-estnew="name" value="${esc(x.name)}" placeholder="e.g. Riverside Commerce Park"></label><label class="f s2">Location<input class="field" data-estnew="location" value="${esc(x.location)}" placeholder="City or address"></label>
         <label class="f s2">GC / client<select class="field" data-estnew="client"><option value="">None yet</option>${gcClients().sort((a,c)=>a.company.localeCompare(c.company)).map(c=>`<option value="${c.id}"${x.client===c.id?' selected':''}>${esc(c.company)}</option>`).join('')}</select></label>
         <label class="f">Bid due<input class="field" type="date" data-estnew="due" value="${esc(x.due)}"></label><label class="f">Bid type<select class="field" data-estnew="type">${BID_TYPES.map(t=>`<option${x.type===t?' selected':''}>${t}</option>`).join('')}</select></label></div>
@@ -7209,6 +7230,8 @@ function estNewModal(){const x=M;const bids=S.bids.filter(b=>!b.archived_at&&!DE
       ${opt('copy','<b>Copy another estimate</b>',!others.length)}${x.start==='copy'?`<select class="field" data-estnew="src">${others.map(o=>`<option value="${o.e.id}"${x.src===o.e.id?' selected':''}>${esc(o.b.name)} — ${money(o.e.total_price)}</option>`).join('')}</select>`:''}</div></fieldset></div>
   <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Cancel</button><button class="btn primary" data-act="estnew-go"${x.busy?' disabled':''}>${x.busy?'Creating…':'Create estimate'}</button></div></div>`}
 async function estNewGo(){const x=M;let bidId=x.mode==='existing'?x.bidId:null;
+  if(x.mode==='test'){if((x.start==='tpl'||x.start==='copy')&&!x.src){toast(x.start==='tpl'?'Pick a master template.':'Pick an estimate to copy.');return}
+    const id=newId();if(!sbxPut(id,{name:String(x.name||'').trim()||'Test estimate',created:new Date().toISOString(),data:null}))return;const start=x.start==='scopes'?'blank':x.start,src=x.src;closeModal();await estOpen(id,'estimates');if(S.est&&!S.est.row)await estCreate(start,src);return}
   if(x.mode==='existing'&&!bidId){toast('Pick a bid.');return}if(x.mode==='new'&&!String(x.name||'').trim()){toast('Name the project.');return}
   if((x.start==='tpl'||x.start==='copy')&&!x.src){toast(x.start==='tpl'?'Pick a master template.':'Pick an estimate to copy.');return}
   x.busy=true;renderModal();
@@ -7225,7 +7248,7 @@ FOCUS_ATTRS.push('data-esttpl','data-estnew','data-estrev','data-estdel');
 document.addEventListener('click',e=>{
   if(S.est&&S.est.ctx&&!e.target.closest('#eo-ctx')&&!e.target.closest('[data-act=eo-menu]')){S.est.ctx=null;if(S.view==='estimate')render()}
   const t=e.target.closest('[data-act]');if(!t||t.tagName==='SELECT')return;const a=t.dataset.act;
-  if(!/^(eo-|ef-|ests-|estnew-|esttpl-|estrev-|estdel-|est-revs$|est-ver)/.test(a)&&a!=='est-savetpl')return;const E=S.est;
+  if(!/^(sbx-|eo-|ef-|ests-|estnew-|esttpl-|estrev-|estdel-|est-revs$|est-ver)/.test(a)&&a!=='est-savetpl')return;const E=S.est;
   switch(a){
     case 'eo-sel':case 'eo-pick':if(!E)break;if(E.sel&&E.sel.id===t.dataset.id&&a==='eo-sel')break;E.sel={t:t.dataset.t,id:t.dataset.id};
       if(a==='eo-pick'){const f=estFind(E.data,t.dataset.t,t.dataset.id);const o=estOpenSet();if(f&&f.o.sec)o.add(f.o.sec);if(f&&f.it){o.add(f.it.sec);o.add(f.it.id)}estOpenSave()}render();break;
@@ -7262,6 +7285,10 @@ document.addEventListener('click',e=>{
     case 'ests-new':M={kind:'estnew',mode:S.bids.some(b=>!b.archived_at&&!DECIDED.includes(b.status)&&canWork(b)&&!estOf(b.id))?'existing':'new',bidId:'',name:'',location:'',client:'',due:'',type:'Hard bid',start:cbList('estimate').length?'tpl':'blank',src:cbList('estimate')[0]?.id||''};showModal();break;
     case 'estnew-mode':M.mode=t.dataset.v;if(M.start==='scopes')M.start='blank';renderModal();if(M.mode==='new')setTimeout(()=>$('#estnew-name')?.focus(),0);break;
     case 'estnew-go':if(!M.busy)estNewGo();break;
+    case 'sbx-del':{const id=t.dataset.id;if(S.est&&S.est.bidId===id&&!S.est.sbxArm){S.est.sbxArm=true;render();setTimeout(()=>{if(S.est&&S.est.sbxArm){S.est.sbxArm=false;render()}},4000);break}
+      if(t.closest('.sbx-list')&&!t.classList.contains('arm')){t.classList.add('arm','danger');t.textContent='Delete?';setTimeout(()=>{t.classList.remove('arm','danger');t.textContent='Delete'},3000);break}
+      sbxDel(id);toast('Test estimate deleted');if(S.view==='estimate'&&S.est&&S.est.bidId===id){S.view='estimates';S.est=null}render();break}
+    case 'sbx-open':estOpen(t.dataset.id,'estimates');break;
   }});
 document.addEventListener('contextmenu',e=>{const tr=e.target.closest('tr[data-act=eo-sel]');if(!tr||!S.est||EC().ro)return;if(e.target.tagName==='INPUT'&&e.target.selectionStart!==e.target.selectionEnd)return; // keep the normal copy/paste menu when text is selected
   e.preventDefault();S.est.ctx={x:e.clientX,y:e.clientY,t:tr.dataset.t,id:tr.dataset.id};S.est.sel={t:tr.dataset.t,id:tr.dataset.id};render()});
