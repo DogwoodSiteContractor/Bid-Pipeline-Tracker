@@ -3484,3 +3484,12 @@ html.eb-lock .est-tabs button{padding-top:6px;padding-bottom:6px}
 .eb-hb .est-prod{padding:4px 8px;row-gap:2px}
 .eb-hb .est-prod .est-hrs{font-size:12px}
 .eb-hb .eb-acts .btn{padding:3px 9px;font-size:12.5px}
+
+/* Build tab toolbar: one row above both panels */
+.eb-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px;padding:6px 8px;background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.eb-bar-g{display:inline-flex;gap:6px;align-items:center;padding-left:8px;margin-left:2px;border-left:1px solid var(--line)}
+.eb-bar-r{display:inline-flex;gap:6px;align-items:center;margin-left:auto}
+.eb-bar .eo-lv{margin-left:0}
+.eb-bar .seg.sm button{padding:4px 9px;font-size:12.5px}
+.eb-split{display:inline-flex}.eb-split .btn:first-child:not(:last-child){border-top-right-radius:0;border-bottom-right-radius:0}
+.eb-split .eb-caret{border-top-left-radius:0;border-bottom-left-radius:0;padding-left:6px;padding-right:6px;border-left:1px solid rgba(255,255,255,.3)}
