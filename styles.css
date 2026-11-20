@@ -3406,3 +3406,81 @@ input.uncommitted{border-color:var(--warn,#d9a441)!important;box-shadow:0 0 0 2p
 #prop-paper tr.pp-has:not(.pp-hot) td:first-child{box-shadow:inset 3px 0 0 var(--accent)}#prop-paper tr.pp-has{box-shadow:none}
 @media print{#print-root .pp-hot,#print-root .pp-has{outline:0!important;box-shadow:none!important}#print-root .pp-has td{box-shadow:none!important}}
 .pp-tool.in{transform:translate(0,-50%)}
+
+/* Build tab, HeavyBid-style: the page holds still, the tree scrolls on the left, the bid item and activity info
+   stay put on the right and only the resource detail scrolls */
+html.eb-lock,html.eb-lock body{overflow:hidden}
+.eb.fit{align-items:stretch;min-height:0}
+.eb-left{min-width:0;min-height:0;display:flex;flex-direction:column;gap:10px}
+.eb.fit[style*=height] .eb-left .eo-wrap{flex:1;min-height:0;display:flex;flex-direction:column;margin:0}
+.eb.fit[style*=height] .eo-scroll{flex:1;max-height:none;min-height:0}
+.eb.fit[style*=height] .eb-right{position:static;max-height:none;height:100%;min-height:0;overflow:auto}
+.eb.fit[style*=height] .eb-right:has(> .eb-hb){overflow:hidden}
+.eb.fit[style*=height] .eb-hb{height:100%;min-height:0;display:flex;flex-direction:column;gap:6px}
+.eb-hb .eb-fix{flex:0 0 auto;max-height:62%;overflow:auto;display:flex;flex-direction:column;gap:6px;padding-right:2px}
+.eb-hb .eb-low{flex:1 1 0;min-height:160px;display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.eb.fit:not([style*=height]) .eb-hb .eb-fix{max-height:none}
+.eb-hb .eb-scroll{flex:1;min-height:0;overflow:auto}
+.eb.fit:not([style*=height]) .eb-hb .eb-scroll{max-height:60vh}
+.eb-tabs{display:flex;align-items:center;gap:2px;padding:4px 6px 0;border-bottom:1px solid var(--line);background:var(--surface-2)}
+.eb-tabs button{border:1px solid transparent;border-bottom:0;background:none;color:var(--ink-2);font:600 12.5px/1 inherit;font-family:inherit;padding:7px 12px;border-radius:7px 7px 0 0;cursor:pointer;margin-bottom:-1px}
+.eb-tabs button.on{background:var(--surface);border-color:var(--line);color:var(--ink)}
+.eb-tabs-tot{margin-left:auto;font-size:12.5px;color:var(--ink-2);padding:0 6px 4px}.eb-tabs-tot b{color:var(--ink);font-variant-numeric:tabular-nums}
+.eb-scroll .est-act.sheet{gap:0}
+.eb-scroll .sh-wrap{overflow:visible}
+.eb-scroll table.sh thead th{position:sticky;top:0;z-index:2;background:var(--surface-2)}
+.eb-scroll table.sh tfoot td{position:sticky;bottom:0;z-index:2;background:var(--surface-2);border-top:1px solid var(--line)}
+.eb-scroll table.sh tfoot .est-act-f{padding:6px 8px}
+.eb-scroll>.empty{padding:24px}
+.eb-scroll>.ch-card,.eb-scroll>div:not(.est-act){padding:8px 10px}
+/* denser, form-like info blocks */
+.eb-hb .ef{border-radius:8px}
+.eb-hb .ef-h{padding:4px 10px;background:var(--surface-2);border-radius:8px 8px 0 0}
+.eb-hb .ef.shut .ef-h{border-radius:8px}
+.eb-hb .ef-t{font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+.eb-hb .ef-b{padding:6px 10px 8px}
+.eb-hb .eb-fg{gap:4px 8px}
+.eb-hb .f{font-size:11px;gap:2px}
+.eb-hb .fix .field,.eb-hb .ef-b .field{padding:4px 7px;font-size:13px;min-height:0}
+.eb-hb .est-isum{margin-top:6px}.eb-hb .est-isum b{font-size:14px}
+.eb-hb .eb-acts{margin:0;padding:6px 10px}
+.eb-hb .eb-acts-h{margin-bottom:5px}.eb-hb .eb-acts-h b{font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
+.eb-hb .eb-chips{flex-wrap:nowrap;overflow-x:auto;padding-bottom:2px}
+.eb-hb .eb-chip{flex:none;padding:4px 9px}
+.eb-hb .eb-actbox{margin:0;padding-left:8px}
+.eb-hb .est-act.sheet{gap:6px}
+.eb-hb .est-anotes{margin-top:5px}
+.eb-hb .est-prod{gap:6px 10px}
+.eb-hb .eb-crumb{font-size:11.5px}
+
+/* in the locked Build view, tighten the page header so the work area gets the room */
+html.eb-lock .est-headrow h1{font-size:24px;margin:0}
+html.eb-lock .est-headrow{margin-bottom:8px}
+html.eb-lock .est-kpis{gap:8px;margin-bottom:8px}
+html.eb-lock .est-kpi{padding:6px 12px;flex-direction:row;align-items:baseline;gap:8px;flex-wrap:wrap}
+html.eb-lock .est-kpi b{font-size:17px}
+html.eb-lock .est-kpi small{display:none}
+html.eb-lock .est-tabs{margin-bottom:8px}
+html.eb-lock .est-tabs button{padding-top:6px;padding-bottom:6px}
+.eo-bar .eb-bv.sm button{padding:4px 9px;font-size:12.5px}
+.eb-hb .eb-fg{grid-template-columns:minmax(80px,.8fr) repeat(3,minmax(0,1fr)) minmax(70px,.7fr) minmax(56px,.55fr)}
+.eb-hb .eb-fg .s3,.eb-hb .eb-fg .s4{grid-column:span 3}
+.eb-hb .eb-acts-h{flex-wrap:nowrap;margin:0}.eb-hb .eb-acts-h>b{flex:none}
+.eb-hb .eb-acts-h .eb-chips{flex:0 1 auto;min-width:0}
+.eb-hb .eb-acts-h .btn{flex:none}
+.eb-hb .ef-b>.check{float:right;margin:16px 0 0}
+.eb-hb .eb-fix{max-height:70%}
+.eb-hb .est-isum{display:flex;gap:16px;margin-top:4px}
+.eb-hb .est-isum span{font-size:10.5px}
+.eb-hb .est-mix{height:4px;margin-top:4px}
+.eb-hb .ef-h{padding:2px 10px}
+.eb-hb .ef-h .btn{padding:3px 8px;font-size:12px}
+.eb-hb .ef-b{padding:4px 10px 6px}
+.eb-hb .ef-b .field{padding:3px 7px}
+.eb-hb .eb-fix,.eb-hb .est-act.sheet{gap:5px}
+.eb-hb .est-isum b{font-size:13.5px}
+.eb-hb .est-act-h .btn{padding:3px 7px}
+.eb-hb .est-anotes{margin-top:4px}
+.eb-hb .est-prod{padding:4px 8px;row-gap:2px}
+.eb-hb .est-prod .est-hrs{font-size:12px}
+.eb-hb .eb-acts .btn{padding:3px 9px;font-size:12.5px}
