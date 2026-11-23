@@ -1918,7 +1918,7 @@ function clientsSection(b,work){
   const hasW=num(b.amount_with)!=null||PI.some(id=>num(propOf(b,id).amount_with)!=null);const multi=PI.length>1;
   // a GC's amount: blank shows the base in grey; typing a number gives just that GC a different number
   const amtBox=(id,p,k,label)=>{const own=num(p[k])!=null;const base=num(b[k]);if(!multi&&!own)return '';
-    return `<div class="f gc-amt${own?' own':''}"><label for="gca-${id}-${k}">${label}</label><input id="gca-${id}-${k}" type="number" step="0.01" min="0" class="field" data-cp="${id}.${k}" data-t="n" data-commit value=""${esc(p[k]??'')}" placeholder="${base!=null?money(base):'$'}" title="${own?'A different number for this GC':'Same as the base bid. Type to give this GC a different number.'}"${d}>${own?`<button class="linkbtn small gc-reset" data-act="cp-reset" data-id="${id}" data-k="${k}" title="Use the base number again">↺ use base</button>`:''}</div>`};
+    return `<div class="f gc-amt${own?' own':''}"><label for="gca-${id}-${k}">${label}</label><input id="gca-${id}-${k}" type="number" step="0.01" min="0" class="field" data-cp="${id}.${k}" data-t="n" data-commit value="${esc(p[k]??'')}" placeholder="${base!=null?money(base):'$'}" title="${own?'A different number for this GC':'Same as the base bid. Type to give this GC a different number.'}"${d}>${own?`<button class="linkbtn small gc-reset" data-act="cp-reset" data-id="${id}" data-k="${k}" title="Use the base number again">↺ use base</button>`:''}</div>`};
   const rows=PI.map(id=>{
     const c=byId(S.clients,id);const cs=c?.contacts||[];const ct=cs.find(x=>x.name===b.client_contacts?.[id]);const p=propOf(b,id);const ownW=num(p.amount_with)!=null,ownO=num(p.amount_without)!=null;
     const won=b.status==='Awarded'&&b.awarded_client_id===id;
@@ -2207,7 +2207,11 @@ async function saveBid(opt={},m=M){
   const out=isSent(d);
   if(out&&bidValue(d)){const last=d.revisions[d.revisions.length-1];
     if(!last)addRevision(d,'Original proposal',true);
-    else if(!revSame(last.snapshot,revSnap(d)))addRevision(d,'Numbers updated',true);}
+    else if(!revSame(last.snapshot,revSnap(d))){
+      // typing several GC numbers in a row makes one revision for the day, not one per box
+      const prev=d.revisions[d.revisions.length-2];
+      if(last.auto&&last.reason==='Numbers updated'&&last.date===todayStr()&&last.by===myName()&&!last.addendum){if(prev&&revSame(prev.snapshot,revSnap(d)))d.revisions.pop();else last.snapshot=revSnap(d)}
+      else addRevision(d,'Numbers updated',true)}}
   if(d.status==='Awarded'&&!d.awarded_date)d.awarded_date=todayStr();
   const row={};(has61()?BID_COLS.concat(BID_COLS61):BID_COLS).forEach(k=>row[k]=d[k]);if('addenda' in row)row.addenda=addsKeep;
   ['due_date','due_time','walk_date','rfi_date','submitted_date','awarded_date','contract_date','start_date','lead_estimator_id','awarded_client_id'].forEach(k=>{if(k in row)row[k]=nullIfEmpty(row[k])});if('contract_amount' in row)row.contract_amount=num(row.contract_amount)??null;if('asset_class' in row)row.asset_class=row.asset_class||assetOf(row.project_type)||'';
