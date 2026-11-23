@@ -17,7 +17,12 @@ const ST_LABEL={'Estimating':'Estimate & proposal','Proposal Review':'Ready for 
 const stPill=(s,b)=>pill(b?stLabelB(b):stLabel(s),BID_CLS[s]);
 function stLabelB(b){if(b.status==='Proposal Review'&&typeof epPhase==='function'){const ph=epPhase(b);if(ph==='ir')return 'In review';if(ph==='ok')return 'Ready to send'}if(b.status!=='Quotes Received')return stLabel(b.status);const qs=(b.quotes||quotesFor(b.id)).filter(qAsked);const out=qs.filter(q=>q.status==='Requested').length;
   return !qs.length?'Quotes':out?`Waiting on quotes ${qs.length-out}/${qs.length}`:'Quotes in'}
-const ACTIVE=['Project Created','RFQ Sent','Takeoff','Quotes Received','Estimating','Proposal Review','Submitted','On Hold'];
+const ACTIVE=['Project Created','RFQ Sent','Takeoff','Quotes Received','Estimating','Proposal Review','Submitted'];
+// On Hold: the job is parked (budget pricing, owner paused…) with a date to check back. Not active, not decided, never archived.
+const HOLD_REASONS=['Budget / early pricing','Owner paused','Funding','Design not ready','Waiting on the GC','Other'];
+const holdOf=b=>(b&&b.rfq&&typeof b.rfq==='object'&&b.rfq.hold)||null;
+const holdDue=b=>b&&b.status==='On Hold'&&!!holdOf(b)?.until&&holdOf(b).until<=new Date().toISOString().slice(0,10);
+const addMonths=(n,from)=>{const d=from?new Date(from+'T12:00'):new Date();d.setMonth(d.getMonth()+n);return d.toISOString().slice(0,10)};
 const PRE_SUBMIT=['Project Created','RFQ Sent','Takeoff','Quotes Received','Estimating','Proposal Review'];
 const stageNo=s=>PRE_SUBMIT.indexOf(s);   // -1 once it's sent, on hold or decided
 const DECIDED=['Awarded','Not Awarded','No Bid'];
@@ -286,7 +291,7 @@ function propsIn(from,to){const sends=S.bids.filter(b=>!b._new&&statOk(b)).flatM
   const bids=[...new Set(sends.map(x=>x.b))];const proj=jobsOnce(bids);return {sends,proj,projVal:proj.reduce((t,b)=>t+bidValue(b),0),gcVal:sends.reduce((t,x)=>t+(x.amt||0),0)}}
 // processed = the outcome is handled: lost and marked, or won with the contract executed / turned over / underway on the Awarded tab
 const awOfBid=b=>(S.awards||[]).find(a=>a.bid_id===b.id&&!a._local);
-function procState(b){if(!isSent(b))return null;if(b.status==='Not Awarded'||b.status==='No Bid')return 'lost';if(b.status==='Awarded')return (b.contract_date||awOfBid(b))?'won-done':'won-open';return 'pending'}
+function procState(b){if(!isSent(b))return null;if(b.status==='On Hold')return 'hold';if(b.status==='Not Awarded'||b.status==='No Bid')return 'lost';if(b.status==='Awarded')return (b.contract_date||awOfBid(b))?'won-done':'won-open';return 'pending'}
 function jobsOnce(list){const m=new Map();list.forEach(b=>{const k=jobRoot(b);const o=m.get(k);if(!o||bidWhen(b)>bidWhen(o))m.set(k,b)});return list.filter(b=>m.get(jobRoot(b))===b)}
 // a later re-bid of the same job exists (an awarded bid is never hidden)
 function rebidLater(b){if(b.status==='Awarded')return false;const k=jobRoot(b);const w=bidWhen(b);return S.bids.some(x=>x!==b&&!x._new&&jobRoot(x)===k&&bidWhen(x)>w)}
@@ -556,12 +561,12 @@ function dashSeg(){const cur=S.dash==='reports'?'reports':S.dash==='month'?'mont
 function propFunnel(Y){const P=propsIn(Y+'-01-01',Y+'-12-31');const st=P.proj.map(procState);const c=k=>st.filter(x=>x===k).length;const won=c('won-done')+c('won-open');
   const val=k=>P.proj.filter((b,i)=>st[i]===k).reduce((t,b)=>t+(k.startsWith('won')?wonValue(b):bidValue(b)),0);
   const step=(n,l,sub,cls,act)=>`<${act?'button':'div'} class="pf-step ${cls||''}"${act?` data-act="${act}"`:''}><b>${n}</b><span>${l}</span>${sub?`<small>${sub}</small>`:''}</${act?'button':'div'}>`;
-  return `<div class="pf"><div class="pf-h"><b>${Y} proposals</b><span class="dim small">projects sent this year and where each one stands · processed = lost and marked, or won and executed / turned over / underway</span></div><div class="pf-row">
+  return `<div class="pf"><div class="pf-h"><b>${Y} proposals</b><span class="dim small">projects sent this year and where each one stands · processed = lost and marked, on hold with a check-back date, or won and executed / turned over / underway</span></div><div class="pf-row">
     ${step(P.proj.length,'Sent',moneyK(P.projVal),'',`prop-drill" data-from="${Y}-01-01" data-to="${Y}-12-31`)}<i class="pf-arr">→</i>
     ${step(won,'Won',moneyK(val('won-done')+val('won-open')),'good')}${step(c('won-done'),'Won &amp; processed',c('won-open')?c('won-open')+' won, not started yet':'all started','good')}
-    ${step(c('lost'),'Lost',moneyK(val('lost')),'')}
+    ${step(c('lost'),'Lost',moneyK(val('lost')),'')}${c('hold')?step(c('hold'),'On hold',moneyK(val('hold')),'',`hold-all`):''}
     ${step(c('pending'),'Waiting on a decision',c('pending')?'Record outcomes ›':'all recorded',c('pending')?'warn':'',c('pending')?'out-open':'')}
-    <span class="pf-proc">${P.proj.length?Math.round((c('won-done')+c('lost'))/P.proj.length*100):0}% processed</span></div></div>`}
+    <span class="pf-proc">${P.proj.length?Math.round((c('won-done')+c('lost')+c('hold'))/P.proj.length*100):0}% processed</span></div></div>`}
 function propDrillModal(){const x=M;const P=pdFilter(propsIn(x.from,x.to),x);const by=x.by||'gc';
   const rows=by==='gc'?P.sends.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(r=>({b:r.b,gc:r.gc?clientName(r.gc):'—',date:r.date,amt:r.amt})):P.proj.slice().sort((a,b)=>bidWhen(b).localeCompare(bidWhen(a))).map(b=>({b,gc:clientsLine(b,3),date:sentOn(b),amt:bidValue(b)}));
   const tot=rows.reduce((t,r)=>t+(r.amt||0),0);
@@ -582,24 +587,25 @@ function pdCsv(){const x=M;const P=pdFilter(propsIn(x.from,x.to),x);const by=x.b
   const lines=[by==='gc'?'Sent,Project,GC,Estimator,Status,Amount':'Sent,Project,Bidding to,Estimator,Status,Amount'].concat(by==='gc'?P.sends.map(r=>[r.date,r.b.name,r.gc?clientName(r.gc):'',estName(r.b.lead_estimator_id),r.b.status,r.amt||0].map(q).join(',')):P.proj.map(b=>[sentOn(b),b.name,clientsLine(b,9),estName(b.lead_estimator_id),b.status,bidValue(b)].map(q).join(',')));
   const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/csv'}));a.download=`Proposals ${x.est||x.gc?(x.est||x.gc)+' ':''}${x.from} to ${x.to} (${by==='gc'?'to GCs':'projects'}).csv`;a.click()}
 // Record outcomes: oldest proposals still waiting on a decision first
-const outPending=()=>jobsOnce(S.bids.filter(b=>!b._new&&statOk(b)&&isSent(b)&&!DECIDED.includes(b.status))).sort((a,b)=>(sentOn(a)||'').localeCompare(sentOn(b)||''));
+const outPending=()=>jobsOnce(S.bids.filter(b=>!b._new&&statOk(b)&&isSent(b)&&!DECIDED.includes(b.status)&&b.status!=='On Hold')).sort((a,b)=>(sentOn(a)||'').localeCompare(sentOn(b)||''));
 function outModal(){const x=M;const today=todayStr();let L=outPending();const all=L.length;if(x.age)L=L.filter(b=>sentOn(b)&&daysUntil(sentOn(b))<=-x.age);if(!x.showSkip)L=L.filter(b=>!(b.rfq&&b.rfq.outSkip&&daysUntil(b.rfq.outSkip)>-30));
   const ok=can('bids')==='edit'||isAdmin();
   return mhead('Record outcomes',`${all} proposal${all===1?'':'s'} still waiting on a decision · oldest first`)+`<div class="mbody">
     <div class="pd-bar"><div class="seg sm">${[[0,'All'],[30,'30+ days'],[60,'60+ days'],[90,'90+ days']].map(([v,l])=>`<button class="${(x.age||0)===v?'on':''}" data-act="out-age" data-v="${v}">${l}</button>`).join('')}</div>
       <label class="check small"><input type="checkbox" data-outskip${x.showSkip?' checked':''}> Show ones marked “still waiting” in the last 30 days</label>
       ${(S.outUndo||[]).length?`<button class="btn sm" data-act="out-undo">↶ Undo last</button>`:''}</div>
-    <p class="hint">Pick the date the GC told you, then Won or Lost. Won on a bid sent to more than one GC opens the bid so you can pick which GC. “Still waiting” hides it here for 30 days.</p>
+    <p class="hint">Pick the date the GC told you, then Won or Lost. Won on a bid sent to more than one GC opens the bid so you can pick which GC. <b>On hold</b> parks it (budget pricing, project paused) with a reminder to check back in 3 months; change the reason or date on the bid. “Still waiting” hides it here for 30 days.</p>
     <div class="out-list">${L.map(b=>{const so=sentOn(b);const gcs=propIds(b);const age=so?-daysUntil(so):null;
       return `<div class="out-row"><div class="out-m"><button class="linkish" data-act="open-bid" data-id="${b.id}"><b>${esc(b.name)}</b></button><div class="dim small">${esc(clientsLine(b,3)||'No GC')} · ${esc(estName(b.lead_estimator_id)||'no estimator')}</div></div>
         <div class="out-s"><span class="num">${money(bidValue(b))}</span><span class="dim small">sent ${so?fmtShort(so):'—'}${age!=null?` · ${age} day${age===1?'':'s'} ago`:''}</span></div>
         ${ok?`<div class="out-a"><input type="date" class="field sm" data-outdate="${b.id}" value="${esc((x.dates||{})[b.id]||today)}" max="${today}" title="Date of the decision">
-          <button class="btn sm good" data-act="out-won" data-id="${b.id}"${gcs.length>1?' title="Opens the bid to pick the GC"':''}>Won${gcs.length>1?'…':''}</button><button class="btn sm" data-act="out-lost" data-id="${b.id}">Lost</button><button class="btn sm ghost" data-act="out-skip" data-id="${b.id}">Still waiting</button></div>`:''}</div>`}).join('')||'<div class="empty"><b>All caught up</b>Every proposal in this list has an outcome.</div>'}</div></div>
+          <button class="btn sm good" data-act="out-won" data-id="${b.id}"${gcs.length>1?' title="Opens the bid to pick the GC"':''}>Won${gcs.length>1?'…':''}</button><button class="btn sm" data-act="out-lost" data-id="${b.id}">Lost</button><button class="btn sm" data-act="out-hold" data-id="${b.id}" title="Park it: budget pricing or the project paused. Check back in 3 months.">On hold</button><button class="btn sm ghost" data-act="out-skip" data-id="${b.id}">Still waiting</button></div>`:''}</div>`}).join('')||'<div class="empty"><b>All caught up</b>Every proposal in this list has an outcome.</div>'}</div></div>
     <div class="mfoot"><div class="dim small">${L.length} shown</div><div class="r"><button class="btn" data-act="close">Done</button></div></div>`}
 async function outPatch(b,patch,label){const old={};Object.keys(patch).forEach(k=>old[k]=clone(b[k]??null));Object.assign(b,patch);
   try{await run(sb.from('bids').update({...patch,updated_by:S.session.user.id}).eq('id',b.id));(S.outUndo=S.outUndo||[]).push({id:b.id,old,label});toast(`${b.name}: ${label}`)}catch(e){Object.assign(b,old);toast(errMsg(e))}renderModal();render()}
 function outDecide(b,kind){const d=(M.dates||{})[b.id]||todayStr();const r={...(b.rfq||{})};delete r.outSkip;
   if(kind==='skip'){r.outSkip=todayStr();return outPatch(b,{rfq:r},'still waiting')}
+  if(kind==='hold'){r.hold={since:d,until:addMonths(3,d),reason:isBudget(b)?'Budget / early pricing':'',by:myName()};return outPatch(b,{status:'On Hold',rfq:r},'on hold, check back '+fmtShort(r.hold.until))}
   r.decidedOn=d;const cps=clone(b.client_proposals||{});
   if(kind==='lost'){propIds(b).forEach(id=>{cps[id]={...(cps[id]||{}),status:'Lost'}});return outPatch(b,{status:'Not Awarded',client_proposals:cps,rfq:r},'marked lost')}
   const g=propIds(b);if(g.length>1){closeModal();openBid(b.id);toast('Set the winning GC’s proposal to Awarded on the bid');return}
@@ -610,7 +616,7 @@ document.addEventListener('click',e=>{const t=e.target instanceof Element&&e.tar
   if(!M)return;
   if(M.kind==='propdrill'){if(a==='pd-by'){M.by=t.dataset.v;renderModal()}else if(a==='pd-csv')pdCsv();return}
   if(M.kind==='outrec'){const b=t.dataset.id&&byId(S.bids,t.dataset.id);
-    if(a==='out-age'){M.age=+t.dataset.v;renderModal()}else if(a==='out-won'&&b)outDecide(b,'won');else if(a==='out-lost'&&b)outDecide(b,'lost');else if(a==='out-skip'&&b)outDecide(b,'skip');
+    if(a==='out-age'){M.age=+t.dataset.v;renderModal()}else if(a==='out-won'&&b)outDecide(b,'won');else if(a==='out-lost'&&b)outDecide(b,'lost');else if(a==='out-skip'&&b)outDecide(b,'skip');else if(a==='out-hold'&&b)outDecide(b,'hold');
     else if(a==='out-undo'){const u=(S.outUndo||[]).pop();const bb=u&&byId(S.bids,u.id);if(bb){Object.assign(bb,u.old);run(sb.from('bids').update({...u.old,updated_by:S.session.user.id}).eq('id',bb.id)).then(()=>{toast('Undone');renderModal();render()}).catch(err=>toast(errMsg(err)))}}}},true);
 document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='outrec')return;if(t.dataset.outdate){(M.dates=M.dates||{})[t.dataset.outdate]=t.value}else if(t.dataset.outskip!=null){M.showSkip=t.checked;renderModal()}});
 /* ---------- Monthly report: any month, closed on the last business day after review ---------- */
@@ -628,7 +634,7 @@ function moStats(y,m){const [from,to]=moRange(y,m);const P=propsIn(from,to);cons
   const st=P.proj.map(procState);const c=k=>st.filter(x=>x===k).length;const won=c('won-done')+c('won-open'),lost=c('lost');
   const est={};P.proj.forEach((b,i)=>{const k=estName(b.lead_estimator_id)||'Unassigned';const o=est[k]=est[k]||{n:0,val:0,won:0,lost:0,pend:0};o.n++;o.val+=bidValue(b);if(st[i].startsWith('won'))o.won++;else if(st[i]==='lost')o.lost++;else o.pend++});
   const gc={};P.sends.forEach(x=>{const k=x.gc?clientName(x.gc):'No GC';const o=gc[k]=gc[k]||{n:0,amt:0,won:0};o.n++;o.amt+=x.amt||0;if(x.gc&&clientWon(x.b,x.gc))o.won++});
-  return {k:moKey(y,m),from,to,s:{sends:P.sends.length,proj:P.proj.length,projVal:P.projVal,gcVal:P.gcVal,newIn:newIn.length,won:wonIn.length,wonVal:wonIn.reduce((t,b)=>t+wonValue(b),0),cWon:won,cLost:lost,cPend:c('pending'),proc:c('won-done')+lost,winRate:won+lost?won/(won+lost):null},
+  return {k:moKey(y,m),from,to,s:{sends:P.sends.length,proj:P.proj.length,projVal:P.projVal,gcVal:P.gcVal,newIn:newIn.length,won:wonIn.length,wonVal:wonIn.reduce((t,b)=>t+wonValue(b),0),cWon:won,cLost:lost,cPend:c('pending'),cHold:c('hold'),proc:c('won-done')+lost+c('hold'),winRate:won+lost?won/(won+lost):null},
     est:Object.entries(est).sort((a,b)=>b[1].val-a[1].val).map(([k,o])=>[k,o.n,o.val,o.won,o.lost,o.pend]),
     gc:Object.entries(gc).sort((a,b)=>b[1].amt-a[1].amt).map(([k,o])=>[k,o.n,o.amt,o.won]),
     list:P.proj.slice().sort((a,b)=>(sentOn(a)||'').localeCompare(sentOn(b)||'')).map(b=>[b.id,b.name,clientsLine(b,3),sentOn(b),bidValue(b),b.status,estName(b.lead_estimator_id)]),
@@ -658,7 +664,7 @@ function vMonthly(dstr){const now=new Date();S.mo=S.mo||{y:now.getFullYear(),m:n
     ${box('Proposals sent',moneyK(S2.projVal),`${S2.proj} project${S2.proj===1?'':'s'} · ${S2.sends} to GCs (${moneyK(S2.gcVal)})`,'projVal',1,` data-act="prop-drill" data-from="${R.from}" data-to="${R.to}"`)}
     ${box('New bids in',fmtN(S2.newIn,0),'invitations received','newIn')}
     ${box('Won this month',moneyK(S2.wonVal),`${S2.won} job${S2.won===1?'':'s'} awarded`,'wonVal',1)}
-    ${box('Win rate',pct(S2.winRate),`on ${MO_N[m].slice(0,3)} proposals: ${S2.cWon} won · ${S2.cLost} lost · ${S2.cPend} waiting`)}
+    ${box('Win rate',pct(S2.winRate),`on ${MO_N[m].slice(0,3)} proposals: ${S2.cWon} won · ${S2.cLost} lost · ${S2.cPend} waiting${S2.cHold?` · ${S2.cHold} on hold`:''}`)}
     ${box('Processed',S2.proj?Math.round(S2.proc/S2.proj*100)+'%':'—',`${S2.proc} of ${S2.proj} projects sent this month`)}</div>
   <div class="mo-grid"><div class="sec"><div class="sec-h"><h2>By estimator</h2><span>projects sent this month and how they turned out</span></div>
     ${tbl([['Estimator'],['Sent',1],['Value',1],['Won',1],['Lost',1],['Waiting',1],['Win rate',1]],R.est.map(r=>`<tr class="click" data-act="mo-who" data-k="est" data-v="${esc(r[0])}" title="See ${esc(r[0])}’s proposals"><td><span class="mo-name">${esc(r[0])}</span></td><td class="r num">${r[1]}</td><td class="r num">${moneyK(r[2])}</td><td class="r num">${r[3]}</td><td class="r num">${r[4]}</td><td class="r num">${r[5]}</td><td class="r num">${r[3]+r[4]?Math.round(r[3]/(r[3]+r[4])*100)+'%':'—'}</td></tr>`).join(''),'No proposals sent.')}</div>
@@ -675,6 +681,7 @@ async function moReopen(){const {y,m}=S.mo;const k=moKey(y,m);if(!confirm(`Reope
   const cur=clone(S.settings.month_close||{months:{}});delete (cur.months||{})[k];try{await run(sb.from('settings').upsert({key:'month_close',value:cur}));await loadTable('settings');toast('Reopened');render()}catch(e){toast(errMsg(e))}}
 document.addEventListener('click',e=>{const t=e.target instanceof Element&&e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
   if(a==='mo-who'){const [from,to]=moRange(S.mo.y,S.mo.m);M={kind:'propdrill',from,to,by:t.dataset.k==='gc'?'gc':'proj',[t.dataset.k]:t.dataset.v};showModal();return}
+  if(a==='hold-all'){S.view='pipeline';S.filter='hold';if(S.pv.mode==='sheet')S.pv.mode='list';savePv();render();window.scrollTo(0,0);return}
   if(a==='mo-pick'){S.mo.m=+t.dataset.m;S.moLive=false;render()}else if(a==='mo-go'){S.view='dashboard';S.dash='month';S.mo={y:+t.dataset.y,m:+t.dataset.m};render()}
   else if(a==='mo-close')moClose();else if(a==='mo-reopen')moReopen();
   else if(a==='mo-print'){const el=$('#mo-rep');if(!el)return;const pr=document.createElement('div');pr.id='print-root';pr.innerHTML=`<div class="dt-print mo-print">${el.innerHTML}</div>`;document.body.appendChild(pr);document.body.classList.add('printing-prop');window.print();setTimeout(()=>{document.body.classList.remove('printing-prop');pr.remove()},500)}});
@@ -752,7 +759,7 @@ function precon(){
   const maxL=Math.max(1,...load.map(x=>x.n));
   const loadHtml=load.length?`<div class="hbars">${load.sort((a,b)=>b.n-a.n).map(x=>`<div class="hb"><span class="lab who">${avatar(x.e.id,22)}${esc(x.e.name)}</span><div class="track"><div class="fill ${x.soon?'acc':''}" style="width:${x.n/maxL*100}%"></div></div><span class="v">${x.n} bid${x.n===1?'':'s'}${x.soon?` · ${x.soon} due soon`:''}</span></div>`).join('')}</div>`:`<div class="empty"><b>No estimators yet</b><button class="btn sm" data-act="nav" data-v="team">Add people</button></div>`;
   const closed=yr.filter(b=>live(b)&&DECIDED.includes(b.status)).sort((a,b)=>(b.awarded_date||b.due_date||'').localeCompare(a.awarded_date||a.due_date||''));
-  return moBanner()+kpis+propFunnel(Y)+`<div class="sec"><div class="sec-h ov-h"><h2>Projects overview</h2><span class="ov-view">${S.ov.hide?`<span class="dim small">${act.length} active bid${act.length===1?'':'s'} hidden</span>`:'<span class="dim small ov-hint">Active bids and upcoming deadlines · click a row to open it</span>'}${S.ov.hide?'':`<span class="seg sm wk-seg" title="How many bids to show"><span class="ov-lbl small dim">Show</span>${[[5,'5'],[10,'10'],[15,'15'],[0,'All']].map(([v,l])=>`<button class="${(+S.ov.limit||0)===v?'on':''}" data-act="ov-limit" data-v="${v}">${l}</button>`).join('')}</span>`}<button class="btn sm" data-act="ov-hide" aria-expanded="${!S.ov.hide}">${S.ov.hide?'▸ Expand':'▾ Collapse'}</button></span></div>${S.ov.hide?'':overviewTable(act)}</div>
+  return moBanner()+kpis+propFunnel(Y)+holdCard(false)+`<div class="sec"><div class="sec-h ov-h"><h2>Projects overview</h2><span class="ov-view">${S.ov.hide?`<span class="dim small">${act.length} active bid${act.length===1?'':'s'} hidden</span>`:'<span class="dim small ov-hint">Active bids and upcoming deadlines · click a row to open it</span>'}${S.ov.hide?'':`<span class="seg sm wk-seg" title="How many bids to show"><span class="ov-lbl small dim">Show</span>${[[5,'5'],[10,'10'],[15,'15'],[0,'All']].map(([v,l])=>`<button class="${(+S.ov.limit||0)===v?'on':''}" data-act="ov-limit" data-v="${v}">${l}</button>`).join('')}</span>`}<button class="btn sm" data-act="ov-hide" aria-expanded="${!S.ov.hide}">${S.ov.hide?'▸ Expand':'▾ Collapse'}</button></span></div>${S.ov.hide?'':overviewTable(act)}</div>
   ${weeklyPanel('precon')}
   ${closed.length?`<div class="sec"><div class="sec-h"><h2>Closed this year</h2><span>Awarded, lost and no-bid</span></div>${closedTable(closed)}</div>`:''}
   <div class="grid3">
@@ -867,7 +874,7 @@ function mine(){
   const dates=[];act.forEach(b=>{[['due_date','Bid due'],['walk_date','Site walk'],['rfi_date','RFI deadline']].forEach(([k,l])=>{const d=daysUntil(b[k]);if(b[k]&&d>=0&&d<=21)dates.push({b,l,date:b[k],d})})});
   dates.sort((a,b)=>a.date.localeCompare(b.date));
   const recent=S.bid_files.filter(f=>my.some(b=>b.id===f.bid_id)).sort((a,b)=>(b.created_at||'').localeCompare(a.created_at||'')).slice(0,8);
-  return `<div class="kpis">
+  return holdCard(true)+`<div class="kpis">
     ${kpi('My active bids',act.length,est.length+' estimating','','active')}
     ${kpi('Due in 7 days',due7.length,due7.length?'Next: '+esc(due7[0].name):'Nothing this week',due7.length?'hot':'','active')}
     ${kpi('Quotes outstanding',oq.length,'On my bids',oq.length?'hot':'')}
@@ -898,7 +905,7 @@ const ARCHIVED_FILTER=['archived','Archived',b=>!!b.archived_at];
 // a due date we picked ourselves because the GC hasn't given one
 const dueTgt=b=>!!(b&&b.rfq&&b.rfq.dueTarget);
 document.addEventListener('change',e=>{const t=e.target;if(!t.dataset||!t.dataset.arf)return;S[t.dataset.arf]=t.value||null;render()});
-const FILTERS=[['active','All active',b=>ACTIVE.includes(b.status)],['notstarted','Project created',b=>b.status==='Project Created'],['rfq','RFQ sent',b=>b.status==='RFQ Sent'],['takeoff','Takeoff',b=>b.status==='Takeoff'],['quotes','Quotes',b=>b.status==='Quotes Received'],['estimating','Estimate & proposal',b=>b.status==='Estimating'||b.status==='Proposal Review'],['review','Ready for review',b=>b.status==='Proposal Review'],['submitted','Submitted',b=>b.status==='Submitted'],['hold','On hold',b=>b.status==='On Hold'],['awarded','Awarded',b=>b.status==='Awarded'],['lost','Not awarded',b=>b.status==='Not Awarded'],['nobid','No bid',b=>b.status==='No Bid'],['target','Target due dates',b=>dueTgt(b)&&!DECIDED.includes(b.status)&&!isSent(b)],['all','Everything',()=>true]];
+const FILTERS=[['active','All active',b=>ACTIVE.includes(b.status)],['notstarted','Project created',b=>b.status==='Project Created'],['rfq','RFQ sent',b=>b.status==='RFQ Sent'],['takeoff','Takeoff',b=>b.status==='Takeoff'],['quotes','Quotes',b=>b.status==='Quotes Received'],['estimating','Estimate & proposal',b=>b.status==='Estimating'||b.status==='Proposal Review'],['review','Ready for review',b=>b.status==='Proposal Review'],['submitted','Submitted',b=>b.status==='Submitted'],['hold','On hold',b=>b.status==='On Hold'&&!holdOf(b)?.back],['awarded','Awarded',b=>b.status==='Awarded'],['lost','Not awarded',b=>b.status==='Not Awarded'],['nobid','No bid',b=>b.status==='No Bid'],['target','Target due dates',b=>dueTgt(b)&&!DECIDED.includes(b.status)&&!isSent(b)],['all','Everything',()=>true]];
 /* =====================================================================
    Pipeline views: Cards / List / Calendar, filters, sort and search
    (view choices are remembered per browser)
@@ -1802,10 +1809,38 @@ function baseNumbersHtml(b,work){const hasW=num(b.amount_with)!=null||M.showWith
   </div><p class="hint">Press Enter (or click away) to save a number. Every GC gets ${hasW?'these numbers':'this number'}. If one GC gets a different number, change it on their row below.</p></fieldset>`}
 function bpEstProp(b,work){return `${epBar(b,work)}${frHtml(b,work)}${estOn()&&!b._sample?estBidBlock(b,work):''}
   ${baseNumbersHtml(b,work)}${clientsSection(b,work)}${revisionSection(b,work)}`}
+function holdPanel(b,work){const h=holdOf(b)||{};const dis=work?'':' disabled';const due=holdDue(b);const back=h.back&&byId(S.bids,h.back);
+  return `<fieldset class="hold-fs${due?' due':''}"><legend>⏸ On hold</legend>
+    ${back?`<div class="notice small">This project came back: <button class="linkish" data-act="open-bid" data-id="${back.id}"><b>${esc(back.name)}</b></button> was started as a re-bid on ${fmtShort(h.backOn||'')}.</div>`:due?`<div class="notice small"><b>Time to check back.</b> Is this project moving again?</div>`:''}
+    <div class="fg"><label class="f">Why it’s on hold<select class="field" data-hold="reason"${dis}><option value="">Pick a reason…</option>${HOLD_REASONS.map(x=>`<option${h.reason===x?' selected':''}>${x}</option>`).join('')}</select></label>
+      <label class="f">Check back on<input type="date" class="field" data-hold="until" value="${esc(h.until||'')}"${dis}></label>
+      <label class="f s2">Note<input class="field" data-hold="note" value="${esc(h.note||'')}" placeholder="e.g. Owner re-bidding after rezoning in spring"${dis}></label></div>
+    <p class="hint">On hold since ${h.since?fmtDate(h.since):'—'}${h.by?' · '+esc(h.by):''}. It stays out of the active pipeline and the win rate, still counts as a proposal sent, and is never archived. Find it under <b>On hold</b> in the pipeline filters.</p>
+    ${work&&!back?`<div class="adders hold-acts"><button class="btn primary" data-act="bp-hold-back" title="Starts a new bid linked to this one, with the same GCs and details">↻ It’s back: start a re-bid</button>
+      <span class="hold-push">Still on hold: <button class="btn sm" data-act="bp-hold-push" data-v="3">+3 months</button><button class="btn sm" data-act="bp-hold-push" data-v="6">+6</button><button class="btn sm" data-act="bp-hold-push" data-v="12">+12</button></span>
+      <button class="btn ghost" data-act="bp-hold-dead">Dead: mark not awarded</button></div>`:''}</fieldset>`}
+document.addEventListener('change',e=>{const t=e.target;if(!(t.dataset&&t.dataset.hold&&M&&M.kind==='bid'))return;const r=rfqOf(M.draft);const h=r.hold=r.hold||{since:todayStr()};h[t.dataset.hold]=t.value;if(!M.draft._new)bpSaveUI('Editing…');if(t.dataset.hold!=='note')renderModal()});
+// "It's back": a new bid linked as a re-bid of the parked one, carrying the GCs, team and project details
+async function holdBack(b){if(!canAssign()){toast('Starting a re-bid creates a new bid, which takes someone who can add bids.');return}
+  if(!confirm(`Start a re-bid of “${b.name}”?\n\nA new bid opens with the same GCs, team and project details, linked to this one so you can see what you sent last time. This one stays on hold as the earlier round.`))return;
+  try{if(bpCanAuto())await bpSave();const d=newBid();delete d._new;Object.assign(d,{name:b.name,status:'Project Created'});
+    ['location','project_type','asset_class','bid_type','size','units'].forEach(k=>{if(b[k]!=null&&b[k]!=='')d[k]=b[k]});d.client_ids=[...(b.client_ids||[])];d.client_contacts=clone(b.client_contacts||{});d.client_proposals={};
+    d.lead_estimator_id=b.lead_estimator_id||null;d.support_estimator_ids=[...(b.support_estimator_ids||[])];
+    const row={};(has61()?BID_COLS.concat(BID_COLS61):BID_COLS).forEach(k=>row[k]=d[k]);
+    ['due_date','due_time','walk_date','rfi_date','submitted_date','awarded_date','contract_date','start_date','lead_estimator_id','awarded_client_id'].forEach(k=>{if(k in row)row[k]=nullIfEmpty(row[k])});if('asset_class' in row)row.asset_class=row.asset_class||assetOf(row.project_type)||'';row.updated_by=S.session.user.id;
+    await run(sb.from('bids').insert(row));const ro=rfqOf(b);const rfq={intake:todayStr(),rebidOf:b.id};['engineer','plans','plansLink','owner'].forEach(k=>{if(ro[k]!=null&&ro[k]!=='')rfq[k]=ro[k]});
+    try{await run(sb.from('bids').update({rfq}).eq('id',d.id))}catch(e){}
+    const or={...ro,hold:{...(ro.hold||{}),back:d.id,backOn:todayStr(),ended:todayStr()}};await run(sb.from('bids').update({rfq:or,updated_by:S.session.user.id}).eq('id',b.id));
+    await loadTable('bids');toast(`Re-bid of “${b.name}” started`);M=null;closeModal();openBid(d.id)}catch(e){toast(errMsg(e))}}
+// dashboard: on-hold jobs whose check-back date has come
+function holdCard(mine){const L=S.bids.filter(b=>live(b)&&b.status==='On Hold'&&!holdOf(b)?.back&&(!mine||assigned(b)));if(!L.length)return '';const due=L.filter(holdDue).sort((a,b)=>holdOf(a).until.localeCompare(holdOf(b).until));
+  return `<div class="sec"><div class="sec-h"><h2>On hold</h2><span>${L.length} parked · ${due.length?`<b>${due.length} to check back on</b>`:'none due yet'} · <button class="linkbtn" data-act="hold-all">See all</button></span></div>
+    ${due.length?`<div class="panel pad"><div class="list">${due.slice(0,8).map(b=>{const h=holdOf(b);return `<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}"><b>${esc(b.name)}</b></button><div class="dim small">${esc(h.reason||'No reason given')} · on hold since ${h.since?fmtShort(h.since):'—'} · ${esc(clientsLine(b,2))}</div></div><span class="small warn-t">check back ${fmtShort(h.until)}</span></div>`}).join('')}</div></div>`:''}</div>`}
 function bpOutcome(b,work){
   const outcome=isSent(b)||DECIDED.includes(b.status);
   return `${fuRow(b)}
-  ${work&&!DECIDED.includes(b.status)?`<fieldset><legend>Outcome</legend><p class="hint" style="margin:0 0 10px">${isSent(b)?'When you hear back, record it here.':'The proposal hasn’t gone out yet. You can still record a decision.'}</p><div class="adders"><button class="btn" data-act="bp-out" data-v="Awarded">🏆 Awarded</button><button class="btn" data-act="bp-out" data-v="Not Awarded">Not awarded</button><button class="btn" data-act="bp-out" data-v="No Bid">No bid</button></div></fieldset>`:''}
+  ${work&&!DECIDED.includes(b.status)?`<fieldset><legend>Outcome</legend><p class="hint" style="margin:0 0 10px">${isSent(b)?'When you hear back, record it here.':'The proposal hasn’t gone out yet. You can still record a decision.'}</p><div class="adders"><button class="btn" data-act="bp-out" data-v="Awarded">🏆 Awarded</button><button class="btn" data-act="bp-out" data-v="Not Awarded">Not awarded</button><button class="btn" data-act="bp-out" data-v="No Bid">No bid</button>${b.status!=='On Hold'?'<button class="btn" data-act="bp-out" data-v="On Hold" title="Park it: budget pricing or the project paused. It stays live with a date to check back.">⏸ On hold</button>':''}</div></fieldset>`:''}
+  ${b.status==='On Hold'?holdPanel(b,work):''}
   ${outcome?`<fieldset><legend>${DECIDED.includes(b.status)?esc(b.status):'Submitted'}</legend><div class="fg">
     <label class="f">Submitted on<input type="date" class="field" ${bf('submitted_date')}></label>
     ${b.status==='Awarded'?`<label class="f">Verbal award on<input type="date" class="field" ${bf('awarded_date')}></label>
@@ -1847,6 +1882,10 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
     if(BP_TABS[cur+1][0]==='estprop'){epGo('ip');M.tab='estprop';renderModal();return}
     b.status=BP_ORDER[cur+1];M.tab=BP_TABS[cur+1][0];
     renderModal();const bd=$('#modal .mbody');if(bd)bd.scrollTop=0;toast(`Moved to ${BP_TABS[cur+1][1]}.`);return}
+  if(a==='bp-out'&&t.dataset.v==='On Hold'){const r=rfqOf(M.draft);r.hold={since:todayStr(),until:addMonths(3),reason:isBudget(M.draft)?'Budget / early pricing':'',by:myName()};M.draft.status='On Hold';renderModal();toast('On hold. Pick a reason and when to check back.');return}
+  if(a==='bp-hold-push'){const r=rfqOf(M.draft);const h=r.hold=r.hold||{};h.until=addMonths(+t.dataset.v,h.until&&h.until>todayStr()?h.until:null);h.checked=todayStr();renderModal();toast('Check back '+fmtDate(h.until));return}
+  if(a==='bp-hold-dead'){const r=rfqOf(M.draft);if(r.hold)r.hold.ended=todayStr();M.draft.status='Not Awarded';M.draft.lost_reason=M.draft.lost_reason||'Project cancelled';renderModal();toast('Marked not awarded');return}
+  if(a==='bp-hold-back'){holdBack(M.draft);return}
   if(a==='bp-out'){M.draft.status=t.dataset.v;if(t.dataset.v==='Awarded'&&!M.draft.awarded_date)M.draft.awarded_date=todayStr();renderModal();return}});
 
 /* auto-save: a second after the last change, if anything on the bid differs from what was last saved */
