@@ -3684,3 +3684,6 @@ button.pf-step{cursor:pointer}button.pf-step:hover{border-color:var(--accent)}
 
 .mo-name{font-weight:600}tr.click:hover .mo-name{color:var(--accent);text-decoration:underline}
 .pd-k{margin-bottom:8px}
+
+.sbx-acts{display:inline-flex;gap:6px;align-items:center}
+.sbx-people{display:flex;flex-direction:column;gap:6px;max-height:50vh;overflow:auto;padding:4px 0}
