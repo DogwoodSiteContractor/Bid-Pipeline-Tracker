@@ -546,19 +546,25 @@ function propFunnel(Y){const P=propsIn(Y+'-01-01',Y+'-12-31');const st=P.proj.ma
     ${step(c('lost'),'Lost',moneyK(val('lost')),'')}
     ${step(c('pending'),'Waiting on a decision',c('pending')?'Record outcomes ›':'all recorded',c('pending')?'warn':'',c('pending')?'out-open':'')}
     <span class="pf-proc">${P.proj.length?Math.round((c('won-done')+c('lost'))/P.proj.length*100):0}% processed</span></div></div>`}
-function propDrillModal(){const x=M;const P=propsIn(x.from,x.to);const by=x.by||'gc';
+function propDrillModal(){const x=M;const P=pdFilter(propsIn(x.from,x.to),x);const by=x.by||'gc';
   const rows=by==='gc'?P.sends.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(r=>({b:r.b,gc:r.gc?clientName(r.gc):'—',date:r.date,amt:r.amt})):P.proj.slice().sort((a,b)=>bidWhen(b).localeCompare(bidWhen(a))).map(b=>({b,gc:clientsLine(b,3),date:sentOn(b),amt:bidValue(b)}));
   const tot=rows.reduce((t,r)=>t+(r.amt||0),0);
-  return mhead(x.title||'Proposals sent',`${fmtDate(x.from)} – ${fmtDate(x.to)} · ${P.proj.length} projects · ${P.sends.length} proposals to GCs`)+`<div class="mbody">
+  const st=P.proj.map(procState);const n=k=>st.filter(v=>v&&v.startsWith(k)).length;const w=n('won'),l=n('lost'),pe=n('pending');
+  return mhead(x.est?x.est:x.gc?x.gc:(x.title||'Proposals sent'),`${x.est||x.gc?'Proposals sent · ':''}${fmtDate(x.from)} – ${fmtDate(x.to)} · ${P.proj.length} project${P.proj.length===1?'':'s'} · ${P.sends.length} proposal${P.sends.length===1?'':'s'} to GCs`)+`<div class="mbody">
+    <div class="dt-kpis pd-k"><div><span>Projects</span><b>${P.proj.length}</b></div><div><span>Value</span><b>${moneyK(P.projVal)}</b></div><div><span>Won</span><b>${w}</b></div><div><span>Lost</span><b>${l}</b></div><div><span>Waiting</span><b>${pe}</b></div><div class="main"><span>Win rate</span><b>${w+l?Math.round(w/(w+l)*100)+'%':'—'}</b></div></div>
     <div class="pd-bar"><div class="seg sm"><button class="${by==='gc'?'on':''}" data-act="pd-by" data-v="gc">Each proposal to a GC (${P.sends.length})</button><button class="${by==='proj'?'on':''}" data-act="pd-by" data-v="proj">Unique projects (${P.proj.length})</button></div><button class="btn sm" data-act="pd-csv">⬇ CSV</button></div>
     <p class="hint">${by==='gc'?'A job sent to two GCs is two proposals here, each at that GC’s number.':'Each job once, at its latest proposal (a re-bid or superseded bid replaces the earlier one).'} Archived bids count; bids marked “leave out of the numbers” don’t.</p>
     <div class="panel scroll"><table><thead><tr><th>Sent</th><th>Project</th><th>${by==='gc'?'GC':'Bidding to'}</th><th>Estimator</th><th>Status</th><th class="r">Amount</th></tr></thead><tbody>
     ${rows.map(r=>`<tr class="click" data-act="open-bid" data-id="${r.b.id}"><td class="num">${r.date?fmtShort(r.date):'—'}</td><td>${esc(r.b.name)}${r.b.archived_at?' <span class="dim small">archived</span>':''}</td><td>${esc(r.gc||'—')}</td><td>${esc(estName(r.b.lead_estimator_id)||'—')}</td><td>${stPill(r.b.status,r.b)}</td><td class="r num">${money(r.amt||0)}</td></tr>`).join('')||'<tr><td colspan="6"><div class="empty">Nothing sent in this period.</div></td></tr>'}
     </tbody><tfoot><tr><td></td><td><b>${rows.length} ${by==='gc'?'proposals':'projects'}</b></td><td></td><td></td><td></td><td class="r num"><b>${money(tot)}</b></td></tr></tfoot></table></div></div>
     <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Close</button></div></div>`}
-function pdCsv(){const x=M;const P=propsIn(x.from,x.to);const by=x.by||'gc';const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+// narrow the list to one estimator (lead) or one GC
+function pdFilter(P,x){if(!x.est&&!x.gc)return P;let sends=P.sends;
+  if(x.est)sends=sends.filter(r=>(estName(r.b.lead_estimator_id)||'Unassigned')===x.est);if(x.gc)sends=sends.filter(r=>(r.gc?clientName(r.gc):'No GC')===x.gc);
+  const ids=new Set(sends.map(r=>r.b.id));const proj=P.proj.filter(b=>ids.has(b.id));return {sends,proj,projVal:proj.reduce((t,b)=>t+bidValue(b),0),gcVal:sends.reduce((t,r)=>t+(r.amt||0),0)}}
+function pdCsv(){const x=M;const P=pdFilter(propsIn(x.from,x.to),x);const by=x.by||'gc';const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
   const lines=[by==='gc'?'Sent,Project,GC,Estimator,Status,Amount':'Sent,Project,Bidding to,Estimator,Status,Amount'].concat(by==='gc'?P.sends.map(r=>[r.date,r.b.name,r.gc?clientName(r.gc):'',estName(r.b.lead_estimator_id),r.b.status,r.amt||0].map(q).join(',')):P.proj.map(b=>[sentOn(b),b.name,clientsLine(b,9),estName(b.lead_estimator_id),b.status,bidValue(b)].map(q).join(',')));
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/csv'}));a.download=`Proposals ${x.from} to ${x.to} (${by==='gc'?'to GCs':'projects'}).csv`;a.click()}
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/csv'}));a.download=`Proposals ${x.est||x.gc?(x.est||x.gc)+' ':''}${x.from} to ${x.to} (${by==='gc'?'to GCs':'projects'}).csv`;a.click()}
 // Record outcomes: oldest proposals still waiting on a decision first
 const outPending=()=>jobsOnce(S.bids.filter(b=>!b._new&&statOk(b)&&isSent(b)&&!DECIDED.includes(b.status))).sort((a,b)=>(sentOn(a)||'').localeCompare(sentOn(b)||''));
 function outModal(){const x=M;const today=todayStr();let L=outPending();const all=L.length;if(x.age)L=L.filter(b=>sentOn(b)&&daysUntil(sentOn(b))<=-x.age);if(!x.showSkip)L=L.filter(b=>!(b.rfq&&b.rfq.outSkip&&daysUntil(b.rfq.outSkip)>-30));
@@ -639,9 +645,9 @@ function vMonthly(dstr){const now=new Date();S.mo=S.mo||{y:now.getFullYear(),m:n
     ${box('Win rate',pct(S2.winRate),`on ${MO_N[m].slice(0,3)} proposals: ${S2.cWon} won · ${S2.cLost} lost · ${S2.cPend} waiting`)}
     ${box('Processed',S2.proj?Math.round(S2.proc/S2.proj*100)+'%':'—',`${S2.proc} of ${S2.proj} projects sent this month`)}</div>
   <div class="mo-grid"><div class="sec"><div class="sec-h"><h2>By estimator</h2><span>projects sent this month and how they turned out</span></div>
-    ${tbl([['Estimator'],['Sent',1],['Value',1],['Won',1],['Lost',1],['Waiting',1],['Win rate',1]],R.est.map(r=>`<tr><td>${esc(r[0])}</td><td class="r num">${r[1]}</td><td class="r num">${moneyK(r[2])}</td><td class="r num">${r[3]}</td><td class="r num">${r[4]}</td><td class="r num">${r[5]}</td><td class="r num">${r[3]+r[4]?Math.round(r[3]/(r[3]+r[4])*100)+'%':'—'}</td></tr>`).join(''),'No proposals sent.')}</div>
+    ${tbl([['Estimator'],['Sent',1],['Value',1],['Won',1],['Lost',1],['Waiting',1],['Win rate',1]],R.est.map(r=>`<tr class="click" data-act="mo-who" data-k="est" data-v="${esc(r[0])}" title="See ${esc(r[0])}’s proposals"><td><span class="mo-name">${esc(r[0])}</span></td><td class="r num">${r[1]}</td><td class="r num">${moneyK(r[2])}</td><td class="r num">${r[3]}</td><td class="r num">${r[4]}</td><td class="r num">${r[5]}</td><td class="r num">${r[3]+r[4]?Math.round(r[3]/(r[3]+r[4])*100)+'%':'—'}</td></tr>`).join(''),'No proposals sent.')}</div>
   <div class="sec"><div class="sec-h"><h2>By GC</h2><span>proposals to each GC</span></div>
-    ${tbl([['GC'],['Proposals',1],['Amount',1],['Won',1]],R.gc.slice(0,15).map(r=>`<tr><td>${esc(r[0])}</td><td class="r num">${r[1]}</td><td class="r num">${moneyK(r[2])}</td><td class="r num">${r[3]||''}</td></tr>`).join(''),'No proposals sent.')}</div></div>
+    ${tbl([['GC'],['Proposals',1],['Amount',1],['Won',1]],R.gc.slice(0,15).map(r=>`<tr class="click" data-act="mo-who" data-k="gc" data-v="${esc(r[0])}" title="See proposals to ${esc(r[0])}"><td><span class="mo-name">${esc(r[0])}</span></td><td class="r num">${r[1]}</td><td class="r num">${moneyK(r[2])}</td><td class="r num">${r[3]||''}</td></tr>`).join(''),'No proposals sent.')}</div></div>
   <div class="sec"><div class="sec-h"><h2>Won in ${MO_N[m]}</h2><span>by award date</span></div>
     ${tbl([['Awarded'],['Project'],['GC'],['Amount',1],['Processed']],R.wonList.map(r=>`<tr class="click" data-act="open-bid" data-id="${r[0]}"><td class="num">${fmtShort(r[3])}</td><td>${esc(r[1])}</td><td>${esc(r[2]||'—')}</td><td class="r num">${money(r[4])}</td><td>${r[5]?pill('Executed / underway','good'):pill('Not started','warn')}</td></tr>`).join(''),'Nothing awarded this month.')}</div>
   <div class="sec"><div class="sec-h"><h2>Proposals sent in ${MO_N[m]}</h2><span>each project once · status today</span></div>
@@ -652,6 +658,7 @@ async function moClose(){const {y,m}=S.mo;const k=moKey(y,m);if(!confirm(`Close 
 async function moReopen(){const {y,m}=S.mo;const k=moKey(y,m);if(!confirm(`Reopen ${MO_N[m]} ${y}? Its saved numbers are dropped and the report goes back to live numbers until it's closed again.`))return;
   const cur=clone(S.settings.month_close||{months:{}});delete (cur.months||{})[k];try{await run(sb.from('settings').upsert({key:'month_close',value:cur}));await loadTable('settings');toast('Reopened');render()}catch(e){toast(errMsg(e))}}
 document.addEventListener('click',e=>{const t=e.target instanceof Element&&e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
+  if(a==='mo-who'){const [from,to]=moRange(S.mo.y,S.mo.m);M={kind:'propdrill',from,to,by:t.dataset.k==='gc'?'gc':'proj',[t.dataset.k]:t.dataset.v};showModal();return}
   if(a==='mo-pick'){S.mo.m=+t.dataset.m;S.moLive=false;render()}else if(a==='mo-go'){S.view='dashboard';S.dash='month';S.mo={y:+t.dataset.y,m:+t.dataset.m};render()}
   else if(a==='mo-close')moClose();else if(a==='mo-reopen')moReopen();
   else if(a==='mo-print'){const el=$('#mo-rep');if(!el)return;const pr=document.createElement('div');pr.id='print-root';pr.innerHTML=`<div class="dt-print mo-print">${el.innerHTML}</div>`;document.body.appendChild(pr);document.body.classList.add('printing-prop');window.print();setTimeout(()=>{document.body.classList.remove('printing-prop');pr.remove()},500)}});
