@@ -94,7 +94,8 @@ const ptShort=t=>String(normProjectType(t)||'').replace(/\s*\((Residential|Indus
 const BID_COLS61=['asset_class','contract_date','contract_amount','start_date'];const has61=()=>S.bids.some(b=>'asset_class' in b);
 const live=b=>!b.archived_at;
 // dashboards and win rates count archived bids only when someone asks for them (Board dashboard → Include archived)
-const statOk=b=>!b.archived_at||!!S.inclArch;
+// What counts in the numbers: every bid, archived or not, unless it was flagged as a duplicate / test / mistake
+const statOk=b=>!(b&&b.rfq&&b.rfq.noStats)&&!b._sample;
 const unitsText=b=>num(b.units)?`${Number(b.units).toLocaleString('en-US')} unit${+b.units===1?'':'s'}`:'';
 const BID_TYPES=['Hard bid','Negotiated','Budget / pricing','Design-assist'];
 const LOST_REASONS=['','Price','Schedule','Relationship / incumbent','Project cancelled','Scope','Unknown'];
@@ -259,6 +260,17 @@ const supByOf=b=>b&&b.rfq&&b.rfq.supersededBy||null;      // this bid was replac
 function jobRoot(b){let x=b,n=0;while(x&&(rebidOf(x)||supOf(x))&&n<20){const p=byId(S.bids,rebidOf(x)||supOf(x));if(!p)break;x=p;n++}return x?x.id:b.id}
 const bidWhen=b=>sentOn(b)||b.submitted_date||b.due_date||String(b.created_at||'').slice(0,10);
 // keep only the latest bid of each job in a list
+// every proposal that went out on a bid: one per GC it was sent to, with that GC's number and send date
+function propSends(b){if(!isSent(b))return [];const so=sentOn(b)||String(b.submitted_date||b.due_date||'').slice(0,10);const ids=propIds(b);const cps=b.client_proposals||{};
+  if(!ids.length)return [{b,gc:null,date:so,amt:bidValue(b)}];
+  let use=ids;if(ids.some(id=>cps[id]&&cps[id].status&&cps[id].status!=='Not sent')){const f=ids.filter(id=>['Sent','Lost','Awarded'].includes((cps[id]||{}).status));if(f.length)use=f}
+  return use.map(id=>({b,gc:id,date:String((cps[id]||{}).sent_date||so||'').slice(0,10),amt:clientAmount(b,id)||bidValue(b)}))}
+// proposals sent between two dates: count to GCs, unique projects (a re-bid counts once) and the dollars each way
+function propsIn(from,to){const sends=S.bids.filter(b=>!b._new&&statOk(b)).flatMap(propSends).filter(x=>x.date&&x.date>=from&&x.date<=to);
+  const bids=[...new Set(sends.map(x=>x.b))];const proj=jobsOnce(bids);return {sends,proj,projVal:proj.reduce((t,b)=>t+bidValue(b),0),gcVal:sends.reduce((t,x)=>t+(x.amt||0),0)}}
+// processed = the outcome is handled: lost and marked, or won with the contract executed / turned over / underway on the Awarded tab
+const awOfBid=b=>(S.awards||[]).find(a=>a.bid_id===b.id&&!a._local);
+function procState(b){if(!isSent(b))return null;if(b.status==='Not Awarded'||b.status==='No Bid')return 'lost';if(b.status==='Awarded')return (b.contract_date||awOfBid(b))?'won-done':'won-open';return 'pending'}
 function jobsOnce(list){const m=new Map();list.forEach(b=>{const k=jobRoot(b);const o=m.get(k);if(!o||bidWhen(b)>bidWhen(o))m.set(k,b)});return list.filter(b=>m.get(jobRoot(b))===b)}
 // a later re-bid of the same job exists (an awarded bid is never hidden)
 function rebidLater(b){if(b.status==='Awarded')return false;const k=jobRoot(b);const w=bidWhen(b);return S.bids.some(x=>x!==b&&!x._new&&jobRoot(x)===k&&bidWhen(x)>w)}
@@ -519,19 +531,139 @@ document.addEventListener('submit',async e=>{
 });
 
 /* ---------- dashboard ---------- */
-function dashSeg(){const cur=S.dash==='reports'?'reports':(onlyMine()||scopeView())?'mine':role()==='board'?'board':S.dash;
+function dashSeg(){const cur=S.dash==='reports'?'reports':S.dash==='month'?'month':(onlyMine()||scopeView())?'mine':role()==='board'?'board':S.dash;
   const b=(v,l,sm)=>`<button class="${cur===v?'on':''}" data-act="dash" data-v="${v==='mine'?'precon':v}">${l}${sm?`<small>${sm}</small>`:''}</button>`;
   const items=onlyMine()||scopeView()?[b('mine',onlyMine()?'My dashboard':'Dashboard','Daily work')]:role()==='board'?[b('board','Board','Results & trends')]:[b('precon','Precon','Daily work'),b('board','Board','Results & trends')];
+  items.push(b('month','Monthly','Month by month'));if(S.dash==='month')items.forEach((x,i)=>{items[i]=x.replace(' class="on"',' class=""')});
   return `<div class="seg" role="tablist">${items.join('')}${tabOff('reports')?'':b('reports','Reports'+(devOnly('reports')?' 🔧':''),'Build your own')}</div>`}
+/* ---------- Proposals: funnel, the list behind the numbers, and recording outcomes ---------- */
+function propFunnel(Y){const P=propsIn(Y+'-01-01',Y+'-12-31');const st=P.proj.map(procState);const c=k=>st.filter(x=>x===k).length;const won=c('won-done')+c('won-open');
+  const val=k=>P.proj.filter((b,i)=>st[i]===k).reduce((t,b)=>t+(k.startsWith('won')?wonValue(b):bidValue(b)),0);
+  const step=(n,l,sub,cls,act)=>`<${act?'button':'div'} class="pf-step ${cls||''}"${act?` data-act="${act}"`:''}><b>${n}</b><span>${l}</span>${sub?`<small>${sub}</small>`:''}</${act?'button':'div'}>`;
+  return `<div class="pf"><div class="pf-h"><b>${Y} proposals</b><span class="dim small">projects sent this year and where each one stands · processed = lost and marked, or won and executed / turned over / underway</span></div><div class="pf-row">
+    ${step(P.proj.length,'Sent',moneyK(P.projVal),'',`prop-drill" data-from="${Y}-01-01" data-to="${Y}-12-31`)}<i class="pf-arr">→</i>
+    ${step(won,'Won',moneyK(val('won-done')+val('won-open')),'good')}${step(c('won-done'),'Won &amp; processed',c('won-open')?c('won-open')+' won, not started yet':'all started','good')}
+    ${step(c('lost'),'Lost',moneyK(val('lost')),'')}
+    ${step(c('pending'),'Waiting on a decision',c('pending')?'Record outcomes ›':'all recorded',c('pending')?'warn':'',c('pending')?'out-open':'')}
+    <span class="pf-proc">${P.proj.length?Math.round((c('won-done')+c('lost'))/P.proj.length*100):0}% processed</span></div></div>`}
+function propDrillModal(){const x=M;const P=propsIn(x.from,x.to);const by=x.by||'gc';
+  const rows=by==='gc'?P.sends.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(r=>({b:r.b,gc:r.gc?clientName(r.gc):'—',date:r.date,amt:r.amt})):P.proj.slice().sort((a,b)=>bidWhen(b).localeCompare(bidWhen(a))).map(b=>({b,gc:clientsLine(b,3),date:sentOn(b),amt:bidValue(b)}));
+  const tot=rows.reduce((t,r)=>t+(r.amt||0),0);
+  return mhead(x.title||'Proposals sent',`${fmtDate(x.from)} – ${fmtDate(x.to)} · ${P.proj.length} projects · ${P.sends.length} proposals to GCs`)+`<div class="mbody">
+    <div class="pd-bar"><div class="seg sm"><button class="${by==='gc'?'on':''}" data-act="pd-by" data-v="gc">Each proposal to a GC (${P.sends.length})</button><button class="${by==='proj'?'on':''}" data-act="pd-by" data-v="proj">Unique projects (${P.proj.length})</button></div><button class="btn sm" data-act="pd-csv">⬇ CSV</button></div>
+    <p class="hint">${by==='gc'?'A job sent to two GCs is two proposals here, each at that GC’s number.':'Each job once, at its latest proposal (a re-bid or superseded bid replaces the earlier one).'} Archived bids count; bids marked “leave out of the numbers” don’t.</p>
+    <div class="panel scroll"><table><thead><tr><th>Sent</th><th>Project</th><th>${by==='gc'?'GC':'Bidding to'}</th><th>Estimator</th><th>Status</th><th class="r">Amount</th></tr></thead><tbody>
+    ${rows.map(r=>`<tr class="click" data-act="open-bid" data-id="${r.b.id}"><td class="num">${r.date?fmtShort(r.date):'—'}</td><td>${esc(r.b.name)}${r.b.archived_at?' <span class="dim small">archived</span>':''}</td><td>${esc(r.gc||'—')}</td><td>${esc(estName(r.b.lead_estimator_id)||'—')}</td><td>${stPill(r.b.status,r.b)}</td><td class="r num">${money(r.amt||0)}</td></tr>`).join('')||'<tr><td colspan="6"><div class="empty">Nothing sent in this period.</div></td></tr>'}
+    </tbody><tfoot><tr><td></td><td><b>${rows.length} ${by==='gc'?'proposals':'projects'}</b></td><td></td><td></td><td></td><td class="r num"><b>${money(tot)}</b></td></tr></tfoot></table></div></div>
+    <div class="mfoot"><div></div><div class="r"><button class="btn" data-act="close">Close</button></div></div>`}
+function pdCsv(){const x=M;const P=propsIn(x.from,x.to);const by=x.by||'gc';const q=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+  const lines=[by==='gc'?'Sent,Project,GC,Estimator,Status,Amount':'Sent,Project,Bidding to,Estimator,Status,Amount'].concat(by==='gc'?P.sends.map(r=>[r.date,r.b.name,r.gc?clientName(r.gc):'',estName(r.b.lead_estimator_id),r.b.status,r.amt||0].map(q).join(',')):P.proj.map(b=>[sentOn(b),b.name,clientsLine(b,9),estName(b.lead_estimator_id),b.status,bidValue(b)].map(q).join(',')));
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/csv'}));a.download=`Proposals ${x.from} to ${x.to} (${by==='gc'?'to GCs':'projects'}).csv`;a.click()}
+// Record outcomes: oldest proposals still waiting on a decision first
+const outPending=()=>jobsOnce(S.bids.filter(b=>!b._new&&statOk(b)&&isSent(b)&&!DECIDED.includes(b.status))).sort((a,b)=>(sentOn(a)||'').localeCompare(sentOn(b)||''));
+function outModal(){const x=M;const today=todayStr();let L=outPending();const all=L.length;if(x.age)L=L.filter(b=>sentOn(b)&&daysUntil(sentOn(b))<=-x.age);if(!x.showSkip)L=L.filter(b=>!(b.rfq&&b.rfq.outSkip&&daysUntil(b.rfq.outSkip)>-30));
+  const ok=can('bids')==='edit'||isAdmin();
+  return mhead('Record outcomes',`${all} proposal${all===1?'':'s'} still waiting on a decision · oldest first`)+`<div class="mbody">
+    <div class="pd-bar"><div class="seg sm">${[[0,'All'],[30,'30+ days'],[60,'60+ days'],[90,'90+ days']].map(([v,l])=>`<button class="${(x.age||0)===v?'on':''}" data-act="out-age" data-v="${v}">${l}</button>`).join('')}</div>
+      <label class="check small"><input type="checkbox" data-outskip${x.showSkip?' checked':''}> Show ones marked “still waiting” in the last 30 days</label>
+      ${(S.outUndo||[]).length?`<button class="btn sm" data-act="out-undo">↶ Undo last</button>`:''}</div>
+    <p class="hint">Pick the date the GC told you, then Won or Lost. Won on a bid sent to more than one GC opens the bid so you can pick which GC. “Still waiting” hides it here for 30 days.</p>
+    <div class="out-list">${L.map(b=>{const so=sentOn(b);const gcs=propIds(b);const age=so?-daysUntil(so):null;
+      return `<div class="out-row"><div class="out-m"><button class="linkish" data-act="open-bid" data-id="${b.id}"><b>${esc(b.name)}</b></button><div class="dim small">${esc(clientsLine(b,3)||'No GC')} · ${esc(estName(b.lead_estimator_id)||'no estimator')}</div></div>
+        <div class="out-s"><span class="num">${money(bidValue(b))}</span><span class="dim small">sent ${so?fmtShort(so):'—'}${age!=null?` · ${age} day${age===1?'':'s'} ago`:''}</span></div>
+        ${ok?`<div class="out-a"><input type="date" class="field sm" data-outdate="${b.id}" value="${esc((x.dates||{})[b.id]||today)}" max="${today}" title="Date of the decision">
+          <button class="btn sm good" data-act="out-won" data-id="${b.id}"${gcs.length>1?' title="Opens the bid to pick the GC"':''}>Won${gcs.length>1?'…':''}</button><button class="btn sm" data-act="out-lost" data-id="${b.id}">Lost</button><button class="btn sm ghost" data-act="out-skip" data-id="${b.id}">Still waiting</button></div>`:''}</div>`}).join('')||'<div class="empty"><b>All caught up</b>Every proposal in this list has an outcome.</div>'}</div></div>
+    <div class="mfoot"><div class="dim small">${L.length} shown</div><div class="r"><button class="btn" data-act="close">Done</button></div></div>`}
+async function outPatch(b,patch,label){const old={};Object.keys(patch).forEach(k=>old[k]=clone(b[k]??null));Object.assign(b,patch);
+  try{await run(sb.from('bids').update({...patch,updated_by:S.session.user.id}).eq('id',b.id));(S.outUndo=S.outUndo||[]).push({id:b.id,old,label});toast(`${b.name}: ${label}`)}catch(e){Object.assign(b,old);toast(errMsg(e))}renderModal();render()}
+function outDecide(b,kind){const d=(M.dates||{})[b.id]||todayStr();const r={...(b.rfq||{})};delete r.outSkip;
+  if(kind==='skip'){r.outSkip=todayStr();return outPatch(b,{rfq:r},'still waiting')}
+  r.decidedOn=d;const cps=clone(b.client_proposals||{});
+  if(kind==='lost'){propIds(b).forEach(id=>{cps[id]={...(cps[id]||{}),status:'Lost'}});return outPatch(b,{status:'Not Awarded',client_proposals:cps,rfq:r},'marked lost')}
+  const g=propIds(b);if(g.length>1){closeModal();openBid(b.id);toast('Set the winning GC’s proposal to Awarded on the bid');return}
+  if(g[0])cps[g[0]]={...(cps[g[0]]||{}),status:'Awarded'};return outPatch(b,{status:'Awarded',awarded_date:d,awarded_client_id:g[0]||b.awarded_client_id||null,client_proposals:cps,rfq:r},'marked won')}
+document.addEventListener('click',e=>{const t=e.target instanceof Element&&e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
+  if(a==='prop-drill'){M={kind:'propdrill',from:t.dataset.from,to:t.dataset.to,by:'gc'};showModal();return}
+  if(a==='out-open'){M={kind:'outrec',age:0,dates:{}};showModal();return}
+  if(!M)return;
+  if(M.kind==='propdrill'){if(a==='pd-by'){M.by=t.dataset.v;renderModal()}else if(a==='pd-csv')pdCsv();return}
+  if(M.kind==='outrec'){const b=t.dataset.id&&byId(S.bids,t.dataset.id);
+    if(a==='out-age'){M.age=+t.dataset.v;renderModal()}else if(a==='out-won'&&b)outDecide(b,'won');else if(a==='out-lost'&&b)outDecide(b,'lost');else if(a==='out-skip'&&b)outDecide(b,'skip');
+    else if(a==='out-undo'){const u=(S.outUndo||[]).pop();const bb=u&&byId(S.bids,u.id);if(bb){Object.assign(bb,u.old);run(sb.from('bids').update({...u.old,updated_by:S.session.user.id}).eq('id',bb.id)).then(()=>{toast('Undone');renderModal();render()}).catch(err=>toast(errMsg(err)))}}}},true);
+document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='outrec')return;if(t.dataset.outdate){(M.dates=M.dates||{})[t.dataset.outdate]=t.value}else if(t.dataset.outskip!=null){M.showSkip=t.checked;renderModal()}});
+/* ---------- Monthly report: any month, closed on the last business day after review ---------- */
+const MO_N=['January','February','March','April','May','June','July','August','September','October','November','December'];
+const moKey=(y,m)=>`${y}-${String(m+1).padStart(2,'0')}`;
+const ymd=d=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+function moRange(y,m){return [moKey(y,m)+'-01',ymd(new Date(y,m+1,0))]}
+function lastBizDay(y,m){const d=new Date(y,m+1,0);while(d.getDay()===0||d.getDay()===6)d.setDate(d.getDate()-1);return ymd(d)}
+const moCloses=()=>(S.settings.month_close&&S.settings.month_close.months)||{};
+function moStats(y,m){const [from,to]=moRange(y,m);const P=propsIn(from,to);const bids=S.bids.filter(b=>!b._new&&statOk(b));
+  const newIn=bids.filter(b=>{const i=intakeOf(b);return i&&i>=from&&i<=to});
+  const wonIn=jobsOnce(bids.filter(b=>b.status==='Awarded'&&b.awarded_date&&String(b.awarded_date).slice(0,10)>=from&&String(b.awarded_date).slice(0,10)<=to));
+  const st=P.proj.map(procState);const c=k=>st.filter(x=>x===k).length;const won=c('won-done')+c('won-open'),lost=c('lost');
+  const est={};P.proj.forEach((b,i)=>{const k=estName(b.lead_estimator_id)||'Unassigned';const o=est[k]=est[k]||{n:0,val:0,won:0,lost:0,pend:0};o.n++;o.val+=bidValue(b);if(st[i].startsWith('won'))o.won++;else if(st[i]==='lost')o.lost++;else o.pend++});
+  const gc={};P.sends.forEach(x=>{const k=x.gc?clientName(x.gc):'No GC';const o=gc[k]=gc[k]||{n:0,amt:0,won:0};o.n++;o.amt+=x.amt||0;if(x.gc&&clientWon(x.b,x.gc))o.won++});
+  return {k:moKey(y,m),from,to,s:{sends:P.sends.length,proj:P.proj.length,projVal:P.projVal,gcVal:P.gcVal,newIn:newIn.length,won:wonIn.length,wonVal:wonIn.reduce((t,b)=>t+wonValue(b),0),cWon:won,cLost:lost,cPend:c('pending'),proc:c('won-done')+lost,winRate:won+lost?won/(won+lost):null},
+    est:Object.entries(est).sort((a,b)=>b[1].val-a[1].val).map(([k,o])=>[k,o.n,o.val,o.won,o.lost,o.pend]),
+    gc:Object.entries(gc).sort((a,b)=>b[1].amt-a[1].amt).map(([k,o])=>[k,o.n,o.amt,o.won]),
+    list:P.proj.slice().sort((a,b)=>(sentOn(a)||'').localeCompare(sentOn(b)||'')).map(b=>[b.id,b.name,clientsLine(b,3),sentOn(b),bidValue(b),b.status,estName(b.lead_estimator_id)]),
+    wonList:wonIn.map(b=>[b.id,b.name,b.awarded_client_id?clientName(b.awarded_client_id):clientsLine(b,2),String(b.awarded_date).slice(0,10),wonValue(b),procState(b)==='won-done'])}}
+function moBanner(){if(!isAdmin())return '';const t=todayStr(),now=new Date();const C=moCloses();
+  const cand=[[now.getFullYear(),now.getMonth()],[now.getMonth()?now.getFullYear():now.getFullYear()-1,now.getMonth()?now.getMonth()-1:11]].find(([y,m])=>lastBizDay(y,m)<=t&&!C[moKey(y,m)]&&moKey(y,m)>='2026-11');
+  if(!cand)return '';const [y,m]=cand;return `<div class="notice mo-ban"><span>📊 <b>${MO_N[m]} ${y} report is ready to review.</b> Look it over, then close the month to lock its numbers.</span><button class="btn sm primary" data-act="mo-go" data-y="${y}" data-m="${m}">Review ${MO_N[m]}</button></div>`}
+function vMonthly(dstr){const now=new Date();S.mo=S.mo||{y:now.getFullYear(),m:now.getMonth()};const {y,m}=S.mo;const k=moKey(y,m);const C=moCloses();const cl=C[k];const t=todayStr();const lbd=lastBizDay(y,m);
+  const live=moStats(y,m);const R=cl&&!S.moLive?cl:live;const prevY=m?y:y-1,prevM=m?m-1:11;const pk=moKey(prevY,prevM);const P=C[pk]||moStats(prevY,prevM);const L=C[moKey(y-1,m)]||moStats(y-1,m);
+  const ys=new Set([now.getFullYear(),now.getFullYear()-1]);S.bids.forEach(b=>{const v=+String(sentOn(b)||'').slice(0,4);if(v)ys.add(v)});
+  const chips=MO_N.map((n,i)=>{const fut=moKey(y,i)>moKey(now.getFullYear(),now.getMonth());return `<button class="${i===m?'on':''}" data-act="mo-pick" data-m="${i}"${fut?' disabled':''}>${n.slice(0,3)}${C[moKey(y,i)]?' <i class="mo-ck">✓</i>':''}</button>`}).join('');
+  const dl=(a,b,money_)=>{if(b==null||!b){return ''}const d=(a-b)/Math.abs(b)*100;return `<span class="mo-d ${d>=0?'up':'down'}">${d>=0?'▲':'▼'} ${Math.abs(d).toFixed(0)}%</span>`};
+  const cmp=(f,mon)=>{const a=R.s[f],p=P.s[f],l=L.s[f];const fm=v=>mon?moneyK(v):fmtN(v,0);return `<div class="mo-cmp">${MO_N[prevM].slice(0,3)} ${fm(p)} ${dl(a,p)}<br>${MO_N[m].slice(0,3)} ${y-1} ${fm(l)} ${dl(a,l)}</div>`};
+  const box=(l,v,sub,f,mon,act)=>`<${act?'button':'div'} class="kpi mo-k"${act||''}><div class="l">${l}</div><div class="v">${v}</div><div class="s">${sub}</div>${f?cmp(f,mon):''}</${act?'button':'div'}>`;
+  const S2=R.s;const ok=isAdmin();
+  const status=cl?`<span class="pill good">Closed</span> <span class="small dim">${fmtDate(String(cl.closedAt).slice(0,10))} by ${esc(cl.by||'')}</span>${ok?` <button class="btn sm ghost" data-act="mo-reopen">Reopen</button>`:''} <label class="check small"><input type="checkbox" data-molive${S.moLive?' checked':''}> Show today’s numbers instead</label>`
+    :t>=lbd?`<span class="pill warn">Ready for review</span> <span class="small dim">since ${fmtShort(lbd)}, the last business day</span>${ok?` <button class="btn sm primary" data-act="mo-close">Close ${MO_N[m]}</button>`:' <span class="small dim">An admin closes the month.</span>'}`
+    :`<span class="pill">Open</span> <span class="small dim">month to date · review opens ${fmtShort(lbd)}, the last business day</span>`;
+  const drift=cl&&!S.moLive&&JSON.stringify(cl.s)!==JSON.stringify(live.s)?`<p class="notice small">Bids from ${MO_N[m]} have changed since it was closed. These are the closed numbers; tick “Show today’s numbers” to compare.</p>`:'';
+  const tbl=(h,rows,empty)=>`<div class="panel scroll"><table><thead><tr>${h.map(x=>`<th${x[1]?' class="r"':''}>${x[0]}</th>`).join('')}</tr></thead><tbody>${rows||`<tr><td colspan="${h.length}"><div class="empty">${empty}</div></td></tr>`}</tbody></table></div>`;
+  const pct=v=>v==null?'—':Math.round(v*100)+'%';
+  return `<div class="head"><div><h1>Monthly report</h1><p>${dstr}</p></div><div class="tools">${dashSeg()}</div></div>
+  <div class="mo-bar"><select class="field sm" data-moy>${[...ys].sort((a,b)=>b-a).map(v=>`<option${v===y?' selected':''}>${v}</option>`).join('')}</select><div class="seg sm mo-chips">${chips}</div><button class="btn sm" data-act="mo-print">🖨 Print</button></div>
+  <div class="mo-st">${status}</div>${drift}
+  <div id="mo-rep"><h2 class="mo-title">${MO_N[m]} ${y}</h2>
+  <div class="kpis mo-kpis">
+    ${box('Proposals sent',moneyK(S2.projVal),`${S2.proj} project${S2.proj===1?'':'s'} · ${S2.sends} to GCs (${moneyK(S2.gcVal)})`,'projVal',1,` data-act="prop-drill" data-from="${R.from}" data-to="${R.to}"`)}
+    ${box('New bids in',fmtN(S2.newIn,0),'invitations received','newIn')}
+    ${box('Won this month',moneyK(S2.wonVal),`${S2.won} job${S2.won===1?'':'s'} awarded`,'wonVal',1)}
+    ${box('Win rate',pct(S2.winRate),`on ${MO_N[m].slice(0,3)} proposals: ${S2.cWon} won · ${S2.cLost} lost · ${S2.cPend} waiting`)}
+    ${box('Processed',S2.proj?Math.round(S2.proc/S2.proj*100)+'%':'—',`${S2.proc} of ${S2.proj} projects sent this month`)}</div>
+  <div class="mo-grid"><div class="sec"><div class="sec-h"><h2>By estimator</h2><span>projects sent this month and how they turned out</span></div>
+    ${tbl([['Estimator'],['Sent',1],['Value',1],['Won',1],['Lost',1],['Waiting',1],['Win rate',1]],R.est.map(r=>`<tr><td>${esc(r[0])}</td><td class="r num">${r[1]}</td><td class="r num">${moneyK(r[2])}</td><td class="r num">${r[3]}</td><td class="r num">${r[4]}</td><td class="r num">${r[5]}</td><td class="r num">${r[3]+r[4]?Math.round(r[3]/(r[3]+r[4])*100)+'%':'—'}</td></tr>`).join(''),'No proposals sent.')}</div>
+  <div class="sec"><div class="sec-h"><h2>By GC</h2><span>proposals to each GC</span></div>
+    ${tbl([['GC'],['Proposals',1],['Amount',1],['Won',1]],R.gc.slice(0,15).map(r=>`<tr><td>${esc(r[0])}</td><td class="r num">${r[1]}</td><td class="r num">${moneyK(r[2])}</td><td class="r num">${r[3]||''}</td></tr>`).join(''),'No proposals sent.')}</div></div>
+  <div class="sec"><div class="sec-h"><h2>Won in ${MO_N[m]}</h2><span>by award date</span></div>
+    ${tbl([['Awarded'],['Project'],['GC'],['Amount',1],['Processed']],R.wonList.map(r=>`<tr class="click" data-act="open-bid" data-id="${r[0]}"><td class="num">${fmtShort(r[3])}</td><td>${esc(r[1])}</td><td>${esc(r[2]||'—')}</td><td class="r num">${money(r[4])}</td><td>${r[5]?pill('Executed / underway','good'):pill('Not started','warn')}</td></tr>`).join(''),'Nothing awarded this month.')}</div>
+  <div class="sec"><div class="sec-h"><h2>Proposals sent in ${MO_N[m]}</h2><span>each project once · status today</span></div>
+    ${tbl([['Sent'],['Project'],['Bidding to'],['Estimator'],['Status'],['Amount',1]],R.list.map(r=>{const b=byId(S.bids,r[0]);return `<tr class="click" data-act="open-bid" data-id="${r[0]}"><td class="num">${r[3]?fmtShort(r[3]):'—'}</td><td>${esc(r[1])}</td><td>${esc(r[2]||'—')}</td><td>${esc(r[6]||'—')}</td><td>${b?stPill(b.status,b):esc(r[5])}</td><td class="r num">${money(r[4])}</td></tr>`}).join(''),'Nothing sent this month.')}</div></div>`}
+async function moClose(){const {y,m}=S.mo;const k=moKey(y,m);if(!confirm(`Close ${MO_N[m]} ${y}?\n\nIts numbers are saved as they are right now, and the report shows those from here on, even if bids change later. An admin can reopen it.`))return;
+  const snap={...moStats(y,m),closedAt:new Date().toISOString(),by:myName()};const cur=clone(S.settings.month_close||{months:{}});cur.months=cur.months||{};cur.months[k]=snap;
+  try{await run(sb.from('settings').upsert({key:'month_close',value:cur}));await loadTable('settings');S.moLive=false;toast(`${MO_N[m]} ${y} closed`);render()}catch(e){toast(errMsg(e))}}
+async function moReopen(){const {y,m}=S.mo;const k=moKey(y,m);if(!confirm(`Reopen ${MO_N[m]} ${y}? Its saved numbers are dropped and the report goes back to live numbers until it's closed again.`))return;
+  const cur=clone(S.settings.month_close||{months:{}});delete (cur.months||{})[k];try{await run(sb.from('settings').upsert({key:'month_close',value:cur}));await loadTable('settings');toast('Reopened');render()}catch(e){toast(errMsg(e))}}
+document.addEventListener('click',e=>{const t=e.target instanceof Element&&e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;
+  if(a==='mo-pick'){S.mo.m=+t.dataset.m;S.moLive=false;render()}else if(a==='mo-go'){S.view='dashboard';S.dash='month';S.mo={y:+t.dataset.y,m:+t.dataset.m};render()}
+  else if(a==='mo-close')moClose();else if(a==='mo-reopen')moReopen();
+  else if(a==='mo-print'){const el=$('#mo-rep');if(!el)return;const pr=document.createElement('div');pr.id='print-root';pr.innerHTML=`<div class="dt-print mo-print">${el.innerHTML}</div>`;document.body.appendChild(pr);document.body.classList.add('printing-prop');window.print();setTimeout(()=>{document.body.classList.remove('printing-prop');pr.remove()},500)}});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.moy!=null){S.mo.y=+t.value;const now=new Date();if(moKey(S.mo.y,S.mo.m)>moKey(now.getFullYear(),now.getMonth()))S.mo.m=now.getMonth();render()}else if(t.dataset&&t.dataset.molive!=null){S.moLive=t.checked;render()}});
 function vDashboard(){
   const d=new Date().toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'});
   if(S.dash==='reports'&&tabOff('reports'))S.dash=role()==='board'?'board':'precon';
   if(S.dash==='reports')return vReports(true);
+  if(S.dash==='month')return vMonthly(d);
   if(onlyMine())return `<div class="head"><div><h1>My dashboard</h1><p>${d}</p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+cuPanel()+crPanel()+bidReqPanel()+reviewPanel()+tgtPanel()+fuPanel()+mine();
   if(scopeView())return `<div class="head"><div><h1>All projects</h1><p>${d} · <span class="dim">You can open any bid. To work on one that isn’t yours, open it and request access.</span></p></div><div class="tools">${mineSeg()}${dashSeg()}</div></div>`+cuPanel()+crPanel()+bidReqPanel()+fuPanel()+precon();
   if(role()==='board')return `<div class="head"><div><h1>Board dashboard</h1><p>${d}</p></div><div class="tools">${yearSelect()}${dashSeg()}</div></div>`+board();
   return `<div class="head"><div><h1>${S.dash==='precon'?'Bid pipeline dashboard':'Board dashboard'}</h1><p>${d}${S.lastLoaded?` · <span class="dim">Last updated ${S.lastLoaded.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'})}</span>`:''}</p></div>
-  <div class="tools">${S.dash==='board'?yearSelect()+(S.bids.some(b=>b.archived_at)?`<label class="check small" title="Archived bids are left out of the numbers unless this is on"><input type="checkbox" data-inclarch${S.inclArch?' checked':''}> Include archived</label>`:'')+`<div class="seg" title="What the board sees is the CRM view"><button class="${crmMode()==='crm'?'on':''}" data-act="crm-mode" data-v="crm">CRM</button><button class="${crmMode()==='charts'?'on':''}" data-act="crm-mode" data-v="charts">Charts</button></div>`+(crmMode()==='charts'?'<button class="btn" data-act="board-custom">Customize view</button><button class="btn" data-act="rp-board-copy" title="Copy these charts to a report page you can change">Copy to Reports</button>':''):'<button class="btn" data-act="refresh">↻ Refresh</button>'}
+  <div class="tools">${S.dash==='board'?yearSelect()+''+`<div class="seg" title="What the board sees is the CRM view"><button class="${crmMode()==='crm'?'on':''}" data-act="crm-mode" data-v="crm">CRM</button><button class="${crmMode()==='charts'?'on':''}" data-act="crm-mode" data-v="charts">Charts</button></div>`+(crmMode()==='charts'?'<button class="btn" data-act="board-custom">Customize view</button><button class="btn" data-act="rp-board-copy" title="Copy these charts to a report page you can change">Copy to Reports</button>':''):'<button class="btn" data-act="refresh">↻ Refresh</button>'}
   ${dashSeg()}</div></div>`
   +(S.dash==='precon'?vxUpkeepHtml()+cuPanel():'')+crPanel()+bidReqPanel()+reviewPanel()+tgtPanel()+fuPanel()+(S.dash==='precon'?precon():board());
 }
@@ -588,14 +720,14 @@ function precon(){
     ${kpi('Due this week',due7.length,past.length?past.length+' past due':'Upcoming deadlines',due7.length||past.length?'hot':'','active')}
     ${kpi('Pending decision',sub.length,'Bids submitted','','submitted')}
     ${kpi('Awarded',won.length,won.length?moneyK(won.reduce((x,b)=>x+wonValue(b),0))+' this year':'This year','good','awarded')}
-    ${kpi('Yearly proposals',moneyK(proposed.reduce((x,b)=>x+bidValue(b),0)),split(proposed))}
+    ${(()=>{const P=propsIn(Y+'-01-01',Y+'-12-31');return `<button class="kpi" data-act="prop-drill" data-from="${Y}-01-01" data-to="${Y}-12-31" title="Click to see every proposal behind this number"><div class="l">Proposals sent ${Y}</div><div class="v">${moneyK(P.projVal)}</div><div class="s">${P.proj.length} project${P.proj.length===1?'':'s'} · ${P.sends.length} proposal${P.sends.length===1?'':'s'} to GCs (${moneyK(P.gcVal)})</div></button>`})()}
     ${kpi('Active bid value',moneyK(val),split(act),'good')}</div>`;
   const fuList=fu.map(b=>`<div class="li"><div><button class="linkish" data-act="open-bid" data-id="${b.id}">${esc(b.name)}</button><div class="dim small">${(b.client_ids||[]).map(clientName).map(esc).join(', ')||'No client'}</div></div><div class="small">${lastTouch(b)?'Last '+fmtShort(lastTouch(b)):'Never contacted'}</div></div>`).join('');
   const load=S.estimators.filter(e=>e.active!==false).map(e=>({e,n:est.filter(b=>b.lead_estimator_id===e.id||(b.support_estimator_ids||[]).includes(e.id)).length,soon:due7.filter(b=>b.lead_estimator_id===e.id).length}));
   const maxL=Math.max(1,...load.map(x=>x.n));
   const loadHtml=load.length?`<div class="hbars">${load.sort((a,b)=>b.n-a.n).map(x=>`<div class="hb"><span class="lab who">${avatar(x.e.id,22)}${esc(x.e.name)}</span><div class="track"><div class="fill ${x.soon?'acc':''}" style="width:${x.n/maxL*100}%"></div></div><span class="v">${x.n} bid${x.n===1?'':'s'}${x.soon?` · ${x.soon} due soon`:''}</span></div>`).join('')}</div>`:`<div class="empty"><b>No estimators yet</b><button class="btn sm" data-act="nav" data-v="team">Add people</button></div>`;
   const closed=yr.filter(b=>live(b)&&DECIDED.includes(b.status)).sort((a,b)=>(b.awarded_date||b.due_date||'').localeCompare(a.awarded_date||a.due_date||''));
-  return kpis+`<div class="sec"><div class="sec-h ov-h"><h2>Projects overview</h2><span class="ov-view">${S.ov.hide?`<span class="dim small">${act.length} active bid${act.length===1?'':'s'} hidden</span>`:'<span class="dim small ov-hint">Active bids and upcoming deadlines · click a row to open it</span>'}${S.ov.hide?'':`<span class="seg sm wk-seg" title="How many bids to show"><span class="ov-lbl small dim">Show</span>${[[5,'5'],[10,'10'],[15,'15'],[0,'All']].map(([v,l])=>`<button class="${(+S.ov.limit||0)===v?'on':''}" data-act="ov-limit" data-v="${v}">${l}</button>`).join('')}</span>`}<button class="btn sm" data-act="ov-hide" aria-expanded="${!S.ov.hide}">${S.ov.hide?'▸ Expand':'▾ Collapse'}</button></span></div>${S.ov.hide?'':overviewTable(act)}</div>
+  return moBanner()+kpis+propFunnel(Y)+`<div class="sec"><div class="sec-h ov-h"><h2>Projects overview</h2><span class="ov-view">${S.ov.hide?`<span class="dim small">${act.length} active bid${act.length===1?'':'s'} hidden</span>`:'<span class="dim small ov-hint">Active bids and upcoming deadlines · click a row to open it</span>'}${S.ov.hide?'':`<span class="seg sm wk-seg" title="How many bids to show"><span class="ov-lbl small dim">Show</span>${[[5,'5'],[10,'10'],[15,'15'],[0,'All']].map(([v,l])=>`<button class="${(+S.ov.limit||0)===v?'on':''}" data-act="ov-limit" data-v="${v}">${l}</button>`).join('')}</span>`}<button class="btn sm" data-act="ov-hide" aria-expanded="${!S.ov.hide}">${S.ov.hide?'▸ Expand':'▾ Collapse'}</button></span></div>${S.ov.hide?'':overviewTable(act)}</div>
   ${weeklyPanel('precon')}
   ${closed.length?`<div class="sec"><div class="sec-h"><h2>Closed this year</h2><span>Awarded, lost and no-bid</span></div>${closedTable(closed)}</div>`:''}
   <div class="grid3">
@@ -1338,8 +1470,8 @@ function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=tr
 function renderModalNow(first){
   const body=$('#modal .mbody');const st=body?body.scrollTop:0;
   const ae=document.activeElement;const fk=focusKey(ae);let sel=null;const raw=ae&&ae.tagName==='INPUT'&&ae.type==='text'?ae.value:null;try{if(fk&&ae.selectionStart!=null)sel=[ae.selectionStart,ae.selectionEnd]}catch(e){}
-  const html={eodet:eoDetModal,survey:svModal,estx:estxModal,shpick:shPickModal,cbbak:cbBakModal,qhist:qHistModal,tplsync:tplSyncModal,rfnew:rfNewModal,tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal,airate:aiRateModal,aiinstr:aiInstrModal,vqlink:vqLinkModal,aitko:atkModal,aitkr:atkReportModal}[M.kind]();
-  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='bid'?' bidpage':''}${['eodet','rpcard','rpdrill','airate','aitko','aitkr','import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
+  const html={propdrill:propDrillModal,outrec:outModal,eodet:eoDetModal,survey:svModal,estx:estxModal,shpick:shPickModal,cbbak:cbBakModal,qhist:qHistModal,tplsync:tplSyncModal,rfnew:rfNewModal,tidy:tidyModal,vpick:vpickModal,vximp:vxImpModal,vclean:vcModal,vxrate:vxRateModal,vxlink:vxLinkModal,vxhist:vxHistModal,arch:archModal,task:taskModal,twcad:cadModal,twsurf:twSurfModal,twqty:twQtyModal,peimp:peModal,dirt:dirtModal,push:pushModal,tko:tkoModal,welcome:welcomeModal,aslist:asListModal,trivia:triviaModal,fb:fbModal,devtest:devTestModal,access:accessModal,acctfmt:fmtModal,acctco:coModal,job:jobModal,jitem:jitemModal,jlog:logModal,bulkdel:bulkDelModal,import:importModal,bid:bidModal,lib:libModal,tpl:tplModal,est:estModal,client:clientModal,vendor:vendorModal,board:boardModal,company:companyModal,mats:matsModal,pipes:pipesModal,tkimp:tkImpModal,cbitem:cbItemModal,cbimp:cbImpModal,cbmass:cbMassModal,cbtpl:cbTplModal,proplib:propLibModal,esttpl:estTplModal,pt:ptModal,cx:cxModal,track:trackModal,fu:fuModal,fulist:fuListModal,useradd:userAddModal,estrev:estRevModal,estdel:estDelModal,estnew:estNewModal,cbpick:cbPickModal,qtyapply:qaModal,simcheck:simModal,peqest:peqEstModal,biddel:bidDelModal,peeimp:peeModal,crnew:crNewModal,crbulk:crBulkModal,crlib:crLibModal,rpcard:rpCardModal,rpdrill:rpDrillModal,rppage:rpPageModal,airate:aiRateModal,aiinstr:aiInstrModal,vqlink:vqLinkModal,aitko:atkModal,aitkr:atkReportModal}[M.kind]();
+  $('#modal').innerHTML=`<div class="modal-wrap" data-act="backdrop"><div class="modal${first?' enter':''}${M.kind==='bid'?' bidpage':''}${['propdrill','outrec','eodet','rpcard','rpdrill','airate','aitko','aitkr','import','jlog','cbimp','cbmass','cbtpl','proplib','cbpick','simcheck','devtest','dirt','push','tko','peimp','twqty','twcad'].includes(M.kind)||M.kind==='cx'||M.kind==='fulist'||(M.kind==='cbitem'&&rbOn(M.draft))?' wide':''}" role="dialog" aria-modal="true">${html}</div></div>`;
   const nb=$('#modal .mbody');if(nb)nb.scrollTop=st;
   if(fk&&!first){const n=$('#modal '+fk);if(n){if(raw!=null&&n.tagName==='INPUT'&&n.type==='text'&&n.value!==raw&&num(raw.replace(/[,$\s]/g,''))===num(n.value))n.value=raw;n.focus({preventScroll:true});if(sel)try{n.setSelectionRange(sel[0],sel[1])}catch(e){}else if(n.type==='number'){const v=n.value;n.value='';n.value=v}}}
   loadThumbs();
@@ -1515,6 +1647,7 @@ function bpProject(b,work,admin){
       const o=x=>`<option value="${x.id}"${cur===x.id?' selected':''}>${esc(x.name||'Untitled')}${bidWhen(x)?` · ${fmtShort(bidWhen(x))}`:''}${x.archived_at?' · archived':''}</option>`;
       return `<div class="f sup-pick" title="The old bid is archived as superseded and kept on record; both bids link to each other. The job counts once in yearly totals."><span class="f-lab">Supersedes</span><div class="sup-row"><label class="sup-box${on?' on':''}"><input type="checkbox" data-act="sup-on"${on?' checked':''}${DIS()}> ${on?'Replaces':'Replaces an earlier bid'}</label>${on?`<select class="field" data-act="sup-sel"${DIS()}><option value="">— Pick the project it replaces —</option>${same.length?`<optgroup label="Same GC">${same.map(o).join('')}</optgroup>`:''}<optgroup label="All bids">${rest.map(o).join('')}</optgroup></select>`:''}</div>${on?`<span class="sup-hint">${cur?'Saving archives the old bid as superseded and links the two.':'Pick the bid this one replaces.'}</span>`:''}</div>`})()}
     </div>
+    ${b._new?'':`<label class="check small s3 bp-nostats" title="For duplicates, tests or bids entered by mistake. Archived bids still count; this is the only thing that leaves a bid out."><input type="checkbox" data-nostats${rfqOf(b).noStats?' checked':''}${DIS()}> Leave this bid out of the dashboard numbers <span class="dim">(duplicate, test or entered by mistake)</span></label>`}
   </div></fieldset>
   <fieldset><legend>Key dates</legend><div class="fg">
     <label class="f" title="The day the invitation came in. Blank = the day the bid was entered.">Intake date<input type="date" class="field" data-bprfq="intake" value="${esc(rfqOf(b).intake||(b._new?todayStr():intakeOf(b)))}"${work?'':' disabled'}></label>
@@ -12503,7 +12636,7 @@ function archModal(){const A=M;const pool=archPool();const pick=archPick();
   const days=[...pool.reduce((m,b)=>m.set(archDay(b),(m.get(archDay(b))||0)+1),new Map())].filter(([d])=>d).sort((a,b)=>b[1]-a[1]||b[0].localeCompare(a[0])).slice(0,12);
   const cnt=k=>k==='all'?pool.length:k==='decided'?pool.filter(b=>DECIDED.includes(b.status)).length:null;
   return mhead('Archive bids','Start the pipeline fresh without losing anything')+`<div class="mbody">
-    <p class="small" style="margin-top:0">Archived bids leave the pipeline, the dashboards and the win rates, but keep their estimates, quotes, files and log. They're under <b>🗄 Archived</b> in the Pipeline, where you can search them, open them and restore them, one at a time or the whole batch.</p>
+    <p class="small" style="margin-top:0">Archived bids leave the pipeline but still count in the dashboards, the monthly reports and the win rates, and keep their estimates, quotes, files and log. They're under <b>🗄 Archived</b> in the Pipeline, where you can search them, open them and restore them, one at a time or the whole batch.</p>
     <div class="arch-modes">${ARCH_MODES.map(([k,l])=>`<label class="arch-m${A.mode===k?' on':''}"><input type="radio" name="arch-mode" value="${k}" data-archmode${A.mode===k?' checked':''}><span><b>${l}</b>${cnt(k)!=null?` <span class="dim">${cnt(k)}</span>`:''}
       ${k==='added'&&A.mode==='added'?`<span class="arch-days">${days.map(([d,n])=>`<label class="check small"><input type="checkbox" data-archday="${d}"${A.days.has(d)?' checked':''}> ${fmtDate(d)} <span class="dim">· ${n} bid${n===1?'':'s'}</span></label>`).join('')||'<span class="dim small">No dates on file.</span>'}<span class="dim small">The day with the most bids is usually the import.</span></span>`:''}
       ${k==='due'&&A.mode==='due'?`<span class="arch-days"><label class="small">Due before <input class="field sm" type="date" data-archbefore value="${esc(A.before||'')}" style="width:auto"></label><label class="check small"><input type="checkbox" data-archnodate${A.noDate?' checked':''}> Also bids with no due date</label></span>`:''}</span></label>`).join('')}</div>
@@ -13273,6 +13406,7 @@ document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')re
   if(t.dataset.act==='rebid-sel'){const r=rfqOf(M.draft);if(t.value)r.rebidOf=t.value;else delete r.rebidOf;bpSaveUI('Editing…');return}
   if(t.dataset.act==='likely-sel'){const r=rfqOf(M.draft);if(t.value)r.likely=+t.value;else delete r.likely;bpSaveUI('Editing…');return}
   if(t.dataset.bf==='project_type'){M.draft.asset_class=assetOf(t.value);setTimeout(()=>{const s=$('[data-act=asset-sel]');if(s)s.value=M.draft.asset_class},0)}});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.nostats!=null&&M&&M.kind==='bid'){const r=rfqOf(M.draft);if(t.checked)r.noStats=true;else delete r.noStats;if(!M.draft._new)bpSaveUI('Editing…');return}});
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.duetgt!=null&&M&&M.kind==='bid'){const r=rfqOf(M.draft);if(t.checked)r.dueTarget=true;else delete r.dueTarget;
   if(t.checked&&!M.draft.due_date){const d=new Date();d.setDate(d.getDate()+14);M.draft.due_date=d.toISOString().slice(0,10);toast('Set a target two weeks out. Change it to whatever you plan for.')}
   if(!M.draft._new)bpSaveUI('Editing…');const y=$('#modal .mbody')?.scrollTop;renderModal();const bd=$('#modal .mbody');if(bd&&y!=null)bd.scrollTop=y;return}});
