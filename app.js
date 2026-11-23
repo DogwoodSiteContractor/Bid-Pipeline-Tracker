@@ -534,7 +534,7 @@ document.addEventListener('submit',async e=>{
 function dashSeg(){const cur=S.dash==='reports'?'reports':S.dash==='month'?'month':(onlyMine()||scopeView())?'mine':role()==='board'?'board':S.dash;
   const b=(v,l,sm)=>`<button class="${cur===v?'on':''}" data-act="dash" data-v="${v==='mine'?'precon':v}">${l}${sm?`<small>${sm}</small>`:''}</button>`;
   const items=onlyMine()||scopeView()?[b('mine',onlyMine()?'My dashboard':'Dashboard','Daily work')]:role()==='board'?[b('board','Board','Results & trends')]:[b('precon','Precon','Daily work'),b('board','Board','Results & trends')];
-  items.push(b('month','Monthly','Month by month'));if(S.dash==='month')items.forEach((x,i)=>{items[i]=x.replace(' class="on"',' class=""')});
+  items.push(b('month','Monthly','Month by month'));
   return `<div class="seg" role="tablist">${items.join('')}${tabOff('reports')?'':b('reports','Reports'+(devOnly('reports')?' 🔧':''),'Build your own')}</div>`}
 /* ---------- Proposals: funnel, the list behind the numbers, and recording outcomes ---------- */
 function propFunnel(Y){const P=propsIn(Y+'-01-01',Y+'-12-31');const st=P.proj.map(procState);const c=k=>st.filter(x=>x===k).length;const won=c('won-done')+c('won-open');
@@ -599,7 +599,9 @@ function moRange(y,m){return [moKey(y,m)+'-01',ymd(new Date(y,m+1,0))]}
 function lastBizDay(y,m){const d=new Date(y,m+1,0);while(d.getDay()===0||d.getDay()===6)d.setDate(d.getDate()-1);return ymd(d)}
 const moCloses=()=>(S.settings.month_close&&S.settings.month_close.months)||{};
 function moStats(y,m){const [from,to]=moRange(y,m);const P=propsIn(from,to);const bids=S.bids.filter(b=>!b._new&&statOk(b));
-  const newIn=bids.filter(b=>{const i=intakeOf(b);return i&&i>=from&&i<=to});
+  // a bulk import has no intake date and stamps every bid with the import day, so those days don't count as invitations
+  const bulk=new Map();bids.forEach(b=>{if(b.rfq&&b.rfq.intake)return;const d=String(b.created_at||'').slice(0,10);if(d)bulk.set(d,(bulk.get(d)||0)+1)});
+  const newIn=bids.filter(b=>{if(!(b.rfq&&b.rfq.intake)&&(bulk.get(String(b.created_at||'').slice(0,10))||0)>=15)return false;const i=intakeOf(b);return i&&i>=from&&i<=to});
   const wonIn=jobsOnce(bids.filter(b=>b.status==='Awarded'&&b.awarded_date&&String(b.awarded_date).slice(0,10)>=from&&String(b.awarded_date).slice(0,10)<=to));
   const st=P.proj.map(procState);const c=k=>st.filter(x=>x===k).length;const won=c('won-done')+c('won-open'),lost=c('lost');
   const est={};P.proj.forEach((b,i)=>{const k=estName(b.lead_estimator_id)||'Unassigned';const o=est[k]=est[k]||{n:0,val:0,won:0,lost:0,pend:0};o.n++;o.val+=bidValue(b);if(st[i].startsWith('won'))o.won++;else if(st[i]==='lost')o.lost++;else o.pend++});
