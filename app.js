@@ -1577,14 +1577,18 @@ function pickerFinish(){
    Tabs follow the pipeline. You can open any tab at any time; looking at a tab never moves the bid. Only Advance
    (or the status menu) moves it. Advance says what's still open on that step and lights up when the step is done.
    Changes save on their own a second after you stop typing. */
-const BP_TABS=[['project','Project','Project Created'],['rfq','Scopes & RFQs','RFQ Sent'],['takeoff','Takeoff','Takeoff'],['quotes','Quotes','Quotes Received'],['estprop','Estimate & proposal','Estimating'],['outcome','Follow-up & outcome','Submitted']];
+// Four stages. Working holds takeoff, quotes, and the estimate & proposal, each with its own status,
+// so nobody has to catch the bid's stage up while the real work happens in other programs.
+const BP_TABS=[['project','Project','Project Created'],['rfq','Scopes & RFQs','RFQ Sent'],['work','Working','Takeoff'],['outcome','Follow-up & outcome','Submitted']];
+const WORK_ST=['Takeoff','Quotes Received','Estimating','Proposal Review'];
+const WORK_TABS=['takeoff','quotes','estprop'];
 const BP_ORDER=BP_TABS.map(x=>x[2]);
 // where the bid stands: 0..6 on the way, 7 once decided; on hold → best guess from the work
-function bpStageIdx(b){const n=BP_TABS.length;if(DECIDED.includes(b.status))return n;if(b.status==='Proposal Review')return 4;const i=BP_ORDER.indexOf(b.status);if(i>=0)return i;try{return Math.min(n-1,stageInfo(b,b.quotes).current)}catch(e){return 0}}
+function bpStageIdx(b){const n=BP_TABS.length;if(DECIDED.includes(b.status))return n;if(WORK_ST.includes(b.status))return 2;const i=BP_ORDER.indexOf(b.status);if(i>=0)return i;try{return Math.min(n-1,stageInfo(b,b.quotes).current)}catch(e){return 0}}
 const bpTabOf=b=>BP_TABS[Math.min(BP_TABS.length-1,bpStageIdx(b))][0];
 function bpSubScopes(b){return b.scope_items.filter(it=>performOf(it)!=='Self perform')}
 // what's still open on each step, in plain words
-function bpMissing(b,key){const m=[];const Q=b.quotes||[];
+function bpMissing(b,key){if(key==='work')key='estprop';const m=[];const Q=b.quotes||[];
   if(key==='project'){if(!String(b.name||'').trim())m.push('Project name');if(!b.due_date)m.push('Bid due date');if(!b.lead_estimator_id)m.push('Lead estimator');if(!propIds(b).length)m.push('Who you’re bidding to')}
   if(key==='rfq'){if(!b.scope_items.length)m.push('Pick the scopes');const none=bpSubScopes(b).filter(it=>!Q.some(q=>qHas(q,it.name)));if(none.length)m.push(`${none.length} sub scope${none.length===1?'':'s'} with no vendor (${none.slice(0,3).map(x=>x.name).join(', ')}${none.length>3?'…':''})`);const nr=Q.filter(q=>(q.status||'Not requested')==='Not requested').length;if(nr)m.push(`${nr} quote${nr===1?'':'s'} not requested yet`)}
   if(key==='takeoff'){const open=b.scope_items.filter(x=>x.status!=='Complete'&&x.status!=='N/A');if(!b.scope_items.length)m.push('No scopes on the bid');else if(open.length)m.push(`${open.length} of ${b.scope_items.length} scopes not signed off`)}
@@ -1598,6 +1602,7 @@ function bpProgress(b,key){const Q=b.quotes||[];
   if(key==='takeoff'){const s=b.scope_items.filter(x=>x.status==='Complete'||x.status==='N/A').length;return b.scope_items.length?`${s}/${b.scope_items.length} signed`:'—'}
   if(key==='quotes'){const asked=Q.filter(qAsked);const back=asked.filter(q=>q.status!=='Requested').length;return asked.length?`${back}/${asked.length} back`:'—'}
   if(key==='estprop'){return EP_LABEL[epPhase(b)]+(bidValue(b)?' · '+moneyK(bidValue(b)):'')}
+  if(key==='work'){const ph=epPhase(b);return ph==='ns'?`Takeoff ${WK_TO[wkTakeoff(b)].toLowerCase()}`:EP_LABEL[ph]+(bidValue(b)?' · '+moneyK(bidValue(b)):'')}
   if(key==='proposal'){const n=propIds(b).length;const s=propIds(b).filter(id=>['Sent','Lost','Awarded'].includes(propOf(b,id).status)).length;return n?`${s}/${n} sent`:'—'}
   if(key==='outcome'){return DECIDED.includes(b.status)?b.status:isSent(b)?'Waiting':'—'}
   return ''}
@@ -1619,9 +1624,10 @@ function bidModal(){
   const due=b.due_date?`${dueTgt(b)?'Target':'Due'} ${fmtShort(b.due_date)}${dueOrig(b)&&dueOrig(b)!==b.due_date?` (was ${fmtShort(dueOrig(b))})`:''}${b.due_time?' '+fuTime(b.due_time):''}${(()=>{const n=daysUntil(b.due_date);return n==null?'':n<0?` · ${-n} day${n===-1?'':'s'} ago`:n===0?' · today':` · ${n} day${n===1?'':'s'}`})()}`:'No due date';
   const sub=[partyLine(b),...(()=>{const t=inHouse(b);return t?[t.text]:[]})(),due,b.lead_estimator_id?'Lead: '+esc(estName(b.lead_estimator_id)||''):'No lead estimator'].filter(Boolean);
   const saveTxt=b._sample?'Practice · not saved':isNew?'Not created yet':!work?'Read-only':(M.bpErr?'<span class="bad">Not saved</span>':'Saved');
+  if(WORK_TABS.includes(M.tab)){M.wkJump=M.tab;M.tab='work'}
   const tabs=BP_TABS.map(([k,l],i)=>{const st=i<cur?'past':i===cur?'now':'';const skip=false;
     return `<button class="bp-tab ${st}${M.tab===k?' on':''}" data-act="bp-tab" data-v="${k}"><i>${i<cur?'✓':i+1}</i><span><b>${esc(l)}${skip?'':''}</b><small>${esc(isNew&&k!=='project'?'':bpProgress(b,k))}</small></span></button>`}).join('');
-  const body={project:bpProject,rfq:bpRfq,takeoff:bpTakeoff,quotes:bpQuotes,estprop:bpEstProp,outcome:bpOutcome}[M.tab](b,work,admin);
+  const body={project:bpProject,rfq:bpRfq,work:bpWork,outcome:bpOutcome}[M.tab](b,work,admin);
   const archNote=b.archived_at?`<div class="notice" style="margin-bottom:14px">🗄 Archived ${fmtDate(String(b.archived_at).slice(0,10))}. It’s hidden from the pipeline and dashboard but all its history is kept.${admin?' Click <b>Restore</b> to bring it back.':''}</div>`:'';
   return `<div class="bp-head"><button class="btn ghost bp-back" data-act="close">← ${S.view==='pipeline'?'Pipeline':'Back'}</button>
     <div class="bp-title"><h2>${esc(isNew?(b.name||'New bid'):b.name||'Untitled bid')}</h2><p>${sub.join(' · ')}</p></div>
@@ -1636,13 +1642,14 @@ function bidModal(){
 const estOn=()=>!tabOff('estimates');
 // one stage back from where the bid is now (null when there's nowhere to go)
 function bpBackTo(b){if(b.status==='On Hold')return null;if(DECIDED.includes(b.status))return {st:'Submitted',l:'Proposal sent',tab:'outcome'};
-  if(b.status==='Submitted')return {st:'Proposal Review',l:'Ready for review',tab:'estprop',ep:'rr'};if(b.status==='Proposal Review')return {st:'Estimating',l:'Estimate & proposal in progress',tab:'estprop',ep:'ip'};
-  const i=BP_ORDER.indexOf(b.status);if(i<=0)return null;if(b.status==='Estimating')return {st:'Quotes Received',l:BP_TABS[i-1][1],tab:BP_TABS[i-1][0],ep:'ns'};return {st:BP_ORDER[i-1],l:BP_TABS[i-1][1],tab:BP_TABS[i-1][0]}}
+  if(b.status==='Submitted')return {st:'Proposal Review',l:'Ready for review',tab:'work',ep:'rr'};if(b.status==='Proposal Review')return {st:'Estimating',l:'Estimate in progress',tab:'work',ep:'ip'};
+  if(b.status==='Estimating')return {st:'Takeoff',l:'Working (estimate not started)',tab:'work',ep:'ns'};
+  if(b.status==='Takeoff'||b.status==='Quotes Received')return {st:'RFQ Sent',l:'Scopes & RFQs',tab:'rfq'};if(b.status==='RFQ Sent')return {st:'Project Created',l:'Project',tab:'project'};return null}
 function bpBack(){const b=M.draft;const t=bpBackTo(b);if(!t)return;
   const extra=DECIDED.includes(b.status)?`\n\nIt comes off ${b.status==='Awarded'?'Awarded':b.status==='No Bid'?'No bid':'Not awarded'} and goes back to waiting on the GC.`:b.status==='Submitted'?'\n\nThe GCs’ proposals go back to Not sent and the follow-up clock stops.':'';
   if(!confirm(`Move “${b.name||'this bid'}” back to ${t.l}?${extra}\n\nNothing you entered is deleted.`))return;const from=stLabel(b.status);
   if(t.ep==='rr'){propIds(b).forEach(id=>{const p=propOf(b,id);if(p.status==='Sent')b.client_proposals={...(b.client_proposals||{}),[id]:{...p,status:'Not sent'}}});b.status='Proposal Review';b.proposal_status='Complete';M.tab=t.tab;renderModal()}
-  else if(t.ep){M.tab=t.tab;epGo(t.ep,true);M.tab=t.tab;renderModal()}else{b.status=t.st;M.tab=t.tab;renderModal()}
+  else if(t.ep){M.tab=t.tab;epGo(t.ep,true);if(t.ep==='ns')b.status='Takeoff';M.tab=t.tab;renderModal()}else{b.status=t.st;if(t.st==='RFQ Sent'){const r=rfqOf(b);if(r.work)r.work.takeoff='none'}M.tab=t.tab;renderModal()}
   const bd=$('#modal .mbody');if(bd)bd.scrollTop=0;toast(`Moved back from ${from} to ${t.l}.`)}
 function bpAdvanceHtml(b,work,isNew){
   const i=BP_TABS.findIndex(x=>x[0]===M.tab);const prev=BP_TABS[i-1],next=BP_TABS[i+1];
@@ -1650,7 +1657,7 @@ function bpAdvanceHtml(b,work,isNew){
   if(isNew||!work)return nav;
   const backBtn='';
   const cur=bpStageIdx(b);if(cur>=BP_TABS.length-1||b.status==='On Hold')return backBtn+nav;
-  const key=BP_TABS[cur][0];const miss=bpMissing(b,key);const ep=key==='estprop';
+  const key=BP_TABS[cur][0];const miss=bpMissing(b,key);const ep=key==='work';
   const label=ep?(b.status==='Proposal Review'?'Mark proposal sent →':'Ready for review →'):`Advance to ${esc(BP_TABS[cur+1][1])} →`;
   const left=miss.length?`<span class="bp-miss" title="${esc(miss.join('\n'))}">${M.advArm?'<b>Advance anyway?</b> ':'Still open: '}${esc(miss.slice(0,2).join(' · '))}${miss.length>2?` +${miss.length-2}`:''}</span>`:`<span class="bp-ready">✓ ${esc(BP_TABS[cur][1])} is done</span>`;
   return `${backBtn}${nav}<span class="bp-adv">${left}<button class="btn ${miss.length?(M.advArm?'warn':''):'primary glow'}" data-act="bp-advance">${M.advArm&&miss.length?'Yes, advance':label}</button></span>`}
@@ -1732,6 +1739,27 @@ function bpRfq(b,work,admin){
     ${work?`<div class="adders"><button class="btn sm" data-act="pick-open"${b.scope_items.length&&S.vendors.length?'':' disabled title="Add scopes and vendors first"'}>Select vendors scope by scope…</button><select class="field" data-act="add-quote"><option value="">+ Add a vendor or sub…</option>${vendorsSorted.map(v=>`<option value="${v.id}">${esc(v.company)} (${esc(v.trade)})</option>`).join('')}</select>
     ${tradesWithVendors.length?`<select class="field" data-act="add-trade"><option value="">+ Add every vendor in a trade…</option>${tradesWithVendors.map(t=>`<option>${esc(t)}</option>`).join('')}</select>`:''}</div>`:''}
   </fieldset>`}
+const WK_TO={none:'Not started',wip:'In progress',done:'Done'};
+function wkTakeoff(b){const w=b.rfq&&b.rfq.work;if(w&&w.takeoff)return w.takeoff;const sc=b.scope_items||[];if(sc.length&&sc.every(x=>x.status==='Complete'||x.status==='N/A'))return 'done';
+  return WORK_ST.includes(b.status)||isSent(b)||DECIDED.includes(b.status)?(['Takeoff'].includes(b.status)?'wip':'done'):'none'}
+function bpWork(b,work,admin){const Q=b.quotes||[];const asked=Q.filter(qAsked);const back=asked.filter(q=>q.status!=='Requested').length;const ph=epPhase(b);const tk=wkTakeoff(b);const dis=work?'':' disabled';
+  const sc=b.scope_items||[];const signed=sc.filter(x=>x.status==='Complete'||x.status==='N/A').length;const sent=isSent(b);
+  const item=(cls,l,v,sub,go)=>`<div class="wk-i ${cls}"><span class="wk-l">${l}</span><div class="wk-v">${v}</div>${sub?`<small>${sub}</small>`:''}${go?`<button class="linkbtn small" data-act="wk-go" data-v="${go}">Go to it ↓</button>`:''}</div>`;
+  const chk=`<div class="wk-chk">
+    ${item('wk-'+tk,'Takeoff',`<select class="field sm wk-sel" data-wk="takeoff"${dis}>${Object.entries(WK_TO).map(([k,l])=>`<option value="${k}"${tk===k?' selected':''}>${l}</option>`).join('')}</select>`,sc.length?`${signed} of ${sc.length} scopes signed off`:'no scopes yet','wk-to')}
+    ${item(asked.length?(back===asked.length?'wk-done':'wk-wip'):'wk-none','Quotes',asked.length?`<b>${back} of ${asked.length}</b> back`:'<b>None requested</b>',asked.length?(back===asked.length?'all quotes are in':`${asked.length-back} still out · updates from Scopes & RFQs`):'request them on Scopes & RFQs','wk-q')}
+    ${item(ph==='ns'?'wk-none':['rr','ir','ok','sent'].includes(ph)?'wk-done':'wk-wip','Estimate',`<b>${ph==='ns'?'Not started':ph==='ip'?'In progress':'Done'}</b>`,estOn()&&!b._sample&&typeof estOf==='function'&&estOf(b.id)?'built in the app':'','wk-ep')}
+    ${item(['rr','ir','ok'].includes(ph)||sent?'wk-done':'wk-none','Ready for review',`<b>${ph==='ir'?'In review':ph==='ok'?'Approved to send':['rr'].includes(ph)?'Yes, waiting on review':sent?'Reviewed':'Not yet'}</b>`,ph==='rr'||ph==='ir'?'the precon manager sees it in his review list':'','wk-ep')}
+    ${item(sent?'wk-done':bidValue(b)?'wk-wip':'wk-none','Proposal',bidValue(b)?`<b>${moneyK(bidValue(b))}</b>`:'<b>No number yet</b>',sent?`sent ${sentOn(b)?fmtShort(sentOn(b)):''}`:'not sent','wk-ep')}
+  </div>`;
+  const sec=(id,t,body,open)=>`<details class="wk-sec" id="${id}"${open?' open':''}><summary><b>${t}</b></summary><div class="wk-b">${body}</div></details>`;
+  const jump=M.wkJump;if(jump){M.wkJump=null;setTimeout(()=>{const el=$('#'+({takeoff:'wk-to',quotes:'wk-q',estprop:'wk-ep'}[jump]||'wk-ep'));if(el){el.open=true;el.scrollIntoView({block:'start'})}},30)}
+  const tOpen=tk!=='done',qOpen=asked.length&&back<asked.length;
+  return chk+sec('wk-to','Takeoff',bpTakeoff(b,work),jump==='takeoff'||(tOpen&&!jump&&ph==='ns'))+sec('wk-q','Quotes',bpQuotes(b,work,admin),jump==='quotes'||(qOpen&&!jump&&ph==='ns'))+sec('wk-ep','Estimate & proposal',bpEstProp(b,work),true)}
+document.addEventListener('change',e=>{const t=e.target;if(!(t.dataset&&t.dataset.wk&&M&&M.kind==='bid'))return;const b=M.draft;const r=rfqOf(b);r.work={...(r.work||{}),[t.dataset.wk]:t.value};
+  if(t.dataset.wk==='takeoff'){if(t.value!=='none'&&['Project Created','RFQ Sent'].includes(b.status))b.status='Takeoff';if(t.value==='none'&&b.status==='Takeoff')b.status='RFQ Sent'}
+  if(!b._new)bpSaveUI('Editing…');renderModal()});
+document.addEventListener('click',e=>{const t=e.target instanceof Element&&e.target.closest('[data-act=wk-go]');if(!t)return;const el=$('#'+t.dataset.v);if(el){el.open=true;el.scrollIntoView({behavior:'smooth',block:'start'})}});
 function bpTakeoff(b,work){return `${peqPanel(b,work)}${scopeSection(b,work)}${logSection(b,work)}${addendaSection(b,work)}`}
 function bpQuotes(b,work,admin){
   const asked=b.quotes.filter(qAsked);
@@ -1878,8 +1906,8 @@ document.addEventListener('click',e=>{const t=e.target.closest('[data-act]');if(
   if(a==='bp-back'){bpBack();return}
   if(a==='bp-advance'){const b=M.draft;const cur=bpStageIdx(b);if(cur>=BP_TABS.length-1)return;const key=BP_TABS[cur][0];const miss=bpMissing(b,key);
     if(miss.length&&!M.advArm){M.advArm=true;renderModal();return}M.advArm=false;
-    if(key==='estprop'){M.tab='estprop';if(b.status==='Proposal Review')epOpenSend();else epGo('rr');return}
-    if(BP_TABS[cur+1][0]==='estprop'){epGo('ip');M.tab='estprop';renderModal();return}
+    if(key==='work'){M.tab='work';if(b.status==='Proposal Review')epOpenSend();else{if(epPhase(b)==='ns')epGo('ip');epGo('rr')}return}
+    if(BP_TABS[cur+1][0]==='work'){b.status='Takeoff';const r=rfqOf(b);r.work={...(r.work||{}),takeoff:r.work?.takeoff&&r.work.takeoff!=='none'?r.work.takeoff:'wip'};M.tab='work';renderModal();const bd=$('#modal .mbody');if(bd)bd.scrollTop=0;toast('Moved to Working. Takeoff is in progress.');return}
     b.status=BP_ORDER[cur+1];M.tab=BP_TABS[cur+1][0];
     renderModal();const bd=$('#modal .mbody');if(bd)bd.scrollTop=0;toast(`Moved to ${BP_TABS[cur+1][1]}.`);return}
   if(a==='bp-out'&&t.dataset.v==='On Hold'){const r=rfqOf(M.draft);r.hold={since:todayStr(),until:addMonths(3),reason:isBudget(M.draft)?'Budget / early pricing':'',by:myName()};M.draft.status='On Hold';renderModal();toast('On hold. Pick a reason and when to check back.');return}
@@ -16245,8 +16273,8 @@ FOCUS_ATTRS.push('data-aitext','data-airules');
 function ctxDraft(b){const d=Object.assign(newBid(),clone(b));d.scope_items=clone(scopeItems(b));d.quotes=clone(quotesFor(b.id));d.client_ids=d.client_ids||[];return d}
 function ctxClose(){const m=document.getElementById('ctxm');if(m)m.remove()}
 function ctxHtml(b){const d=ctxDraft(b);const work=canWork(b);const cur=bpStageIdx(d);const n=BP_TABS.length;
-  let adv='';if(work&&cur<n-1&&b.status!=='On Hold'){const key=BP_TABS[cur][0];const miss=bpMissing(d,key);const ep=key==='estprop'||BP_TABS[cur+1][0]==='estprop';
-    adv=`<button class="ctx-i" data-ctx="adv" data-id="${b.id}"><span>⏩ ${ep?(key==='estprop'?'Finish estimate & proposal…':'Start estimate & proposal…'):`Advance to ${esc(BP_TABS[cur+1][1])}`}</span>${miss.length?`<small>${miss.length} still open</small>`:''}</button>`}
+  let adv='';if(work&&cur<n-1&&b.status!=='On Hold'){const key=BP_TABS[cur][0];const miss=bpMissing(d,key);const ep=key==='work';
+    adv=`<button class="ctx-i" data-ctx="adv" data-id="${b.id}"><span>⏩ ${ep?'Finish estimate & proposal…':`Advance to ${esc(BP_TABS[cur+1][1])}`}</span>${miss.length?`<small>${miss.length} still open</small>`:''}</button>`}
   const tabs=BP_TABS.map(([k,l],i)=>`<button class="ctx-i" data-ctx="tab" data-v="${k}" data-id="${b.id}"><span>${i<cur?'✓':i===cur?'●':'○'} ${esc(l)}</span></button>`).join('');
   const st=BID_ST.map(s=>`<button class="ctx-i${s===b.status?' on':''}" data-ctx="st" data-v="${esc(s)}" data-id="${b.id}"><span>${s===b.status?'✓ ':''}${esc(stLabel(s)==='Submitted'?'Proposal sent':s)}</span></button>`).join('');
   return `<div class="ctx-h"><b>${esc(b.name||'Untitled bid')}</b><small>${esc([clientName((b.client_ids||[])[0]),b.due_date?'Due '+fmtShort(b.due_date):''].filter(Boolean).join(' · '))}</small></div>
@@ -16277,7 +16305,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest&&e.target.c
   else if(k==='tab'){openBid(b.id);if(M&&M.kind==='bid'){M.tab=t.dataset.v;renderModal()}}
   else if(k==='st')ctxStatus(b,t.dataset.v);
   else if(k==='adv'){const d=ctxDraft(b);const cur=bpStageIdx(d);const key=BP_TABS[cur][0];const nx=BP_TABS[cur+1];const miss=bpMissing(d,key);
-    if(!miss.length&&key!=='estprop'&&nx[0]!=='estprop'){await ctxStatus(b,BP_ORDER[cur+1]);return}
+    if(!miss.length&&key!=='work'){await ctxStatus(b,BP_ORDER[cur+1]);return}
     openBid(b.id);if(!M||M.kind!=='bid')return;M.tab=key;renderModal();const btn=document.querySelector('#modal [data-act="bp-advance"]');if(btn)btn.click()}
   else if(k==='aw'){openBid(b.id);const y=document.querySelector('#modal [data-act="aw-frombid"]');if(y)y.click()}
   else if(k==='print'){openBid(b.id);const y=document.querySelector('#modal [data-act="op-open"]');if(y)y.click()}

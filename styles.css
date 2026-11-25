@@ -3690,3 +3690,16 @@ button.pf-step{cursor:pointer}button.pf-step:hover{border-color:var(--accent)}
 
 .hold-fs.due{border-color:color-mix(in srgb,var(--warn,#c9922e) 60%,var(--line))}
 .hold-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.hold-push{display:inline-flex;gap:4px;align-items:center;font-size:12.5px;color:var(--ink-2)}
+
+/* Working tab: one status per part of the work */
+.wk-chk{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px;margin-bottom:14px}
+.wk-i{display:flex;flex-direction:column;gap:3px;padding:10px 12px;border:1px solid var(--line);border-radius:10px;background:var(--surface);border-top:3px solid var(--line);min-width:0}
+.wk-i.wk-wip{border-top-color:var(--warn,#c9922e)}.wk-i.wk-done{border-top-color:var(--good,#3a8a55)}
+.wk-l{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);font-weight:700}
+.wk-v b{font-size:15px}.wk-i small{font-size:11.5px;color:var(--ink-3)}.wk-i .linkbtn{align-self:flex-start;margin-top:auto;padding:0}
+.wk-sel{width:100%}
+.wk-sec{border:1px solid var(--line);border-radius:10px;margin-bottom:10px;background:var(--surface)}
+.wk-sec>summary{cursor:pointer;padding:10px 14px;font-size:15px;list-style:revert}
+.wk-sec[open]>summary{border-bottom:1px solid var(--line)}
+.wk-b{padding:12px 14px}
+@media (max-width:1100px){.wk-chk{grid-template-columns:repeat(2,minmax(0,1fr))}}
