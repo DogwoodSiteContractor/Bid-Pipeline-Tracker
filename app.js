@@ -1752,14 +1752,19 @@ function bpWork(b,work,admin){const Q=b.quotes||[];const asked=Q.filter(qAsked);
     ${item(['rr','ir','ok'].includes(ph)||sent?'wk-done':'wk-none','Ready for review',`<b>${ph==='ir'?'In review':ph==='ok'?'Approved to send':['rr'].includes(ph)?'Yes, waiting on review':sent?'Reviewed':'Not yet'}</b>`,ph==='rr'||ph==='ir'?'the precon manager sees it in his review list':'','wk-ep')}
     ${item(sent?'wk-done':bidValue(b)?'wk-wip':'wk-none','Proposal',bidValue(b)?`<b>${moneyK(bidValue(b))}</b>`:'<b>No number yet</b>',sent?`sent ${sentOn(b)?fmtShort(sentOn(b)):''}`:'not sent','wk-ep')}
   </div>`;
-  const sec=(id,t,body,open)=>`<details class="wk-sec" id="${id}"${open?' open':''}><summary><b>${t}</b></summary><div class="wk-b">${body}</div></details>`;
-  const jump=M.wkJump;if(jump){M.wkJump=null;setTimeout(()=>{const el=$('#'+({takeoff:'wk-to',quotes:'wk-q',estprop:'wk-ep'}[jump]||'wk-ep'));if(el){el.open=true;el.scrollIntoView({block:'start'})}},30)}
-  const tOpen=tk!=='done',qOpen=asked.length&&back<asked.length;
-  return chk+sec('wk-to','Takeoff',bpTakeoff(b,work),jump==='takeoff'||(tOpen&&!jump&&ph==='ns'))+sec('wk-q','Quotes',bpQuotes(b,work,admin),jump==='quotes'||(qOpen&&!jump&&ph==='ns'))+sec('wk-ep','Estimate & proposal',bpEstProp(b,work),true)}
+  // all folded to start; one open at a time, and it stays open while you edit
+  const jump=M.wkJump;if(jump){M.wkJump=null;M.wkOpen={takeoff:'wk-to',quotes:'wk-q',estprop:'wk-ep'}[jump]||'wk-ep';const id=M.wkOpen;setTimeout(()=>{const el=$('#'+id);if(el)el.scrollIntoView({block:'start'})},30)}
+  const sec=(id,t,sub,body)=>`<details class="wk-sec" id="${id}" name="wk"${M.wkOpen===id?' open':''}><summary><b>${t}</b><span class="wk-sum">${sub}</span></summary>${M.wkOpen===id?`<div class="wk-b">${body}</div>`:''}</details>`;
+  return chk+sec('wk-to','Takeoff',`${WK_TO[tk]}${sc.length?` · ${signed} of ${sc.length} scopes signed off`:''}`,bpTakeoff(b,work))
+    +sec('wk-q','Quotes',asked.length?`${back} of ${asked.length} back`:'none requested',bpQuotes(b,work,admin))
+    +sec('wk-ep','Estimate & proposal',`${EP_LABEL[ph]}${bidValue(b)?' · '+money(bidValue(b)):''}`,bpEstProp(b,work))}
 document.addEventListener('change',e=>{const t=e.target;if(!(t.dataset&&t.dataset.wk&&M&&M.kind==='bid'))return;const b=M.draft;const r=rfqOf(b);r.work={...(r.work||{}),[t.dataset.wk]:t.value};
   if(t.dataset.wk==='takeoff'){if(t.value!=='none'&&['Project Created','RFQ Sent'].includes(b.status))b.status='Takeoff';if(t.value==='none'&&b.status==='Takeoff')b.status='RFQ Sent'}
   if(!b._new)bpSaveUI('Editing…');renderModal()});
-document.addEventListener('click',e=>{const t=e.target instanceof Element&&e.target.closest('[data-act=wk-go]');if(!t)return;const el=$('#'+t.dataset.v);if(el){el.open=true;el.scrollIntoView({behavior:'smooth',block:'start'})}});
+// opening a section closes the others (the summary click is handled here so the choice survives redraws)
+document.addEventListener('click',e=>{if(!(e.target instanceof Element)||!M||M.kind!=='bid')return;const go=e.target.closest('[data-act=wk-go]');const sum=!go&&e.target.closest('.wk-sec>summary');if(!go&&!sum)return;
+  e.preventDefault();const id=go?go.dataset.v:sum.parentElement.id;M.wkOpen=go?id:(M.wkOpen===id?null:id);renderModal();
+  if(M.wkOpen)requestAnimationFrame(()=>{const el=$('#'+M.wkOpen);if(el)el.scrollIntoView({behavior:go?'smooth':'auto',block:'start'})})});
 function bpTakeoff(b,work){return `${peqPanel(b,work)}${scopeSection(b,work)}${logSection(b,work)}${addendaSection(b,work)}`}
 function bpQuotes(b,work,admin){
   const asked=b.quotes.filter(qAsked);
