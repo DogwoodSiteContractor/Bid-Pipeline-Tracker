@@ -1496,7 +1496,7 @@ let M=null;
 function closeModal(){const ae=document.activeElement;if(ae&&$('#modal')?.contains(ae))ae.blur();if(M&&M.kind==='bid'&&M.draft&&M.draft._sample&&!M.picker&&!M.sup&&!M.rfq&&!M.op&&!M.trk){setTimeout(()=>{if(TOUR&&TOUR.kind==='bids'){TOUR=null;tourLayer().innerHTML='';tourMark()}tourCleanup();render()},0)}if(M&&M.kind==='bid'&&!M.picker&&!M.sup){bpHash('');if(bpCanAuto()&&bpSig(M.draft)!==M.bpSig){const m=M;saveBid({auto:true},m).then(()=>toast(`Saved ${m.draft.name}`)).catch(e=>toast('Not saved: '+errMsg(e)))}}const back=M&&M.kind==='lib'&&M.back;if(back){M=back;renderModal();return}M=null;$('#modal').innerHTML='';document.body.style.overflow=''}
 function showModal(){document.body.style.overflow='hidden';renderModal(true)}
 // keep the cursor in the same field when a modal re-renders
-const FOCUS_ATTRS=['data-grab','data-rfqf','data-rfqsubj','data-rfqt','data-bprfq','data-itp','data-jip','data-itf','data-entf','data-logf','data-jobf','data-logdate','data-ef','data-bf','data-qf','data-cp','data-ad','data-rv','data-sf','data-lf','data-ctf','data-ff','data-tn','data-pickq','data-bulktype'];
+const FOCUS_ATTRS=['data-grab','data-rfqf','data-rfqsn','data-rfqsubj','data-rfqt','data-bprfq','data-itp','data-jip','data-itf','data-entf','data-logf','data-jobf','data-logdate','data-ef','data-bf','data-qf','data-cp','data-ad','data-rv','data-sf','data-lf','data-ctf','data-ff','data-tn','data-pickq','data-bulktype'];
 function focusKey(el){if(!el||!$('#modal')?.contains(el))return null;if(el.id)return '#'+CSS.escape(el.id);for(const a of FOCUS_ATTRS)if(el.hasAttribute(a))return `[${a}="${CSS.escape(el.getAttribute(a))}"]`;return null}
 function renderModal(first){if(!M||renderModal._busy)return;renderModal._busy=true;try{renderModalNow(first)}finally{renderModal._busy=false}}
 function renderModalNow(first){
@@ -13322,7 +13322,7 @@ document.addEventListener('input',e=>{const t=e.target;if(t.dataset.trd!=null&&S
 document.addEventListener('change',e=>{const t=e.target;if(t.dataset.trdto!=null&&S.trd){S.trd.rows[+t.dataset.trdto].to=t.value}});
 document.addEventListener('keydown',e=>{const t=e.target;if(t.dataset&&t.dataset.trdnew!=null&&e.key==='Enter'&&S.trd){e.preventDefault();const v=t.value.trim();if(!v)return;const oi=S.trd.rows.findIndex(r=>r.orig==='Other');S.trd.rows.splice(oi<0?S.trd.rows.length:oi,0,{orig:null,name:v});t.value='';render();setTimeout(()=>{const n=document.getElementById('trd-new');if(n)n.focus()},0)}});
 document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]');if(!t)return;const a=t.dataset.act;if(!a.startsWith('scd-'))return;
-  if(a==='scd-edit'){const gs=SG();S.scd={groups:gs.map(g=>({k:g,name:g,orig:g})),rows:lib().scopes.map(x=>({orig:x.name,name:x.name,g:gs.includes(x.group)?x.group:'Other',perform:x.perform||'Self perform'}))};render();return}
+  if(a==='scd-edit'){const gs=SG();S.scd={groups:gs.map(g=>({k:g,name:g,orig:g})),rows:lib().scopes.map(x=>({orig:x.name,name:x.name,g:gs.includes(x.group)?x.group:'Other',perform:x.perform||'Self perform',rfq:x.rfq||''}))};render();return}
   if(a==='scd-cancel'){S.scd=null;render();return}const D=S.scd;if(!D)return;const i=+t.dataset.v;
   if(a==='scd-del'){D.rows[i].gone=true;render();return}
   if(a==='scd-undo'){D.rows[i].gone=false;render();return}
@@ -13333,7 +13333,7 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
   if(a==='scd-save'){const gname=new Map(D.groups.filter(g=>!g.gone).map(g=>[g.k,g.k==='Other'?'Other':(g.name.trim()||g.orig||'Other')]));
     {const seenG=new Set();for(const g of D.groups.filter(g=>!g.gone&&g.k!=='Other')){const n=gname.get(g.k);if(n==='Other'||seenG.has(n.toLowerCase())){toast(`Two categories are named “${n}”. Give each one its own name.`);return}seenG.add(n.toLowerCase())}}
     const groups=[...D.groups.filter(g=>!g.gone&&g.k!=='Other').map(g=>gname.get(g.k)),'Other'];const oal=lib().galias||{};const galias={};D.groups.filter(g=>!g.gone&&g.orig&&g.k!=='Other').forEach(g=>{const root=oal[g.orig]||g.orig;const n=gname.get(g.k);if(n!==root)galias[n]=root});D.rows.forEach(r=>{r.group=gname.get(r.g)||'Other'});const seen=new Set();const keep=D.rows.filter(r=>!r.gone&&r.name.trim()).filter(r=>{const k=r.name.trim().toLowerCase();if(seen.has(k))return false;seen.add(k);return true});
-    const scopes=keep.map(r=>({name:r.name.trim(),group:r.group,perform:PERFORM.includes(r.perform)?r.perform:'Self perform'}));const ren=new Map(D.rows.filter(r=>r.orig&&!r.gone&&r.name.trim()&&r.name.trim()!==r.orig).map(r=>[r.orig.toLowerCase(),r.name.trim()]));
+    const scopes=keep.map(r=>({name:r.name.trim(),group:r.group,perform:PERFORM.includes(r.perform)?r.perform:'Self perform',...(r.rfq?{rfq:r.rfq}:{})}));const ren=new Map(D.rows.filter(r=>r.orig&&!r.gone&&r.name.trim()&&r.name.trim()!==r.orig).map(r=>[r.orig.toLowerCase(),r.name.trim()]));
     D.busy=true;render();try{const L=lib();const templates=(L.templates||[]).map(tp=>({...tp,scopes:[...new Set(tp.scopes.map(n=>ren.get(String(n).toLowerCase())||n))]}));await saveLib({groups,galias,scopes,templates});
       if(ren.size&&can('contacts','edit')){for(const v of S.vendors){const vs=vendorScopes(v);if(!vs.some(n=>ren.has(String(n).toLowerCase())))continue;const nx=[...new Set(vs.map(n=>ren.get(String(n).toLowerCase())||n))];const {error}=await sb.from('vendors').update({scopes:nx}).eq('id',v.id);if(error)throw error}await loadTable('vendors')}
       S.scd=null;render();toast(`Scope list saved: ${scopes.length} scopes.`)}catch(err){D.busy=false;render();toast(errMsg(err))}}});
@@ -13395,11 +13395,20 @@ function rfqOf(b){if(!b.rfq||typeof b.rfq!=='object')b.rfq={...(rfqLS(b.id)||{})
 function rfqDueNote(b,due,mixed){return mixed?'The quotes have different due dates. Pick one to set them all.':due?`${rfqDate(due)}${b.due_date?` · ${Math.round((parseD(b.due_date)-parseD(due))/864e5)} days before the bid`:''}`:'One date for the whole RFQ. Every vendor gets the same one.'}
 function rfqDue(b){const r=rfqOf(b);if(r.due)return r.due;const ds=[...new Set((b.quotes||[]).filter(q=>qOpen(q)).map(q=>q.due_date).filter(Boolean))];return ds.length===1?ds[0]:''}
 const vEmail=v=>(/[^\s<>(),;]+@[^\s<>(),;]+/.exec(String(v&&v.email||''))||[''])[0];
-// scopes on this RFQ; ones you self perform go out as "(material)"
-function rfqScopes(b,qs){const ord=n=>{const i=b.scope_items.findIndex(x=>x.name.toLowerCase()===String(n).toLowerCase());return i<0?999:i};const names=[...new Set(qs.flatMap(qScopes))].sort((x,y)=>ord(x)-ord(y));return names.map(n=>{const it=b.scope_items.find(x=>x.name.toLowerCase()===String(n).toLowerCase());const P=partsOf(it);return {n:n+(P.length?` (${P.join(', ')})`:''),mat:it&&performOf(it)==='Self perform'}})}
+// how a scope reads in RFQ emails: this bid's wording, else the name saved on the scope, else the scope itself
+const rfqLibName=n=>{const L=lib();const k=String(n).toLowerCase();const m=(L.rfqNames||{})[k];if(m)return m;const x=(L.scopes||[]).find(s=>s.name.toLowerCase()===k);return x&&x.rfq||''};
+const rfqName=(b,n)=>{const o=(rfqOf(b).scopeNames||{})[String(n).toLowerCase()];return o||rfqLibName(n)||n};
+function rfqScopes(b,qs){const ord=n=>{const i=b.scope_items.findIndex(x=>x.name.toLowerCase()===String(n).toLowerCase());return i<0?999:i};const names=[...new Set(qs.flatMap(qScopes))].sort((x,y)=>ord(x)-ord(y));return names.map(n=>{const it=b.scope_items.find(x=>x.name.toLowerCase()===String(n).toLowerCase());const P=partsOf(it);return {k:n,n:rfqName(b,n)+(P.length?` (${P.join(', ')})`:''),mat:false}})}
+// rename how scopes read in the email (e.g. General Conditions → Survey). Saved as the scope's RFQ name, so every RFQ uses it from now on.
+// remember the wording on the scope itself so every future RFQ reads that way
+async function rfqSaveLibName(k,v){const L=lib();const m={...(L.rfqNames||{})};const key=k.toLowerCase();const nv=v&&v!==k?v:'';if((m[key]||'')===nv)return;if(nv)m[key]=nv;else delete m[key];
+  try{await saveLib({rfqNames:m});toast(nv?`RFQs will say “${nv}” for ${k} from now on`:`RFQs will say “${k}” again`)}catch(e){toast(errMsg(e))}}
+function rfqScopeEditor(b){const R=M.rfq||{sel:new Set()};const qs=b.quotes.filter(q=>R.sel.has(q.id));const sc=rfqScopes(b,qs);if(!sc.length)return '';const canLib=can('codebook')==='edit'||isAdmin();
+  return `<div class="rfq-sn"><div class="rfq-sn-h"><b>How scopes read in the email</b><span class="dim small">${canLib?'Change one and every RFQ uses that wording from now on.':'Changes apply to this bid.'}</span></div>
+    ${sc.map(x=>`<label class="rfq-sn-r"><span class="dim small">${esc(x.k)}</span><input class="field sm" data-rfqsn="${esc(x.k)}" value="${esc(rfqName(b,x.k))}" placeholder="${esc(x.k)}"></label>`).join('')}</div>`}
 function rfqMap(b,qs){const r=rfqOf(b);const lead=byId(S.estimators,b.lead_estimator_id)||{};const co=S.settings.general?.companyName||CFG.companyName||'Dogwood Site Contractors';const sc=rfqScopes(b,qs);
   return {project:b.name||'',location:b.location||'',quotes_due:rfqD(rfqDue(b)),quotes_due_time:r.time||'5PM',note:r.note||'',note_short:r.note?' '+r.note.replace(/^\W+|\W+$/g,'').replace(/^(pricing and quotes needed are for )?only /i,''):'',start_date:r.start||'TBD',plans_link:'\u0001plans\u0001',details_table:'\u0001table\u0001',quote_portal:'You can upload your quote, ask questions or decline this RFQ on your quote portal (the private link we emailed you; reply if you need it again).',
-    scopes:sc.map(x=>x.n+(x.mat?' (material)':'')).join(', '),plan_date:r.planDate?rfqD(r.planDate):'',engineer:r.engineer||'',gc:propIds(b).map(clientName).join(', '),bid_due:rfqD(b.due_date),walk_date:b.walk_date?rfqD(b.walk_date):'',rfi_date:b.rfi_date?rfqD(b.rfi_date):'',estimator:lead.name||myName(),company:co,
+    scopes:sc.map(x=>x.n).join(', '),plan_date:r.planDate?rfqD(r.planDate):'',engineer:r.engineer||'',gc:propIds(b).map(clientName).join(', '),bid_due:rfqD(b.due_date),walk_date:b.walk_date?rfqD(b.walk_date):'',rfi_date:b.rfi_date?rfqD(b.rfi_date):'',estimator:lead.name||myName(),company:co,
     _sc:sc,_desc:r.desc||`This is a ${ptShort(b.project_type)||'Commercial'} Development which includes the following:`,_plans:r.plans||'',_plansLabel:r.plansLabel||(r.planDate?`${r.planDate.replace(/-/g,'')} - ${b.name||'Plans'} Civil Set.pdf`:'')}}
 // fill the template: drop a line when its fields came out empty and nothing else is on it
 function rfqLines(str,map){return String(str||'').split('\n').flatMap(line=>{let empty=false,any=false;const out=line.replace(/\{(\w+)\}/g,(m,k)=>{if(!(k in map))return m;any=true;const v=map[k];if(v===''||v==null)empty=true;return v??''});
@@ -13407,7 +13416,7 @@ function rfqLines(str,map){return String(str||'').split('\n').flatMap(line=>{let
 const rfqEsc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function rfqInline(t){return rfqEsc(t).replace(/\*\*(.+?)\*\*/g,'<b>$1</b>').replace(/__(.+?)__/g,'<u>$1</u>').replace(/(^|[\s(])([\w.+-]+@[\w-]+\.[\w.]+)/g,'$1<a href="mailto:$2">$2</a>')}
 function rfqTableHtml(b,map){const td='border:1px solid #000;padding:6px 8px;vertical-align:top;font-family:Calibri,Arial,sans-serif;font-size:11pt';
-  const rows=[['Project Address:',rfqEsc(b.location||'')],['Description:',`<b>${rfqEsc(map._desc)}</b>${map._sc.length?`<ul style="margin:8px 0 8px 18px;padding:0">${map._sc.map(x=>`<li><b>${rfqEsc(x.n)}${x.mat?' (material)':''}</b></li>`).join('')}</ul>`:''}`]];
+  const rows=[['Project Address:',rfqEsc(b.location||'')],['Description:',`<b>${rfqEsc(map._desc)}</b>${map._sc.length?`<ul style="margin:8px 0 8px 18px;padding:0">${map._sc.map(x=>`<li><b>${rfqEsc(x.n)}</b></li>`).join('')}</ul>`:''}`]];
   if(map.plan_date)rows.push(['Plan Date',rfqEsc(map.plan_date)]);
   if(map.engineer)rows.push(['Engineer',rfqEsc(map.engineer)]);
   return `<table cellspacing="0" cellpadding="0" style="border-collapse:collapse;border:3px double #000;width:620px">${rows.map(([k,v])=>`<tr><td style="${td};width:180px">${k.endsWith(':')?`<b>${k}</b>`:`<b>${k}</b>`}</td><td style="${td}">${v}</td></tr>`).join('')}</table>`}
@@ -13416,7 +13425,7 @@ function rfqHtml(b,qs,tplBody){const map=rfqMap(b,qs);const text=rfqLines(tplBod
   const html=text.split(/\n{2,}/).map(par=>{if(par.trim()==='\u0001table\u0001')return rfqTableHtml(b,map);return `<p style="margin:0 0 12px">${par.split('\n').map(rfqInline).join('<br>')}</p>`}).join('').replace(/\u0001plans\u0001/g,plans).replace(/\u0001table\u0001/g,'');
   return `<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt;color:#000">${html}</div>`}
 function rfqText(b,qs,tplBody){const map=rfqMap(b,qs);const text=rfqLines(tplBody,map);
-  const table=[`Project Address: ${b.location||''}`,`Description: ${map._desc}`,...map._sc.map(x=>`  • ${x.n}${x.mat?' (material)':''}`),map.plan_date?`Plan Date: ${map.plan_date}`:'',map.engineer?`Engineer: ${map.engineer}`:''].filter(Boolean).join('\n');
+  const table=[`Project Address: ${b.location||''}`,`Description: ${map._desc}`,...map._sc.map(x=>`  • ${x.n}`),map.plan_date?`Plan Date: ${map.plan_date}`:'',map.engineer?`Engineer: ${map.engineer}`:''].filter(Boolean).join('\n');
   return text.replace(/\*\*|__/g,'').replace(/\u0001plans\u0001/g,map._plans||'(link to plans)').replace(/\u0001table\u0001/g,table)}
 function rfqStart(){const b=M.draft;rfqOf(b);const pick=b.quotes.filter(q=>(q.status||'Not requested')==='Not requested').map(q=>q.id);
   M.rfq={sel:new Set(pick.length?pick:b.quotes.filter(q=>qOpen(q)).map(q=>q.id)),edit:false,tpl:null,copied:'',plain:false,subj:null};renderModal()}
@@ -13439,7 +13448,7 @@ function rfqView(){const b=M.draft;const R=M.rfq;const T=rfqTpl();const r=rfqOf(
      ${f('engineer','Engineer','e.g. LJA Engineering')}
      ${f('start','Anticipated start','TBD')}
      ${f('desc','Description line',`This is a ${ptShort(b.project_type)||'Commercial'} Development which includes the following:`,'s2')}
-   </div><p class="hint">Saved with the bid, so the next RFQ for this project starts filled in. Scopes you self perform are listed as “(material)”.</p></fieldset>
+   </div><p class="hint">Saved with the bid, so the next RFQ for this project starts filled in.</p>${rfqScopeEditor(b)}</fieldset>
    <fieldset><legend>Who it goes to</legend><div class="rfq-list">${rows||'<div class="dim small">Add vendors and subs on the Scopes & RFQs tab first.</div>'}</div>
      ${noMail.length?`<p class="hint bad">${noMail.map(v=>esc(v.company)).join(', ')} ${noMail.length===1?'has':'have'} no email on file and will be left off. Add it on the Vendors page.</p>`:''}${vqRfqHtml(vs)}</fieldset>
    </div><div>
@@ -13493,6 +13502,8 @@ document.addEventListener('click',async e=>{const t=e.target.closest('[data-act]
 document.addEventListener('input',e=>{const t=e.target;if(!M||!M.rfq)return;
   if(t.dataset.rfqt!=null&&M.rfq.tpl){M.rfq.tpl[t.dataset.rfqt]=t.value;return}
   if(t.dataset.rfqsubj!=null){M.rfq.subj=t.value;if(M.rfq.out)M.rfq.out.subj=t.value;return}
+  if(t.dataset.rfqsn!=null){const k=t.dataset.rfqsn,v=t.value.trim();const r=rfqOf(M.draft);const sn=r.scopeNames=r.scopeNames||{};if(v&&v!==k)sn[k.toLowerCase()]=v;else delete sn[k.toLowerCase()];M.rfq.copied='';clearTimeout(rfqStart._t);rfqStart._t=setTimeout(rfqRefresh,250);
+    clearTimeout(rfqStart._lib);if(can('codebook')==='edit'||isAdmin())rfqStart._lib=setTimeout(()=>rfqSaveLibName(k,v),900);return}
   if(t.dataset.rfqf){const r=rfqOf(M.draft);r[t.dataset.rfqf]=t.value;M.rfq.copied='';if(t.dataset.rfqf==='note')M.rfq.subj=null;clearTimeout(rfqStart._t);rfqStart._t=setTimeout(rfqRefresh,250)}});
 document.addEventListener('change',e=>{const t=e.target;if(!M||M.kind!=='bid')return;
   if(t.dataset.rfqsel&&M.rfq){t.checked?M.rfq.sel.add(t.dataset.rfqsel):M.rfq.sel.delete(t.dataset.rfqsel);M.rfq.copied='';M.rfq.subj=null;renderModal();return}
